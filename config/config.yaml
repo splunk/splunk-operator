@@ -1,0 +1,3 @@
+apiVersion: splunk-instance.splunk.com/v1alpha1
+kind: SplunkInstance
+projectName: splunk-operator

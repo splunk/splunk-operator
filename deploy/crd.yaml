@@ -1,0 +1,13 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: splunkinstances.splunk-instance.splunk.com
+spec:
+  group: splunk-instance.splunk.com
+  names:
+    kind: SplunkInstance
+    listKind: SplunkInstanceList
+    plural: splunkinstances
+    singular: splunkinstance
+  scope: Namespaced
+  version: v1alpha1

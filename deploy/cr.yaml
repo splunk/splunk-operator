@@ -1,0 +1,4 @@
+apiVersion: "splunk-instance.splunk.com/v1alpha1"
+kind: "SplunkInstance"
+metadata:
+  name: "example"
