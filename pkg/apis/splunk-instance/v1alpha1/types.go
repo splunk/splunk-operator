@@ -22,7 +22,9 @@ type SplunkInstance struct {
 }
 
 type SplunkInstanceSpec struct {
-	// Fill me
+	Standalones int `json:"standalones"`
+	Indexers int `json:"indexers"`
+	SearchHeads int `json:"searchHeads"`
 }
 type SplunkInstanceStatus struct {
 	// Fill me
