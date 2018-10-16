@@ -4,6 +4,10 @@ metadata:
   name: splunkinstances.splunk-instance.splunk.com
 spec:
   group: splunk-instance.splunk.com
+  version:
+    - name: v1alpha1
+      served: true
+      storage: true
   names:
     kind: SplunkInstance
     listKind: SplunkInstanceList
