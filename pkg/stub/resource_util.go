@@ -17,6 +17,7 @@ import (
 
 
 const (
+	DEPLOYMENT_TEMPLATE_STR = "splunk-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	STATEFULSET_TEMPLATE_STR = "splunk-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	STATEFULSET_POD_TEMPLATE_STR = "splunk-instance-%s-%s-%d" // instanceType, identifier, index (ex: 0, 1, 2, ...)
 	EXPOSE_SERVICE_TEMPLATE_STR = "splunk-expose-%s-%s-%d" // instanceType, identifier, index
@@ -42,6 +43,60 @@ func GetClusterComponetUrls(cr *v1alpha1.SplunkInstance, identifier string, inst
 	return strings.Join(urls, ",")
 }
 
+func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, identifier string, instanceType SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) error {
+
+	labels := GetSplunkAppLabels(identifier, map[string]string{"type": instanceType.toString()})
+	replicas32 := int32(replicas)
+
+	deployment := &v1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf(DEPLOYMENT_TEMPLATE_STR, instanceType.toString(), identifier),
+			Namespace: cr.Namespace,
+		},
+		Spec: v1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Replicas: &replicas32,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Image: SPLUNK_IMAGE,
+							Name: "splunk",
+							Ports: []corev1.ContainerPort{
+								{
+									Name: "web",
+									ContainerPort: 8000,
+								},{
+									Name: "mgmt",
+									ContainerPort: 8089,
+								},
+							},
+							Env: envVariables,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	addOwnerRefToObject(deployment, asOwner(cr))
+
+	err := CreateResource(deployment)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func CreateSplunkStatefulSet(cr *v1alpha1.SplunkInstance, identifier string, instanceType SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) error {
 

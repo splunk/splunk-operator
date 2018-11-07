@@ -3,4 +3,5 @@ kind: "SplunkInstance"
 metadata:
   name: "example"
 spec:
-  standalones: 1
+  indexers: 2
+  searchHeads: 2
