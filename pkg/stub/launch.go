@@ -1,51 +1,29 @@
 package stub
 
 import (
-	"k8s.io/api/core/v1"
 	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"operator/splunk-operator/pkg/stub/resources"
+	"operator/splunk-operator/pkg/stub/splunk"
 )
 
 
-func GetIdentifier(cr *v1alpha1.SplunkInstance) string {
-	return cr.GetObjectMeta().GetName()
-}
+func LaunchDeployment(cr *v1alpha1.SplunkInstance) error {
 
-
-func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
-	conf := []v1.EnvVar{
-		{
-			Name: "SPLUNK_HOME",
-			Value: "/opt/splunk",
-		},{
-			Name: "SPLUNK_PASSWORD",
-			Value: "helloworld",
-		},{
-			Name: "SPLUNK_START_ARGS",
-			Value: "--accept-license",
-		},
+	if cr.Spec.Standalones > 0 {
+		LaunchStandalones(cr)
 	}
 
-	if overrides != nil {
-		for k, v := range overrides {
-			conf = append(conf, v1.EnvVar{
-				Name: k,
-				Value: v,
-			})
-		}
+	if cr.Spec.Indexers > 0 && cr.Spec.SearchHeads > 0 {
+		LaunchCluster(cr)
 	}
 
-	return conf
+	return nil
 }
 
 
 func LaunchStandalones(cr *v1alpha1.SplunkInstance) error {
 
-	err := CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_STANDALONE, cr.Spec.Standalones, GetSplunkConfiguration(nil))
-	if err != nil {
-		return err
-	}
-
-	err = ExposeStandaloneInstances(cr, GetIdentifier(cr))
+	err := resources.CreateSplunkDeployment(cr, splunk.SPLUNK_STANDALONE, splunk.GetIdentifier(cr), cr.Spec.Standalones, splunk.GetSplunkConfiguration(nil))
 	if err != nil {
 		return err
 	}
@@ -56,103 +34,181 @@ func LaunchStandalones(cr *v1alpha1.SplunkInstance) error {
 
 func LaunchCluster(cr *v1alpha1.SplunkInstance) error {
 
-	getClusterConf := func(role string) map[string]string {
-		return map[string]string{
-			"SPLUNK_CLUSTER_MASTER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_MASTER, 1),
-			"SPLUNK_INDEXER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers),
-			"SPLUNK_SEARCH_HEAD_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads),
-			"SPLUNK_ROLE": role,
-		}
-	}
-
-	numMasters := 0
-	if cr.Spec.SearchHeads > 0 && cr.Spec.Indexers > 0 {
-		numMasters = 1
-	}
-	err := CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_MASTER, numMasters, GetSplunkConfiguration(getClusterConf("splunk_cluster_master")))
+	err := LaunchLicenseMaster(cr)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers, GetSplunkConfiguration(getClusterConf("splunk_indexer")))
+	err = LaunchClusterMaster(cr)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads, GetSplunkConfiguration(getClusterConf("splunk_search_head")))
+	err = LaunchDeployer(cr)
 	if err != nil {
 		return err
 	}
 
-	if numMasters == 1 {
-		err = CreateExposeService(cr, GetIdentifier(cr), SPLUNK_MASTER, EXPOSE_MASTER_SERVICE,0)
-		if err != nil {
-			return err
-		}
+	err = LaunchIndexers(cr)
+	if err != nil {
+		return nil
+	}
+
+	err = LaunchSearchHeads(cr)
+	if err != nil {
+		return nil
+	}
+
+	//getClusterConf := func(role string) map[string]string {
+	//	return map[string]string{
+	//		"SPLUNK_CLUSTER_MASTER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_MASTER, 1),
+	//		"SPLUNK_INDEXER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers),
+	//		"SPLUNK_SEARCH_HEAD_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads),
+	//		"SPLUNK_ROLE": role,
+	//	}
+	//}
+	//
+	//numMasters := 0
+	//if cr.Spec.SearchHeads > 0 && cr.Spec.Indexers > 0 {
+	//	numMasters = 1
+	//}
+	//err := CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_MASTER, numMasters, GetSplunkConfiguration(getClusterConf("splunk_cluster_master")))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers, GetSplunkConfiguration(getClusterConf("splunk_indexer")))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads, GetSplunkConfiguration(getClusterConf("splunk_search_head")))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//if numMasters == 1 {
+	//	err = CreateExposeService(cr, GetIdentifier(cr), SPLUNK_MASTER, EXPOSE_MASTER_SERVICE,0)
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
+
+	return nil
+}
+
+
+func LaunchLicenseMaster(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_LICENSE_MASTER, splunk.GetIdentifier(cr), false)
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_LICENSE_MASTER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(cr,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_license_master",
+				"SPLUNK_LICENSE_URI": "/license.lic",
+			},
+		),
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
 
-func UpdateStandalones(cr *v1alpha1.SplunkInstance) error {
-
-	err := UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_STANDALONE, cr.Spec.Standalones)
+func LaunchClusterMaster(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_CLUSTER_MASTER, splunk.GetIdentifier(cr), false)
 	if err != nil {
 		return err
 	}
 
-	err = UpdateExposeServices(cr, GetIdentifier(cr), SPLUNK_STANDALONE, EXPOSE_STANDALONE_SERVICE, cr.Spec.Standalones)
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_CLUSTER_MASTER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(cr,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_cluster_master",
+			},
+		),
+	)
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-
-func UpdateCluster(cr *v1alpha1.SplunkInstance) error {
-
-	numMasters := 0
-	if cr.Spec.SearchHeads > 0 && cr.Spec.Indexers > 0 {
-		numMasters = 1
-	}
-	err := UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_MASTER, numMasters)
-	if err != nil {
-		return err
-	}
-
-	err = UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads)
-	if err != nil {
-		return err
-	}
-
-	err = UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers)
-	if err != nil {
-		return err
-	}
-
-	err = UpdateExposeServices(cr, GetIdentifier(cr), SPLUNK_MASTER, EXPOSE_MASTER_SERVICE, numMasters)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-
-func CleanupLaunch(cr *v1alpha1.SplunkInstance) error {
-	err := DeletePersistentVolumeClaims(cr, GetIdentifier(cr))
 	return err
 }
 
 
-func ExposeStandaloneInstances(cr *v1alpha1.SplunkInstance, identifier string) error {
-	for i := 0; i < cr.Spec.Standalones; i++ {
-		err := CreateExposeService(cr, identifier, SPLUNK_STANDALONE, EXPOSE_STANDALONE_SERVICE, int(i))
-		if err != nil {
-			return err
-		}
+func LaunchDeployer(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_DEPLOYER, splunk.GetIdentifier(cr), false)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_DEPLOYER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(cr,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_deployer",
+			},
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+
+func LaunchIndexers(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateSplunkStatefulSet(
+		cr,
+		splunk.SPLUNK_INDEXER,
+		splunk.GetIdentifier(cr),
+		cr.Spec.Indexers,
+		splunk.GetSplunkClusterConfiguration(cr,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_indexer",
+			},
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+
+func LaunchSearchHeads(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateSplunkStatefulSet(
+		cr,
+		splunk.SPLUNK_SEARCH_HEAD,
+		splunk.GetIdentifier(cr),
+		cr.Spec.SearchHeads,
+		splunk.GetSplunkClusterConfiguration(cr,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_search_head",
+			},
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
 }

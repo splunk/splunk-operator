@@ -28,28 +28,15 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 			}
 
 			if event.Deleted {
-				return CleanupLaunch(o)
+				return nil
 			}
 
-			err = LaunchStandalones(o)
+			err = LaunchDeployment(o)
 			if err != nil {
 				return err
 			}
 
-			err = LaunchCluster(o)
-			if err != nil {
-				return err
-			}
-
-			err = UpdateStandalones(o)
-			if err != nil {
-				return err
-			}
-
-			err = UpdateCluster(o)
-			if err != nil {
-				return err
-			}
-		}
+			break
+	}
 	return nil
 }
