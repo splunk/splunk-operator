@@ -23,7 +23,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkInstance) error {
 
 func LaunchStandalones(cr *v1alpha1.SplunkInstance) error {
 
-	err := resources.CreateSplunkDeployment(cr, splunk.SPLUNK_STANDALONE, splunk.GetIdentifier(cr), cr.Spec.Standalones, splunk.GetSplunkConfiguration(nil))
+	err := resources.CreateSplunkDeployment(cr, splunk.SPLUNK_STANDALONE, splunk.GetIdentifier(cr), cr.Spec.Standalones, splunk.GetSplunkConfiguration(nil), nil)
 	if err != nil {
 		return err
 	}
@@ -109,12 +109,15 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkInstance) error {
 		splunk.SPLUNK_LICENSE_MASTER,
 		splunk.GetIdentifier(cr),
 		1,
-		splunk.GetSplunkClusterConfiguration(cr,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			true,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_license_master",
 				"SPLUNK_LICENSE_URI": "/license.lic",
 			},
 		),
+		splunk.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -135,11 +138,14 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkInstance) error {
 		splunk.SPLUNK_CLUSTER_MASTER,
 		splunk.GetIdentifier(cr),
 		1,
-		splunk.GetSplunkClusterConfiguration(cr,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			true,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_cluster_master",
 			},
 		),
+		splunk.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -160,11 +166,14 @@ func LaunchDeployer(cr *v1alpha1.SplunkInstance) error {
 		splunk.SPLUNK_DEPLOYER,
 		splunk.GetIdentifier(cr),
 		1,
-		splunk.GetSplunkClusterConfiguration(cr,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			true,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_deployer",
 			},
 		),
+		splunk.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -180,11 +189,14 @@ func LaunchIndexers(cr *v1alpha1.SplunkInstance) error {
 		splunk.SPLUNK_INDEXER,
 		splunk.GetIdentifier(cr),
 		cr.Spec.Indexers,
-		splunk.GetSplunkClusterConfiguration(cr,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			true,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_indexer",
 			},
 		),
+		splunk.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -200,11 +212,14 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkInstance) error {
 		splunk.SPLUNK_SEARCH_HEAD,
 		splunk.GetIdentifier(cr),
 		cr.Spec.SearchHeads,
-		splunk.GetSplunkClusterConfiguration(cr,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			true,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_search_head",
 			},
 		),
+		splunk.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err

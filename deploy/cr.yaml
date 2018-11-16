@@ -4,4 +4,4 @@ metadata:
   name: "example"
 spec:
   indexers: 1
-  searchHeads: 1
+  searchHeads: 3

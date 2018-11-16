@@ -1,9 +1,9 @@
 package splunk
 
-
 import (
 	"k8s.io/api/core/v1"
 	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"strings"
 )
 
 
@@ -51,7 +51,7 @@ func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
 			Value: "/opt/splunk",
 		},{
 			Name: "SPLUNK_PASSWORD",
-			Value: "helloworld",
+			Value: "helloworld123",
 		},{
 			Name: "SPLUNK_START_ARGS",
 			Value: "--accept-license",
@@ -71,17 +71,14 @@ func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
 }
 
 
-func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, overrides map[string]string) []v1.EnvVar {
+func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, chooseSearchHeadCaptain bool, overrides map[string]string) []v1.EnvVar {
 	urls := []v1.EnvVar{
 		{
 			Name: "SPLUNK_CLUSTER_MASTER_URL",
 			Value: GetSplunkServiceName(SPLUNK_CLUSTER_MASTER, GetIdentifier(cr)),
 		},{
 			Name: "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr), cr.Spec.Indexers, false),
-		},{
-			Name: "SPLUNK_SEARCH_HEAD_URL",
-			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr), cr.Spec.Indexers, false),
+			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr), cr.Spec.Indexers, true),
 		},{
 			Name: "SPLUNK_DEPLOYER_URL",
 			Value: GetSplunkServiceName(SPLUNK_DEPLOYER, GetIdentifier(cr)),
@@ -91,7 +88,35 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, overrides map[st
 		},
 	}
 
-	return append(urls, GetSplunkConfiguration(overrides)...)
+	searchHeadUrlsStr := GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr), cr.Spec.SearchHeads, true)
+	searchHeadConf := []v1.EnvVar{
+		{
+			Name: "SPLUNK_SEARCH_HEAD_URL",
+			Value: searchHeadUrlsStr,
+		},
+	}
+	if chooseSearchHeadCaptain {
+		searchHeadUrls := strings.Split(searchHeadUrlsStr, ",")
+		searchHeadConf = []v1.EnvVar{
+			{
+				Name: "SPLUNK_SEARCH_HEAD_URL",
+				Value: strings.Join(searchHeadUrls[1:], ","),
+			},{
+				Name: "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
+				Value: searchHeadUrls[0],
+			},
+		}
+	}
+
+	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides)...)
+}
+
+
+func GetSplunkDNSConfiguration(cr *v1alpha1.SplunkInstance) []string {
+	return []string{
+		GetSplunkDNSUrl(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr)),
+		GetSplunkDNSUrl(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr)),
+	}
 }
 
 

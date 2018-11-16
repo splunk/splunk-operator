@@ -69,3 +69,12 @@ func GetSplunkStatefulsetUrl(namespace string, instanceType SplunkInstanceType, 
 		)
 	}
 }
+
+
+func GetSplunkDNSUrl(namespace string, instanceType SplunkInstanceType, identifier string) string {
+	return fmt.Sprintf(
+		"%s.%s.svc.cluster.local",
+		GetSplunkHeadlessServiceName(instanceType, identifier),
+		namespace,
+	)
+}

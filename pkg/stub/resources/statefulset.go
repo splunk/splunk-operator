@@ -10,7 +10,7 @@ import (
 )
 
 
-func CreateSplunkStatefulSet(cr *v1alpha1.SplunkInstance, instanceType splunk.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar) error {
+func CreateSplunkStatefulSet(cr *v1alpha1.SplunkInstance, instanceType splunk.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
 
 	labels := splunk.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -47,6 +47,13 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkInstance, instanceType splunk.Sp
 				},
 			},
 		},
+	}
+
+	if DNSConfigSearches != nil {
+		statefulSet.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
+		statefulSet.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
+			Searches: DNSConfigSearches,
+		}
 	}
 
 	AddOwnerRefToObject(statefulSet, AsOwner(cr))

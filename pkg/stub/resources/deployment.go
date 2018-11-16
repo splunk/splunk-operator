@@ -10,7 +10,7 @@ import (
 )
 
 
-func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar) error {
+func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
 
 	labels := splunk.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -46,6 +46,13 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 				},
 			},
 		},
+	}
+
+	if DNSConfigSearches != nil {
+		deployment.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
+		deployment.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
+			Searches: DNSConfigSearches,
+		}
 	}
 
 	AddOwnerRefToObject(deployment, AsOwner(cr))
