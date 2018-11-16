@@ -25,6 +25,8 @@ type SplunkInstanceSpec struct {
 	Standalones int `json:"standalones"`
 	Indexers int `json:"indexers"`
 	SearchHeads int `json:"searchHeads"`
+	EnableDFS bool `json:"enableDFS"`
+	SparkWorkers int `json:"sparkWorkers"`
 }
 type SplunkInstanceStatus struct {
 	// Fill me

@@ -18,29 +18,38 @@ func GetSplunkAppLabels(identifier string, typeLabel string) map[string]string {
 }
 
 
-func GetSplunkPorts() []v1.ContainerPort {
-	return []v1.ContainerPort{
-		{
-			Name: "splunkweb",
-			ContainerPort: 8000,
-		}, {
-			Name: "splunkd",
-			ContainerPort: 8089,
-		},
+func GetSplunkPorts() map[string]int {
+	return map[string]int{
+		"splunkweb": 8000,
+		"splunkd": 8089,
+		"dfccontrol": 17000,
+		"datarecieve": 19000,
+		"dfsmaster": 9000,
 	}
 }
 
 
-func GetSplunkPortsForService() []v1.ServicePort {
-	return []v1.ServicePort{
-		{
-			Name: "splunkweb",
-			Port: 8000,
-		}, {
-			Name: "splunkd",
-			Port: 8089,
-		},
+func GetSplunkContainerPorts() []v1.ContainerPort {
+	l := []v1.ContainerPort{}
+	for key, value := range GetSplunkPorts() {
+		l = append(l, v1.ContainerPort{
+			Name: key,
+			ContainerPort: int32(value),
+		})
 	}
+	return l
+}
+
+
+func GetSplunkServicePorts() []v1.ServicePort {
+	l := []v1.ServicePort{}
+	for key, value := range GetSplunkPorts() {
+		l = append(l, v1.ServicePort{
+			Name: key,
+			Port: int32(value),
+		})
+	}
+	return l
 }
 
 
@@ -71,7 +80,7 @@ func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
 }
 
 
-func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, chooseSearchHeadCaptain bool, overrides map[string]string) []v1.EnvVar {
+func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, searchHeadCluster bool, overrides map[string]string) []v1.EnvVar {
 	urls := []v1.EnvVar{
 		{
 			Name: "SPLUNK_CLUSTER_MASTER_URL",
@@ -79,9 +88,6 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, chooseSearchHead
 		},{
 			Name: "SPLUNK_INDEXER_URL",
 			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr), cr.Spec.Indexers, true),
-		},{
-			Name: "SPLUNK_DEPLOYER_URL",
-			Value: GetSplunkServiceName(SPLUNK_DEPLOYER, GetIdentifier(cr)),
 		},{
 			Name: "SPLUNK_LICENSE_MASTER_URL",
 			Value: GetSplunkServiceName(SPLUNK_LICENSE_MASTER, GetIdentifier(cr)),
@@ -95,7 +101,7 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, chooseSearchHead
 			Value: searchHeadUrlsStr,
 		},
 	}
-	if chooseSearchHeadCaptain {
+	if searchHeadCluster {
 		searchHeadUrls := strings.Split(searchHeadUrlsStr, ",")
 		searchHeadConf = []v1.EnvVar{
 			{
@@ -104,6 +110,9 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, chooseSearchHead
 			},{
 				Name: "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
 				Value: searchHeadUrls[0],
+			},{
+				Name: "SPLUNK_DEPLOYER_URL",
+				Value: GetSplunkServiceName(SPLUNK_DEPLOYER, GetIdentifier(cr)),
 			},
 		}
 	}
