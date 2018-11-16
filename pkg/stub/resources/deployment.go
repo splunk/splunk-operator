@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"operator/splunk-operator/pkg/stub/spark"
 	"operator/splunk-operator/pkg/stub/splunk"
 )
 
@@ -38,7 +39,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 						{
 							Image: splunk.SPLUNK_IMAGE,
 							Name: "splunk",
-							Ports: splunk.GetSplunkPorts(),
+							Ports: splunk.GetSplunkContainerPorts(),
 							Env: envVariables,
 						},
 					},
@@ -53,6 +54,56 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 		deployment.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
 			Searches: DNSConfigSearches,
 		}
+	}
+
+	AddOwnerRefToObject(deployment, AsOwner(cr))
+
+	err := CreateResource(deployment)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+func CreateSparkDeployment(cr *v1alpha1.SplunkInstance, instanceType spark.SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
+
+	labels := spark.GetSparkAppLabels(identifier, instanceType.ToString())
+	replicas32 := int32(replicas)
+
+	deployment := &v1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: spark.GetSparkDeploymentName(instanceType, identifier),
+			Namespace: cr.Namespace,
+		},
+		Spec: v1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Replicas: &replicas32,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Hostname: spark.GetSparkServiceName(instanceType, identifier),
+					Containers: []corev1.Container{
+						{
+							Image: spark.SPARK_IMAGE,
+							Name: "spark",
+							Ports: ports,
+							Env: envVariables,
+						},
+					},
+					ImagePullSecrets: splunk.GetImagePullSecrets(),
+				},
+			},
+		},
 	}
 
 	AddOwnerRefToObject(deployment, AsOwner(cr))
