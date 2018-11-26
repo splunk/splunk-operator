@@ -31,6 +31,6 @@ spec:
 | enableDFS | bool | If this is true, DFS will be installed on **searchHeads** being launched. |
 | sparkWorkers | integer | The number of spark workers to launch. When this is defined, a **spark cluster master** will be launched as well to create a spark cluster. |
 
-** Notes **
+**Notes**
 + If **searchHeads** is defined then **indexers** must also be defined (and vice versa).
 + If **enableDFS** is defined then **sparkWorkers** must also be defined (and vice versa) or else a DFS search won't work.
