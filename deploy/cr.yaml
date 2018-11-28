@@ -3,5 +3,7 @@ kind: "SplunkInstance"
 metadata:
   name: "example"
 spec:
-  indexers: 2
-  searchHeads: 2
+  indexers: 1
+  searchHeads: 1
+  enableDFS: true
+  sparkWorkers: 4

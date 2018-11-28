@@ -1,51 +1,35 @@
 package stub
 
 import (
-	"k8s.io/api/core/v1"
 	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"operator/splunk-operator/pkg/stub/resources"
+	"operator/splunk-operator/pkg/stub/spark"
+	"operator/splunk-operator/pkg/stub/splunk"
 )
 
 
-func GetIdentifier(cr *v1alpha1.SplunkInstance) string {
-	return cr.GetObjectMeta().GetName()
-}
+func LaunchDeployment(cr *v1alpha1.SplunkInstance) error {
 
-
-func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
-	conf := []v1.EnvVar{
-		{
-			Name: "SPLUNK_HOME",
-			Value: "/opt/splunk",
-		},{
-			Name: "SPLUNK_PASSWORD",
-			Value: "helloworld",
-		},{
-			Name: "SPLUNK_START_ARGS",
-			Value: "--accept-license",
-		},
+	if cr.Spec.Standalones > 0 {
+		LaunchStandalones(cr)
 	}
 
-	if overrides != nil {
-		for k, v := range overrides {
-			conf = append(conf, v1.EnvVar{
-				Name: k,
-				Value: v,
-			})
+	if cr.Spec.Indexers > 0 && cr.Spec.SearchHeads > 0 {
+		if cr.Spec.SparkWorkers > 0 && cr.Spec.EnableDFS {
+			LaunchCluster(cr, true)
+			LaunchSparkCluster(cr)
+		} else {
+			LaunchCluster(cr, false)
 		}
 	}
 
-	return conf
+	return nil
 }
 
 
 func LaunchStandalones(cr *v1alpha1.SplunkInstance) error {
 
-	err := CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_STANDALONE, cr.Spec.Standalones, GetSplunkConfiguration(nil))
-	if err != nil {
-		return err
-	}
-
-	err = ExposeStandaloneInstances(cr, GetIdentifier(cr))
+	err := resources.CreateSplunkDeployment(cr, splunk.SPLUNK_STANDALONE, splunk.GetIdentifier(cr), cr.Spec.Standalones, splunk.GetSplunkConfiguration(nil), nil)
 	if err != nil {
 		return err
 	}
@@ -54,85 +38,60 @@ func LaunchStandalones(cr *v1alpha1.SplunkInstance) error {
 }
 
 
-func LaunchCluster(cr *v1alpha1.SplunkInstance) error {
+func LaunchCluster(cr *v1alpha1.SplunkInstance, enableDFS bool) error {
 
-	getClusterConf := func(role string) map[string]string {
-		return map[string]string{
-			"SPLUNK_CLUSTER_MASTER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_MASTER, 1),
-			"SPLUNK_INDEXER_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers),
-			"SPLUNK_SEARCH_HEAD_URL": GetClusterComponetUrls(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads),
-			"SPLUNK_ROLE": role,
-		}
-	}
-
-	numMasters := 0
-	if cr.Spec.SearchHeads > 0 && cr.Spec.Indexers > 0 {
-		numMasters = 1
-	}
-	err := CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_MASTER, numMasters, GetSplunkConfiguration(getClusterConf("splunk_cluster_master")))
+	err := LaunchLicenseMaster(cr)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers, GetSplunkConfiguration(getClusterConf("splunk_indexer")))
+	err = LaunchClusterMaster(cr)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads, GetSplunkConfiguration(getClusterConf("splunk_search_head")))
-	if err != nil {
-		return err
-	}
-
-	if numMasters == 1 {
-		err = CreateExposeService(cr, GetIdentifier(cr), SPLUNK_MASTER, EXPOSE_MASTER_SERVICE,0)
+	if cr.Spec.SearchHeads > 1 {
+		err = LaunchDeployer(cr)
 		if err != nil {
 			return err
 		}
 	}
 
-	return nil
-}
-
-
-func UpdateStandalones(cr *v1alpha1.SplunkInstance) error {
-
-	err := UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_STANDALONE, cr.Spec.Standalones)
+	err = LaunchIndexers(cr)
 	if err != nil {
-		return err
+		return nil
 	}
 
-	err = UpdateExposeServices(cr, GetIdentifier(cr), SPLUNK_STANDALONE, EXPOSE_STANDALONE_SERVICE, cr.Spec.Standalones)
+	err = LaunchSearchHeads(cr, enableDFS)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	return nil
 }
 
 
-func UpdateCluster(cr *v1alpha1.SplunkInstance) error {
-
-	numMasters := 0
-	if cr.Spec.SearchHeads > 0 && cr.Spec.Indexers > 0 {
-		numMasters = 1
-	}
-	err := UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_MASTER, numMasters)
+func LaunchLicenseMaster(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_LICENSE_MASTER, splunk.GetIdentifier(cr), false)
 	if err != nil {
 		return err
 	}
 
-	err = UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_SEARCH_HEAD, cr.Spec.SearchHeads)
-	if err != nil {
-		return err
-	}
-
-	err = UpdateSplunkInstance(cr, GetIdentifier(cr), SPLUNK_INDEXER, cr.Spec.Indexers)
-	if err != nil {
-		return err
-	}
-
-	err = UpdateExposeServices(cr, GetIdentifier(cr), SPLUNK_MASTER, EXPOSE_MASTER_SERVICE, numMasters)
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_LICENSE_MASTER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			cr.Spec.SearchHeads > 1,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_license_master",
+				"SPLUNK_LICENSE_URI": "/license.lic",
+			},
+		),
+		splunk.GetSplunkDNSConfiguration(cr),
+	)
 	if err != nil {
 		return err
 	}
@@ -141,18 +100,141 @@ func UpdateCluster(cr *v1alpha1.SplunkInstance) error {
 }
 
 
-func CleanupLaunch(cr *v1alpha1.SplunkInstance) error {
-	err := DeletePersistentVolumeClaims(cr, GetIdentifier(cr))
+func LaunchClusterMaster(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_CLUSTER_MASTER, splunk.GetIdentifier(cr), false)
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_CLUSTER_MASTER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			cr.Spec.SearchHeads > 1,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_cluster_master",
+			},
+		),
+		splunk.GetSplunkDNSConfiguration(cr),
+	)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
 
-func ExposeStandaloneInstances(cr *v1alpha1.SplunkInstance, identifier string) error {
-	for i := 0; i < cr.Spec.Standalones; i++ {
-		err := CreateExposeService(cr, identifier, SPLUNK_STANDALONE, EXPOSE_STANDALONE_SERVICE, int(i))
-		if err != nil {
-			return err
+func LaunchDeployer(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateService(cr, splunk.SPLUNK_DEPLOYER, splunk.GetIdentifier(cr), false)
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateSplunkDeployment(
+		cr,
+		splunk.SPLUNK_DEPLOYER,
+		splunk.GetIdentifier(cr),
+		1,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			cr.Spec.SearchHeads > 1,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_deployer",
+			},
+		),
+		splunk.GetSplunkDNSConfiguration(cr),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+
+func LaunchIndexers(cr *v1alpha1.SplunkInstance) error {
+	err := resources.CreateSplunkStatefulSet(
+		cr,
+		splunk.SPLUNK_INDEXER,
+		splunk.GetIdentifier(cr),
+		cr.Spec.Indexers,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			cr.Spec.SearchHeads > 1,
+			map[string]string{
+				"SPLUNK_ROLE": "splunk_indexer",
+			},
+		),
+		splunk.GetSplunkDNSConfiguration(cr),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+
+func LaunchSearchHeads(cr *v1alpha1.SplunkInstance, enableDFS bool) error {
+
+	overrides := map[string]string{
+		"SPLUNK_ROLE": "splunk_search_head",
+	}
+
+	if enableDFS {
+		overrides["ENABLE_DFS"] = "true"
+		overrides["DFS_MASTER_PORT"] = "9000"
+		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, splunk.GetIdentifier(cr))
+		overrides["SPARK_MASTER_WEBUI_PORT"] = "8009"
+		overrides["DFS_EXECUTOR_STARTING_PORT"] = "17500"
+		if cr.Spec.SearchHeads > 1 {
+			overrides["DFW_NUM_SLOTS_ENABLED"] = "true"
+		} else {
+			overrides["DFW_NUM_SLOTS_ENABLED"] = "false"
 		}
 	}
+
+	err := resources.CreateSplunkStatefulSet(
+		cr,
+		splunk.SPLUNK_SEARCH_HEAD,
+		splunk.GetIdentifier(cr),
+		cr.Spec.SearchHeads,
+		splunk.GetSplunkClusterConfiguration(
+			cr,
+			cr.Spec.SearchHeads > 1,
+			overrides,
+		),
+		splunk.GetSplunkDNSConfiguration(cr),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+
+func LaunchSparkCluster(cr *v1alpha1.SplunkInstance) error {
+
+	err := resources.CreateSparkService(cr, spark.SPARK_MASTER, splunk.GetIdentifier(cr), false, spark.GetSparkMasterServicePorts())
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateSparkDeployment(cr, spark.SPARK_MASTER, splunk.GetIdentifier(cr), 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	if err != nil {
+		return err
+	}
+
+
+	err = resources.CreateSparkStatefulSet(cr, spark.SPARK_WORKER, splunk.GetIdentifier(cr), cr.Spec.SparkWorkers, spark.GetSparkWorkerConfiguration(splunk.GetIdentifier(cr)), splunk.GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
