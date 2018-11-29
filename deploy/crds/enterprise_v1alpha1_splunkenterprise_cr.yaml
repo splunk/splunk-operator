@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v1alpha1
+kind: SplunkEnterprise
+metadata:
+  name: example-splunkenterprise
+spec:
+  indexers: 1
+  searchHeads: 1
+  enableDFS: true
+  sparkWorkers: 4
