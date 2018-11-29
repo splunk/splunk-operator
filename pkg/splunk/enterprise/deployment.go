@@ -1,19 +1,19 @@
-package resources
-
+package enterprise
 
 import (
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/spark"
+	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
-	"operator/splunk-operator/pkg/stub/spark"
-	"operator/splunk-operator/pkg/stub/splunk"
 )
 
 
-func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
+func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
 
-	labels := splunk.GetSplunkAppLabels(identifier, instanceType.ToString())
+	labels := GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
 
 	deployment := &v1.Deployment{
@@ -22,7 +22,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: splunk.GetSplunkDeploymentName(instanceType, identifier),
+			Name: GetSplunkDeploymentName(instanceType, identifier),
 			Namespace: cr.Namespace,
 		},
 		Spec: v1.DeploymentSpec{
@@ -37,13 +37,13 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: splunk.SPLUNK_IMAGE,
+							Image: SPLUNK_IMAGE,
 							Name: "splunk",
-							Ports: splunk.GetSplunkContainerPorts(),
+							Ports: GetSplunkContainerPorts(),
 							Env: envVariables,
 						},
 					},
-					ImagePullSecrets: splunk.GetImagePullSecrets(),
+					ImagePullSecrets: GetImagePullSecrets(),
 				},
 			},
 		},
@@ -56,9 +56,9 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 		}
 	}
 
-	AddOwnerRefToObject(deployment, AsOwner(cr))
+	resources.AddOwnerRefToObject(deployment, resources.AsOwner(cr))
 
-	err := CreateResource(deployment)
+	err := resources.CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkInstance, instanceType splunk.Spl
 }
 
 
-func CreateSparkDeployment(cr *v1alpha1.SplunkInstance, instanceType spark.SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
+func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
 
 	labels := spark.GetSparkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -100,15 +100,15 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkInstance, instanceType spark.Spark
 							Env: envVariables,
 						},
 					},
-					ImagePullSecrets: splunk.GetImagePullSecrets(),
+					ImagePullSecrets: GetImagePullSecrets(),
 				},
 			},
 		},
 	}
 
-	AddOwnerRefToObject(deployment, AsOwner(cr))
+	resources.AddOwnerRefToObject(deployment, resources.AsOwner(cr))
 
-	err := CreateResource(deployment)
+	err := resources.CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}

@@ -1,11 +1,11 @@
-package stub
+package enterprise
 
 import (
 	"errors"
-	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
-func ValidateSplunkCustomResource(instance *v1alpha1.SplunkInstance) error {
+func ValidateSplunkCustomResource(instance *v1alpha1.SplunkEnterprise) error {
 	if instance.Spec.SearchHeads > 0 && instance.Spec.Indexers <= 0 {
 		return errors.New("You must specify how many indexers the cluster should have.")
 	}

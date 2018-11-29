@@ -1,18 +1,20 @@
 package resources
 
 import (
-	"github.com/operator-framework/operator-sdk/pkg/sdk"
-	"github.com/sirupsen/logrus"
+	"log"
+	"context"
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 
-func CreateResource(object sdk.Object) error {
-	err := sdk.Create(object)
+func CreateResource(client client.Client, obj runtime.Object) error {
+	err := client.Create(context.TODO(), obj)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		logrus.Errorf("Failed to create object : %v", err)
+		log.Printf("Failed to create object : %v", err)
 		return err
 	}
 	return nil
@@ -24,7 +26,7 @@ func AddOwnerRefToObject(object metav1.Object, reference metav1.OwnerReference) 
 }
 
 
-func AsOwner(instance *v1alpha1.SplunkInstance) metav1.OwnerReference {
+func AsOwner(instance *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 	trueVar := true
 	return metav1.OwnerReference{
 		APIVersion: instance.APIVersion,

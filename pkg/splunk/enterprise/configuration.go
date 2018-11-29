@@ -1,8 +1,8 @@
-package splunk
+package enterprise
 
 import (
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"k8s.io/api/core/v1"
-	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
 	"strings"
 )
 
@@ -80,7 +80,7 @@ func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
 }
 
 
-func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, searchHeadCluster bool, overrides map[string]string) []v1.EnvVar {
+func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadCluster bool, overrides map[string]string) []v1.EnvVar {
 	urls := []v1.EnvVar{
 		{
 			Name: "SPLUNK_CLUSTER_MASTER_URL",
@@ -121,7 +121,7 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkInstance, searchHeadCluste
 }
 
 
-func GetSplunkDNSConfiguration(cr *v1alpha1.SplunkInstance) []string {
+func GetSplunkDNSConfiguration(cr *v1alpha1.SplunkEnterprise) []string {
 	return []string{
 		GetSplunkDNSUrl(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr)),
 		GetSplunkDNSUrl(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr)),

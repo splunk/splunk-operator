@@ -1,4 +1,4 @@
-package splunk
+package enterprise
 
 
 type SplunkInstanceType string
