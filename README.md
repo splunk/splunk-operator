@@ -1,12 +1,49 @@
-# CR Spec
+# splunk-operator
+
+This repository is used to build the [Kubernetes operator](https://coreos.com/operators/) for Splunk.
+
+## Vendor Dependencies
+
+This project uses [dep](https://github.com/golang/dep) to manage dependencies. On MacOS, you can install `dep` using Homebrew:
+
+```
+$ brew install dep
+$ brew upgrade dep
+```
+
+On other platforms you can use the `install.sh` script:
+
+```
+$ curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+```
+
+## Operator SDK
+
+The Kubernetes [Operator SDK](https://github.com/operator-framework/operator-sdk) must also be installed to build this project.
+
+```
+$ mkdir -p $GOPATH/src/github.com/operator-framework
+$ cd $GOPATH/src/github.com/operator-framework
+$ git clone https://github.com/operator-framework/operator-sdk
+$ cd operator-sdk
+$ git checkout master
+$ make dep
+$ make install
+```
+
+## Building the operator
+
+You can build the operator by just running `make`. Use `make push` to push the image you've built to artifactory.
+
+## CR Spec
 
 After creating the relevant resources on your Kubernetes cluster, you will now be able to create resources of type **SplunkInstance**
 
-Here is a sample yaml file that can be used to create a **SplunkInstance**
+Here is a sample yaml file that can be used to create a **SplunkEnterprise**
 
 ```yaml
-apiVersion: "splunk-instance.splunk.com/v1alpha1"
-kind: "SplunkInstance"
+apiVersion: "enterprise.splunk.com/v1alpha1"
+kind: "SplunkEnterprise"
 metadata:
 	name: "example"
 spec:
