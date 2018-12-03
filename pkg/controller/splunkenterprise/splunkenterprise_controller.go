@@ -52,9 +52,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	//	IsController: true,
 	//	OwnerType:    &enterprisev1alpha1.SplunkEnterprise{},
 	//})
-	if err != nil {
-		return err
-	}
+	//if err != nil {
+	//	return err
+	//}
 
 	return nil
 }
