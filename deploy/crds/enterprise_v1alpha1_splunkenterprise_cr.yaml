@@ -3,7 +3,5 @@ kind: SplunkEnterprise
 metadata:
   name: example-splunkenterprise
 spec:
-  indexers: 1
-  searchHeads: 1
-  enableDFS: true
-  sparkWorkers: 4
+  searchHeads: 3
+  indexers: 3

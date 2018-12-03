@@ -28,9 +28,10 @@ func AddOwnerRefToObject(object metav1.Object, reference metav1.OwnerReference) 
 
 func AsOwner(instance *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 	trueVar := true
+
 	return metav1.OwnerReference{
-		APIVersion: instance.APIVersion,
-		Kind:       instance.Kind,
+		APIVersion: instance.TypeMeta.APIVersion,
+		Kind:       instance.TypeMeta.Kind,
 		Name:       instance.Name,
 		UID:        instance.UID,
 		Controller: &trueVar,

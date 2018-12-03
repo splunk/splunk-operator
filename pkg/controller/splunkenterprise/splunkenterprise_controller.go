@@ -93,6 +93,9 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha1"
+	instance.TypeMeta.Kind = "SplunkEnterprise"
+
 	err = enterprise.ValidateSplunkCustomResource(instance)
 	if err != nil {
 		return reconcile.Result{}, err

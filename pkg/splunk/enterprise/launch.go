@@ -1,8 +1,8 @@
 package enterprise
 
 import (
-	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
