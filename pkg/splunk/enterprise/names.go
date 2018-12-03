@@ -1,9 +1,9 @@
-package splunk
+package enterprise
 
 import (
 	"fmt"
 	"strings"
-	"operator/splunk-operator/pkg/apis/splunk-instance/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
 
@@ -18,7 +18,7 @@ const (
 )
 
 
-func GetIdentifier(cr *v1alpha1.SplunkInstance) string {
+func GetIdentifier(cr *v1alpha1.SplunkEnterprise) string {
 	return cr.GetObjectMeta().GetName()
 }
 

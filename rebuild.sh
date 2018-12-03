@@ -1,7 +1,7 @@
 #!/bin/bash
 
-kubectl delete splunkinstances.splunk-instance.splunk.com --all
+kubectl delete splunkenterprises.enterprise.splunk.com --all
 kubectl delete deploy splunk-operator
-operator-sdk build tmaliksplunk/test
-docker push tmaliksplunk/test
+operator-sdk build repo.splunk.com/splunk/products/splunk-operator
+docker push repo.splunk.com/splunk/products/splunk-operator
 kubectl create -f deploy/operator.yaml
