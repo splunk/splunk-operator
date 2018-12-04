@@ -28,7 +28,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateSplunkDeployment(cr, client, SPLUNK_STANDALONE, GetIdentifier(cr), cr.Spec.Standalones, GetSplunkConfiguration(nil), nil)
+	err := CreateSplunkDeployment(cr, client, SPLUNK_STANDALONE, GetIdentifier(cr), cr.Spec.Standalones, GetSplunkConfiguration(cr, nil), nil)
 	if err != nil {
 		return err
 	}

@@ -6,11 +6,18 @@ import (
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NOTE: Do not make struct fields private (i.e. make sure all struct fields start with an uppercase) otherwise the
+//		 serializer will not be able to access those fields and they will be left blank
+
+type SplunkConfigSpec struct {
+	SplunkStartArgs string `json:"splunkStartArgs"`
+}
 
 // SplunkEnterpriseSpec defines the desired state of SplunkEnterprise
 type SplunkEnterpriseSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
+	Config SplunkConfigSpec `json:"config"`
 	Standalones int `json:"standalones"`
 	Indexers int `json:"indexers"`
 	SearchHeads int `json:"searchHeads"`

@@ -3,5 +3,6 @@ kind: SplunkEnterprise
 metadata:
   name: example-splunkenterprise
 spec:
-  searchHeads: 3
-  indexers: 3
+  config:
+    splunkStartArgs: --accept-license
+  standalones: 1
