@@ -53,7 +53,7 @@ func GetSplunkServicePorts() []v1.ServicePort {
 }
 
 
-func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
+func GetSplunkConfiguration(cr *v1alpha1.SplunkEnterprise, overrides map[string]string) []v1.EnvVar {
 	conf := []v1.EnvVar{
 		{
 			Name: "SPLUNK_HOME",
@@ -61,10 +61,14 @@ func GetSplunkConfiguration(overrides map[string]string) []v1.EnvVar {
 		},{
 			Name: "SPLUNK_PASSWORD",
 			Value: "helloworld123",
-		},{
-			Name: "SPLUNK_START_ARGS",
-			Value: "--accept-license",
 		},
+	}
+
+	if (cr.Spec.Config.SplunkStartArgs != "") {
+		conf = append(conf, v1.EnvVar{
+			Name: "SPLUNK_START_ARGS",
+			Value: cr.Spec.Config.SplunkStartArgs,
+		})
 	}
 
 	if overrides != nil {
@@ -117,7 +121,7 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadClus
 		}
 	}
 
-	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides)...)
+	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(cr, overrides)...)
 }
 
 
