@@ -58,9 +58,6 @@ func GetSplunkConfiguration(cr *v1alpha1.SplunkEnterprise, overrides map[string]
 		{
 			Name: "SPLUNK_HOME",
 			Value: "/opt/splunk",
-		},{
-			Name: "SPLUNK_PASSWORD",
-			Value: "helloworld123",
 		},
 	}
 

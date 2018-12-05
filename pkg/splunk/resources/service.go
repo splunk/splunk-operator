@@ -1,29 +1,29 @@
-package enterprise
+package resources
 
 import (
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 
-func CreateService(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType SplunkInstanceType, identifier string, isHeadless bool) error {
+func CreateService(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, isHeadless bool) error {
 
-	serviceName := GetSplunkServiceName(instanceType, identifier)
+	serviceName := enterprise.GetSplunkServiceName(instanceType, identifier)
 	if isHeadless {
-		serviceName = GetSplunkHeadlessServiceName(instanceType, identifier)
+		serviceName = enterprise.GetSplunkHeadlessServiceName(instanceType, identifier)
 	}
 
-	serviceType := SERVICE
+	serviceType := enterprise.SERVICE
 	if isHeadless {
-		serviceType = HEADLESS_SERVICE
+		serviceType = enterprise.HEADLESS_SERVICE
 	}
 
-	serviceTypeLabels := GetSplunkAppLabels(identifier, serviceType.ToString())
-	selectLabels := GetSplunkAppLabels(identifier, instanceType.ToString())
+	serviceTypeLabels := enterprise.GetSplunkAppLabels(identifier, serviceType.ToString())
+	selectLabels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -37,7 +37,7 @@ func CreateService(cr *v1alpha1.SplunkEnterprise, client client.Client, instance
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selectLabels,
-			Ports: GetSplunkServicePorts(),
+			Ports: enterprise.GetSplunkServicePorts(),
 		},
 	}
 
@@ -45,9 +45,9 @@ func CreateService(cr *v1alpha1.SplunkEnterprise, client client.Client, instance
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 	}
 
-	resources.AddOwnerRefToObject(service, resources.AsOwner(cr))
+	AddOwnerRefToObject(service, AsOwner(cr))
 
-	err := resources.CreateResource(client, service)
+	err := CreateResource(client, service)
 	if err != nil {
 		return err
 	}
@@ -63,9 +63,9 @@ func CreateSparkService(cr *v1alpha1.SplunkEnterprise, client client.Client, ins
 		serviceName = spark.GetSparkHeadlessServiceName(instanceType, identifier)
 	}
 
-	serviceType := SERVICE
+	serviceType := enterprise.SERVICE
 	if isHeadless {
-		serviceType = HEADLESS_SERVICE
+		serviceType = enterprise.HEADLESS_SERVICE
 	}
 
 	serviceTypeLabels := spark.GetSparkAppLabels(identifier, serviceType.ToString())
@@ -91,9 +91,9 @@ func CreateSparkService(cr *v1alpha1.SplunkEnterprise, client client.Client, ins
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 	}
 
-	resources.AddOwnerRefToObject(service, resources.AsOwner(cr))
+	AddOwnerRefToObject(service, AsOwner(cr))
 
-	err := resources.CreateResource(client, service)
+	err := CreateResource(client, service)
 	if err != nil {
 		return err
 	}

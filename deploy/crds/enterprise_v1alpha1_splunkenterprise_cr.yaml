@@ -5,4 +5,5 @@ metadata:
 spec:
   config:
     splunkStartArgs: --accept-license
+    defaultsConfigMapName: splunk-defaults
   standalones: 1

@@ -1,20 +1,20 @@
-package enterprise
+package resources
 
 import (
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 
-func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
+func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
 
-	labels := GetSplunkAppLabels(identifier, instanceType.ToString())
+	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
 
 	statefulSet := &v1.StatefulSet{
@@ -23,14 +23,14 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSplunkStatefulsetName(instanceType, identifier),
+			Name: enterprise.GetSplunkStatefulsetName(instanceType, identifier),
 			Namespace: cr.Namespace,
 		},
 		Spec: v1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName: GetSplunkHeadlessServiceName(instanceType, identifier),
+			ServiceName: enterprise.GetSplunkHeadlessServiceName(instanceType, identifier),
 			Replicas: &replicas32,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -39,16 +39,20 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: SPLUNK_IMAGE,
+							Image: enterprise.SPLUNK_IMAGE,
 							Name: "splunk",
-							Ports: GetSplunkContainerPorts(),
+							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
 						},
 					},
-					ImagePullSecrets: GetImagePullSecrets(),
+					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},
+	}
+
+	if cr.Spec.Config.DefaultsConfigMapName != "" {
+		AddConfigMapVolumeToPodTemplate(&statefulSet.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, "/tmp/defaults")
 	}
 
 	if DNSConfigSearches != nil {
@@ -58,9 +62,9 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 		}
 	}
 
-	resources.AddOwnerRefToObject(statefulSet, resources.AsOwner(cr))
+	AddOwnerRefToObject(statefulSet, AsOwner(cr))
 
-	err := resources.CreateResource(client, statefulSet)
+	err := CreateResource(client, statefulSet)
 	if err != nil {
 		return err
 	}
@@ -123,7 +127,7 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 							},
 						},
 					},
-					ImagePullSecrets: GetImagePullSecrets(),
+					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},
@@ -136,9 +140,9 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 		}
 	}
 
-	resources.AddOwnerRefToObject(statefulSet, resources.AsOwner(cr))
+	AddOwnerRefToObject(statefulSet, AsOwner(cr))
 
-	err = resources.CreateResource(client, statefulSet)
+	err = CreateResource(client, statefulSet)
 	if err != nil {
 		return err
 	}

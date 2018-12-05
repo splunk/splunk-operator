@@ -10,7 +10,7 @@ const (
 	STATEFULSET_TEMPLATE_STR = "spark-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	HEADLESS_SERVICE_TEMPLATE_STR = "spark-headless-%s-%s" // instanceType, identifier
 
-	SPARK_IMAGE = "tmaliksplunk/spark"
+	SPARK_IMAGE = "repo.splunk.com/tmalik/spark"
 )
 
 

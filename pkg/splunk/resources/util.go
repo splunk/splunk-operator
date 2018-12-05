@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"k8s.io/api/core/v1"
 	"log"
 	"context"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
@@ -35,5 +36,29 @@ func AsOwner(instance *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 		Name:       instance.Name,
 		UID:        instance.UID,
 		Controller: &trueVar,
+	}
+}
+
+
+func AddConfigMapVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeName string, configMapName string, mountLocation string) {
+	podTemplateSpec.Spec.Volumes = []v1.Volume{
+		{
+			Name: volumeName,
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: configMapName,
+					},
+				},
+			},
+		},
+	}
+	for idx, _ := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = []v1.VolumeMount{
+			{
+				Name: volumeName,
+				MountPath: mountLocation,
+			},
+		}
 	}
 }
