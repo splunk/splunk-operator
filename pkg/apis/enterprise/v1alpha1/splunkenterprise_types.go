@@ -10,6 +10,7 @@ import (
 //		 serializer will not be able to access those fields and they will be left blank
 
 type SplunkConfigSpec struct {
+	SplunkPassword string `json:"splunkPassword"`
 	SplunkStartArgs string `json:"splunkStartArgs"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
 }

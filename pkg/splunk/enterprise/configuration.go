@@ -61,10 +61,17 @@ func GetSplunkConfiguration(cr *v1alpha1.SplunkEnterprise, overrides map[string]
 		},
 	}
 
-	if (cr.Spec.Config.SplunkStartArgs != "") {
+	if cr.Spec.Config.SplunkStartArgs != "" {
 		conf = append(conf, v1.EnvVar{
 			Name: "SPLUNK_START_ARGS",
 			Value: cr.Spec.Config.SplunkStartArgs,
+		})
+	}
+
+	if cr.Spec.Config.SplunkPassword != "" {
+		conf = append(conf, v1.EnvVar{
+			Name: "SPLUNK_PASSWORD",
+			Value: cr.Spec.Config.SplunkPassword,
 		})
 	}
 
