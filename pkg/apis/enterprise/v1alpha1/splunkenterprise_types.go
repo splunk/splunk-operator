@@ -13,13 +13,13 @@ type SplunkConfigSpec struct {
 	SplunkPassword string `json:"splunkPassword"`
 	SplunkStartArgs string `json:"splunkStartArgs"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
+	EnableDFS bool `json:"enableDFS"`
 }
 
 type SplunkTopologySpec struct {
 	Standalones int `json:"standalones"`
 	Indexers int `json:"indexers"`
 	SearchHeads int `json:"searchHeads"`
-	EnableDFS bool `json:"enableDFS"`
 	SparkWorkers int `json:"sparkWorkers"`
 }
 

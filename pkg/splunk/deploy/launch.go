@@ -16,7 +16,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 	}
 
 	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
-		if cr.Spec.Topology.SparkWorkers > 0 && cr.Spec.Topology.EnableDFS {
+		if cr.Spec.Topology.SparkWorkers > 0 && cr.Spec.Config.EnableDFS {
 			LaunchCluster(cr, client, true)
 			LaunchSparkCluster(cr, client)
 		} else {
