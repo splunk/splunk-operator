@@ -1,19 +1,19 @@
-package enterprise
+package resources
 
 import (
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"k8s.io/api/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 
-func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
+func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
 
-	labels := GetSplunkAppLabels(identifier, instanceType.ToString())
+	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
 
 	deployment := &v1.Deployment{
@@ -22,7 +22,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSplunkDeploymentName(instanceType, identifier),
+			Name: enterprise.GetSplunkDeploymentName(instanceType, identifier),
 			Namespace: cr.Namespace,
 		},
 		Spec: v1.DeploymentSpec{
@@ -37,16 +37,20 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: SPLUNK_IMAGE,
+							Image: enterprise.SPLUNK_IMAGE,
 							Name: "splunk",
-							Ports: GetSplunkContainerPorts(),
+							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
 						},
 					},
-					ImagePullSecrets: GetImagePullSecrets(),
+					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},
+	}
+
+	if cr.Spec.Config.DefaultsConfigMapName != "" {
+		AddConfigMapVolumeToPodTemplate(&deployment.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, "/tmp/defaults")
 	}
 
 	if DNSConfigSearches != nil {
@@ -56,9 +60,9 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 		}
 	}
 
-	resources.AddOwnerRefToObject(deployment, resources.AsOwner(cr))
+	AddOwnerRefToObject(deployment, AsOwner(cr))
 
-	err := resources.CreateResource(client, deployment)
+	err := CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}
@@ -100,15 +104,15 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 							Env: envVariables,
 						},
 					},
-					ImagePullSecrets: GetImagePullSecrets(),
+					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},
 	}
 
-	resources.AddOwnerRefToObject(deployment, resources.AsOwner(cr))
+	AddOwnerRefToObject(deployment, AsOwner(cr))
 
-	err := resources.CreateResource(client, deployment)
+	err := CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ const (
 	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-headless-%s-%s" // instanceType, identifier
 	SERVICE_TEMPLATE_STR = "splunk-service-%s-%s" // instanceType, identifier
 
-	SPLUNK_IMAGE = "tmaliksplunk/dfs"
+	SPLUNK_IMAGE = "repo.splunk.com/tmalik/dfs"
 )
 
 

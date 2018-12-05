@@ -11,6 +11,7 @@ import (
 
 type SplunkConfigSpec struct {
 	SplunkStartArgs string `json:"splunkStartArgs"`
+	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
 }
 
 // SplunkEnterpriseSpec defines the desired state of SplunkEnterprise

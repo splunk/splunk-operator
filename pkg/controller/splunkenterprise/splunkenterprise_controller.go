@@ -2,7 +2,7 @@ package splunkenterprise
 
 import (
 	"context"
-	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+	"git.splunk.com/splunk-operator/pkg/splunk/deploy"
 	"log"
 
 	enterprisev1alpha1 "git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
@@ -96,12 +96,12 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha1"
 	instance.TypeMeta.Kind = "SplunkEnterprise"
 
-	err = enterprise.ValidateSplunkCustomResource(instance)
+	err = deploy.ValidateSplunkCustomResource(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	err = enterprise.LaunchDeployment(instance, r.client)
+	err = deploy.LaunchDeployment(instance, r.client)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

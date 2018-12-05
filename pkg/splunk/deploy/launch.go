@@ -1,7 +1,9 @@
-package enterprise
+package deploy
 
 import (
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,7 +30,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateSplunkDeployment(cr, client, SPLUNK_STANDALONE, GetIdentifier(cr), cr.Spec.Standalones, GetSplunkConfiguration(cr, nil), nil)
+	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Standalones, enterprise.GetSplunkConfiguration(cr, nil), nil)
 	if err != nil {
 		return err
 	}
@@ -71,18 +73,18 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDF
 
 
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := CreateService(cr, client, SPLUNK_LICENSE_MASTER, GetIdentifier(cr), false)
+	err := resources.CreateService(cr, client, enterprise.SPLUNK_LICENSE_MASTER, enterprise.GetIdentifier(cr), false)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = resources.CreateSplunkDeployment(
 		cr,
 		client,
-		SPLUNK_LICENSE_MASTER,
-		GetIdentifier(cr),
+		enterprise.SPLUNK_LICENSE_MASTER,
+		enterprise.GetIdentifier(cr),
 		1,
-		GetSplunkClusterConfiguration(
+		enterprise.GetSplunkClusterConfiguration(
 			cr,
 			cr.Spec.SearchHeads > 1,
 			map[string]string{
@@ -90,7 +92,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 				"SPLUNK_LICENSE_URI": "/license.lic",
 			},
 		),
-		GetSplunkDNSConfiguration(cr),
+		enterprise.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -101,25 +103,25 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := CreateService(cr, client, SPLUNK_CLUSTER_MASTER, GetIdentifier(cr), false)
+	err := resources.CreateService(cr, client, enterprise.SPLUNK_CLUSTER_MASTER, enterprise.GetIdentifier(cr), false)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = resources.CreateSplunkDeployment(
 		cr,
 		client,
-		SPLUNK_CLUSTER_MASTER,
-		GetIdentifier(cr),
+		enterprise.SPLUNK_CLUSTER_MASTER,
+		enterprise.GetIdentifier(cr),
 		1,
-		GetSplunkClusterConfiguration(
+		enterprise.GetSplunkClusterConfiguration(
 			cr,
 			cr.Spec.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_cluster_master",
 			},
 		),
-		GetSplunkDNSConfiguration(cr),
+		enterprise.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -130,25 +132,25 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := CreateService(cr, client, SPLUNK_DEPLOYER, GetIdentifier(cr), false)
+	err := resources.CreateService(cr, client, enterprise.SPLUNK_DEPLOYER, enterprise.GetIdentifier(cr), false)
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = resources.CreateSplunkDeployment(
 		cr,
 		client,
-		SPLUNK_DEPLOYER,
-		GetIdentifier(cr),
+		enterprise.SPLUNK_DEPLOYER,
+		enterprise.GetIdentifier(cr),
 		1,
-		GetSplunkClusterConfiguration(
+		enterprise.GetSplunkClusterConfiguration(
 			cr,
 			cr.Spec.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_deployer",
 			},
 		),
-		GetSplunkDNSConfiguration(cr),
+		enterprise.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -159,20 +161,20 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := CreateSplunkStatefulSet(
+	err := resources.CreateSplunkStatefulSet(
 		cr,
 		client,
-		SPLUNK_INDEXER,
-		GetIdentifier(cr),
+		enterprise.SPLUNK_INDEXER,
+		enterprise.GetIdentifier(cr),
 		cr.Spec.Indexers,
-		GetSplunkClusterConfiguration(
+		enterprise.GetSplunkClusterConfiguration(
 			cr,
 			cr.Spec.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_indexer",
 			},
 		),
-		GetSplunkDNSConfiguration(cr),
+		enterprise.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -191,7 +193,7 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 	if enableDFS {
 		overrides["ENABLE_DFS"] = "true"
 		overrides["DFS_MASTER_PORT"] = "9000"
-		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, GetIdentifier(cr))
+		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, enterprise.GetIdentifier(cr))
 		overrides["SPARK_MASTER_WEBUI_PORT"] = "8009"
 		overrides["DFS_EXECUTOR_STARTING_PORT"] = "17500"
 		if cr.Spec.SearchHeads > 1 {
@@ -201,18 +203,18 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 		}
 	}
 
-	err := CreateSplunkStatefulSet(
+	err := resources.CreateSplunkStatefulSet(
 		cr,
 		client,
-		SPLUNK_SEARCH_HEAD,
-		GetIdentifier(cr),
+		enterprise.SPLUNK_SEARCH_HEAD,
+		enterprise.GetIdentifier(cr),
 		cr.Spec.SearchHeads,
-		GetSplunkClusterConfiguration(
+		enterprise.GetSplunkClusterConfiguration(
 			cr,
 			cr.Spec.SearchHeads > 1,
 			overrides,
 		),
-		GetSplunkDNSConfiguration(cr),
+		enterprise.GetSplunkDNSConfiguration(cr),
 	)
 	if err != nil {
 		return err
@@ -224,18 +226,18 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateSparkService(cr, client, spark.SPARK_MASTER, GetIdentifier(cr), false, spark.GetSparkMasterServicePorts())
+	err := resources.CreateSparkService(cr, client, spark.SPARK_MASTER, enterprise.GetIdentifier(cr), false, spark.GetSparkMasterServicePorts())
 	if err != nil {
 		return err
 	}
 
-	err = CreateSparkDeployment(cr, client, spark.SPARK_MASTER, GetIdentifier(cr), 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	err = resources.CreateSparkDeployment(cr, client, spark.SPARK_MASTER, enterprise.GetIdentifier(cr), 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
 	if err != nil {
 		return err
 	}
 
 
-	err = CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, GetIdentifier(cr), cr.Spec.SparkWorkers, spark.GetSparkWorkerConfiguration(GetIdentifier(cr)), GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
+	err = resources.CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, enterprise.GetIdentifier(cr), cr.Spec.SparkWorkers, spark.GetSparkWorkerConfiguration(enterprise.GetIdentifier(cr)), enterprise.GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
 	if err != nil {
 		return err
 	}
