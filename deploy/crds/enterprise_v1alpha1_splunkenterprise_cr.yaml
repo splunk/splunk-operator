@@ -6,5 +6,5 @@ spec:
   config:
     splunkPassword: helloworld456
     splunkStartArgs: --accept-license
-    defaultsConfigMapName: splunk-defaults
-  standalones: 1
+  topology:
+    standalones: 1
