@@ -11,12 +11,12 @@ import (
 
 func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	if cr.Spec.Standalones > 0 {
+	if cr.Spec.Topology.Standalones > 0 {
 		LaunchStandalones(cr, client)
 	}
 
-	if cr.Spec.Indexers > 0 && cr.Spec.SearchHeads > 0 {
-		if cr.Spec.SparkWorkers > 0 && cr.Spec.EnableDFS {
+	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
+		if cr.Spec.Topology.SparkWorkers > 0 && cr.Spec.Config.EnableDFS {
 			LaunchCluster(cr, client, true)
 			LaunchSparkCluster(cr, client)
 		} else {
@@ -30,7 +30,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Standalones, enterprise.GetSplunkConfiguration(cr, nil), nil)
+	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, nil), nil)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDF
 		return err
 	}
 
-	if cr.Spec.SearchHeads > 1 {
+	if cr.Spec.Topology.SearchHeads > 1 {
 		err = LaunchDeployer(cr, client)
 		if err != nil {
 			return err
@@ -86,7 +86,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
-			cr.Spec.SearchHeads > 1,
+			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_license_master",
 				"SPLUNK_LICENSE_URI": "/license.lic",
@@ -116,7 +116,7 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
-			cr.Spec.SearchHeads > 1,
+			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_cluster_master",
 			},
@@ -145,7 +145,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
-			cr.Spec.SearchHeads > 1,
+			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_deployer",
 			},
@@ -166,10 +166,10 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		client,
 		enterprise.SPLUNK_INDEXER,
 		enterprise.GetIdentifier(cr),
-		cr.Spec.Indexers,
+		cr.Spec.Topology.Indexers,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
-			cr.Spec.SearchHeads > 1,
+			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_indexer",
 			},
@@ -196,7 +196,7 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, enterprise.GetIdentifier(cr))
 		overrides["SPARK_MASTER_WEBUI_PORT"] = "8009"
 		overrides["DFS_EXECUTOR_STARTING_PORT"] = "17500"
-		if cr.Spec.SearchHeads > 1 {
+		if cr.Spec.Topology.SearchHeads > 1 {
 			overrides["DFW_NUM_SLOTS_ENABLED"] = "true"
 		} else {
 			overrides["DFW_NUM_SLOTS_ENABLED"] = "false"
@@ -208,10 +208,10 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 		client,
 		enterprise.SPLUNK_SEARCH_HEAD,
 		enterprise.GetIdentifier(cr),
-		cr.Spec.SearchHeads,
+		cr.Spec.Topology.SearchHeads,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
-			cr.Spec.SearchHeads > 1,
+			cr.Spec.Topology.SearchHeads > 1,
 			overrides,
 		),
 		enterprise.GetSplunkDNSConfiguration(cr),
@@ -237,7 +237,7 @@ func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) err
 	}
 
 
-	err = resources.CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, enterprise.GetIdentifier(cr), cr.Spec.SparkWorkers, spark.GetSparkWorkerConfiguration(enterprise.GetIdentifier(cr)), enterprise.GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
+	err = resources.CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, enterprise.GetIdentifier(cr), cr.Spec.Topology.SparkWorkers, spark.GetSparkWorkerConfiguration(enterprise.GetIdentifier(cr)), enterprise.GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
 	if err != nil {
 		return err
 	}

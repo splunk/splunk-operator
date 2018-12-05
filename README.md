@@ -47,8 +47,12 @@ kind: "SplunkEnterprise"
 metadata:
 	name: "example"
 spec:
-	indexers: 1
-	searchHeads: 1
+	config:
+		splunkPassword: helloworld
+		splunkStartArgs: --accept-license
+	topology:
+		indexers: 1
+		searchHeads: 1
 ```
 
 ### Relevant Parameters
@@ -60,13 +64,18 @@ spec:
 | namespace | string | Your splunk deployments will be created in this namespace. You must insure that this namespace exists beforehand. |
 
 #### Spec
-| Key          | Type    | Description                                                                                                                                                           |
-| ------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| standalones  | integer | The number of standalone instances to launch.                                                                                                                         |
-| searchHeads  | integer | The number of search heads to launch. If this number is greater than 1 then a deployer will be launched as well to create a search head cluster.                      |
-| indexers     | integer | The number of indexers to launch. When **searchHeads** is defined and **indexers** is defined a **cluster master** is also launched to create a clustered deployment. |
-| enableDFS    | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
-| sparkWorkers | integer | The number of spark workers to launch. When this is defined, a **spark cluster master** will be launched as well to create a spark cluster.                           |
+| Key                   | Type    | Description                                                                                                                                                           |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Config**            |         |                                                                                                                                                                       |
+| splunkPassword        | string  | The password that can be used to login to splunk instances.                                                                                                           |
+| splunkStartArgs       | string  | Arguments to launch each splunk instance with.                                                                                                                        |
+| defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data.                                                                                                      |
+| enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
+| **Topology**          |         |                                                                                                                                                                       |
+| standalones           | integer | The number of standalone instances to launch.                                                                                                                         |
+| searchHeads           | integer | The number of search heads to launch. If this number is greater than 1 then a deployer will be launched as well to create a search head cluster.                      |
+| indexers              | integer | The number of indexers to launch. When **searchHeads** is defined and **indexers** is defined a **cluster master** is also launched to create a clustered deployment. |
+| sparkWorkers          | integer | The number of spark workers to launch. When this is defined, a **spark cluster master** will be launched as well to create a spark cluster.                           |
 
 **Notes**
 + If **searchHeads** is defined then **indexers** must also be defined (and vice versa).

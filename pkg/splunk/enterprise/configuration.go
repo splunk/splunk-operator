@@ -95,14 +95,14 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadClus
 			Value: GetSplunkServiceName(SPLUNK_CLUSTER_MASTER, GetIdentifier(cr)),
 		},{
 			Name: "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr), cr.Spec.Indexers, true),
+			Value: GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_INDEXER, GetIdentifier(cr), cr.Spec.Topology.Indexers, true),
 		},{
 			Name: "SPLUNK_LICENSE_MASTER_URL",
 			Value: GetSplunkServiceName(SPLUNK_LICENSE_MASTER, GetIdentifier(cr)),
 		},
 	}
 
-	searchHeadUrlsStr := GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr), cr.Spec.SearchHeads, true)
+	searchHeadUrlsStr := GetSplunkStatefulsetUrls(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr), cr.Spec.Topology.SearchHeads, true)
 	searchHeadConf := []v1.EnvVar{
 		{
 			Name: "SPLUNK_SEARCH_HEAD_URL",

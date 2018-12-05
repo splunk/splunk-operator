@@ -13,6 +13,14 @@ type SplunkConfigSpec struct {
 	SplunkPassword string `json:"splunkPassword"`
 	SplunkStartArgs string `json:"splunkStartArgs"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
+	EnableDFS bool `json:"enableDFS"`
+}
+
+type SplunkTopologySpec struct {
+	Standalones int `json:"standalones"`
+	Indexers int `json:"indexers"`
+	SearchHeads int `json:"searchHeads"`
+	SparkWorkers int `json:"sparkWorkers"`
 }
 
 // SplunkEnterpriseSpec defines the desired state of SplunkEnterprise
@@ -20,11 +28,7 @@ type SplunkEnterpriseSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	Config SplunkConfigSpec `json:"config"`
-	Standalones int `json:"standalones"`
-	Indexers int `json:"indexers"`
-	SearchHeads int `json:"searchHeads"`
-	EnableDFS bool `json:"enableDFS"`
-	SparkWorkers int `json:"sparkWorkers"`
+	Topology SplunkTopologySpec `json:"topology"`
 }
 
 // SplunkEnterpriseStatus defines the observed state of SplunkEnterprise
