@@ -37,7 +37,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: enterprise.SPLUNK_IMAGE,
+							Image: enterprise.GetSplunkImage(cr),
 							Name: "splunk",
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
@@ -98,7 +98,7 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 					Hostname: spark.GetSparkServiceName(instanceType, identifier),
 					Containers: []corev1.Container{
 						{
-							Image: spark.SPARK_IMAGE,
+							Image: spark.SPLUNK_SPARK_IMAGE,
 							Name: "spark",
 							Ports: ports,
 							Env: envVariables,

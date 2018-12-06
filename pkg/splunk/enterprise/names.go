@@ -14,7 +14,8 @@ const (
 	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-headless-%s-%s" // instanceType, identifier
 	SERVICE_TEMPLATE_STR = "splunk-service-%s-%s" // instanceType, identifier
 
-	SPLUNK_IMAGE = "repo.splunk.com/tmalik/dfs"
+	SPLUNK_IMAGE = "splunk/splunk"
+	SPLUNK_DFS_IMAGE = "repo.splunk.com/splunk/products/splunk-dfs"
 )
 
 
@@ -77,4 +78,13 @@ func GetSplunkDNSUrl(namespace string, instanceType SplunkInstanceType, identifi
 		GetSplunkHeadlessServiceName(instanceType, identifier),
 		namespace,
 	)
+}
+
+
+func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
+	splunkImage := SPLUNK_IMAGE
+	if (cr.Spec.Config.EnableDFS) {
+		splunkImage = SPLUNK_DFS_IMAGE
+	}
+	return splunkImage
 }

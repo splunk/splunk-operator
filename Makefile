@@ -1,23 +1,48 @@
 # Makefile for Splunk Operator
 
-DOCKER_IMAGE := "repo.splunk.com/splunk/products/splunk-operator"
+SPLUNK_OPERATOR_IMAGE := "repo.splunk.com/splunk/products/splunk-operator"
+SPLUNK_DFS_IMAGE := "repo.splunk.com/splunk/products/splunk-dfs"
+SPLUNK_SPARK_IMAGE := "repo.splunk.com/splunk/products/splunk-spark"
 
-.PHONY: all deps image push
+.PHONY: all dep splunk-operator splunk-dfs splunk-spark push install uninstall rebuild
 
-all: deps image
+all: splunk-opeerator splunk-dfs splunk-spark
 
-deps:
+dep:
 	@echo Checking vendor dependencies
 	@dep ensure
 
-image:
-	@echo Building ${DOCKER_IMAGE}
-	@operator-sdk build ${DOCKER_IMAGE}
+splunk-operator: dep
+	@echo Building ${SPLUNK_OPERATOR_IMAGE}
+	@operator-sdk build ${SPLUNK_OPERATOR_IMAGE}
 
-push: get-tag
-	@echo Pushing ${DOCKER_IMAGE}:${IMAGE_TAG}
-	@docker tag ${DOCKER_IMAGE} ${DOCKER_IMAGE}:${IMAGE_TAG}
-	@docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+splunk-dfs:
+	@cd dockerfiles/splunk && docker build -t repo.splunk.com/splunk/products/splunk-dfs .
 
-get-tag:
-	@$(eval IMAGE_TAG := $(shell bash -c "git rev-parse HEAD | cut -c8-19"))
+splunk-spark:
+	@cd dockerfiles/spark && docker build -t repo.splunk.com/splunk/products/splunk-spark .
+
+push: get-commit-id
+	@echo Pushing ${SPLUNK_OPERATOR_IMAGE}:${COMMIT_ID}
+	@docker tag ${SPLUNK_OPERATOR_IMAGE} ${SPLUNK_OPERATOR_IMAGE}:${COMMIT_ID}
+	@docker push ${SPLUNK_OPERATOR_IMAGE}:${COMMIT_ID}
+
+install:
+	@kubectl create -f deploy/service_account.yaml
+	@kubectl create -f deploy/role.yaml
+	@kubectl create -f deploy/role_binding.yaml
+	@kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+	@kubectl create -f deploy/operator.yaml
+
+uninstall:
+	@kubectl delete splunkenterprises.enterprise.splunk.com --all
+	@kubectl delete -f deploy/operator.yaml
+	@kubectl delete -f deploy/role.yaml
+	@kubectl delete -f deploy/role_binding.yaml
+	@kubectl delete -f deploy/service_account.yaml
+	@kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+
+rebuild: uninstall splunk-operator push install
+
+get-commit-id:
+	@$(eval COMMIT_ID := $(shell bash -c "git rev-parse HEAD | cut -c8-19"))
