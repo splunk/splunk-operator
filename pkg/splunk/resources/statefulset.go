@@ -39,7 +39,7 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: enterprise.SPLUNK_IMAGE,
+							Image: enterprise.GetSplunkImage(cr),
 							Name: "splunk",
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
@@ -115,7 +115,7 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image: spark.SPARK_IMAGE,
+							Image: spark.SPLUNK_SPARK_IMAGE,
 							Name: "spark",
 							Ports: containerPorts,
 							Env: envVariables,

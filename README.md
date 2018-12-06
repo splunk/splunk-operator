@@ -17,7 +17,8 @@ On other platforms you can use the `install.sh` script:
 $ curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 ```
 
-## Operator SDK
+
+## Kubernetes Operator SDK
 
 The Kubernetes [Operator SDK](https://github.com/operator-framework/operator-sdk) must also be installed to build this project.
 
@@ -31,9 +32,55 @@ $ make dep
 $ make install
 ```
 
+
+## Building the splunk-debian-9 image (required to build splunk-dfs image)
+
+Clone the docker-splunk repository and create splunk-debian-9 image using a DFS build:
+
+```
+$ git clone git@github.com:splunk/docker-splunk.git
+$ cd docker-splunk
+$ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/epic-dfs_builds/7.3.0-20181205-0400/splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz splunk-debian-9
+
+```
+
+
+## Cloning this repository
+
+This repository should be cloned into your `~/go/src/git.splunk.com` directory:
+```
+$ mkdir -p ~/go/src/git.splunk.com
+$ cd ~/go/src/git.splunk.com
+$ git clone ssh://git@git.splunk.com:7999/tools/splunk-operator.git
+$ cd splunk-operator
+```
+
+
 ## Building the operator
 
-You can build the operator by just running `make`. Use `make push` to push the image you've built to artifactory.
+You can build the operator by just running `make splunk-operator`.
+
+You can install the operator in current kubernetes target cluster by running `make install` or remove it by running `make uninstall`.
+
+Other make targets include:
+
+* `make all`: builds the splunk-operator, splunk-dfs and splunk-spark docker images
+* `make dep`: checks all vendor dependencies and ensures they are up to date
+* `make splunk-operator`: builds the `splunk-operator` docker image
+* `make splunk-dfs`: builds the `splunk-dfs` docker image
+* `make splunk-spark`: builds the `splunk-spark` docker image
+* `make push`: pushes the `splunk-operator` docker image to `repo.splunk.com`
+* `make install`: installs splunk operator in current k8s target cluster
+* `make uninstall`: removes splunk operator (including all instances) from current k8s target cluster
+* `make rebuild`: rebuilds and reinstalls splunk operator in current k8s target cluster
+
+
+## Running Splunk Enterprise
+
+To create a new Splunk Enterprise instance, run `kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml`.
+
+To remove the instance, run `kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml`
+
 
 ## CR Spec
 
