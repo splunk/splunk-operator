@@ -6,7 +6,7 @@ SPLUNK_SPARK_IMAGE := "repo.splunk.com/splunk/products/splunk-spark"
 
 .PHONY: all dep splunk-operator splunk-dfs splunk-spark push install uninstall rebuild
 
-all: splunk-opeerator splunk-dfs splunk-spark
+all: splunk-operator splunk-dfs splunk-spark
 
 dep:
 	@echo Checking vendor dependencies
