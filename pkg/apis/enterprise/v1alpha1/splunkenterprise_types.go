@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -9,11 +10,17 @@ import (
 // NOTE: Do not make struct fields private (i.e. make sure all struct fields start with an uppercase) otherwise the
 //		 serializer will not be able to access those fields and they will be left blank
 
+type SplunkLicense struct {
+	VolumeSource *v1.VolumeSource `json:"volumeSource"`
+	LicensePath string `json:"licensePath"`
+}
+
 type SplunkConfigSpec struct {
 	SplunkPassword string `json:"splunkPassword"`
 	SplunkStartArgs string `json:"splunkStartArgs"`
 	SplunkImage string `json:"splunkImage"`
 	SparkImage string `json:"sparkImage"`
+	SplunkLicense SplunkLicense `json:"splunkLicense"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
 	EnableDFS bool `json:"enableDFS"`
 }

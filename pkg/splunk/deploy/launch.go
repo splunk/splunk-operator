@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"fmt"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/resources"
@@ -89,7 +90,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
 				"SPLUNK_ROLE": "splunk_license_master",
-				"SPLUNK_LICENSE_URI": "/license.lic",
+				"SPLUNK_LICENSE_URI": fmt.Sprintf("%s%s", enterprise.LICENSE_MOUNT_LOCATION, cr.Spec.Config.SplunkLicense.LicensePath),
 			},
 		),
 		enterprise.GetSplunkDNSConfiguration(cr),
