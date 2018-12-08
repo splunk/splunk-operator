@@ -50,7 +50,7 @@ You can build the operator by just running `make splunk-operator`.
 
 Other make targets include:
 
-* `make all`: builds the splunk-operator, splunk-dfs and splunk-spark docker images (requires splunk-debian-9)
+* `make all`: builds the `splunk-operator` docker image (same as `make splunk-operator`)
 * `make dep`: checks all vendor dependencies and ensures they are up to date
 * `make splunk-operator`: builds the `splunk-operator` docker image
 * `make splunk-dfs`: builds the `splunk-dfs` docker image
@@ -59,8 +59,8 @@ Other make targets include:
 * `make push-dfs`: pushes the `splunk-dfs` docker image to all `push_targets`
 * `make push-spark`: pushes the `splunk-spark` docker image to all `push_targets`
 * `make push`: pushes all docker images to all `push_targets`
-* `make publish-repo`: publishes the `splunk-operator` docker image to repo.splunk.com
-* `make publish-playground`: publishes the `splunk-operator` docker image to cloudrepo-docker-playground.jfrog.io
+* `make publish-repo`: publishes the `splunk-operator` docker image to `repo.splunk.com`
+* `make publish-playground`: publishes the `splunk-operator` docker image to `cloudrepo-docker-playground.jfrog.io`
 * `make publish`: publishes the `splunk-operator` docker image to all registries
 * `make install`: installs required resources in current k8s target cluster
 * `make uninstall`: removes required resources from current k8s target cluster
@@ -96,7 +96,7 @@ $ cd docker-splunk
 $ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/epic-dfs_builds/7.3.0-20181205-0400/splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz splunk-debian-9
 
 ```
-After you have built `splunk-debian-9` you can build build `splunk-dfs` by running `make splunk-dfs`.
+After you have built `splunk-debian-9` you can build `splunk-dfs` by running `make splunk-dfs`.
 
 The `splunk-spark` image can be built by running `make splunk-spark`.
 
@@ -130,7 +130,7 @@ running `make publish-repo`. This will tag the image as `repo.splunk.com/splunk/
 * `splunk-spark`: available via `cloudrepo-docker-playground.jfrog.io`
 
 The `splunk-operator` image is published and available via `cloudrepo-docker-playground.jfrog.io`. You can publish a new
-local build by running `make publish-repo`. This will tag the image as
+local build by running `make publish-playground`. This will tag the image as
 `cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:[COMMIT_ID]`.
 
 
@@ -139,7 +139,7 @@ local build by running `make publish-repo`. This will tag the image as
 You can still run the Splunk operator on clusters that do not have access to Splunk's Docker Registries.
 THIS IS PRE-RELEASE SOFTWARE, SO PLEASE BE VERY CAREFUL NOT TO PUBLISH THESE IMAGES TO ANY PUBLIC REGISTRIES.
 
-Provided is a convenient `push` commands that you can use to upload the images directly to each worker node.
+There are additional `push` make targets that can be used to upload the images directly to each worker node.
 Create a file in the top level directory of this repository named `push_targets`. This file
 should include every worker node in your K8s cluster, one user@host for each line. For example:
 
@@ -204,9 +204,7 @@ To remove the instance, run `kubectl delete -f deploy/crds/enterprise_v1alpha1_s
 
 ## CR Spec
 
-After creating the relevant resources on your Kubernetes cluster, you will now be able to create resources of type **SplunkInstance**
-
-Here is a sample yaml file that can be used to create a **SplunkEnterprise**
+Here is a sample yaml file that can be used to create a **SplunkEnterprise** instance
 
 ```yaml
 apiVersion: "enterprise.splunk.com/v1alpha1"

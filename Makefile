@@ -2,7 +2,7 @@
 
 .PHONY: all dep splunk-operator splunk-dfs splunk-spark push-operator push-dfs push-spark push publish-repo publish-playground publish install uninstall start stop rebuild
 
-all: splunk-opeerator splunk-dfs splunk-spark
+all: splunk-operator
 
 dep:
 	@echo Checking vendor dependencies
@@ -32,14 +32,14 @@ push-spark:
 push: push-operator push-dfs push-spark
 
 publish-repo: get-commit-id
-    @echo Publishing repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
-    @docker tag splunk-operator:latest repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
-    @docker push repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
+	@echo Publishing repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
+	@docker tag splunk-operator:latest repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
+	@docker push repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
 
 publish-playground:
-    @echo Publishing cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
-    @docker tag splunk-operator:latest cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
-    @docker push cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
+	@echo Publishing cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
+	@docker tag splunk-operator:latest cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
+	@docker push cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
 
 publish: publish-repo publish-playground
 
