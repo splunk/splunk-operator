@@ -33,18 +33,6 @@ $ make install
 ```
 
 
-## Building the splunk-debian-9 image (required to build splunk-dfs image)
-
-Clone the docker-splunk repository and create splunk-debian-9 image using a DFS build:
-
-```
-$ git clone git@github.com:splunk/docker-splunk.git
-$ cd docker-splunk
-$ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/epic-dfs_builds/7.3.0-20181205-0400/splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz splunk-debian-9
-
-```
-
-
 ## Cloning this repository
 
 This repository should be cloned into your `~/go/src/git.splunk.com` directory:
@@ -60,26 +48,158 @@ $ cd splunk-operator
 
 You can build the operator by just running `make splunk-operator`.
 
-You can install the operator in current kubernetes target cluster by running `make install` or remove it by running `make uninstall`.
-
 Other make targets include:
 
-* `make all`: builds the splunk-operator, splunk-dfs and splunk-spark docker images
+* `make all`: builds the splunk-operator, splunk-dfs and splunk-spark docker images (requires splunk-debian-9)
 * `make dep`: checks all vendor dependencies and ensures they are up to date
 * `make splunk-operator`: builds the `splunk-operator` docker image
 * `make splunk-dfs`: builds the `splunk-dfs` docker image
 * `make splunk-spark`: builds the `splunk-spark` docker image
-* `make push`: pushes the `splunk-operator` docker image to `repo.splunk.com`
-* `make install`: installs splunk operator in current k8s target cluster
-* `make uninstall`: removes splunk operator (including all instances) from current k8s target cluster
+* `make push-operator`: pushes the `splunk-operator` docker image to all `push_targets`
+* `make push-dfs`: pushes the `splunk-dfs` docker image to all `push_targets`
+* `make push-spark`: pushes the `splunk-spark` docker image to all `push_targets`
+* `make push`: pushes all docker images to all `push_targets`
+* `make publish-repo`: publishes the `splunk-operator` docker image to repo.splunk.com
+* `make publish-playground`: publishes the `splunk-operator` docker image to cloudrepo-docker-playground.jfrog.io
+* `make publish`: publishes the `splunk-operator` docker image to all registries
+* `make install`: installs required resources in current k8s target cluster
+* `make uninstall`: removes required resources from current k8s target cluster
+* `make start`: starts splunk operator in current k8s target cluster
+* `make stop`: stops splunk operator (including all instances) in current k8s target cluster
 * `make rebuild`: rebuilds and reinstalls splunk operator in current k8s target cluster
 
 
-## Running Splunk Enterprise
+## Installing Required Resources
+
+The Splunk operator requires that your k8s target cluster have certain resources. These can be installed by running
+`make install`.
+
+You can later remove these resources by running
+`make uninstall`.
+
+
+## Building Docker Images
+
+The Splunk operator requires three docker images to be present or available to your k8s target cluster:
+
+* `splunk/splunk`: The default Splunk Enterprise image (available from Docker Hub)
+* `splunk-dfs`: The default Splunk Enterprise image used when DFS is enabled
+* `splunk-spark`: The default Spark image used by DFS, when enabled
+* `splunk-operator`: The Splunk operator image
+
+Building the `splunk-dfs` image requires that you first clone the [docker-splunk repository](https://github.com/splunk/docker-splunk)
+and build a `splunk-debian-9` base image using a DFS build of Splunk Enterprise:
+
+```
+$ git clone git@github.com:splunk/docker-splunk.git
+$ cd docker-splunk
+$ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/epic-dfs_builds/7.3.0-20181205-0400/splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz splunk-debian-9
+
+```
+After you have built `splunk-debian-9` you can build build `splunk-dfs` by running `make splunk-dfs`.
+
+The `splunk-spark` image can be built by running `make splunk-spark`.
+
+The `splunk-operator` image can be built by running `make splunk-operator`.
+
+
+## Publishing and Pushing Docker Images
+
+The Splunk operator requires that your k8s cluster has access to the Docker images listed above.
+
+
+### Local Clusters
+
+If you are using a local single-node k8s cluster, you only need to build the images. You can skip this section.
+
+
+### UCP Clusters
+
+* `splunk/splunk`: available from Docker Hub
+* `splunk-dfs`: available via `repo.splunk.com`
+* `splunk-spark`: available via `repo.splunk.com`
+
+The `splunk-operator` image is published and available via `repo.splunk.com`. You can publish a new local build by
+running `make publish-repo`. This will tag the image as `repo.splunk.com/splunk/products/splunk-operator:[COMMIT_ID]`.
+
+
+### Splunk8s Clusters
+
+* `splunk/splunk`: available from Docker Hub
+* `splunk-dfs`: available via `cloudrepo-docker-playground.jfrog.io`
+* `splunk-spark`: available via `cloudrepo-docker-playground.jfrog.io`
+
+The `splunk-operator` image is published and available via `cloudrepo-docker-playground.jfrog.io`. You can publish a new
+local build by running `make publish-repo`. This will tag the image as
+`cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:[COMMIT_ID]`.
+
+
+### Other Clusters
+
+You can still run the Splunk operator on clusters that do not have access to Splunk's Docker Registries.
+THIS IS PRE-RELEASE SOFTWARE, SO PLEASE BE VERY CAREFUL NOT TO PUBLISH THESE IMAGES TO ANY PUBLIC REGISTRIES.
+
+Provided is a convenient `push` commands that you can use to upload the images directly to each worker node.
+Create a file in the top level directory of this repository named `push_targets`. This file
+should include every worker node in your K8s cluster, one user@host for each line. For example:
+
+```
+ubuntu@myvm1.splunk.com
+ubuntu@myvm2.splunk.com
+ubuntu@myvm3.splunk.com
+```
+
+You can push the `splunk-dfs` image to each of these nodes by running `make push-dfs`.
+
+You can push the `splunk-spark` image to each of these nodes by running `make push-spark`.
+
+You can push the `splunk-operator` image to each of these nodes by running `make push-operator`.
+
+Or, just push all three using `make push`.
+
+
+## Running the Splunk Operator
+
+
+### UCP Clusters
+
+You can start the operator by running
+`kubectl create -f deploy/operator-repo.yaml`.
+
+You can stop the operator by running
+`kubectl create -f deploy/operator-repo.yaml`.
+
+
+### Splunk8s Clusters
+
+You can start the operator by running
+`kubectl create -f deploy/operator-playground.yaml`.
+
+You can stop the operator by running
+`kubectl create -f deploy/operator-playground.yaml`.
+
+
+### Local and Other Clusters
+
+You can start the operator by running
+`kubectl create -f deploy/operator.yaml` or `make start` for short.
+
+You can stop the operator by running
+`kubectl create -f deploy/operator.yaml` or `make stop` for short.
+
+
+## Creating Splunk Enterprise Instances
 
 To create a new Splunk Enterprise instance, run `kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml`.
 
 To remove the instance, run `kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml`
+
+
+## Running Splunk Enterprise with DFS
+
+To create a new Splunk Enterprise instance with DFS (including Spark), run `kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr_dfs.yaml`.
+
+To remove the instance, run `kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr_dfs.yaml`
 
 
 ## CR Spec
@@ -116,6 +236,8 @@ spec:
 | **Config**            |         |                                                                                                                                                                       |
 | splunkPassword        | string  | The password that can be used to login to splunk instances.                                                                                                           |
 | splunkStartArgs       | string  | Arguments to launch each splunk instance with.                                                                                                                        |
+| splunkImage           | string  | Docker image to use for Splunk instances (overrides SPLUNK_IMAGE and SPLUNK_DFS_IMAGE environment variables)                                                          |
+| sparkImage            | string  | Docker image to use for Spark instances (overrides SPLUNK_SPARK_IMAGE environment variables)                                                                          |
 | defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data.                                                                                                      |
 | enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
 | **Topology**          |         |                                                                                                                                                                       |

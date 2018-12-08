@@ -2,6 +2,8 @@ package spark
 
 import (
 	"fmt"
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"os"
 )
 
 const (
@@ -10,7 +12,7 @@ const (
 	STATEFULSET_TEMPLATE_STR = "spark-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	HEADLESS_SERVICE_TEMPLATE_STR = "spark-headless-%s-%s" // instanceType, identifier
 
-	SPLUNK_SPARK_IMAGE = "repo.splunk.com/splunk/products/splunk-spark"
+	SPLUNK_SPARK_IMAGE = "splunk-spark"
 )
 
 
@@ -33,3 +35,16 @@ func GetSparkHeadlessServiceName(instanceType SparkInstanceType, identifier stri
 	return fmt.Sprintf(HEADLESS_SERVICE_TEMPLATE_STR, instanceType, identifier)
 }
 
+
+func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
+	sparkImage := SPLUNK_SPARK_IMAGE
+	if (cr.Spec.Config.SparkImage != "") {
+		sparkImage = cr.Spec.Config.SparkImage
+	} else {
+		sparkImage = os.Getenv("SPLUNK_SPARK_IMAGE")
+		if (sparkImage == "") {
+			sparkImage = SPLUNK_SPARK_IMAGE
+		}
+	}
+	return sparkImage
+}

@@ -16,7 +16,7 @@ spec:
       containers:
         - name: splunk-operator
           # Replace this with the built image name
-          image: splunk-operator
+          image: cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator
           ports:
           - containerPort: 60000
             name: metrics
@@ -37,6 +37,6 @@ spec:
             - name: SPLUNK_IMAGE
               value: "splunk/splunk"
             - name: SPLUNK_DFS_IMAGE
-              value: "splunk-dfs"
+              value: "cloudrepo-docker-playground.jfrog.io/dfs/splunk-dfs"
             - name: SPLUNK_SPARK_IMAGE
-              value: "splunk-spark"
+              value: "cloudrepo-docker-playground.jfrog.io/dfs/splunk-spark"
