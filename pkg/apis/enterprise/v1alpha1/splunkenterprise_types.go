@@ -12,6 +12,8 @@ import (
 type SplunkConfigSpec struct {
 	SplunkPassword string `json:"splunkPassword"`
 	SplunkStartArgs string `json:"splunkStartArgs"`
+	SplunkImage string `json:"splunkImage"`
+	SparkImage string `json:"sparkImage"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
 	EnableDFS bool `json:"enableDFS"`
 }

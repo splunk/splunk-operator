@@ -1,0 +1,13 @@
+apiVersion: enterprise.splunk.com/v1alpha1
+kind: SplunkEnterprise
+metadata:
+  name: example-splunkenterprise
+spec:
+  config:
+    splunkPassword: helloworld456
+    splunkStartArgs: --accept-license
+    enableDFS: true
+  topology:
+    indexers: 3
+    searchHeads: 3
+    sparkWorkers: 3

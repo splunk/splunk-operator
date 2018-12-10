@@ -2,8 +2,9 @@ package enterprise
 
 import (
 	"fmt"
-	"strings"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"os"
+	"strings"
 )
 
 
@@ -15,7 +16,7 @@ const (
 	SERVICE_TEMPLATE_STR = "splunk-service-%s-%s" // instanceType, identifier
 
 	SPLUNK_IMAGE = "splunk/splunk"
-	SPLUNK_DFS_IMAGE = "repo.splunk.com/splunk/products/splunk-dfs"
+	SPLUNK_DFS_IMAGE = "splunk-dfs"
 )
 
 
@@ -83,8 +84,20 @@ func GetSplunkDNSUrl(namespace string, instanceType SplunkInstanceType, identifi
 
 func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
 	splunkImage := SPLUNK_IMAGE
-	if (cr.Spec.Config.EnableDFS) {
-		splunkImage = SPLUNK_DFS_IMAGE
+	if (cr.Spec.Config.SplunkImage != "") {
+		splunkImage = cr.Spec.Config.SplunkImage
+	} else {
+		if (cr.Spec.Config.EnableDFS) {
+			splunkImage = os.Getenv("SPLUNK_DFS_IMAGE")
+			if (splunkImage == "") {
+				splunkImage = SPLUNK_DFS_IMAGE
+			}
+		} else {
+			splunkImage = os.Getenv("SPLUNK_IMAGE")
+			if (splunkImage == "") {
+				splunkImage = SPLUNK_IMAGE
+			}
+		}
 	}
 	return splunkImage
 }
