@@ -297,6 +297,9 @@ spec:
 | splunkStartArgs       | string  | Arguments to launch each splunk instance with.                                                                                                                        |
 | splunkImage           | string  | Docker image to use for Splunk instances (overrides SPLUNK_IMAGE and SPLUNK_DFS_IMAGE environment variables)                                                          |
 | sparkImage            | string  | Docker image to use for Spark instances (overrides SPLUNK_SPARK_IMAGE environment variables)                                                                          |
+| splunkLicense         |         | Specify a splunk license to use for clustered deployments.                                                                                                            |
+| <li>volumeSource</li>	| volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
+| <li>licensePath</li>  | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
 | defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data.                                                                                                      |
 | enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
 | **Topology**          |         |                                                                                                                                                                       |
@@ -308,3 +311,28 @@ spec:
 **Notes**
 + If **searchHeads** is defined then **indexers** must also be defined (and vice versa).
 + If **enableDFS** is defined then **sparkWorkers** must also be defined (and vice versa) or else a DFS search won't work.
+
+## Examples
+
+### License Mount
+
+Suppose we create a ConfigMap of a dfs license in our kubernetes cluster named **dfs-license.lic**. Then to use that license for our deployment the yaml would look like:
+
+```yaml
+apiVersion: "enterprise.splunk.com/v1alpha1"
+kind: "SplunkEnterprise"
+metadata:
+	name: "example"
+spec:
+	config:
+		splunkPassword: helloworld456
+		splunkStartArgs: --accept-license
+		splunkLicense:
+			volumeSource:
+				configMap:
+					name: dfs-license
+			licensePath: /dfs-license.lic
+	topology:
+		indexers: 3
+		searchHeads: 3
+```
