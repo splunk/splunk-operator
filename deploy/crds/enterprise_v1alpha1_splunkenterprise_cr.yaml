@@ -6,5 +6,11 @@ spec:
   config:
     splunkPassword: helloworld456
     splunkStartArgs: --accept-license
+    splunkLicense:
+      volumeSource:
+        configMap:
+          name: dfs-license
+      licensePath: /dfs-license.lic
   topology:
-    standalones: 1
+    indexers: 3
+    searchHeads: 3

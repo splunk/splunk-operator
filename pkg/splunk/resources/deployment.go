@@ -51,7 +51,11 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 	}
 
 	if cr.Spec.Config.DefaultsConfigMapName != "" {
-		AddConfigMapVolumeToPodTemplate(&deployment.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, "/tmp/defaults")
+		AddConfigMapVolumeToPodTemplate(&deployment.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, enterprise.SPLUNK_DEFAULTS_MOUNT_LOCATION)
+	}
+
+	if cr.Spec.Config.SplunkLicense.VolumeSource != nil {
+		AddLicenseVolumeToPodTemplate(&deployment.Spec.Template, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
 	}
 
 	if DNSConfigSearches != nil {

@@ -17,6 +17,9 @@ const (
 
 	SPLUNK_IMAGE = "splunk/splunk"
 	SPLUNK_DFS_IMAGE = "splunk-dfs"
+
+	LICENSE_MOUNT_LOCATION string = "/license"
+	SPLUNK_DEFAULTS_MOUNT_LOCATION string = "/tmp/defaults"
 )
 
 
