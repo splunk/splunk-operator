@@ -74,6 +74,13 @@ Other make targets include (more info below):
 
 ## Installing Required Resources
 
+You must have administrator access for the Kubernetes namespace used by your current context. For Splunk8s playground,
+your namespace will typically be "user-" + your username. You can set the default namespace used by the current
+context by running
+```
+kubectl config set-context $(kubectl config current-context) --namespace=user-${USER}
+``` 
+
 The Splunk operator requires that your k8s target cluster have certain resources. These can be installed by running
 ```
 $ make install
