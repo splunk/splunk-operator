@@ -48,12 +48,15 @@ install:
 	@kubectl create -f deploy/service_account.yaml
 	@kubectl create -f deploy/role.yaml
 	@kubectl create -f deploy/role_binding.yaml
+	@if [[ ! -f splunk-enterprise.lic ]]; then wget --quiet -O splunk-enterprise.lic http://go/splunk-nfr-license; fi
+	@kubectl create configmap splunk-enterprise.lic --from-file=splunk-enterprise.lic
 
 uninstall:
 	@kubectl delete -f deploy/role_binding.yaml
 	@kubectl delete -f deploy/role.yaml
 	@kubectl delete -f deploy/service_account.yaml
 	@if `kubectl get splunkenterprises.enterprise.splunk.com &> /dev/null`; then kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml &> /dev/null || true; fi
+	@kubectl delete configmap splunk-enterprise.lic
 
 start:
 	@kubectl create -f deploy/operator.yaml

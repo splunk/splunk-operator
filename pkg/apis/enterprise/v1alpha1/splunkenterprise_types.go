@@ -20,6 +20,15 @@ type SplunkConfigSpec struct {
 	SplunkStartArgs string `json:"splunkStartArgs"`
 	SplunkImage string `json:"splunkImage"`
 	SparkImage string `json:"sparkImage"`
+	SplunkCpuRequest string `json:"splunkCpuRequest"`
+	SparkCpuRequest string `json:"sparkCpuRequest"`
+	SplunkMemoryRequest string `json:"splunkMemoryRequest"`
+	SparkMemoryRequest string `json:"sparkMemoryRequest"`
+	SplunkCpuLimit string `json:"splunkCpuLimit"`
+	SparkCpuLimit string `json:"sparkCpuLimit"`
+	SplunkMemoryLimit string `json:"splunkMemoryLimit"`
+	SparkMemoryLimit string `json:"sparkMemoryLimit"`
+	ImagePullPolicy string `json:"imagePullPolicy"`
 	SplunkLicense SplunkLicense `json:"splunkLicense"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
 	EnableDFS bool `json:"enableDFS"`

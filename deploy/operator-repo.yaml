@@ -22,7 +22,7 @@ spec:
             name: metrics
           command:
           - splunk-operator
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
               valueFrom:
@@ -40,3 +40,5 @@ spec:
               value: "repo.splunk.com/splunk/products/splunk-dfs"
             - name: SPLUNK_SPARK_IMAGE
               value: "repo.splunk.com/splunk/products/splunk-spark"
+            - name: IMAGE_PULL_POLICY
+              value: "Always"

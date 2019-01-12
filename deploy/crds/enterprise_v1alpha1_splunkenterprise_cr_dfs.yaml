@@ -7,6 +7,11 @@ spec:
     splunkPassword: helloworld456
     splunkStartArgs: --accept-license
     enableDFS: true
+    splunkLicense:
+      volumeSource:
+        configMap:
+          name: splunk-enterprise.lic
+      licensePath: /splunk-enterprise.lic
   topology:
     indexers: 3
     searchHeads: 3

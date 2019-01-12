@@ -6,7 +6,6 @@ import (
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -16,6 +15,11 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 
 	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
+
+	requirements, err := GetSplunkRequirements(cr)
+	if err != nil {
+		return err
+	}
 
 	statefulSet := &v1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -40,10 +44,11 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 					Containers: []corev1.Container{
 						{
 							Image: enterprise.GetSplunkImage(cr),
-							ImagePullPolicy: "IfNotPresent",
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
 							Name: "splunk",
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
+							Resources: requirements,
 						},
 					},
 					ImagePullSecrets: enterprise.GetImagePullSecrets(),
@@ -69,7 +74,7 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 
 	AddOwnerRefToObject(statefulSet, AsOwner(cr))
 
-	err := CreateResource(client, statefulSet)
+	err = CreateResource(client, statefulSet)
 	if err != nil {
 		return err
 	}
@@ -88,12 +93,7 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 	labels := spark.GetSparkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
 
-	numCPU, err := resource.ParseQuantity("1000m")
-	if err != nil {
-		return err
-	}
-
-	numMemory, err := resource.ParseQuantity("2Gi")
+	requirements, err := GetSparkRequirements(cr)
 	if err != nil {
 		return err
 	}
@@ -121,16 +121,11 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 					Containers: []corev1.Container{
 						{
 							Image: spark.GetSparkImage(cr),
-							ImagePullPolicy: "IfNotPresent",
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
 							Name: "spark",
 							Ports: containerPorts,
 							Env: envVariables,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU: numCPU,
-									corev1.ResourceMemory: numMemory,
-								},
-							},
+							Resources: requirements,
 						},
 					},
 					ImagePullSecrets: enterprise.GetImagePullSecrets(),

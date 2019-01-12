@@ -81,3 +81,4 @@ tags
 Gopkg.lock
 vendor/
 push_targets
+splunk-enterprise.lic

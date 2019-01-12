@@ -9,8 +9,8 @@ spec:
     splunkLicense:
       volumeSource:
         configMap:
-          name: dfs-license
-      licensePath: /dfs-license.lic
+          name: splunk-enterprise.lic
+      licensePath: /splunk-enterprise.lic
   topology:
     indexers: 3
     searchHeads: 3

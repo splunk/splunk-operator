@@ -16,6 +16,11 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
 
+	requirements, err := GetSplunkRequirements(cr)
+	if err != nil {
+		return err
+	}
+
 	deployment := &v1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Deployment",
@@ -38,10 +43,11 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 					Containers: []corev1.Container{
 						{
 							Image: enterprise.GetSplunkImage(cr),
-							ImagePullPolicy: "IfNotPresent",
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
 							Name: "splunk",
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
+							Resources: requirements,
 						},
 					},
 					ImagePullSecrets: enterprise.GetImagePullSecrets(),
@@ -67,7 +73,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 
 	AddOwnerRefToObject(deployment, AsOwner(cr))
 
-	err := CreateResource(client, deployment)
+	err = CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}
@@ -80,6 +86,11 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 
 	labels := spark.GetSparkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
+
+	requirements, err := GetSparkRequirements(cr)
+	if err != nil {
+		return err
+	}
 
 	deployment := &v1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -104,10 +115,11 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 					Containers: []corev1.Container{
 						{
 							Image: spark.GetSparkImage(cr),
-							ImagePullPolicy: "IfNotPresent",
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
 							Name: "spark",
 							Ports: ports,
 							Env: envVariables,
+							Resources: requirements,
 						},
 					},
 					ImagePullSecrets: enterprise.GetImagePullSecrets(),
@@ -118,7 +130,7 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 
 	AddOwnerRefToObject(deployment, AsOwner(cr))
 
-	err := CreateResource(client, deployment)
+	err = CreateResource(client, deployment)
 	if err != nil {
 		return err
 	}
