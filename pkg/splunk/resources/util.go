@@ -89,7 +89,8 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 			result = resource.MustParse(useIfEmpty)
 		}
 	} else {
-		result, err := resource.ParseQuantity(str)
+		var err error
+		result, err = resource.ParseQuantity(str)
 		if err != nil {
 			return result, fmt.Errorf("Invalid resource quantity \"%s\": %s", str, err)
 		}
@@ -106,7 +107,7 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuRequest", err)
 	}
 
-	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryRequest, "1Gi")
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryRequest, "512Mi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryRequest", err)
 	}
@@ -139,7 +140,7 @@ func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequire
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCpuRequest", err)
 	}
 
-	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryRequest, "1Gi")
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryRequest, "512Mi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryRequest", err)
 	}

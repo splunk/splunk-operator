@@ -1,0 +1,7 @@
+.git
+.idea
+dfs-deployment-yml-files
+dockerfiles
+pkg
+test
+vendor

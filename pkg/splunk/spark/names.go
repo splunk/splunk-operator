@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	DEPLOYMENT_TEMPLATE_STR = "spark-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
+	DEPLOYMENT_TEMPLATE_STR = "spark-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	SERVICE_TEMPLATE_STR = "spark-service-%s-%s" // instanceType, identifier
-	STATEFULSET_TEMPLATE_STR = "spark-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
+	STATEFULSET_TEMPLATE_STR = "spark-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	HEADLESS_SERVICE_TEMPLATE_STR = "spark-headless-%s-%s" // instanceType, identifier
 
 	SPLUNK_SPARK_IMAGE = "splunk-spark"
