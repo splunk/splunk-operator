@@ -17,7 +17,7 @@ fi
 function pushit() {
     echo "Pushing ${IMAGE_NAME} to $1"
     ssh $1 "mkdir -p /tmp/${IMAGE_NAME}"
-    rsync --progress --delete -az /tmp/${IMAGE_NAME}/* $1:/tmp/${IMAGE_NAME}/
+    rsync --delete -az /tmp/${IMAGE_NAME} $1:/tmp/
     ssh $1 "cd /tmp/${IMAGE_NAME} && tar -cf - * | docker load"
 }
 
