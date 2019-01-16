@@ -86,10 +86,16 @@ The Splunk operator requires that your k8s target cluster have certain resources
 $ make install
 ```
 
-Among other things, this will download the Splunk NFR license as `splunk-enterprise.lic` and use it to create a ConfigMap
-with the same name. If you'd like to use a different license, just copy it to this file before running `make install`.
+Among other things, this will create a license ConfigMap from the file `./splunk-enterprise.lic`. If the file does
+not yet exist, it will attempt to download the current Splunk NFR license (assuming you are on VPN). You can use your
+own license by copying it to this file before running `make install`, or re-generate the ConfigMap by running
+```
+kubectl delete configmap splunk-enterprise.lic
+kubectl create configmap splunk-enterprise.lic --from-file=splunk-enterprise.lic
+```
+Note that you need to provide your own license for DFS because it is not currently included in the NFR license.
 
-You can later remove these resources by running
+You can later remove all the installed resources by running
 ```
 $ make uninstall
 ```

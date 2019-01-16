@@ -35,7 +35,7 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk"
+              value: "repo.splunk.com/splunk/products/splunk-debian-9"
             - name: SPLUNK_DFS_IMAGE
               value: "repo.splunk.com/splunk/products/splunk-dfs"
             - name: SPLUNK_SPARK_IMAGE

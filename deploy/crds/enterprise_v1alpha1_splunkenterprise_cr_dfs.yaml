@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v1alpha1
 kind: SplunkEnterprise
 metadata:
-  name: example-splunkenterprise
+  name: example-dfs
 spec:
   config:
     splunkPassword: helloworld456

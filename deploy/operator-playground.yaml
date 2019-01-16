@@ -35,7 +35,7 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk"
+              value: "cloudrepo-docker-playground.jfrog.io/pcp/splunk-debian-9"
             - name: SPLUNK_DFS_IMAGE
               value: "cloudrepo-docker-playground.jfrog.io/dfs/splunk-dfs"
             - name: SPLUNK_SPARK_IMAGE
