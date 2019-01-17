@@ -1,11 +1,14 @@
 package resources
 
 import (
+	"fmt"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"log"
 	"context"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,4 +78,90 @@ func AddLicenseVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeNa
 			},
 		}
 	}
+}
+
+
+func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, error) {
+	var result resource.Quantity
+
+	if (str == "") {
+		if (useIfEmpty != "") {
+			result = resource.MustParse(useIfEmpty)
+		}
+	} else {
+		var err error
+		result, err = resource.ParseQuantity(str)
+		if err != nil {
+			return result, fmt.Errorf("Invalid resource quantity \"%s\": %s", str, err)
+		}
+	}
+
+	return result, nil
+}
+
+
+
+func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
+	cpuRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkCpuRequest, "0.1")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuRequest", err)
+	}
+
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryRequest, "512Mi")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryRequest", err)
+	}
+
+	cpuLimit, err := ParseResourceQuantity(cr.Spec.Config.SplunkCpuLimit, "4")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuLimit", err)
+	}
+
+	memoryLimit, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryLimit, "8Gi")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryLimit", err)
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    cpuRequest,
+			corev1.ResourceMemory: memoryRequest,
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    cpuLimit,
+			corev1.ResourceMemory: memoryLimit,
+		} }, nil
+}
+
+
+func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
+	cpuRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkCpuRequest, "0.1")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCpuRequest", err)
+	}
+
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryRequest, "512Mi")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryRequest", err)
+	}
+
+	cpuLimit, err := ParseResourceQuantity(cr.Spec.Config.SparkCpuLimit, "4")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCpuLimit", err)
+	}
+
+	memoryLimit, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryLimit, "8Gi")
+	if err != nil {
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryLimit", err)
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    cpuRequest,
+			corev1.ResourceMemory: memoryRequest,
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    cpuLimit,
+			corev1.ResourceMemory: memoryLimit,
+		} }, nil
 }

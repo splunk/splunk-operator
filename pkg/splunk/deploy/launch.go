@@ -18,10 +18,20 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
 		if cr.Spec.Topology.SparkWorkers > 0 && cr.Spec.Config.EnableDFS {
-			LaunchCluster(cr, client, true)
-			LaunchSparkCluster(cr, client)
+			err := LaunchCluster(cr, client, true)
+			if err != nil {
+				return err
+			}
+
+			err = LaunchSparkCluster(cr, client)
+			if err != nil {
+				return err
+			}
 		} else {
-			LaunchCluster(cr, client, false)
+			err := LaunchCluster(cr, client, false)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

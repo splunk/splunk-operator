@@ -74,12 +74,28 @@ Other make targets include (more info below):
 
 ## Installing Required Resources
 
+You must have administrator access for the Kubernetes namespace used by your current context. For Splunk8s playground,
+your namespace will typically be "user-" + your username. You can set the default namespace used by the current
+context by running
+```
+kubectl config set-context $(kubectl config current-context) --namespace=user-${USER}
+``` 
+
 The Splunk operator requires that your k8s target cluster have certain resources. These can be installed by running
 ```
 $ make install
 ```
 
-You can later remove these resources by running
+Among other things, this will create a license ConfigMap from the file `./splunk-enterprise.lic`. If the file does
+not yet exist, it will attempt to download the current Splunk NFR license (assuming you are on VPN). You can use your
+own license by copying it to this file before running `make install`, or re-generate the ConfigMap by running
+```
+kubectl delete configmap splunk-enterprise.lic
+kubectl create configmap splunk-enterprise.lic --from-file=splunk-enterprise.lic
+```
+Note that you need to provide your own license for DFS because it is not currently included in the NFR license.
+
+You can later remove all the installed resources by running
 ```
 $ make uninstall
 ```
@@ -298,8 +314,17 @@ spec:
 | splunkImage           | string  | Docker image to use for Splunk instances (overrides SPLUNK_IMAGE and SPLUNK_DFS_IMAGE environment variables)                                                          |
 | sparkImage            | string  | Docker image to use for Spark instances (overrides SPLUNK_SPARK_IMAGE environment variables)                                                                          |
 | splunkLicense         |         | Specify a splunk license to use for clustered deployments.                                                                                                            |
-| <li>volumeSource</li>	| volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
-| <li>licensePath</li>  | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
+| splunkCpuRequest      | string  | Sets the CPU request (minimum) for Splunk pods (default="0.1")                                                                                                        |
+| sparkCpuRequest       | string  | Sets the CPU request (minimum) for Spark pods (default="0.1")                                                                                                         |
+| splunkMemoryRequest   | string  | Sets the memory request (minimum) for Splunk pods (default="1Gi")                                                                                                     |
+| sparkMemoryRequest    | string  | Sets the memory request (minimum) for Spark pods (default="1Gi")                                                                                                      |
+| splunkCpuLimit        | string  | Sets the CPU limit (maximum) for Splunk pods (default="4")                                                                                                            |
+| sparkCpuLimit         | string  | Sets the CPU limit (maximum) for Spark pods (default="4")                                                                                                             |
+| splunkMemoryLimit     | string  | Sets the memory limit (maximum) for Splunk pods (default="8Gi")                                                                                                       |
+| sparkMemoryLimit      | string  | Sets the memory limit (maximum) for Spark pods (default="8Gi")                                                                                                        |
+| imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
+| volumeSource          | volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
+| licensePath           | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
 | defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data.                                                                                                      |
 | enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
 | **Topology**          |         |                                                                                                                                                                       |

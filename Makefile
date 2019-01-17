@@ -36,7 +36,7 @@ publish-repo: get-commit-id
 	@docker tag splunk-operator:latest repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
 	@docker push repo.splunk.com/splunk/products/splunk-operator:${COMMIT_ID}
 
-publish-playground:
+publish-playground: get-commit-id
 	@echo Publishing cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
 	@docker tag splunk-operator:latest cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
 	@docker push cloudrepo-docker-playground.jfrog.io/pcp/splunk-operator:${COMMIT_ID}
@@ -44,16 +44,19 @@ publish-playground:
 publish: publish-repo publish-playground
 
 install:
+	@if ! `kubectl get splunkenterprises.enterprise.splunk.com &> /dev/null`; then kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml; fi
 	@kubectl create -f deploy/service_account.yaml
 	@kubectl create -f deploy/role.yaml
 	@kubectl create -f deploy/role_binding.yaml
-	@kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+	@if [[ ! -f splunk-enterprise.lic ]]; then wget --quiet -O splunk-enterprise.lic http://go/splunk-nfr-license; fi
+	@kubectl create configmap splunk-enterprise.lic --from-file=splunk-enterprise.lic
 
 uninstall:
-	@kubectl delete -f deploy/role.yaml
 	@kubectl delete -f deploy/role_binding.yaml
+	@kubectl delete -f deploy/role.yaml
 	@kubectl delete -f deploy/service_account.yaml
-	@kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+	@if `kubectl get splunkenterprises.enterprise.splunk.com &> /dev/null`; then kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml &> /dev/null || true; fi
+	@kubectl delete configmap splunk-enterprise.lic
 
 start:
 	@kubectl create -f deploy/operator.yaml

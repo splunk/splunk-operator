@@ -98,13 +98,16 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 
 	err = deploy.ValidateSplunkCustomResource(instance)
 	if err != nil {
+		log.Printf("SplunkEnterprise validation failed for %s/%s: %s\n", request.Namespace, request.Name, err)
 		return reconcile.Result{}, err
 	}
 
 	err = deploy.LaunchDeployment(instance, r.client)
 	if err != nil {
+		log.Printf("SplunkEnterprise reconciliation failed for %s/%s: %s\n", request.Namespace, request.Name, err)
 		return reconcile.Result{}, err
 	}
 
+	log.Printf("SplunkEnterprise reconciliation complete for %s/%s\n", request.Namespace, request.Name)
 	return reconcile.Result{}, nil
 }

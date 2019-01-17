@@ -16,12 +16,15 @@ fi
 
 function pushit() {
     echo "Pushing ${IMAGE_NAME} to $1"
-    rsync -vz /tmp/${IMAGE_NAME}.tar.gz $1:/tmp/${IMAGE_NAME}.tar.gz
-    ssh $1 "gzip -dc /tmp/${IMAGE_NAME}.tar.gz |docker load"
+    ssh $1 "mkdir -p /tmp/${IMAGE_NAME}"
+    rsync --delete -az /tmp/${IMAGE_NAME} $1:/tmp/
+    ssh $1 "cd /tmp/${IMAGE_NAME} && tar -cf - * | docker load"
 }
 
-echo "Exporting ${IMAGE_NAME} to /tmp/${IMAGE_NAME}.tar.gz"
-docker image save ${IMAGE_NAME}:latest | gzip -c > /tmp/${IMAGE_NAME}.tar.gz
+echo "Exporting image layers for ${IMAGE_NAME} to /tmp/${IMAGE_NAME}/"
+rm -rf /tmp/${IMAGE_NAME}
+mkdir -p /tmp/${IMAGE_NAME}
+docker image save ${IMAGE_NAME}:latest | tar -C /tmp/${IMAGE_NAME} -xmf -
 
 exec 4<push_targets
 while read -u4 target ; do

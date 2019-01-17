@@ -22,7 +22,7 @@ spec:
             name: metrics
           command:
           - splunk-operator
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
               valueFrom:
@@ -35,8 +35,10 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk"
+              value: "cloudrepo-docker-playground.jfrog.io/pcp/splunk-debian-9"
             - name: SPLUNK_DFS_IMAGE
               value: "cloudrepo-docker-playground.jfrog.io/dfs/splunk-dfs"
             - name: SPLUNK_SPARK_IMAGE
               value: "cloudrepo-docker-playground.jfrog.io/dfs/splunk-spark"
+            - name: IMAGE_PULL_POLICY
+              value: "Always"

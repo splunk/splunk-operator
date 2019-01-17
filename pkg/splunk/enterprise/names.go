@@ -9,9 +9,9 @@ import (
 
 
 const (
-	DEPLOYMENT_TEMPLATE_STR = "splunk-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
-	STATEFULSET_TEMPLATE_STR = "splunk-instance-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
-	STATEFULSET_POD_TEMPLATE_STR = "splunk-instance-%s-%s-%d" // instanceType, identifier, index (ex: 0, 1, 2, ...)
+	DEPLOYMENT_TEMPLATE_STR = "splunk-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
+	STATEFULSET_TEMPLATE_STR = "splunk-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
+	STATEFULSET_POD_TEMPLATE_STR = "splunk-%s-%s-%d" // instanceType, identifier, index (ex: 0, 1, 2, ...)
 	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-headless-%s-%s" // instanceType, identifier
 	SERVICE_TEMPLATE_STR = "splunk-service-%s-%s" // instanceType, identifier
 

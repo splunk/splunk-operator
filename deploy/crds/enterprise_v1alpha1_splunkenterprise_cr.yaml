@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v1alpha1
 kind: SplunkEnterprise
 metadata:
-  name: example-splunkenterprise
+  name: example-enterprise
 spec:
   config:
     splunkPassword: helloworld456
@@ -9,8 +9,8 @@ spec:
     splunkLicense:
       volumeSource:
         configMap:
-          name: dfs-license
-      licensePath: /dfs-license.lic
+          name: splunk-enterprise.lic
+      licensePath: /splunk-enterprise.lic
   topology:
     indexers: 3
     searchHeads: 3
