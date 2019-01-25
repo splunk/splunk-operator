@@ -110,14 +110,13 @@ The Splunk operator requires three docker images to be present or available to y
 * `splunk-spark`: The default Spark image used by DFS, when enabled
 * `splunk-operator`: The Splunk operator image
 
-Building the `splunk-dfs` image requires that you first clone the [docker-splunk repository](https://github.com/splunk/docker-splunk)
-and build a `splunk-debian-9` base image using a DFS build of Splunk Enterprise:
-
+Because DFS is not included in the current Splunk Enterprise releases, it is necessary to first clone the
+[docker-splunk repository](https://github.com/splunk/docker-splunk) and build a `splunk-debian-9` base image using
+7.3.0 (or later). After 7.3.0 is released, you will be able to skip this step and use `splunk/splunk` instead.
 ```
 $ git clone git@github.com:splunk/docker-splunk.git
 $ cd docker-splunk
-$ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/epic-dfs_builds/7.3.0-20181205-0400/splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-ce483f77eb7f-Linux-x86_64.tgz splunk-debian-9
-
+$ make SPLUNK_LINUX_BUILD_URL=http://releases.splunk.com/dl/current_builds/7.3.0-20190125-0301/splunk-7.3.0-dd20fc0b4444-Linux-x86_64.tgz SPLUNK_LINUX_FILENAME=splunk-7.3.0-dd20fc0b4444-Linux-x86_64.tgz splunk-debian-
 ```
 After you have built `splunk-debian-9` you can build `splunk-dfs` by running
 ```
