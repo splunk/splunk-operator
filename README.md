@@ -321,6 +321,10 @@ spec:
 | sparkCpuLimit         | string  | Sets the CPU limit (maximum) for Spark pods (default="4")                                                                                                             |
 | splunkMemoryLimit     | string  | Sets the memory limit (maximum) for Splunk pods (default="8Gi")                                                                                                       |
 | sparkMemoryLimit      | string  | Sets the memory limit (maximum) for Spark pods (default="8Gi")                                                                                                        |
+| splunkEtcStorage      | string  | Storage capacity to request for Splunk etc volume claims (default="1Gi")                                                                                              |
+| splunkVarStorage      | string  | Storage capacity to request for Splunk var volume claims (default="50Gi")                                                                                             |
+| splunkIndexerStorage  | string  | Storage capacity to request for Splunk var volume claims on indexers (default="200Gi")                                                                                |
+| storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
 | imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
 | volumeSource          | volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
 | licensePath           | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |

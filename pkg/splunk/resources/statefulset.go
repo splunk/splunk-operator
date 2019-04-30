@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"fmt"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
@@ -19,6 +20,14 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 	requirements, err := GetSplunkRequirements(cr)
 	if err != nil {
 		return err
+	}
+
+	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
+	if err != nil {
+		return err
+	}
+	for idx, _ := range volumeClaims {
+		volumeClaims[idx].ObjectMeta.Name = fmt.Sprintf("pvc-%s", volumeClaims[idx].ObjectMeta.Name)
 	}
 
 	statefulSet := &v1.StatefulSet{
@@ -49,11 +58,12 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
 							Resources: requirements,
+							VolumeMounts: GetSplunkVolumeMounts(),
 						},
 					},
-					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
+			VolumeClaimTemplates: volumeClaims,
 		},
 	}
 
@@ -128,7 +138,6 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 							Resources: requirements,
 						},
 					},
-					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},

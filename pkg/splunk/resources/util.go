@@ -2,6 +2,7 @@ package resources
 
 import (
 	"fmt"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"log"
@@ -55,12 +56,10 @@ func AddConfigMapVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volume
 		},
 	})
 	for idx, _ := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].VolumeMounts = []v1.VolumeMount{
-			{
-				Name: volumeName,
-				MountPath: mountLocation,
-			},
-		}
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, v1.VolumeMount{
+			Name: volumeName,
+			MountPath: mountLocation,
+		})
 	}
 }
 
@@ -71,12 +70,10 @@ func AddLicenseVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeNa
 		VolumeSource: *source,
 	})
 	for idx, _ := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].VolumeMounts = []v1.VolumeMount{
-			{
-				Name: volumeName,
-				MountPath: mountLocation,
-			},
-		}
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, v1.VolumeMount{
+			Name: volumeName,
+			MountPath: mountLocation,
+		})
 	}
 }
 
@@ -99,6 +96,83 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 	return result, nil
 }
 
+
+func GetSplunkVolumeMounts() ([]corev1.VolumeMount) {
+	return []corev1.VolumeMount{
+		corev1.VolumeMount{
+			Name:      "pvc-etc",
+			MountPath: "/opt/splunk/etc",
+		},
+		corev1.VolumeMount{
+			Name:      "pvc-var",
+			MountPath: "/opt/splunk/var",
+		},
+	}
+}
+
+
+func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType enterprise.SplunkInstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+	var err error
+	var etcStorage, varStorage resource.Quantity
+
+	etcStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkEtcStorage, "1Gi")
+	if err != nil {
+		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkEtcStorage", err)
+	}
+
+	if (instanceType == enterprise.SPLUNK_INDEXER) {
+		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkIndexerVarStorage, "200Gi")
+		if err != nil {
+			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkIndexerStorage", err)
+		}
+	} else {
+		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkVarStorage, "50Gi")
+		if err != nil {
+			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkVarStorage", err)
+		}
+	}
+
+	volumeClaims := []corev1.PersistentVolumeClaim{
+		corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "etc",
+				Namespace: cr.Namespace,
+				Labels: labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: etcStorage,
+					},
+				},
+			},
+		},
+		corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "var",
+				Namespace: cr.Namespace,
+				Labels: labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: varStorage,
+					},
+				},
+			},
+		},
+	}
+
+	if (cr.Spec.Config.StorageClassName != "") {
+		for idx, _ := range volumeClaims {
+			volumeClaims[idx].Spec.StorageClassName = &cr.Spec.Config.StorageClassName
+		}
+	}
+
+	return volumeClaims, nil
+}
 
 
 func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {

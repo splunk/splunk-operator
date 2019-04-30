@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"fmt"
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
@@ -15,10 +16,24 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 
 	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
+	deploymentName := enterprise.GetSplunkDeploymentName(instanceType, identifier)
 
 	requirements, err := GetSplunkRequirements(cr)
 	if err != nil {
 		return err
+	}
+
+	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
+	if err != nil {
+		return err
+	}
+	for idx, _ := range volumeClaims {
+		volumeClaims[idx].ObjectMeta.Name = fmt.Sprintf("pvc-%s-%s", volumeClaims[idx].ObjectMeta.Name, deploymentName)
+		AddOwnerRefToObject(&volumeClaims[idx], AsOwner(cr))
+		err = CreateResource(client, &volumeClaims[idx])
+		if err != nil {
+			return err
+		}
 	}
 
 	deployment := &v1.Deployment{
@@ -27,7 +42,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: enterprise.GetSplunkDeploymentName(instanceType, identifier),
+			Name: deploymentName,
 			Namespace: cr.Namespace,
 		},
 		Spec: v1.DeploymentSpec{
@@ -48,9 +63,27 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
 							Resources: requirements,
+							VolumeMounts: GetSplunkVolumeMounts(),
 						},
 					},
-					ImagePullSecrets: enterprise.GetImagePullSecrets(),
+					Volumes: []corev1.Volume{
+						{
+							Name: "pvc-etc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "pvc-etc-" + deploymentName,
+								},
+							},
+						},
+						{
+							Name: "pvc-var",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "pvc-var-" + deploymentName,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -122,7 +155,6 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 							Resources: requirements,
 						},
 					},
-					ImagePullSecrets: enterprise.GetImagePullSecrets(),
 				},
 			},
 		},
