@@ -135,12 +135,3 @@ func GetSplunkDNSConfiguration(cr *v1alpha1.SplunkEnterprise) []string {
 		GetSplunkDNSUrl(cr.Namespace, SPLUNK_SEARCH_HEAD, GetIdentifier(cr)),
 	}
 }
-
-
-func GetImagePullSecrets() []v1.LocalObjectReference {
-	return []v1.LocalObjectReference{
-		{
-			Name: "dockerhubtmalikkey",
-		},
-	}
-}

@@ -28,6 +28,11 @@ type SplunkConfigSpec struct {
 	SparkCpuLimit string `json:"sparkCpuLimit"`
 	SplunkMemoryLimit string `json:"splunkMemoryLimit"`
 	SparkMemoryLimit string `json:"sparkMemoryLimit"`
+	SplunkEtcStorage string `json:"splunkEtcStorage"`
+	SplunkVarStorage string `json:"splunkVarStorage"`
+	SplunkIndexerEtcStorage string `json:"splunkIndexerEtcStorage"`
+	SplunkIndexerVarStorage string `json:"splunkIndexerVarStorage"`
+	StorageClassName string `json:"storageClassName"`
 	ImagePullPolicy string `json:"imagePullPolicy"`
 	SplunkLicense SplunkLicense `json:"splunkLicense"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
