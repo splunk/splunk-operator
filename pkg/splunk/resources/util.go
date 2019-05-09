@@ -117,18 +117,18 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType enterpris
 
 	etcStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkEtcStorage, "1Gi")
 	if err != nil {
-		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkEtcStorage", err)
+		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkEtcStorage", err)
 	}
 
 	if (instanceType == enterprise.SPLUNK_INDEXER) {
-		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkIndexerVarStorage, "200Gi")
+		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkIndexerStorage, "200Gi")
 		if err != nil {
-			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkIndexerStorage", err)
+			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkIndexerStorage", err)
 		}
 	} else {
 		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkVarStorage, "50Gi")
 		if err != nil {
-			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "SplunkVarStorage", err)
+			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkVarStorage", err)
 		}
 	}
 
