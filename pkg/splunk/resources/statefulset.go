@@ -45,6 +45,7 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 			},
 			ServiceName: enterprise.GetSplunkHeadlessServiceName(instanceType, identifier),
 			Replicas: &replicas32,
+			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -123,6 +124,7 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 			},
 			ServiceName: spark.GetSparkHeadlessServiceName(instanceType, identifier),
 			Replicas: &replicas32,
+			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
