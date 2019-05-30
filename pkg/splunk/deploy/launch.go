@@ -2,13 +2,13 @@ package deploy
 
 import (
 	"fmt"
-
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
 
 func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
@@ -38,6 +38,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 	return nil
 }
 
+
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_standalone"}
@@ -45,13 +46,14 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		overrides["SPLUNK_LICENSE_URI"] = fmt.Sprintf("%s%s", enterprise.LICENSE_MOUNT_LOCATION, cr.Spec.Config.SplunkLicense.LicensePath)
 	}
 
-	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, nil), nil)
+	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides), nil)
 	if err != nil {
 		return err
 	}
 
 	return nil
 }
+
 
 func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDFS bool) error {
 
@@ -85,6 +87,7 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDF
 	return nil
 }
 
+
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	err := resources.CreateService(cr, client, enterprise.SPLUNK_LICENSE_MASTER, enterprise.GetIdentifier(cr), false)
 	if err != nil {
@@ -101,7 +104,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 			cr,
 			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
-				"SPLUNK_ROLE":        "splunk_license_master",
+				"SPLUNK_ROLE": "splunk_license_master",
 				"SPLUNK_LICENSE_URI": fmt.Sprintf("%s%s", enterprise.LICENSE_MOUNT_LOCATION, cr.Spec.Config.SplunkLicense.LicensePath),
 			},
 		),
@@ -113,6 +116,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 	return nil
 }
+
 
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	err := resources.CreateService(cr, client, enterprise.SPLUNK_CLUSTER_MASTER, enterprise.GetIdentifier(cr), false)
@@ -142,6 +146,7 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 	return err
 }
 
+
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	err := resources.CreateService(cr, client, enterprise.SPLUNK_DEPLOYER, enterprise.GetIdentifier(cr), false)
 	if err != nil {
@@ -170,6 +175,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	return err
 }
 
+
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	err := resources.CreateSplunkStatefulSet(
 		cr,
@@ -192,6 +198,7 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	return err
 }
+
 
 func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDFS bool) error {
 
@@ -231,6 +238,7 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enab
 
 	return err
 }
+
 
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
