@@ -4,7 +4,9 @@ This repository is used to build the [Kubernetes operator](https://coreos.com/op
 
 ## Vendor Dependencies
 
-This project uses [dep](https://github.com/golang/dep) to manage dependencies. On MacOS, you can install `dep` using Homebrew:
+This project now uses [Go modules](https://blog.golang.org/using-go-modules). You must have golang 1.11 or later installed.
+
+The Kubernetes Operator SDK currently still uses [dep](https://github.com/golang/dep) to manage dependencies. On MacOS, you can install `dep` using Homebrew:
 
 ```
 $ brew install dep
@@ -54,7 +56,6 @@ $ make splunk-operator
 Other make targets include (more info below):
 
 * `make all`: builds the `splunk-operator` docker image (same as `make splunk-operator`)
-* `make dep`: checks all vendor dependencies and ensures they are up to date
 * `make splunk-operator`: builds the `splunk-operator` docker image
 * `make splunk-dfs`: builds the `splunk-dfs` docker image (requires `splunk-debian-9`)
 * `make splunk-spark`: builds the `splunk-spark` docker image
@@ -211,6 +212,15 @@ $ make push
 
 
 ## Running the Splunk Operator
+
+
+### Running Locally
+
+Use this to run the operator as a local foreground process on your machine
+```
+make run
+```
+This will use your current Kubernetes context from `~/.kube/config`.
 
 
 ### UCP Clusters

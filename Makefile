@@ -1,14 +1,10 @@
 # Makefile for Splunk Operator
 
-.PHONY: all dep splunk-operator splunk-dfs splunk-spark push-operator push-dfs push-spark push publish-repo publish-playground publish install uninstall start stop rebuild
+.PHONY: all splunk-operator splunk-dfs splunk-spark push-operator push-dfs push-spark push publish-repo publish-playground publish install uninstall start stop rebuild
 
 all: splunk-operator
 
-dep:
-	@echo Checking vendor dependencies
-	@dep ensure
-
-splunk-operator: dep
+splunk-operator:
 	@echo Building splunk-operator image
 	@operator-sdk build splunk-operator
 
@@ -57,6 +53,9 @@ uninstall:
 	@kubectl delete -f deploy/service_account.yaml
 	@if `kubectl get splunkenterprises.enterprise.splunk.com &> /dev/null`; then kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml &> /dev/null || true; fi
 	@kubectl delete configmap splunk-enterprise.lic
+
+run:
+	@OPERATOR_NAME=splunk-operator operator-sdk up local
 
 start:
 	@kubectl create -f deploy/operator.yaml

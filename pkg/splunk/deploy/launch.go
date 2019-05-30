@@ -41,7 +41,12 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, nil), nil)
+	overrides := map[string]string{"SPLUNK_ROLE": "splunk_standalone"}
+	if cr.Spec.Config.SplunkLicense.LicensePath != "" {
+		overrides["SPLUNK_LICENSE_URI"] = fmt.Sprintf("%s%s", enterprise.LICENSE_MOUNT_LOCATION, cr.Spec.Config.SplunkLicense.LicensePath)
+	}
+
+	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides), nil)
 	if err != nil {
 		return err
 	}
@@ -246,7 +251,6 @@ func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) err
 	if err != nil {
 		return err
 	}
-
 
 	err = resources.CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, enterprise.GetIdentifier(cr), cr.Spec.Topology.SparkWorkers, spark.GetSparkWorkerConfiguration(enterprise.GetIdentifier(cr)), enterprise.GetSplunkDNSConfiguration(cr), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
 	if err != nil {
