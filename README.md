@@ -335,11 +335,11 @@ spec:
 | splunkVarStorage      | string  | Storage capacity to request for Splunk var volume claims (default="50Gi")                                                                                             |
 | splunkIndexerStorage  | string  | Storage capacity to request for Splunk var volume claims on indexers (default="200Gi")                                                                                |
 | storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
-| imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
+| imagePullPolicy       | string  | Sets pull policy for all images (either "IfNotPresent" or the default: "Always")                                                                                      |
 | volumeSource          | volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
 | licensePath           | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
-| defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data.                                                                                                      |
-| enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched.                                                                                             |
+| defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data. It must contain a single file named "default.yml"                                                    |
+| enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched and a spark cluster will be created.                                                         |
 | **Topology**          |         |                                                                                                                                                                       |
 | standalones           | integer | The number of standalone instances to launch.                                                                                                                         |
 | searchHeads           | integer | The number of search heads to launch. If this number is greater than 1 then a deployer will be launched as well to create a search head cluster.                      |

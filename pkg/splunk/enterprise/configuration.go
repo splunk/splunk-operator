@@ -2,6 +2,7 @@ package enterprise
 
 import (
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"k8s.io/api/core/v1"
 	"strings"
 )
@@ -50,6 +51,24 @@ func GetSplunkServicePorts() []v1.ServicePort {
 		})
 	}
 	return l
+}
+
+
+func AppendSplunkDfsOverrides(cr *v1alpha1.SplunkEnterprise, overrides map[string]string) {
+	// assertion: overrides is not nil
+	if cr.Spec.Config.EnableDFS {
+		overrides["ENABLE_DFS"] = "true"
+		overrides["DFS_MASTER_PORT"] = "9000"
+		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, GetIdentifier(cr))
+		overrides["SPARK_MASTER_WEBUI_PORT"] = "8009"
+		overrides["DFS_EXECUTOR_STARTING_PORT"] = "17500"
+		if cr.Spec.Topology.SearchHeads > 1 {
+			overrides["DFW_NUM_SLOTS_ENABLED"] = "true"
+		} else {
+			overrides["DFW_NUM_SLOTS_ENABLED"] = "false"
+		}
+		overrides["SPLUNK_ANSIBLE_POST_TASKS"] = "/opt/dfs-ansible/tasks.yml"
+	}
 }
 
 

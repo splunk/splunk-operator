@@ -12,26 +12,25 @@ import (
 
 func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	if cr.Spec.Topology.Standalones > 0 {
-		LaunchStandalones(cr, client)
+	// launch a spark cluster if EnableDFS == true
+	if cr.Spec.Config.EnableDFS {
+		// validation assertion: cr.Spec.Topology.SparkWorkers > 0
+		if err := LaunchSparkCluster(cr, client); err != nil {
+			return err
+		}
 	}
 
-	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
-		if cr.Spec.Topology.SparkWorkers > 0 && cr.Spec.Config.EnableDFS {
-			err := LaunchCluster(cr, client, true)
-			if err != nil {
-				return err
-			}
+	// launch standalone instances when > 0
+	if cr.Spec.Topology.Standalones > 0 {
+		if err := LaunchStandalones(cr, client); err != nil {
+			return err
+		}
+	}
 
-			err = LaunchSparkCluster(cr, client)
-			if err != nil {
-				return err
-			}
-		} else {
-			err := LaunchCluster(cr, client, false)
-			if err != nil {
-				return err
-			}
+	// launch a cluster when at least 1 search head and 1 indexer
+	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
+		if err := LaunchCluster(cr, client); err != nil {
+			return err
 		}
 	}
 
@@ -45,6 +44,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 	if cr.Spec.Config.SplunkLicense.LicensePath != "" {
 		overrides["SPLUNK_LICENSE_URI"] = fmt.Sprintf("%s%s", enterprise.LICENSE_MOUNT_LOCATION, cr.Spec.Config.SplunkLicense.LicensePath)
 	}
+	enterprise.AppendSplunkDfsOverrides(cr, overrides)
 
 	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides), nil)
 	if err != nil {
@@ -55,7 +55,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 }
 
 
-func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDFS bool) error {
+func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	err := LaunchLicenseMaster(cr, client)
 	if err != nil {
@@ -79,7 +79,7 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDF
 		return nil
 	}
 
-	err = LaunchSearchHeads(cr, client, enableDFS)
+	err = LaunchSearchHeads(cr, client)
 	if err != nil {
 		return nil
 	}
@@ -200,24 +200,10 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 }
 
 
-func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client, enableDFS bool) error {
+func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	overrides := map[string]string{
-		"SPLUNK_ROLE": "splunk_search_head",
-	}
-
-	if enableDFS {
-		overrides["ENABLE_DFS"] = "true"
-		overrides["DFS_MASTER_PORT"] = "9000"
-		overrides["SPARK_MASTER_HOSTNAME"] = spark.GetSparkServiceName(spark.SPARK_MASTER, enterprise.GetIdentifier(cr))
-		overrides["SPARK_MASTER_WEBUI_PORT"] = "8009"
-		overrides["DFS_EXECUTOR_STARTING_PORT"] = "17500"
-		if cr.Spec.Topology.SearchHeads > 1 {
-			overrides["DFW_NUM_SLOTS_ENABLED"] = "true"
-		} else {
-			overrides["DFW_NUM_SLOTS_ENABLED"] = "false"
-		}
-	}
+	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
+	enterprise.AppendSplunkDfsOverrides(cr, overrides)
 
 	err := resources.CreateSplunkStatefulSet(
 		cr,
