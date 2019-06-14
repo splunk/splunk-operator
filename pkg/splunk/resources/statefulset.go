@@ -76,6 +76,13 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 		AddLicenseVolumeToPodTemplate(&statefulSet.Spec.Template, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
 	}
 
+	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
+		err = AddDFCToPodTemplate(&statefulSet.Spec.Template, cr)
+		if err != nil {
+			return err
+		}
+	}
+
 	if DNSConfigSearches != nil {
 		statefulSet.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
 		statefulSet.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{

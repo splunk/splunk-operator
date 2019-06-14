@@ -12,7 +12,7 @@ const (
 	STATEFULSET_TEMPLATE_STR = "spark-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
 	HEADLESS_SERVICE_TEMPLATE_STR = "spark-headless-%s-%s" // instanceType, identifier
 
-	SPLUNK_SPARK_IMAGE = "splunk-spark"
+	SPLUNK_SPARK_IMAGE = "splunk/spark"
 )
 
 
@@ -41,7 +41,7 @@ func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
 	if (cr.Spec.Config.SparkImage != "") {
 		sparkImage = cr.Spec.Config.SparkImage
 	} else {
-		sparkImage = os.Getenv("SPLUNK_SPARK_IMAGE")
+		sparkImage = os.Getenv("SPARK_IMAGE")
 		if (sparkImage == "") {
 			sparkImage = SPLUNK_SPARK_IMAGE
 		}
