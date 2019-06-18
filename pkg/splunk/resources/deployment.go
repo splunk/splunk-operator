@@ -104,6 +104,13 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 		}
 	}
 
+	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
+		err = AddDFCToPodTemplate(&deployment.Spec.Template, cr)
+		if err != nil {
+			return err
+		}
+	}
+
 	AddOwnerRefToObject(deployment, AsOwner(cr))
 
 	err = CreateResource(client, deployment)

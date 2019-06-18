@@ -3,6 +3,7 @@ package resources
 import (
 	"fmt"
 	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"log"
@@ -75,6 +76,56 @@ func AddLicenseVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeNa
 			MountPath: mountLocation,
 		})
 	}
+}
+
+
+func AddDFCVolumeMounts(containerSpec *v1.Container) {
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
+		Name:      "mnt-jdk",
+		MountPath: "/mnt/jdk",
+	})
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
+		Name:      "mnt-spark",
+		MountPath: "/mnt/spark",
+	})
+}
+
+
+func AddDFCToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, instance *v1alpha1.SplunkEnterprise) error {
+	requirements, err := GetSparkRequirements(instance)
+	if err != nil {
+		return err
+	}
+
+	containerSpec := corev1.Container {
+		Image: spark.GetSparkImage(instance),
+		ImagePullPolicy: corev1.PullPolicy(instance.Spec.Config.ImagePullPolicy),
+		Name: "init",
+		Resources: requirements,
+		Command: []string{ "bash", "-c", "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt" },
+	}
+
+	AddDFCVolumeMounts(&containerSpec)
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
+
+	emptyVolumeSource := corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	}
+
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name: "mnt-jdk",
+		VolumeSource: emptyVolumeSource,
+	})
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name: "mnt-spark",
+		VolumeSource: emptyVolumeSource,
+	})
+
+	for idx, _ := range podTemplateSpec.Spec.Containers {
+		AddDFCVolumeMounts(&podTemplateSpec.Spec.Containers[idx])
+	}
+
+	return nil
 }
 
 
