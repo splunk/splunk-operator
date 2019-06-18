@@ -289,7 +289,7 @@ spec:
 | splunkVarStorage      | string  | Storage capacity to request for Splunk var volume claims (default="50Gi")                                                                                             |
 | splunkIndexerStorage  | string  | Storage capacity to request for Splunk var volume claims on indexers (default="200Gi")                                                                                |
 | storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
-| imagePullPolicy       | string  | Sets pull policy for all images (either "IfNotPresent" or the default: "Always")                                                                                      |
+| imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
 | volumeSource          | volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
 | licensePath           | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
 | defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data. It must contain a single file named "default.yml"                                                    |

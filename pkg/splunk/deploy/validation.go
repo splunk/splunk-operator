@@ -37,7 +37,7 @@ func ValidateSplunkCustomResource(instance *v1alpha1.SplunkEnterprise) error {
 	}
 	switch (instance.Spec.Config.ImagePullPolicy) {
 	case "":
-		instance.Spec.Config.ImagePullPolicy = "Always"
+		instance.Spec.Config.ImagePullPolicy = "IfNotPresent"
 		break
 	case "Always":
 		break
