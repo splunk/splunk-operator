@@ -12,7 +12,7 @@ import (
 )
 
 
-func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
+func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar) error {
 
 	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -89,29 +89,12 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 		},
 	}
 
-	if cr.Spec.Config.DefaultsConfigMapName != "" {
-		AddConfigMapVolumeToPodTemplate(&deployment.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, enterprise.SPLUNK_DEFAULTS_MOUNT_LOCATION)
-	}
-
-	if cr.Spec.Config.SplunkLicense.VolumeSource != nil {
-		AddLicenseVolumeToPodTemplate(&deployment.Spec.Template, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
-	}
-
-	if DNSConfigSearches != nil {
-		deployment.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
-		deployment.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Searches: DNSConfigSearches,
-		}
-	}
-
-	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
-		err = AddDFCToPodTemplate(&deployment.Spec.Template, cr)
-		if err != nil {
-			return err
-		}
-	}
-
 	AddOwnerRefToObject(deployment, AsOwner(cr))
+
+	err = UpdateSplunkPodTemplateWithConfig(&deployment.Spec.Template, cr, instanceType)
+	if err != nil {
+		return err
+	}
 
 	err = CreateResource(client, deployment)
 	if err != nil {
@@ -168,6 +151,11 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 	}
 
 	AddOwnerRefToObject(deployment, AsOwner(cr))
+
+	err = UpdatePodTemplateWithConfig(&deployment.Spec.Template, cr)
+	if err != nil {
+		return err
+	}
 
 	err = CreateResource(client, deployment)
 	if err != nil {

@@ -129,6 +129,44 @@ func AddDFCToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, instance *v1alpha1
 }
 
 
+func UpdatePodTemplateWithConfig(podTemplateSpec *v1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
+	dnsConfigSearches := enterprise.GetSplunkDNSConfiguration(cr)
+	if dnsConfigSearches != nil {
+		podTemplateSpec.Spec.DNSPolicy = corev1.DNSClusterFirst
+		podTemplateSpec.Spec.DNSConfig = &corev1.PodDNSConfig{
+			Searches: dnsConfigSearches,
+		}
+	}
+
+	if cr.Spec.Config.SchedulerName != "" {
+		podTemplateSpec.Spec.SchedulerName = cr.Spec.Config.SchedulerName
+	}
+
+	if cr.Spec.Config.Affinity != nil {
+		podTemplateSpec.Spec.Affinity = cr.Spec.Config.Affinity
+	}
+
+	return nil
+}
+
+func UpdateSplunkPodTemplateWithConfig(podTemplateSpec *v1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType enterprise.SplunkInstanceType) error {
+	if cr.Spec.Config.DefaultsConfigMapName != "" {
+		AddConfigMapVolumeToPodTemplate(podTemplateSpec, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, enterprise.SPLUNK_DEFAULTS_MOUNT_LOCATION)
+	}
+
+	if cr.Spec.Config.SplunkLicense.VolumeSource != nil {
+		AddLicenseVolumeToPodTemplate(podTemplateSpec, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
+	}
+
+	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
+		if err := AddDFCToPodTemplate(podTemplateSpec, cr); err != nil {
+			return err
+		}
+	}
+
+	return UpdatePodTemplateWithConfig(podTemplateSpec, cr)
+}
+
 func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, error) {
 	var result resource.Quantity
 

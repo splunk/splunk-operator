@@ -3,6 +3,7 @@ package splunkenterprise
 import (
 	"context"
 	"git.splunk.com/splunk-operator/pkg/splunk/deploy"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"log"
 
 	enterprisev1alpha1 "git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
@@ -15,11 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new SplunkEnterprise Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -71,8 +67,6 @@ type ReconcileSplunkEnterprise struct {
 
 // Reconcile reads that state of the cluster for a SplunkEnterprise object and makes changes based on the state read
 // and what is in the SplunkEnterprise.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -96,18 +90,30 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha1"
 	instance.TypeMeta.Kind = "SplunkEnterprise"
 
+	// check if deletion has been requested
+	if instance.ObjectMeta.DeletionTimestamp != nil {
+		deleted, err := enterprise.CheckSplunkDeletion(instance, r.client)
+		if err != nil {
+			log.Printf("Unable to delete SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
+			return reconcile.Result{}, err
+		}
+		if deleted {
+			return reconcile.Result{}, nil
+		}
+	}
+
 	err = deploy.ValidateSplunkCustomResource(instance)
 	if err != nil {
-		log.Printf("SplunkEnterprise validation failed for %s/%s: %s\n", request.Namespace, request.Name, err)
+		log.Printf("Validation failed for SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
 		return reconcile.Result{}, err
 	}
 
 	err = deploy.LaunchDeployment(instance, r.client)
 	if err != nil {
-		log.Printf("SplunkEnterprise reconciliation failed for %s/%s: %s\n", request.Namespace, request.Name, err)
+		log.Printf("Reconciliation failed for SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
 		return reconcile.Result{}, err
 	}
 
-	log.Printf("SplunkEnterprise reconciliation complete for %s/%s\n", request.Namespace, request.Name)
+	log.Printf("Reconciliation complete for SplunkEnterprise %s/%s\n", request.Namespace, request.Name)
 	return reconcile.Result{}, nil
 }

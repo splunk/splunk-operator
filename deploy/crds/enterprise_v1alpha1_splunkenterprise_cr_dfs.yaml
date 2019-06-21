@@ -2,6 +2,8 @@ apiVersion: enterprise.splunk.com/v1alpha1
 kind: SplunkEnterprise
 metadata:
   name: example-dfs
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
 spec:
   config:
     splunkPassword: helloworld456

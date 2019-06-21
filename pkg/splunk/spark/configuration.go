@@ -50,12 +50,6 @@ func GetSparkMasterConfiguration() []v1.EnvVar {
 		{
 			Name: "SPLUNK_ROLE",
 			Value: "splunk_spark_master",
-		},{
-			Name: "SPARK_MASTER_WEBUI_PORT",
-			Value: "8009",
-		},{
-			Name: "SPARK_MASTER_PORT",
-			Value: "7777",
 		},
 	}
 }
@@ -98,15 +92,6 @@ func GetSparkWorkerConfiguration(identifier string) []v1.EnvVar {
 		{
 			Name: "SPLUNK_ROLE",
 			Value: "splunk_spark_worker",
-		},{
-			Name: "SPARK_MASTER_WEBUI_PORT",
-			Value: "8009",
-		},{
-			Name: "SPARK_MASTER_PORT",
-			Value: "7777",
-		},{
-			Name: "SPARK_WORKER_WEBUI_PORT",
-			Value: "7000",
 		},{
 			Name: "SPARK_MASTER_HOSTNAME",
 			Value: GetSparkServiceName(SPARK_MASTER, identifier),

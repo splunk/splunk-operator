@@ -32,6 +32,8 @@ type SplunkConfigSpec struct {
 	SplunkVarStorage string `json:"splunkVarStorage"`
 	SplunkIndexerStorage string `json:"splunkIndexerStorage"`
 	StorageClassName string `json:"storageClassName"`
+	SchedulerName string `json:"schedulerName"`
+	Affinity *v1.Affinity `json:"affinity"`
 	ImagePullPolicy string `json:"imagePullPolicy"`
 	SplunkLicense SplunkLicense `json:"splunkLicense"`
 	DefaultsConfigMapName string `json:"defaultsConfigMapName"`

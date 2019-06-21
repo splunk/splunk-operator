@@ -9,11 +9,11 @@ import (
 
 
 const (
-	DEPLOYMENT_TEMPLATE_STR = "splunk-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
-	STATEFULSET_TEMPLATE_STR = "splunk-%s-%s" // instance type (ex: standalone, indexers, etc...), identifier
-	STATEFULSET_POD_TEMPLATE_STR = "splunk-%s-%s-%d" // instanceType, identifier, index (ex: 0, 1, 2, ...)
-	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-headless-%s-%s" // instanceType, identifier
-	SERVICE_TEMPLATE_STR = "splunk-service-%s-%s" // instanceType, identifier
+	DEPLOYMENT_TEMPLATE_STR = "splunk-%s-%s" // identifier, instanceType (ex: standalone, indexers, etc...)
+	STATEFULSET_TEMPLATE_STR = "splunk-%s-%s" // identifier, instanceType (ex: standalone, indexers, etc...)
+	STATEFULSET_POD_TEMPLATE_STR = "splunk-%s-%s-%d" // identifier, instanceType, index (ex: 0, 1, 2, ...)
+	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
+	SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
 
 	SPLUNK_IMAGE = "splunk/splunk"
 
@@ -27,28 +27,33 @@ func GetIdentifier(cr *v1alpha1.SplunkEnterprise) string {
 }
 
 
+func GetNamespace(cr *v1alpha1.SplunkEnterprise) string {
+	return cr.GetObjectMeta().GetNamespace()
+}
+
+
 func GetSplunkDeploymentName(instanceType SplunkInstanceType, identifier string) string {
-	return fmt.Sprintf(DEPLOYMENT_TEMPLATE_STR, instanceType, identifier)
+	return fmt.Sprintf(DEPLOYMENT_TEMPLATE_STR, identifier, instanceType)
 }
 
 
 func GetSplunkStatefulsetName(instanceType SplunkInstanceType, identifier string) string {
-	return fmt.Sprintf(STATEFULSET_TEMPLATE_STR, instanceType, identifier)
+	return fmt.Sprintf(STATEFULSET_TEMPLATE_STR, identifier, instanceType)
 }
 
 
 func GetSplunkStatefulsetPodName(instanceType SplunkInstanceType, identifier string, index int) string {
-	return fmt.Sprintf(STATEFULSET_POD_TEMPLATE_STR, instanceType, identifier, index)
+	return fmt.Sprintf(STATEFULSET_POD_TEMPLATE_STR, identifier, instanceType, index)
 }
 
 
 func GetSplunkHeadlessServiceName(instanceType SplunkInstanceType, identifier string) string {
-	return fmt.Sprintf(HEADLESS_SERVICE_TEMPLATE_STR, instanceType, identifier)
+	return fmt.Sprintf(HEADLESS_SERVICE_TEMPLATE_STR, identifier, instanceType)
 }
 
 
 func GetSplunkServiceName(instanceType SplunkInstanceType, identifier string) string {
-	return fmt.Sprintf(SERVICE_TEMPLATE_STR, instanceType, identifier)
+	return fmt.Sprintf(SERVICE_TEMPLATE_STR, identifier, instanceType)
 }
 
 
