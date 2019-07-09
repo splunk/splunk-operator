@@ -12,7 +12,7 @@ import (
 )
 
 
-func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string) error {
+func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar) error {
 
 	labels := enterprise.GetSplunkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -68,29 +68,12 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 		},
 	}
 
-	if cr.Spec.Config.DefaultsConfigMapName != "" {
-		AddConfigMapVolumeToPodTemplate(&statefulSet.Spec.Template, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, enterprise.SPLUNK_DEFAULTS_MOUNT_LOCATION)
-	}
-
-	if cr.Spec.Config.SplunkLicense.VolumeSource != nil {
-		AddLicenseVolumeToPodTemplate(&statefulSet.Spec.Template, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
-	}
-
-	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
-		err = AddDFCToPodTemplate(&statefulSet.Spec.Template, cr)
-		if err != nil {
-			return err
-		}
-	}
-
-	if DNSConfigSearches != nil {
-		statefulSet.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
-		statefulSet.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Searches: DNSConfigSearches,
-		}
-	}
-
 	AddOwnerRefToObject(statefulSet, AsOwner(cr))
+
+	err = UpdateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, instanceType)
+	if err != nil {
+		return err
+	}
 
 	err = CreateResource(client, statefulSet)
 	if err != nil {
@@ -106,7 +89,7 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 }
 
 
-func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, DNSConfigSearches []string, containerPorts []corev1.ContainerPort, servicePorts []corev1.ServicePort) error {
+func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort, servicePorts []corev1.ServicePort) error {
 
 	labels := spark.GetSparkAppLabels(identifier, instanceType.ToString())
 	replicas32 := int32(replicas)
@@ -152,14 +135,12 @@ func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client,
 		},
 	}
 
-	if DNSConfigSearches != nil {
-		statefulSet.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
-		statefulSet.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Searches: DNSConfigSearches,
-		}
-	}
-
 	AddOwnerRefToObject(statefulSet, AsOwner(cr))
+
+	err = UpdatePodTemplateWithConfig(&statefulSet.Spec.Template, cr)
+	if err != nil {
+		return err
+	}
 
 	err = CreateResource(client, statefulSet)
 	if err != nil {
