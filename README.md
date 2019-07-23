@@ -2,22 +2,8 @@
 
 This repository is used to build the [Kubernetes operator](https://coreos.com/operators/) for Splunk.
 
-## Vendor Dependencies
-
-This project now uses [Go modules](https://blog.golang.org/using-go-modules). You must have golang 1.11 or later installed.
-
-The Kubernetes Operator SDK currently still uses [dep](https://github.com/golang/dep) to manage dependencies. On MacOS, you can install `dep` using Homebrew:
-
-```
-$ brew install dep
-$ brew upgrade dep
-```
-
-On other platforms you can use the `install.sh` script:
-
-```
-$ curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-```
+This project now uses [Go modules](https://blog.golang.org/using-go-modules). You must have golang 1.12 or later installed.
+Please note that you must `export GO111MODULE=on` if cloning these repositories into your `$GOPATH` (not recommended).
 
 
 ## Kubernetes Operator SDK
@@ -25,22 +11,15 @@ $ curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 The Kubernetes [Operator SDK](https://github.com/operator-framework/operator-sdk) must also be installed to build this project.
 
 ```
-$ mkdir -p $GOPATH/src/github.com/operator-framework
-$ cd $GOPATH/src/github.com/operator-framework
-$ git clone https://github.com/operator-framework/operator-sdk
+$ git clone -b v0.9.0 https://github.com/operator-framework/operator-sdk
 $ cd operator-sdk
-$ git checkout master
-$ make dep
 $ make install
 ```
 
 
 ## Cloning this repository
 
-This repository should be cloned into your `~/go/src/git.splunk.com` directory:
 ```
-$ mkdir -p ~/go/src/git.splunk.com
-$ cd ~/go/src/git.splunk.com
 $ git clone ssh://git@git.splunk.com:7999/tools/splunk-operator.git
 $ cd splunk-operator
 ```
