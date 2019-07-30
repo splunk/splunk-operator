@@ -14,11 +14,10 @@ const (
 	STATEFULSET_POD_TEMPLATE_STR = "splunk-%s-%s-%d" // identifier, instanceType, index (ex: 0, 1, 2, ...)
 	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
 	SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
+	SECRETS_TEMPLATE_STR = "splunk-%s-secrets" // identifier
+	DEFAULTS_TEMPLATE_STR = "splunk-%s-defaults" // identifier
 
 	SPLUNK_IMAGE = "splunk/splunk"
-
-	LICENSE_MOUNT_LOCATION string = "/license"
-	SPLUNK_DEFAULTS_MOUNT_LOCATION string = "/tmp/defaults"
 )
 
 
@@ -57,6 +56,16 @@ func GetSplunkServiceName(instanceType SplunkInstanceType, identifier string) st
 }
 
 
+func GetSplunkSecretsName(identifier string) string {
+	return fmt.Sprintf(SECRETS_TEMPLATE_STR, identifier)
+}
+
+
+func GetSplunkDefaultsName(identifier string) string {
+	return fmt.Sprintf(DEFAULTS_TEMPLATE_STR, identifier)
+}
+
+
 func GetSplunkStatefulsetUrls(namespace string, instanceType SplunkInstanceType, identifier string, replicas int, hostnameOnly bool) string {
 	urls := make([]string, replicas)
 	for i := 0; i < replicas; i++ {
@@ -91,8 +100,8 @@ func GetSplunkDNSUrl(namespace string, instanceType SplunkInstanceType, identifi
 
 func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
 	splunkImage := SPLUNK_IMAGE
-	if (cr.Spec.Config.SplunkImage != "") {
-		splunkImage = cr.Spec.Config.SplunkImage
+	if (cr.Spec.SplunkImage != "") {
+		splunkImage = cr.Spec.SplunkImage
 	} else {
 		splunkImage = os.Getenv("SPLUNK_IMAGE")
 		if (splunkImage == "") {

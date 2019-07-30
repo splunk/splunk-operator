@@ -10,16 +10,7 @@ import (
 // NOTE: Do not make struct fields private (i.e. make sure all struct fields start with an uppercase) otherwise the
 //		 serializer will not be able to access those fields and they will be left blank
 
-type SplunkLicense struct {
-	VolumeSource *v1.VolumeSource `json:"volumeSource"`
-	LicensePath string `json:"licensePath"`
-}
-
-type SplunkConfigSpec struct {
-	SplunkPassword string `json:"splunkPassword"`
-	SplunkStartArgs string `json:"splunkStartArgs"`
-	SplunkImage string `json:"splunkImage"`
-	SparkImage string `json:"sparkImage"`
+type SplunkResourcesSpec struct {
 	SplunkCpuRequest string `json:"splunkCpuRequest"`
 	SparkCpuRequest string `json:"sparkCpuRequest"`
 	SplunkMemoryRequest string `json:"splunkMemoryRequest"`
@@ -31,13 +22,6 @@ type SplunkConfigSpec struct {
 	SplunkEtcStorage string `json:"splunkEtcStorage"`
 	SplunkVarStorage string `json:"splunkVarStorage"`
 	SplunkIndexerStorage string `json:"splunkIndexerStorage"`
-	StorageClassName string `json:"storageClassName"`
-	SchedulerName string `json:"schedulerName"`
-	Affinity *v1.Affinity `json:"affinity"`
-	ImagePullPolicy string `json:"imagePullPolicy"`
-	SplunkLicense SplunkLicense `json:"splunkLicense"`
-	DefaultsConfigMapName string `json:"defaultsConfigMapName"`
-	EnableDFS bool `json:"enableDFS"`
 }
 
 type SplunkTopologySpec struct {
@@ -51,8 +35,19 @@ type SplunkTopologySpec struct {
 type SplunkEnterpriseSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	Config SplunkConfigSpec `json:"config"`
+	EnableDFS bool `json:"enableDFS"`
+	SparkImage string `json:"sparkImage"`
+	SplunkImage string `json:"splunkImage"`
+	SplunkVolumes []v1.Volume `json:"splunkVolumes"`
+	DefaultsUrl string `json:"defaultsUrl"`
+	LicenseUrl string `json:"licenseUrl"`
+	ImagePullPolicy string `json:"imagePullPolicy"`
+	StorageClassName string `json:"storageClassName"`
+	SchedulerName string `json:"schedulerName"`
+	Affinity *v1.Affinity `json:"affinity"`
+	Resources SplunkResourcesSpec `json:"resources"`
 	Topology SplunkTopologySpec `json:"topology"`
+	Defaults string `json:"defaults"`
 }
 
 // SplunkEnterpriseStatus defines the observed state of SplunkEnterprise

@@ -38,8 +38,8 @@ func GetSparkHeadlessServiceName(instanceType SparkInstanceType, identifier stri
 
 func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
 	sparkImage := SPLUNK_SPARK_IMAGE
-	if (cr.Spec.Config.SparkImage != "") {
-		sparkImage = cr.Spec.Config.SparkImage
+	if (cr.Spec.SparkImage != "") {
+		sparkImage = cr.Spec.SparkImage
 	} else {
 		sparkImage = os.Getenv("SPARK_IMAGE")
 		if (sparkImage == "") {
