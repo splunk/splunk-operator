@@ -37,6 +37,7 @@ Other make targets include (more info below):
 * `make publish-repo`: publishes the `splunk-operator` docker image to `repo.splunk.com`
 * `make publish-playground`: publishes the `splunk-operator` docker image to `cloudrepo-docker-playground.jfrog.io`
 * `make publish`: publishes the `splunk-operator` docker image to all registries
+* `make package`: generates tarball of the `splunk-operator` docker image and installation YAML file
 * `make install`: installs required resources in current k8s target cluster
 * `make uninstall`: removes required resources from current k8s target cluster
 * `make start`: starts splunk operator in current k8s target cluster
