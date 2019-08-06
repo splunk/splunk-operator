@@ -15,7 +15,7 @@ func ValidateSplunkCustomResource(instance *v1alpha1.SplunkEnterprise) error {
 	if instance.Spec.Topology.SearchHeads <= 0 && instance.Spec.Topology.Indexers > 0 {
 		return errors.New("You must specify how many search heads the cluster should have.")
 	}
-	if instance.Spec.Topology.Indexers > 0 && instance.Spec.Topology.SearchHeads > 0 && instance.Spec.Config.SplunkLicense.LicensePath == "" {
+	if instance.Spec.Topology.Indexers > 0 && instance.Spec.Topology.SearchHeads > 0 && instance.Spec.LicenseUrl == "" {
 		return errors.New("You must provide a license to create a cluster.")
 	}
 
@@ -27,17 +27,17 @@ func ValidateSplunkCustomResource(instance *v1alpha1.SplunkEnterprise) error {
 	}
 
 	// default to a single spark worker
-	if instance.Spec.Config.EnableDFS && instance.Spec.Topology.SparkWorkers <= 0 {
+	if instance.Spec.EnableDFS && instance.Spec.Topology.SparkWorkers <= 0 {
 		instance.Spec.Topology.SparkWorkers = 1
 	}
 
 	// ImagePullPolicy
-	if (instance.Spec.Config.ImagePullPolicy == "") {
-		instance.Spec.Config.ImagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	if (instance.Spec.ImagePullPolicy == "") {
+		instance.Spec.ImagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
 	}
-	switch (instance.Spec.Config.ImagePullPolicy) {
+	switch (instance.Spec.ImagePullPolicy) {
 	case "":
-		instance.Spec.Config.ImagePullPolicy = "IfNotPresent"
+		instance.Spec.ImagePullPolicy = "IfNotPresent"
 		break
 	case "Always":
 		break
@@ -45,7 +45,7 @@ func ValidateSplunkCustomResource(instance *v1alpha1.SplunkEnterprise) error {
 		break
 	default:
 		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"",
-			instance.Spec.Config.ImagePullPolicy)
+			instance.Spec.ImagePullPolicy)
 	}
 
 	return nil

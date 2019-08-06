@@ -5,14 +5,11 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  config:
-    splunkPassword: helloworld456
-    splunkStartArgs: --accept-license
-    splunkLicense:
-      volumeSource:
-        configMap:
-          name: splunk-enterprise.lic
-      licensePath: /splunk-enterprise.lic
+  splunkVolumes:
+    - name: license
+      configMap:
+        name: splunk-enterprise.lic
+  licenseUrl: /mnt/license/splunk-enterprise.lic
   topology:
     indexers: 3
     searchHeads: 3

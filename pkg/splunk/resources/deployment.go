@@ -58,7 +58,7 @@ func CreateSplunkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client,
 					Containers: []corev1.Container{
 						{
 							Image: enterprise.GetSplunkImage(cr),
-							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name: "splunk",
 							Ports: enterprise.GetSplunkContainerPorts(),
 							Env: envVariables,
@@ -138,7 +138,7 @@ func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, 
 					Containers: []corev1.Container{
 						{
 							Image: spark.GetSparkImage(cr),
-							ImagePullPolicy: corev1.PullPolicy(cr.Spec.Config.ImagePullPolicy),
+							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name: "spark",
 							Ports: ports,
 							Env: envVariables,

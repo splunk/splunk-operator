@@ -92,14 +92,12 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 
 	// check if deletion has been requested
 	if instance.ObjectMeta.DeletionTimestamp != nil {
-		deleted, err := enterprise.CheckSplunkDeletion(instance, r.client)
+		_, err := enterprise.CheckSplunkDeletion(instance, r.client)
 		if err != nil {
 			log.Printf("Unable to delete SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
 			return reconcile.Result{}, err
 		}
-		if deleted {
-			return reconcile.Result{}, nil
-		}
+		return reconcile.Result{}, nil
 	}
 
 	err = deploy.ValidateSplunkCustomResource(instance)

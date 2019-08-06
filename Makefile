@@ -23,6 +23,9 @@ publish-playground: get-commit-id
 
 publish: publish-repo publish-playground
 
+package:
+	@build/package.sh
+
 install:
 	@if ! `kubectl get splunkenterprises.enterprise.splunk.com &> /dev/null`; then kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml; fi
 	@kubectl create -f deploy/service_account.yaml
@@ -51,4 +54,4 @@ stop:
 rebuild: splunk-operator stop push start
 
 get-commit-id:
-	@$(eval COMMIT_ID := $(shell bash -c "git rev-parse HEAD | cut -c8-19"))
+	@$(eval COMMIT_ID := $(shell bash -c "git rev-parse HEAD | cut -c1-12"))

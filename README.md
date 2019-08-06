@@ -37,6 +37,7 @@ Other make targets include (more info below):
 * `make publish-repo`: publishes the `splunk-operator` docker image to `repo.splunk.com`
 * `make publish-playground`: publishes the `splunk-operator` docker image to `cloudrepo-docker-playground.jfrog.io`
 * `make publish`: publishes the `splunk-operator` docker image to all registries
+* `make package`: generates tarball of the `splunk-operator` docker image and installation YAML file
 * `make install`: installs required resources in current k8s target cluster
 * `make uninstall`: removes required resources from current k8s target cluster
 * `make start`: starts splunk operator in current k8s target cluster
@@ -109,10 +110,6 @@ This will tag the image as `repo.splunk.com/splunk/products/splunk-operator:[COM
 
 
 ### Splunk8s Clusters
-
-* `splunk/splunk`: available from Docker Hub
-* `splunk-dfs`: available via `cloudrepo-docker-playground.jfrog.io`
-* `splunk-spark`: available via `cloudrepo-docker-playground.jfrog.io`
 
 The `splunk-operator` image is published and available via `cloudrepo-docker-playground.jfrog.io`.
 You can publish a new local build by running
@@ -202,6 +199,13 @@ To create a new Splunk Enterprise instance, run
 $ kubectl create -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml
 ```
 
+If you do not provide a default admin password by using the `defaultsUrl` or `defaults`
+configuration parameters (see below), you can obtain the default admin user account
+password by running:
+```
+kubectl get secret splunk-<id>-secrets -o jsonpath='{.data.password}' | base64 --decode
+```
+
 To remove the instance, run
 ```
 $ kubectl delete -f deploy/crds/enterprise_v1alpha1_splunkenterprise_cr.yaml
@@ -229,14 +233,15 @@ Here is a sample yaml file that can be used to create a **SplunkEnterprise** ins
 apiVersion: "enterprise.splunk.com/v1alpha1"
 kind: "SplunkEnterprise"
 metadata:
-	name: "example"
+  name: "example"
 spec:
-	config:
-		splunkPassword: helloworld
-		splunkStartArgs: --accept-license
-	topology:
-		indexers: 1
-		searchHeads: 1
+  resources:
+    splunkEtcStorage: 1Gi
+    splunkVarStorage: 20Gi
+    splunkIndexerStorage: 25Gi
+  topology:
+    indexers: 3
+    searchHeads: 3
 ```
 
 ### Relevant Parameters
@@ -250,12 +255,23 @@ spec:
 #### Spec
 | Key                   | Type    | Description                                                                                                                                                           |
 | --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Config**            |         |                                                                                                                                                                       |
-| splunkPassword        | string  | The password that can be used to login to splunk instances.                                                                                                           |
-| splunkStartArgs       | string  | Arguments to launch each splunk instance with.                                                                                                                        |
-| splunkImage           | string  | Docker image to use for Splunk instances (overrides SPLUNK_IMAGE environment variables)                                                          |
-| sparkImage            | string  | Docker image to use for Spark instances (overrides SPARK_IMAGE environment variables)                                                                          |
-| splunkLicense         |         | Specify a splunk license to use for clustered deployments.                                                                                                            |
+| enableDFS             | bool    | If this is true, DFS will be installed and enabled on all **searchHeads** and a spark cluster will be created.                                                        |
+| sparkImage            | string  | Docker image to use for Spark instances (overrides SPARK_IMAGE environment variables)                                                                                 |
+| splunkImage           | string  | Docker image to use for Splunk instances (overrides SPLUNK_IMAGE environment variables)                                                                               |
+| splunkVolumes         | volumes | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all Splunk containers as as /mnt/&lt;name&gt;|
+| defaults              | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment     |
+| defaultsUrl           | string  | Full path or URL for a [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) file used to initialize the environment |
+| licenseUrl            | string  | Full path or URL for a Splunk Enterprise license file, located within a mounted volume                                                                                |
+| imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
+| storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
+| schedulerName         | string  | Name of Scheduler to use for pod placement                                                                                                                            |
+| affinity              | string  | Sets affinity for how pods are scheduled                                                                                                                              |
+| **Topology**          |         |                                                                                                                                                                       |
+| standalones           | integer | The number of standalone instances to launch.                                                                                                                         |
+| searchHeads           | integer | The number of search heads to launch. If this number is greater than 1 then a deployer will be launched as well to create a search head cluster.                      |
+| indexers              | integer | The number of indexers to launch. When **searchHeads** is defined and **indexers** is defined a **cluster master** is also launched to create a clustered deployment. |
+| sparkWorkers          | integer | The number of spark workers to launch. When this is defined, a **spark cluster master** will be launched as well to create a spark cluster.                           |
+| **Resources**         |         |                                                                                                                                                                       |
 | splunkCpuRequest      | string  | Sets the CPU request (minimum) for Splunk pods (default="0.1")                                                                                                        |
 | sparkCpuRequest       | string  | Sets the CPU request (minimum) for Spark pods (default="0.1")                                                                                                         |
 | splunkMemoryRequest   | string  | Sets the memory request (minimum) for Splunk pods (default="1Gi")                                                                                                     |
@@ -267,19 +283,6 @@ spec:
 | splunkEtcStorage      | string  | Storage capacity to request for Splunk etc volume claims (default="1Gi")                                                                                              |
 | splunkVarStorage      | string  | Storage capacity to request for Splunk var volume claims (default="50Gi")                                                                                             |
 | splunkIndexerStorage  | string  | Storage capacity to request for Splunk var volume claims on indexers (default="200Gi")                                                                                |
-| storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
-| schedulerName         | string  | Name of Scheduler to use for pod placement                                                                                                                            |
-| affinity              | string  | Sets affinity for how pods are scheduled                                                                                                                              |
-| imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
-| volumeSource          | volume  | Any Kubernetes supported volume (awsElasticBlockStore, gcePersistentDisk, nfs, etc...). This will be mounted as a directory inside the container.                     |
-| licensePath           | string  | The location (and name) of the license inside the volume to be mounted.                                                                                               |
-| defaultsConfigMapName | string  | The name of the ConfigMap which stores the splunk defaults data. It must contain a single file named "default.yml"                                                    |
-| enableDFS             | bool    | If this is true, DFS will be installed on **searchHeads** being launched and a spark cluster will be created.                                                         |
-| **Topology**          |         |                                                                                                                                                                       |
-| standalones           | integer | The number of standalone instances to launch.                                                                                                                         |
-| searchHeads           | integer | The number of search heads to launch. If this number is greater than 1 then a deployer will be launched as well to create a search head cluster.                      |
-| indexers              | integer | The number of indexers to launch. When **searchHeads** is defined and **indexers** is defined a **cluster master** is also launched to create a clustered deployment. |
-| sparkWorkers          | integer | The number of spark workers to launch. When this is defined, a **spark cluster master** will be launched as well to create a spark cluster.                           |
 
 **Notes**
 + If **searchHeads** is defined then **indexers** must also be defined (and vice versa).
@@ -289,23 +292,68 @@ spec:
 
 ### License Mount
 
-Suppose we create a ConfigMap of a dfs license in our kubernetes cluster named **dfs-license.lic**. Then to use that license for our deployment the yaml would look like:
+Suppose we create a ConfigMap named **splunk-licenses** that includes a DFS license file `dfs.lic` in our kubernetes cluster. Then to use that license for our deployment the yaml would look like:
 
 ```yaml
 apiVersion: "enterprise.splunk.com/v1alpha1"
 kind: "SplunkEnterprise"
 metadata:
-	name: "example"
+  name: "example"
 spec:
-	config:
-		splunkPassword: helloworld456
-		splunkStartArgs: --accept-license
-		splunkLicense:
-			volumeSource:
-				configMap:
-					name: dfs-license
-			licensePath: /dfs-license.lic
-	topology:
-		indexers: 3
-		searchHeads: 3
+  splunkVolumes:
+    - name: licenses
+      configMap:
+        name: splunk-licenses
+  licenseUrl: /mnt/licenses/dfs.lic
 ```
+
+### Defaults
+
+Suppose we create a ConfigMap named **splunk-defaults** that includes a `default.yml` in our kubernetes cluster. The yaml to use it would look like:
+
+```yaml
+apiVersion: "enterprise.splunk.com/v1alpha1"
+kind: "SplunkEnterprise"
+metadata:
+  name: "example"
+spec:
+  splunkVolumes:
+    - name: defaults
+      configMap:
+        name: splunk-defaults
+  defaultsUrl: /mnt/defaults/default.yml
+```
+
+Note that `defaultsUrl` supports multiple YAML files, separated by commas. You may want to use a `generic.yml` that has overrides or additional parameters in `metrics.yml`:
+
+```yaml
+  defaultsUrl: "/mnt/defaults/generic.yml,/mnt/defaults/metrics.yml"
+```
+
+You can also mix and match local files and remote URLs:
+
+```yaml
+  defaultsUrl: "http://myco.com/splunk/generic.yml,/mnt/defaults/metrics.yml"
+```
+
+Suppose we want to override the admin password for our deployment, you can also specify inline overrides using `default`:
+
+```yaml
+apiVersion: "enterprise.splunk.com/v1alpha1"
+kind: "SplunkEnterprise"
+metadata:
+  name: "example"
+spec:
+  splunkVolumes:
+    - name: defaults
+      configMap:
+        name: splunk-defaults
+  defaultsUrl: /mnt/defaults/default.yml
+  defaults: |-
+    splunk:
+      password: helloworld456
+```
+
+(Setting passwords your CRDs works for demos and testing but is strongly discouraged)
+
+Note that inline defaults are always processed last, after any `defaultsUrl` settings.

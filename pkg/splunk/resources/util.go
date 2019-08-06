@@ -45,120 +45,105 @@ func AsOwner(instance *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 }
 
 
-func AddConfigMapVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeName string, configMapName string, mountLocation string) {
-	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, v1.Volume{
-		Name: volumeName,
-		VolumeSource: v1.VolumeSource{
-			ConfigMap: &v1.ConfigMapVolumeSource{
-				LocalObjectReference: v1.LocalObjectReference{
-					Name: configMapName,
-				},
-			},
-		},
+func AddSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name string, volumeSource corev1.VolumeSource) {
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name: "mnt-splunk-" + name,
+		VolumeSource: volumeSource,
 	})
+
 	for idx, _ := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, v1.VolumeMount{
-			Name: volumeName,
-			MountPath: mountLocation,
+		containerSpec := &podTemplateSpec.Spec.Containers[idx]
+		containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
+			Name:      "mnt-splunk-" + name,
+			MountPath: "/mnt/splunk-" + name,
 		})
 	}
 }
 
 
-func AddLicenseVolumeToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, volumeName string, source *v1.VolumeSource, mountLocation string) {
-	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, v1.Volume{
-		Name: volumeName,
-		VolumeSource: *source,
-	})
-	for idx, _ := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, v1.VolumeMount{
-			Name: volumeName,
-			MountPath: mountLocation,
-		})
-	}
-}
-
-
-func AddDFCVolumeMounts(containerSpec *v1.Container) {
-	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
-		Name:      "mnt-jdk",
-		MountPath: "/mnt/jdk",
-	})
-	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
-		Name:      "mnt-spark",
-		MountPath: "/mnt/spark",
-	})
-}
-
-
-func AddDFCToPodTemplate(podTemplateSpec *v1.PodTemplateSpec, instance *v1alpha1.SplunkEnterprise) error {
+func AddDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, instance *v1alpha1.SplunkEnterprise) error {
 	requirements, err := GetSparkRequirements(instance)
 	if err != nil {
 		return err
 	}
 
+	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
 	containerSpec := corev1.Container {
 		Image: spark.GetSparkImage(instance),
-		ImagePullPolicy: corev1.PullPolicy(instance.Spec.Config.ImagePullPolicy),
+		ImagePullPolicy: corev1.PullPolicy(instance.Spec.ImagePullPolicy),
 		Name: "init",
 		Resources: requirements,
 		Command: []string{ "bash", "-c", "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt" },
 	}
-
-	AddDFCVolumeMounts(&containerSpec)
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
+		Name:      "mnt-splunk-jdk",
+		MountPath: "/mnt/jdk",
+	})
+	containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, v1.VolumeMount{
+		Name:      "mnt-splunk-spark",
+		MountPath: "/mnt/spark",
+	})
 	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
 
+	// add empty jdk and spark mount directories to all of the splunk containers
 	emptyVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
+	AddSplunkVolumeToTemplate(podTemplateSpec, "jdk", emptyVolumeSource)
+	AddSplunkVolumeToTemplate(podTemplateSpec, "spark", emptyVolumeSource)
 
-	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
-		Name: "mnt-jdk",
-		VolumeSource: emptyVolumeSource,
-	})
-	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
-		Name: "mnt-spark",
-		VolumeSource: emptyVolumeSource,
-	})
+	return nil
+}
 
-	for idx, _ := range podTemplateSpec.Spec.Containers {
-		AddDFCVolumeMounts(&podTemplateSpec.Spec.Containers[idx])
+
+func UpdatePodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
+	if cr.Spec.SchedulerName != "" {
+		podTemplateSpec.Spec.SchedulerName = cr.Spec.SchedulerName
+	}
+
+	if cr.Spec.Affinity != nil {
+		podTemplateSpec.Spec.Affinity = cr.Spec.Affinity
 	}
 
 	return nil
 }
 
 
-func UpdatePodTemplateWithConfig(podTemplateSpec *v1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
-	dnsConfigSearches := enterprise.GetSplunkDNSConfiguration(cr)
-	if dnsConfigSearches != nil {
-		podTemplateSpec.Spec.DNSPolicy = corev1.DNSClusterFirst
-		podTemplateSpec.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Searches: dnsConfigSearches,
+func UpdateSplunkPodTemplateWithConfig(podTemplateSpec *v1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType enterprise.SplunkInstanceType) error {
+
+	// Add custom volumes to splunk containers
+	if cr.Spec.SplunkVolumes != nil {
+		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, cr.Spec.SplunkVolumes...)
+		for idx, _ := range podTemplateSpec.Spec.Containers {
+			for v, _ := range cr.Spec.SplunkVolumes {
+				podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, v1.VolumeMount{
+					Name:      cr.Spec.SplunkVolumes[v].Name,
+					MountPath: "/mnt/" + cr.Spec.SplunkVolumes[v].Name,
+				})
+			}
 		}
 	}
 
-	if cr.Spec.Config.SchedulerName != "" {
-		podTemplateSpec.Spec.SchedulerName = cr.Spec.Config.SchedulerName
+	// add defaults secrets to all splunk containers
+	AddSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
+		Secret: &corev1.SecretVolumeSource{
+			SecretName: enterprise.GetSplunkSecretsName(enterprise.GetIdentifier(cr)),
+		},
+	})
+
+	// add inline defaults to all splunk containers
+	if cr.Spec.Defaults != "" {
+		AddSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: enterprise.GetSplunkDefaultsName(enterprise.GetIdentifier(cr)),
+				},
+			},
+		})
 	}
 
-	if cr.Spec.Config.Affinity != nil {
-		podTemplateSpec.Spec.Affinity = cr.Spec.Config.Affinity
-	}
-
-	return nil
-}
-
-func UpdateSplunkPodTemplateWithConfig(podTemplateSpec *v1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType enterprise.SplunkInstanceType) error {
-	if cr.Spec.Config.DefaultsConfigMapName != "" {
-		AddConfigMapVolumeToPodTemplate(podTemplateSpec, "splunk-defaults", cr.Spec.Config.DefaultsConfigMapName, enterprise.SPLUNK_DEFAULTS_MOUNT_LOCATION)
-	}
-
-	if cr.Spec.Config.SplunkLicense.VolumeSource != nil {
-		AddLicenseVolumeToPodTemplate(podTemplateSpec, "splunk-license", cr.Spec.Config.SplunkLicense.VolumeSource, enterprise.LICENSE_MOUNT_LOCATION)
-	}
-
-	if cr.Spec.Config.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
+	// add spark and java mounts to search head containers
+	if cr.Spec.EnableDFS && (instanceType == enterprise.SPLUNK_SEARCH_HEAD || instanceType == enterprise.SPLUNK_STANDALONE) {
 		if err := AddDFCToPodTemplate(podTemplateSpec, cr); err != nil {
 			return err
 		}
@@ -204,18 +189,18 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType enterpris
 	var err error
 	var etcStorage, varStorage resource.Quantity
 
-	etcStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkEtcStorage, "1Gi")
+	etcStorage, err = ParseResourceQuantity(cr.Spec.Resources.SplunkEtcStorage, "1Gi")
 	if err != nil {
 		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkEtcStorage", err)
 	}
 
 	if (instanceType == enterprise.SPLUNK_INDEXER) {
-		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkIndexerStorage, "200Gi")
+		varStorage, err = ParseResourceQuantity(cr.Spec.Resources.SplunkIndexerStorage, "200Gi")
 		if err != nil {
 			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkIndexerStorage", err)
 		}
 	} else {
-		varStorage, err = ParseResourceQuantity(cr.Spec.Config.SplunkVarStorage, "50Gi")
+		varStorage, err = ParseResourceQuantity(cr.Spec.Resources.SplunkVarStorage, "50Gi")
 		if err != nil {
 			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkVarStorage", err)
 		}
@@ -254,9 +239,9 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType enterpris
 		},
 	}
 
-	if (cr.Spec.Config.StorageClassName != "") {
+	if (cr.Spec.StorageClassName != "") {
 		for idx, _ := range volumeClaims {
-			volumeClaims[idx].Spec.StorageClassName = &cr.Spec.Config.StorageClassName
+			volumeClaims[idx].Spec.StorageClassName = &cr.Spec.StorageClassName
 		}
 	}
 
@@ -265,22 +250,22 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType enterpris
 
 
 func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkCpuRequest, "0.1")
+	cpuRequest, err := ParseResourceQuantity(cr.Spec.Resources.SplunkCpuRequest, "0.1")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuRequest", err)
 	}
 
-	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryRequest, "512Mi")
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryRequest, "512Mi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryRequest", err)
 	}
 
-	cpuLimit, err := ParseResourceQuantity(cr.Spec.Config.SplunkCpuLimit, "4")
+	cpuLimit, err := ParseResourceQuantity(cr.Spec.Resources.SplunkCpuLimit, "4")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuLimit", err)
 	}
 
-	memoryLimit, err := ParseResourceQuantity(cr.Spec.Config.SplunkMemoryLimit, "8Gi")
+	memoryLimit, err := ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryLimit, "8Gi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryLimit", err)
 	}
@@ -298,22 +283,22 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 
 
 func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkCpuRequest, "0.1")
+	cpuRequest, err := ParseResourceQuantity(cr.Spec.Resources.SparkCpuRequest, "0.1")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCpuRequest", err)
 	}
 
-	memoryRequest, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryRequest, "512Mi")
+	memoryRequest, err := ParseResourceQuantity(cr.Spec.Resources.SparkMemoryRequest, "512Mi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryRequest", err)
 	}
 
-	cpuLimit, err := ParseResourceQuantity(cr.Spec.Config.SparkCpuLimit, "4")
+	cpuLimit, err := ParseResourceQuantity(cr.Spec.Resources.SparkCpuLimit, "4")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCpuLimit", err)
 	}
 
-	memoryLimit, err := ParseResourceQuantity(cr.Spec.Config.SparkMemoryLimit, "8Gi")
+	memoryLimit, err := ParseResourceQuantity(cr.Spec.Resources.SparkMemoryLimit, "8Gi")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryLimit", err)
 	}
