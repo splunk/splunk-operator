@@ -1,13 +1,16 @@
-package enterprise
+package deploy
 
 import (
 	"context"
 	"fmt"
 	"log"
+
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
 const (
@@ -16,8 +19,8 @@ const (
 
 
 func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, error) {
-	namespace := GetNamespace(cr)
-	identifier := GetIdentifier(cr)
+	namespace := enterprise.GetNamespace(cr)
+	identifier := enterprise.GetIdentifier(cr)
 	currentTime := metav1.Now()
 
 	// nothing to do if deletion time is in the future
@@ -55,10 +58,10 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 	// get list of PVCs for this cluster
 	labels :=  map[string]string{
 		"app": "splunk",
-		"for": GetIdentifier(cr),
+		"for": enterprise.GetIdentifier(cr),
 	}
 	var listopts client.ListOptions
-	listopts.InNamespace(GetNamespace(cr))
+	listopts.InNamespace(enterprise.GetNamespace(cr))
 	listopts.MatchingLabels(labels)
 	pvclist := corev1.PersistentVolumeClaimList{}
 	if err := c.List(context.Background(), &listopts, &pvclist); err != nil {
@@ -67,7 +70,7 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 
 	// delete each PVC
 	for _, pvc := range pvclist.Items {
-		log.Printf("Deleting PVC for SplunkEnterprise %s/%s: %s\n", GetNamespace(cr), GetIdentifier(cr), pvc.ObjectMeta.Name)
+		log.Printf("Deleting PVC for SplunkEnterprise %s/%s: %s\n", enterprise.GetNamespace(cr), enterprise.GetIdentifier(cr), pvc.ObjectMeta.Name)
 		if err := c.Delete(context.Background(), &pvc); err != nil {
 			return err
 		}
@@ -77,7 +80,7 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 }
 
 func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c client.Client, finalizer string) error {
-	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", GetNamespace(cr), GetIdentifier(cr), finalizer)
+	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", enterprise.GetNamespace(cr), enterprise.GetIdentifier(cr), finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed
 	var newFinalizers []string

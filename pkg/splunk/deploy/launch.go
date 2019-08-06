@@ -61,7 +61,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 	}
 	enterprise.AppendSplunkDfsOverrides(cr, overrides)
 
-	err := resources.CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides))
+	err := CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides))
 	if err != nil {
 		return err
 	}
@@ -104,12 +104,12 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateService(cr, client, enterprise.SPLUNK_LICENSE_MASTER, enterprise.GetIdentifier(cr), false)
+	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_LICENSE_MASTER, enterprise.GetIdentifier(cr), false))
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateSplunkDeployment(
+	err = CreateSplunkDeployment(
 		cr,
 		client,
 		enterprise.SPLUNK_LICENSE_MASTER,
@@ -133,12 +133,12 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateService(cr, client, enterprise.SPLUNK_CLUSTER_MASTER, enterprise.GetIdentifier(cr), false)
+	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_CLUSTER_MASTER, enterprise.GetIdentifier(cr), false))
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateSplunkDeployment(
+	err = CreateSplunkDeployment(
 		cr,
 		client,
 		enterprise.SPLUNK_CLUSTER_MASTER,
@@ -161,12 +161,12 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateService(cr, client, enterprise.SPLUNK_DEPLOYER, enterprise.GetIdentifier(cr), false)
+	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_DEPLOYER, enterprise.GetIdentifier(cr), false))
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateSplunkDeployment(
+	err = CreateSplunkDeployment(
 		cr,
 		client,
 		enterprise.SPLUNK_DEPLOYER,
@@ -189,7 +189,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateSplunkStatefulSet(
+	err := CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_INDEXER,
@@ -207,20 +207,20 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
+	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_INDEXER, enterprise.GetIdentifier(cr), true))
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
 
 func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateService(cr, client, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), false)
-	if err != nil {
-		return err
-	}
-
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
 	enterprise.AppendSplunkDfsOverrides(cr, overrides)
 
-	err = resources.CreateSplunkStatefulSet(
+	err := CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_SEARCH_HEAD,
@@ -236,23 +236,46 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		return err
 	}
 
+	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), true))
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), false))
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
 
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := resources.CreateSparkService(cr, client, spark.SPARK_MASTER, enterprise.GetIdentifier(cr), false, spark.GetSparkMasterServicePorts())
+	identifier := enterprise.GetIdentifier(cr)
+
+	err := resources.CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER, identifier, false, spark.GetSparkMasterServicePorts()))
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateSparkDeployment(cr, client, spark.SPARK_MASTER, enterprise.GetIdentifier(cr), 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	err = CreateSparkDeployment(cr, client, spark.SPARK_MASTER, identifier, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateSparkStatefulSet(cr, client, spark.SPARK_WORKER, enterprise.GetIdentifier(cr), cr.Spec.Topology.SparkWorkers, spark.GetSparkWorkerConfiguration(enterprise.GetIdentifier(cr)), spark.GetSparkWorkerContainerPorts(), spark.GetSparkWorkerServicePorts())
+	err = CreateSparkStatefulSet(cr,
+		client,
+		spark.SPARK_WORKER,
+		identifier,
+		cr.Spec.Topology.SparkWorkers,
+		spark.GetSparkWorkerConfiguration(identifier),
+		spark.GetSparkWorkerContainerPorts())
+	if err != nil {
+		return err
+	}
+
+	err = resources.CreateResource(client, spark.GetSparkService(cr, spark.SPARK_WORKER, identifier, true, spark.GetSparkWorkerServicePorts()))
 	if err != nil {
 		return err
 	}

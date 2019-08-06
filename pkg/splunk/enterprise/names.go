@@ -2,9 +2,9 @@ package enterprise
 
 import (
 	"fmt"
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"os"
 	"strings"
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
 
