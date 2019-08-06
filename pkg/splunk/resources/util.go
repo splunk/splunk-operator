@@ -97,14 +97,6 @@ func AddDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, instance *v1al
 
 
 func UpdatePodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
-	dnsConfigSearches := enterprise.GetSplunkDNSConfiguration(cr)
-	if dnsConfigSearches != nil {
-		podTemplateSpec.Spec.DNSPolicy = corev1.DNSClusterFirst
-		podTemplateSpec.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Searches: dnsConfigSearches,
-		}
-	}
-
 	if cr.Spec.SchedulerName != "" {
 		podTemplateSpec.Spec.SchedulerName = cr.Spec.SchedulerName
 	}

@@ -212,11 +212,15 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 
 func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
+	err := resources.CreateService(cr, client, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), false)
+	if err != nil {
+		return err
+	}
 
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
 	enterprise.AppendSplunkDfsOverrides(cr, overrides)
 
-	err := resources.CreateSplunkStatefulSet(
+	err = resources.CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_SEARCH_HEAD,

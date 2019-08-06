@@ -13,7 +13,7 @@ const (
 	STATEFULSET_TEMPLATE_STR = "splunk-%s-%s" // identifier, instanceType (ex: standalone, indexers, etc...)
 	STATEFULSET_POD_TEMPLATE_STR = "splunk-%s-%s-%d" // identifier, instanceType, index (ex: 0, 1, 2, ...)
 	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
-	SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instanceType
+	SERVICE_TEMPLATE_STR = "splunk-%s-%s-service" // identifier, instanceType
 	SECRETS_TEMPLATE_STR = "splunk-%s-secrets" // identifier
 	DEFAULTS_TEMPLATE_STR = "splunk-%s-defaults" // identifier
 
@@ -76,24 +76,29 @@ func GetSplunkStatefulsetUrls(namespace string, instanceType SplunkInstanceType,
 
 
 func GetSplunkStatefulsetUrl(namespace string, instanceType SplunkInstanceType, identifier string, index int, hostnameOnly bool) string {
+	podName := GetSplunkStatefulsetPodName(instanceType, identifier, index)
+
 	if hostnameOnly {
-		return GetSplunkStatefulsetPodName(instanceType, identifier, index)
-	} else {
-		return fmt.Sprintf(
-			"%s.%s.%s.svc.cluster.local",
-			GetSplunkStatefulsetPodName(instanceType, identifier, index),
-			GetSplunkHeadlessServiceName(instanceType, identifier),
-			namespace,
-		)
+		return podName
 	}
+
+	return GetServiceFQDN(namespace,
+		fmt.Sprintf(
+			"%s.%s",
+			podName,
+			GetSplunkHeadlessServiceName(instanceType, identifier),
+		))
 }
 
 
-func GetSplunkDNSUrl(namespace string, instanceType SplunkInstanceType, identifier string) string {
+func GetServiceFQDN(namespace string, name string) string {
+	clusterDomain := os.Getenv("CLUSTER_DOMAIN")
+	if clusterDomain == "" {
+		clusterDomain = "cluster.local"
+	}
 	return fmt.Sprintf(
-		"%s.%s.svc.cluster.local",
-		GetSplunkHeadlessServiceName(instanceType, identifier),
-		namespace,
+		"%s.%s.svc.%s",
+		name, namespace, clusterDomain,
 	)
 }
 
