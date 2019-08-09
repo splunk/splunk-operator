@@ -1,3 +1,7 @@
+// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Use of this source code is governed by an Apache 2 style
+// license that can be found in the LICENSE file.
+
 package deploy
 
 import (
@@ -6,7 +10,6 @@ import (
 	"log"
 
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,19 +21,19 @@ const (
 )
 
 
+// CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
+// If so, it will process and remove any remaining finalizers.
 func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, error) {
-	namespace := enterprise.GetNamespace(cr)
-	identifier := enterprise.GetIdentifier(cr)
 	currentTime := metav1.Now()
 
 	// nothing to do if deletion time is in the future
 	if ! cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
 		log.Printf("Deletion deferred to future for SplunkEnterprise %s/%s (Now='%s', DeletionTimestamp='%s')\n",
-			namespace, identifier, currentTime, cr.ObjectMeta.DeletionTimestamp)
+			cr.GetNamespace(), cr.GetIdentifier(), currentTime, cr.ObjectMeta.DeletionTimestamp)
 		return false, nil
 	}
 
-	log.Printf("Deletion requested for SplunkEnterprise %s/%s\n", namespace, identifier)
+	log.Printf("Deletion requested for SplunkEnterprise %s/%s\n", cr.GetNamespace(), cr.GetIdentifier())
 
 	// process each finalizer
 	for _, finalizer := range cr.ObjectMeta.Finalizers {
@@ -43,25 +46,26 @@ func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, 
 				return false, err
 			}
 		default:
-			return false, fmt.Errorf("Finalizer in SplunkEnterprise %s/%s not recognized: %s", namespace, identifier, finalizer)
+			return false, fmt.Errorf("Finalizer in SplunkEnterprise %s/%s not recognized: %s", cr.GetNamespace(), cr.GetIdentifier(), finalizer)
 		}
 	}
 
-	log.Printf("Deletion complete for SplunkEnterprise %s/%s\n", namespace, identifier)
+	log.Printf("Deletion complete for SplunkEnterprise %s/%s\n", cr.GetNamespace(), cr.GetIdentifier())
 
 	return true, nil
 }
 
 
+// DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
 func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 
 	// get list of PVCs for this cluster
 	labels :=  map[string]string{
 		"app": "splunk",
-		"for": enterprise.GetIdentifier(cr),
+		"for": cr.GetIdentifier(),
 	}
 	var listopts client.ListOptions
-	listopts.InNamespace(enterprise.GetNamespace(cr))
+	listopts.InNamespace(cr.GetNamespace())
 	listopts.MatchingLabels(labels)
 	pvclist := corev1.PersistentVolumeClaimList{}
 	if err := c.List(context.Background(), &listopts, &pvclist); err != nil {
@@ -70,7 +74,7 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 
 	// delete each PVC
 	for _, pvc := range pvclist.Items {
-		log.Printf("Deleting PVC for SplunkEnterprise %s/%s: %s\n", enterprise.GetNamespace(cr), enterprise.GetIdentifier(cr), pvc.ObjectMeta.Name)
+		log.Printf("Deleting PVC for SplunkEnterprise %s/%s: %s\n", cr.GetNamespace(), cr.GetIdentifier(), pvc.ObjectMeta.Name)
 		if err := c.Delete(context.Background(), &pvc); err != nil {
 			return err
 		}
@@ -79,8 +83,10 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 	return nil
 }
 
+
+// RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
 func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c client.Client, finalizer string) error {
-	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", enterprise.GetNamespace(cr), enterprise.GetIdentifier(cr), finalizer)
+	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", cr.GetNamespace(), cr.GetIdentifier(), finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed
 	var newFinalizers []string

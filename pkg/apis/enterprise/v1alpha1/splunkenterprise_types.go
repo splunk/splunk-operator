@@ -1,3 +1,7 @@
+// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Use of this source code is governed by an Apache 2 style
+// license that can be found in the LICENSE file.
+
 package v1alpha1
 
 import (
@@ -67,6 +71,19 @@ type SplunkEnterprise struct {
 	Spec   SplunkEnterpriseSpec   `json:"spec,omitempty"`
 	Status SplunkEnterpriseStatus `json:"status,omitempty"`
 }
+
+
+// convenience function to return unique identifier for the Splunk enterprise deployment
+func (cr *SplunkEnterprise) GetIdentifier() string {
+	return cr.GetObjectMeta().GetName()
+}
+
+
+// convenience function to return namespace for a Splunk enterprise deployment
+func (cr *SplunkEnterprise) GetNamespace() string {
+	return cr.GetObjectMeta().GetNamespace()
+}
+
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
