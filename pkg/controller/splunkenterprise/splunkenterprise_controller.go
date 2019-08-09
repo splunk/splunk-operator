@@ -2,11 +2,12 @@ package splunkenterprise
 
 import (
 	"context"
-	"git.splunk.com/splunk-operator/pkg/splunk/deploy"
-	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
 	"log"
 
 	enterprisev1alpha1 "git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/deploy"
+	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -92,7 +93,7 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 
 	// check if deletion has been requested
 	if instance.ObjectMeta.DeletionTimestamp != nil {
-		_, err := enterprise.CheckSplunkDeletion(instance, r.client)
+		_, err := deploy.CheckSplunkDeletion(instance, r.client)
 		if err != nil {
 			log.Printf("Unable to delete SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
 			return reconcile.Result{}, err
@@ -100,7 +101,7 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, nil
 	}
 
-	err = deploy.ValidateSplunkCustomResource(instance)
+	err = enterprise.ValidateSplunkCustomResource(instance)
 	if err != nil {
 		log.Printf("Validation failed for SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
 		return reconcile.Result{}, err
