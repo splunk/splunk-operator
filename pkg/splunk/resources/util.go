@@ -1,62 +1,46 @@
+// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Use of this source code is governed by an Apache 2 style
+// license that can be found in the LICENSE file.
+
 package resources
 
 import (
 	"fmt"
-	"log"
-	"context"
+	"os"
+	"time"
+	"math/rand"
 
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	SECRET_BYTES = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890%()*+,-./<=>?@[]^_{|}~"
+)
 
-func CreateResource(client client.Client, obj runtime.Object) error {
-	err := client.Create(context.TODO(), obj)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Printf("Failed to create object : %v", err)
-		return err
-	}
-	return nil
+func init() {
+	// seed random number generator for splunk secret generation
+	rand.Seed(time.Now().UnixNano())
 }
 
 
-func AddOwnerRefToObject(object metav1.Object, reference metav1.OwnerReference) {
-	object.SetOwnerReferences(append(object.GetOwnerReferences(), reference))
-}
-
-
-func AsOwner(instance *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
+// AsOwner returns an object to use for Kubernetes resource ownership references.
+func AsOwner(cr *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 	trueVar := true
 
 	return metav1.OwnerReference{
-		APIVersion: instance.TypeMeta.APIVersion,
-		Kind:       instance.TypeMeta.Kind,
-		Name:       instance.Name,
-		UID:        instance.UID,
+		APIVersion: cr.TypeMeta.APIVersion,
+		Kind:       cr.TypeMeta.Kind,
+		Name:       cr.Name,
+		UID:        cr.UID,
 		Controller: &trueVar,
 	}
 }
 
 
-func UpdatePodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
-	if cr.Spec.SchedulerName != "" {
-		podTemplateSpec.Spec.SchedulerName = cr.Spec.SchedulerName
-	}
-
-	if cr.Spec.Affinity != nil {
-		podTemplateSpec.Spec.Affinity = cr.Spec.Affinity
-	}
-
-	return nil
-}
-
-
+// ParseResourceQuantity parses and returns a resource quantity from a string.
 func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, error) {
 	var result resource.Quantity
 
@@ -73,4 +57,27 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 	}
 
 	return result, nil
+}
+
+
+// GetServiceFQDN returns the fully qualified domain name for a Kubernetes service.
+func GetServiceFQDN(namespace string, name string) string {
+	clusterDomain := os.Getenv("CLUSTER_DOMAIN")
+	if clusterDomain == "" {
+		clusterDomain = "cluster.local"
+	}
+	return fmt.Sprintf(
+		"%s.%s.svc.%s",
+		name, namespace, clusterDomain,
+	)
+}
+
+
+// GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
+func GenerateSecret(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = SECRET_BYTES[rand.Int63() % int64(len(SECRET_BYTES))]
+	}
+	return b
 }

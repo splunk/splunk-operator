@@ -1,3 +1,7 @@
+// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Use of this source code is governed by an Apache 2 style
+// license that can be found in the LICENSE file.
+
 package spark
 
 import (
@@ -11,6 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+
+// GetSparkAppLabels returns a map of labels to use for Spark instances.
 func GetSparkAppLabels(identifier string, typeLabel string) map[string]string {
 	labels := map[string]string{
 		"app": "spark",
@@ -22,6 +28,7 @@ func GetSparkAppLabels(identifier string, typeLabel string) map[string]string {
 }
 
 
+// GetSparkMasterPorts returns a map of ports to use for Spark master instances.
 func GetSparkMasterPorts() map[string]int {
 	return map[string]int{
 		"sparkmaster": 7777,
@@ -30,6 +37,7 @@ func GetSparkMasterPorts() map[string]int {
 }
 
 
+// GetSparkMasterContainerPorts returns a list of Kubernetes ContainerPort objects for Spark master instances.
 func GetSparkMasterContainerPorts() []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
 	for key, value := range GetSparkMasterPorts() {
@@ -42,6 +50,7 @@ func GetSparkMasterContainerPorts() []corev1.ContainerPort {
 }
 
 
+// GetSparkMasterServicePorts returns a list of Kubernetes ServicePort objects for Spark master instances.
 func GetSparkMasterServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range GetSparkMasterPorts() {
@@ -54,6 +63,7 @@ func GetSparkMasterServicePorts() []corev1.ServicePort {
 }
 
 
+// GetSparkMasterConfiguration returns a list of Kubernetes EnvVar objects for Spark master instances.
 func GetSparkMasterConfiguration() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
@@ -64,6 +74,7 @@ func GetSparkMasterConfiguration() []corev1.EnvVar {
 }
 
 
+// GetSparkWorkerPorts returns a map of ports to use for Spark worker instances.
 func GetSparkWorkerPorts() map[string]int {
 	return map[string]int{
 		"dfwreceivedata": 17500,
@@ -72,6 +83,7 @@ func GetSparkWorkerPorts() map[string]int {
 }
 
 
+// GetSparkWorkerContainerPorts returns a list of Kubernetes ContainerPort objects for Spark worker instances.
 func GetSparkWorkerContainerPorts() []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
 	for key, value := range GetSparkWorkerPorts() {
@@ -84,6 +96,7 @@ func GetSparkWorkerContainerPorts() []corev1.ContainerPort {
 }
 
 
+// GetSparkWorkerServicePorts returns a list of Kubernetes ServicePort objects for Spark worker instances.
 func GetSparkWorkerServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range GetSparkWorkerPorts() {
@@ -96,6 +109,7 @@ func GetSparkWorkerServicePorts() []corev1.ServicePort {
 }
 
 
+// GetSparkWorkerConfiguration returns a list of Kubernetes EnvVar objects for Spark worker instances.
 func GetSparkWorkerConfiguration(identifier string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
@@ -109,6 +123,7 @@ func GetSparkWorkerConfiguration(identifier string) []corev1.EnvVar {
 }
 
 
+// GetSparkRequirements returns the Kubernetes ResourceRequirements to use for Spark instances.
 func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
 	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCpuRequest, "0.1")
 	if err != nil {
@@ -142,9 +157,10 @@ func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequire
 }
 
 
-func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) (*appsv1.Deployment, error) {
+// GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a SplunkEnterprise resource.
+func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) (*appsv1.Deployment, error) {
 
-	labels := GetSparkAppLabels(identifier, instanceType.ToString())
+	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
 
 	requirements, err := GetSparkRequirements(cr)
@@ -158,7 +174,7 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSparkDeploymentName(instanceType, identifier),
+			Name: GetSparkDeploymentName(instanceType, cr.GetIdentifier()),
 			Namespace: cr.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -171,7 +187,9 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					Hostname: GetSparkServiceName(instanceType, identifier),
+					Affinity: cr.Spec.Affinity,
+					SchedulerName: cr.Spec.SchedulerName,
+					Hostname: GetSparkServiceName(instanceType, cr.GetIdentifier()),
 					Containers: []corev1.Container{
 						{
 							Image: GetSparkImage(cr),
@@ -187,20 +205,16 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 		},
 	}
 
-	resources.AddOwnerRefToObject(deployment, resources.AsOwner(cr))
-
-	err = resources.UpdatePodTemplateWithConfig(&deployment.Spec.Template, cr)
-	if err != nil {
-		return nil, err
-	}
+	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	return deployment, nil
 }
 
 
-func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, identifier string, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) (*appsv1.StatefulSet, error) {
+// GetSparkStatefulSet returns a Kubernetes StatefulSet object for Spark workers configured for a SplunkEnterprise resource.
+func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) (*appsv1.StatefulSet, error) {
 
-	labels := GetSparkAppLabels(identifier, instanceType.ToString())
+	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
 
 	requirements, err := GetSparkRequirements(cr)
@@ -214,14 +228,14 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstan
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSparkStatefulsetName(instanceType, identifier),
+			Name: GetSparkStatefulsetName(instanceType, cr.GetIdentifier()),
 			Namespace: cr.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName: GetSparkHeadlessServiceName(instanceType, identifier),
+			ServiceName: GetSparkHeadlessServiceName(instanceType, cr.GetIdentifier()),
 			Replicas: &replicas32,
 			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
@@ -229,6 +243,8 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstan
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					Affinity: cr.Spec.Affinity,
+					SchedulerName: cr.Spec.SchedulerName,
 					Containers: []corev1.Container{
 						{
 							Image: GetSparkImage(cr),
@@ -244,22 +260,18 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstan
 		},
 	}
 
-	resources.AddOwnerRefToObject(statefulSet, resources.AsOwner(cr))
-
-	err = resources.UpdatePodTemplateWithConfig(&statefulSet.Spec.Template, cr)
-	if err != nil {
-		return nil, err
-	}
+	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	return statefulSet, nil
 }
 
 
-func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, identifier string, isHeadless bool, ports []corev1.ServicePort) *corev1.Service {
+// GetSparkService returns a Kubernetes Service object for Spark instances configured for a SplunkEnterprise resource.
+func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, isHeadless bool, ports []corev1.ServicePort) *corev1.Service {
 
-	serviceName := GetSparkServiceName(instanceType, identifier)
+	serviceName := GetSparkServiceName(instanceType, cr.GetIdentifier())
 	if isHeadless {
-		serviceName = GetSparkHeadlessServiceName(instanceType, identifier)
+		serviceName = GetSparkHeadlessServiceName(instanceType, cr.GetIdentifier())
 	}
 
 	serviceType := resources.SERVICE
@@ -267,8 +279,8 @@ func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceTy
 		serviceType = resources.HEADLESS_SERVICE
 	}
 
-	serviceTypeLabels := GetSparkAppLabels(identifier, serviceType.ToString())
-	selectLabels := GetSparkAppLabels(identifier, instanceType.ToString())
+	serviceTypeLabels := GetSparkAppLabels(cr.GetIdentifier(), serviceType.ToString())
+	selectLabels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -290,7 +302,7 @@ func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceTy
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 	}
 
-	resources.AddOwnerRefToObject(service, resources.AsOwner(cr))
+	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	return service
 }

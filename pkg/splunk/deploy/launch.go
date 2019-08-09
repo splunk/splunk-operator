@@ -1,3 +1,7 @@
+// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Use of this source code is governed by an Apache 2 style
+// license that can be found in the LICENSE file.
+
 package deploy
 
 import (
@@ -9,6 +13,8 @@ import (
 )
 
 
+// LaunchDeployment creates all Kubernetes resources necessary to represent the
+// configuration state represented by the SplunkEnterprise CRD.
 func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	// launch a spark cluster if EnableDFS == true
@@ -21,16 +27,16 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 	// create splunk secrets
 	secrets := enterprise.GetSplunkSecrets(cr)
-	resources.AddOwnerRefToObject(secrets, resources.AsOwner(cr))
-	if err := resources.CreateResource(client, secrets); err != nil {
+	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
+	if err := CreateResource(client, secrets); err != nil {
 		return err
 	}
 
 	// create splunk defaults (for inline config)
 	if (cr.Spec.Defaults != "") {
 		defaults := enterprise.GetSplunkDefaults(cr)
-		resources.AddOwnerRefToObject(defaults, resources.AsOwner(cr))
-		if err := resources.CreateResource(client, defaults); err != nil {
+		defaults.SetOwnerReferences(append(defaults.GetOwnerReferences(), resources.AsOwner(cr)))
+		if err := CreateResource(client, defaults); err != nil {
 			return err
 		}
 	}
@@ -53,15 +59,23 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 }
 
 
+// LaunchStandalones creates a Kubernetes deployment for N standalone instances of Splunk Enterprise.
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_standalone"}
 	if cr.Spec.LicenseUrl != "" {
 		overrides["SPLUNK_LICENSE_URI"] = cr.Spec.LicenseUrl
 	}
-	enterprise.AppendSplunkDfsOverrides(cr, overrides)
+	if cr.Spec.EnableDFS {
+		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
+	}
 
-	err := CreateSplunkDeployment(cr, client, enterprise.SPLUNK_STANDALONE, enterprise.GetIdentifier(cr), cr.Spec.Topology.Standalones, enterprise.GetSplunkConfiguration(cr, overrides))
+	err := CreateSplunkDeployment(cr,
+		client,
+		enterprise.SPLUNK_STANDALONE,
+		cr.GetIdentifier(),
+		cr.Spec.Topology.Standalones,
+		enterprise.GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsUrl))
 	if err != nil {
 		return err
 	}
@@ -70,6 +84,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 }
 
 
+// LaunchCluster creates all Kubernetes resources necessary to represent a complete Splunk Enterprise cluster.
 func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	err := LaunchLicenseMaster(cr, client)
@@ -103,8 +118,10 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 }
 
 
+// LaunchLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_LICENSE_MASTER, enterprise.GetIdentifier(cr), false))
+
+	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_LICENSE_MASTER, false))
 	if err != nil {
 		return err
 	}
@@ -113,7 +130,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		cr,
 		client,
 		enterprise.SPLUNK_LICENSE_MASTER,
-		enterprise.GetIdentifier(cr),
+		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -132,8 +149,10 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 }
 
 
+// LaunchClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_CLUSTER_MASTER, enterprise.GetIdentifier(cr), false))
+
+	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_CLUSTER_MASTER, false))
 	if err != nil {
 		return err
 	}
@@ -142,7 +161,7 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		cr,
 		client,
 		enterprise.SPLUNK_CLUSTER_MASTER,
-		enterprise.GetIdentifier(cr),
+		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -160,8 +179,10 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 }
 
 
+// LaunchDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
-	err := resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_DEPLOYER, enterprise.GetIdentifier(cr), false))
+
+	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_DEPLOYER, false))
 	if err != nil {
 		return err
 	}
@@ -170,7 +191,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		cr,
 		client,
 		enterprise.SPLUNK_DEPLOYER,
-		enterprise.GetIdentifier(cr),
+		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -188,12 +209,13 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 }
 
 
+// LaunchIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
+
 	err := CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_INDEXER,
-		enterprise.GetIdentifier(cr),
 		cr.Spec.Topology.Indexers,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -207,7 +229,7 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
-	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_INDEXER, enterprise.GetIdentifier(cr), true))
+	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_INDEXER, true))
 	if err != nil {
 		return err
 	}
@@ -216,15 +238,17 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 }
 
 
+// LaunchSearchHeads create a Kubernetes StatefulSet and services for a Splunk Enterprise search head cluster.
 func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
-	enterprise.AppendSplunkDfsOverrides(cr, overrides)
+	if cr.Spec.EnableDFS {
+		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
+	}
 
 	err := CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_SEARCH_HEAD,
-		enterprise.GetIdentifier(cr),
 		cr.Spec.Topology.SearchHeads,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -236,12 +260,12 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		return err
 	}
 
-	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), true))
+	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, true))
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, enterprise.GetIdentifier(cr), false))
+	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, false))
 	if err != nil {
 		return err
 	}
@@ -250,16 +274,15 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 }
 
 
+// LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	identifier := enterprise.GetIdentifier(cr)
-
-	err := resources.CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER, identifier, false, spark.GetSparkMasterServicePorts()))
+	err := CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER,false, spark.GetSparkMasterServicePorts()))
 	if err != nil {
 		return err
 	}
 
-	err = CreateSparkDeployment(cr, client, spark.SPARK_MASTER, identifier, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	err = CreateSparkDeployment(cr, client, spark.SPARK_MASTER, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
 	if err != nil {
 		return err
 	}
@@ -267,15 +290,14 @@ func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) err
 	err = CreateSparkStatefulSet(cr,
 		client,
 		spark.SPARK_WORKER,
-		identifier,
 		cr.Spec.Topology.SparkWorkers,
-		spark.GetSparkWorkerConfiguration(identifier),
+		spark.GetSparkWorkerConfiguration(cr.GetIdentifier()),
 		spark.GetSparkWorkerContainerPorts())
 	if err != nil {
 		return err
 	}
 
-	err = resources.CreateResource(client, spark.GetSparkService(cr, spark.SPARK_WORKER, identifier, true, spark.GetSparkWorkerServicePorts()))
+	err = CreateResource(client, spark.GetSparkService(cr, spark.SPARK_WORKER, true, spark.GetSparkWorkerServicePorts()))
 	if err != nil {
 		return err
 	}
