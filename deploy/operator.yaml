@@ -36,6 +36,6 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk:edge"
+              value: "splunk/splunk:edge-redhat"
             - name: SPARK_IMAGE
               value: "splunk/spark"
