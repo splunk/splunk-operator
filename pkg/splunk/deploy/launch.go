@@ -70,12 +70,13 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
 	}
 
-	err := CreateSplunkDeployment(cr,
+	err := CreateSplunkStatefulSet(
+		cr,
 		client,
 		enterprise.SPLUNK_STANDALONE,
-		cr.GetIdentifier(),
 		cr.Spec.Topology.Standalones,
-		enterprise.GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsUrl))
+		enterprise.GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsUrl),
+	)
 	if err != nil {
 		return err
 	}
@@ -126,11 +127,10 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_LICENSE_MASTER,
-		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -157,11 +157,10 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_CLUSTER_MASTER,
-		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
@@ -187,11 +186,10 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
-	err = CreateSplunkDeployment(
+	err = CreateSplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_DEPLOYER,
-		cr.GetIdentifier(),
 		1,
 		enterprise.GetSplunkClusterConfiguration(
 			cr,
