@@ -79,6 +79,10 @@ func GetSplunkConfiguration(overrides map[string]string, defaults string, defaul
 			Name: "SPLUNK_DEFAULTS_URL",
 			Value: splunk_defaults,
 		},
+		{
+			Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
+			Value: "false",
+		},
 	}
 
 	if overrides != nil {
@@ -231,87 +235,13 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 }
 
 
-// GetSplunkDeployment returns a Kubernetes Deployment object for Splunk instances configured for a SplunkEnterprise resource.
-func GetSplunkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, deploymentName string, labels map[string]string, replicas int, envVariables []corev1.EnvVar) (*appsv1.Deployment, error) {
-
-	replicas32 := int32(replicas)
-
-	requirements, err := GetSplunkRequirements(cr)
-	if err != nil {
-		return nil, err
-	}
-
-	deployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Deployment",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: deploymentName,
-			Namespace: cr.GetNamespace(),
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Replicas: &replicas32,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					Affinity: cr.Spec.Affinity,
-					SchedulerName: cr.Spec.SchedulerName,
-					Containers: []corev1.Container{
-						{
-							Image: GetSplunkImage(cr),
-							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
-							Name: "splunk",
-							Ports: getSplunkContainerPorts(),
-							Env: envVariables,
-							Resources: requirements,
-							VolumeMounts: getSplunkVolumeMounts(),
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "pvc-etc",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "pvc-etc-" + deploymentName,
-								},
-							},
-						},
-						{
-							Name: "pvc-var",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "pvc-var-" + deploymentName,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
-
-	err = updateSplunkPodTemplateWithConfig(&deployment.Spec.Template, cr, instanceType)
-	if err != nil {
-		return nil, err
-	}
-
-	return deployment, nil
-}
-
-
 // GetSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a SplunkEnterprise resource.
 func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
 
 	requirements, err := GetSplunkRequirements(cr)
 	if err != nil {
@@ -349,6 +279,10 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 				Spec: corev1.PodSpec{
 					Affinity: cr.Spec.Affinity,
 					SchedulerName: cr.Spec.SchedulerName,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsUser:  &runAsUser,
+						FSGroup:    &fsGroup,
+					},
 					Containers: []corev1.Container{
 						{
 							Image: GetSplunkImage(cr),
