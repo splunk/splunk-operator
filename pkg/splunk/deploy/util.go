@@ -31,7 +31,7 @@ func CreateResource(client client.Client, obj ResourceObject) error {
 		return err
 	}
 
-	log.Printf("Created %s/%s in namespace %s\n", obj.GetObjectKind(), obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace())
+	log.Printf("Created %s in namespace %s\n", obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace())
 
 	return nil
 }
