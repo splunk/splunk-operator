@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-
 // CreateSparkDeployment creates a Kubernetes Deployment for a given type of Spark instance.
 func CreateSparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.SparkInstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
 

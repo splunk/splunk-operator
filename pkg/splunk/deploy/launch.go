@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-
 // LaunchDeployment creates all Kubernetes resources necessary to represent the
 // configuration state represented by the SplunkEnterprise CRD.
 func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
@@ -33,7 +32,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 	}
 
 	// create splunk defaults (for inline config)
-	if (cr.Spec.Defaults != "") {
+	if cr.Spec.Defaults != "" {
 		defaults := enterprise.GetSplunkDefaults(cr)
 		defaults.SetOwnerReferences(append(defaults.GetOwnerReferences(), resources.AsOwner(cr)))
 		if err := CreateResource(client, defaults); err != nil {
@@ -57,7 +56,6 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 
 	return nil
 }
-
 
 // LaunchStandalones creates a Kubernetes deployment for N standalone instances of Splunk Enterprise.
 func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
@@ -83,7 +81,6 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 
 	return nil
 }
-
 
 // LaunchCluster creates all Kubernetes resources necessary to represent a complete Splunk Enterprise cluster.
 func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
@@ -118,7 +115,6 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	return nil
 }
 
-
 // LaunchLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
@@ -136,7 +132,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 			cr,
 			cr.Spec.Topology.SearchHeads > 1,
 			map[string]string{
-				"SPLUNK_ROLE": "splunk_license_master",
+				"SPLUNK_ROLE":        "splunk_license_master",
 				"SPLUNK_LICENSE_URI": cr.Spec.LicenseUrl,
 			},
 		),
@@ -147,7 +143,6 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 
 	return nil
 }
-
 
 // LaunchClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
@@ -177,7 +172,6 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 	return err
 }
 
-
 // LaunchDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
@@ -206,7 +200,6 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 	return err
 }
 
-
 // LaunchIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
@@ -234,7 +227,6 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
 	return err
 }
-
 
 // LaunchSearchHeads create a Kubernetes StatefulSet and services for a Splunk Enterprise search head cluster.
 func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
@@ -271,11 +263,10 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 	return err
 }
 
-
 // LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER,false, spark.GetSparkMasterServicePorts()))
+	err := CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER, false, spark.GetSparkMasterServicePorts()))
 	if err != nil {
 		return err
 	}

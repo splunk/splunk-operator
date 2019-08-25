@@ -15,23 +15,23 @@ import (
 //		 serializer will not be able to access those fields and they will be left blank
 
 type SplunkResourcesSpec struct {
-	SplunkCpuRequest string `json:"splunkCpuRequest"`
-	SparkCpuRequest string `json:"sparkCpuRequest"`
-	SplunkMemoryRequest string `json:"splunkMemoryRequest"`
-	SparkMemoryRequest string `json:"sparkMemoryRequest"`
-	SplunkCpuLimit string `json:"splunkCpuLimit"`
-	SparkCpuLimit string `json:"sparkCpuLimit"`
-	SplunkMemoryLimit string `json:"splunkMemoryLimit"`
-	SparkMemoryLimit string `json:"sparkMemoryLimit"`
-	SplunkEtcStorage string `json:"splunkEtcStorage"`
-	SplunkVarStorage string `json:"splunkVarStorage"`
+	SplunkCpuRequest     string `json:"splunkCpuRequest"`
+	SparkCpuRequest      string `json:"sparkCpuRequest"`
+	SplunkMemoryRequest  string `json:"splunkMemoryRequest"`
+	SparkMemoryRequest   string `json:"sparkMemoryRequest"`
+	SplunkCpuLimit       string `json:"splunkCpuLimit"`
+	SparkCpuLimit        string `json:"sparkCpuLimit"`
+	SplunkMemoryLimit    string `json:"splunkMemoryLimit"`
+	SparkMemoryLimit     string `json:"sparkMemoryLimit"`
+	SplunkEtcStorage     string `json:"splunkEtcStorage"`
+	SplunkVarStorage     string `json:"splunkVarStorage"`
 	SplunkIndexerStorage string `json:"splunkIndexerStorage"`
 }
 
 type SplunkTopologySpec struct {
-	Standalones int `json:"standalones"`
-	Indexers int `json:"indexers"`
-	SearchHeads int `json:"searchHeads"`
+	Standalones  int `json:"standalones"`
+	Indexers     int `json:"indexers"`
+	SearchHeads  int `json:"searchHeads"`
 	SparkWorkers int `json:"sparkWorkers"`
 }
 
@@ -39,19 +39,19 @@ type SplunkTopologySpec struct {
 type SplunkEnterpriseSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	EnableDFS bool `json:"enableDFS"`
-	SparkImage string `json:"sparkImage"`
-	SplunkImage string `json:"splunkImage"`
-	SplunkVolumes []v1.Volume `json:"splunkVolumes"`
-	DefaultsUrl string `json:"defaultsUrl"`
-	LicenseUrl string `json:"licenseUrl"`
-	ImagePullPolicy string `json:"imagePullPolicy"`
-	StorageClassName string `json:"storageClassName"`
-	SchedulerName string `json:"schedulerName"`
-	Affinity *v1.Affinity `json:"affinity"`
-	Resources SplunkResourcesSpec `json:"resources"`
-	Topology SplunkTopologySpec `json:"topology"`
-	Defaults string `json:"defaults"`
+	EnableDFS        bool                `json:"enableDFS"`
+	SparkImage       string              `json:"sparkImage"`
+	SplunkImage      string              `json:"splunkImage"`
+	SplunkVolumes    []v1.Volume         `json:"splunkVolumes"`
+	DefaultsUrl      string              `json:"defaultsUrl"`
+	LicenseUrl       string              `json:"licenseUrl"`
+	ImagePullPolicy  string              `json:"imagePullPolicy"`
+	StorageClassName string              `json:"storageClassName"`
+	SchedulerName    string              `json:"schedulerName"`
+	Affinity         *v1.Affinity        `json:"affinity"`
+	Resources        SplunkResourcesSpec `json:"resources"`
+	Topology         SplunkTopologySpec  `json:"topology"`
+	Defaults         string              `json:"defaults"`
 }
 
 // SplunkEnterpriseStatus defines the observed state of SplunkEnterprise
@@ -72,18 +72,15 @@ type SplunkEnterprise struct {
 	Status SplunkEnterpriseStatus `json:"status,omitempty"`
 }
 
-
 // convenience function to return unique identifier for the Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetIdentifier() string {
 	return cr.GetObjectMeta().GetName()
 }
 
-
 // convenience function to return namespace for a Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetNamespace() string {
 	return cr.GetObjectMeta().GetNamespace()
 }
-
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

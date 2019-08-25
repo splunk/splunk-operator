@@ -6,9 +6,9 @@ package resources
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
-	"math/rand"
 
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 
@@ -25,7 +25,6 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-
 // AsOwner returns an object to use for Kubernetes resource ownership references.
 func AsOwner(cr *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 	trueVar := true
@@ -39,13 +38,12 @@ func AsOwner(cr *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
 	}
 }
 
-
 // ParseResourceQuantity parses and returns a resource quantity from a string.
 func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, error) {
 	var result resource.Quantity
 
-	if (str == "") {
-		if (useIfEmpty != "") {
+	if str == "" {
+		if useIfEmpty != "" {
 			result = resource.MustParse(useIfEmpty)
 		}
 	} else {
@@ -59,7 +57,6 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 	return result, nil
 }
 
-
 // GetServiceFQDN returns the fully qualified domain name for a Kubernetes service.
 func GetServiceFQDN(namespace string, name string) string {
 	clusterDomain := os.Getenv("CLUSTER_DOMAIN")
@@ -72,12 +69,11 @@ func GetServiceFQDN(namespace string, name string) string {
 	)
 }
 
-
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
 func GenerateSecret(n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = SECRET_BYTES[rand.Int63() % int64(len(SECRET_BYTES))]
+		b[i] = SECRET_BYTES[rand.Int63()%int64(len(SECRET_BYTES))]
 	}
 	return b
 }

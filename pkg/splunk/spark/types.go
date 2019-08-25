@@ -4,7 +4,6 @@
 
 package spark
 
-
 // SparkInstanceType is used to represent the type of spark instance (master or worker).
 type SparkInstanceType string
 
