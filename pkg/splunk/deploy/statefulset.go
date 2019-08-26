@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-
 // CreateSplunkStatefulSet creates a Kubernetes StatefulSet for a given type of Splunk Enterprise instance (indexers or search heads).
 func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) error {
 
@@ -29,7 +28,6 @@ func CreateSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client
 
 	return nil
 }
-
 
 // CreateSparkStatefulSet creates a Kubernetes StatefulSet for a given type of Spark instance (master or workers).
 func CreateSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.SparkInstanceType, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) error {

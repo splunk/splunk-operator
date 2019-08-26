@@ -4,7 +4,6 @@
 
 package resources
 
-
 // SplunkServiceType is used to represent the type of Kubernetes service (service or headless).
 type SplunkServiceType string
 

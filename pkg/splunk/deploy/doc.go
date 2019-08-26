@@ -6,5 +6,5 @@
 Package deploy is used to manipulate Kubernetes resources using its REST API.
 Methods within this package are likely to change state and/or mutate data.
 This package has dependencies on enterprise, spark and resources.
- */
+*/
 package deploy

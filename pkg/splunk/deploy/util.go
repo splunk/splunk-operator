@@ -5,22 +5,20 @@
 package deploy
 
 import (
-	"log"
 	"context"
+	"log"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
 
 // The ResourceObject type implements methods of runtime.Object and GetObjectMeta()
 type ResourceObject interface {
 	runtime.Object
 	GetObjectMeta() metav1.Object
 }
-
 
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(client client.Client, obj ResourceObject) error {

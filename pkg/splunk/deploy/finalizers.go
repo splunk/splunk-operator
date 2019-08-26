@@ -11,15 +11,14 @@ import (
 
 	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	SPLUNK_FINALIZER_DELETE_PVC="enterprise.splunk.com/delete-pvc"
+	SPLUNK_FINALIZER_DELETE_PVC = "enterprise.splunk.com/delete-pvc"
 )
-
 
 // CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
 // If so, it will process and remove any remaining finalizers.
@@ -27,7 +26,7 @@ func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, 
 	currentTime := metav1.Now()
 
 	// nothing to do if deletion time is in the future
-	if ! cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
+	if !cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
 		log.Printf("Deletion deferred to future for SplunkEnterprise %s/%s (Now='%s', DeletionTimestamp='%s')\n",
 			cr.GetNamespace(), cr.GetIdentifier(), currentTime, cr.ObjectMeta.DeletionTimestamp)
 		return false, nil
@@ -55,12 +54,11 @@ func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, 
 	return true, nil
 }
 
-
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
 func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 
 	// get list of PVCs for this cluster
-	labels :=  map[string]string{
+	labels := map[string]string{
 		"app": "splunk",
 		"for": cr.GetIdentifier(),
 	}
@@ -82,7 +80,6 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 
 	return nil
 }
-
 
 // RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
 func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c client.Client, finalizer string) error {
