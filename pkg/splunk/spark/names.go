@@ -6,8 +6,9 @@ package spark
 
 import (
 	"fmt"
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"os"
+
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
 const (

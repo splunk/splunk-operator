@@ -9,14 +9,14 @@ import (
 	"fmt"
 	"os"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
-	"git.splunk.com/splunk-operator/pkg/splunk/spark"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/resources"
+	"git.splunk.com/splunk-operator/pkg/splunk/spark"
 )
 
 // GetSplunkAppLabels returns a map of labels to use for Splunk instances.

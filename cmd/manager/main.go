@@ -5,14 +5,15 @@ import (
 	"log"
 	"runtime"
 
-	"git.splunk.com/splunk-operator/pkg/apis"
-	"git.splunk.com/splunk-operator/pkg/controller"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	"git.splunk.com/splunk-operator/pkg/apis"
+	"git.splunk.com/splunk-operator/pkg/controller"
 )
 
 func printVersion() {

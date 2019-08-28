@@ -7,12 +7,12 @@ package spark
 import (
 	"fmt"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 )
 
 // GetSparkAppLabels returns a map of labels to use for Spark instances.

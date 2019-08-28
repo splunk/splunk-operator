@@ -6,10 +6,11 @@ package enterprise
 
 import (
 	"fmt"
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 	"os"
 	"strings"
+
+	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"git.splunk.com/splunk-operator/pkg/splunk/resources"
 )
 
 const (
