@@ -376,11 +376,8 @@ func ValidateSplunkCustomResource(cr *v1alpha1.SplunkEnterprise) error {
 	switch cr.Spec.ImagePullPolicy {
 	case "":
 		cr.Spec.ImagePullPolicy = "IfNotPresent"
-		break
-	case "Always":
-		break
-	case "IfNotPresent":
-		break
+	case "Always", "IfNotPresent":
+		return nil
 	default:
 		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"",
 			cr.Spec.ImagePullPolicy)
