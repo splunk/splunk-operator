@@ -81,14 +81,11 @@ func GetSplunkConfiguration(overrides map[string]string, defaults string, defaul
 			Value: "false",
 		},
 	}
-
-	if overrides != nil {
-		for k, v := range overrides {
-			conf = append(conf, corev1.EnvVar{
-				Name:  k,
-				Value: v,
-			})
-		}
+	for k, v := range overrides {
+		conf = append(conf, corev1.EnvVar{
+			Name:  k,
+			Value: v,
+		})
 	}
 
 	return conf
