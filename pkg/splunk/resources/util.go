@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
 const (

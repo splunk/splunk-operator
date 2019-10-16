@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
 const (

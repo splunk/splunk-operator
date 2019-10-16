@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"git.splunk.com/splunk-operator/pkg/controller/splunkenterprise"
+	"github.com/splunk/splunk-operator/pkg/controller/splunkenterprise"
 )
 
 func init() {

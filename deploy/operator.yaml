@@ -16,8 +16,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
         - name: splunk-operator
-          # Replace this with the built image name
-          image: splunk-operator
+          image: splunk/splunk-operator
           ports:
           - containerPort: 60000
             name: metrics
@@ -36,6 +35,6 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk:edge-redhat"
+              value: "splunk/splunk:8.0"
             - name: SPARK_IMAGE
               value: "splunk/spark"

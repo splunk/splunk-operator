@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
-	"git.splunk.com/splunk-operator/pkg/apis"
-	"git.splunk.com/splunk-operator/pkg/controller"
+	"github.com/splunk/splunk-operator/pkg/apis"
+	"github.com/splunk/splunk-operator/pkg/controller"
 )
 
 func printVersion() {

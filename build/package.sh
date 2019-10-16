@@ -13,6 +13,5 @@ docker tag ${IMAGE_ID} splunk/splunk-operator:${VERSION}
 
 echo Generating splunk-operator-${VERSION}.tar.gz and splunk-operator-${VERSION}.yaml
 docker image save splunk/splunk-operator:${VERSION} | gzip -c > splunk-operator-${VERSION}.tar.gz
-cat deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/service_account.yaml deploy/role.yaml deploy/role_binding.yaml > splunk-operator-${VERSION}.yaml
-sed -e "s,image: splunk-operator,image: splunk/splunk-operator:${VERSION}," deploy/operator.yaml >> splunk-operator-${VERSION}.yaml
+sed -e "s,image: splunk/splunk-operator.*,image: splunk/splunk-operator:${VERSION}," deploy/all-in-one.yaml > splunk-operator-${VERSION}.yaml
 ls -la splunk-operator-${VERSION}.tar.gz splunk-operator-${VERSION}.yaml

@@ -7,10 +7,10 @@ package deploy
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
-	"git.splunk.com/splunk-operator/pkg/splunk/spark"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // LaunchDeployment creates all Kubernetes resources necessary to represent the

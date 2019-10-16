@@ -17,9 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	enterprisev1alpha1 "git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/deploy"
-	"git.splunk.com/splunk-operator/pkg/splunk/enterprise"
+	enterprisev1alpha1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/splunk/deploy"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // Add creates a new SplunkEnterprise Controller and adds it to the Manager. The Manager will set fields on the Controller

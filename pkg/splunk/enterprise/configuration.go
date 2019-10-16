@@ -14,9 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"git.splunk.com/splunk-operator/pkg/apis/enterprise/v1alpha1"
-	"git.splunk.com/splunk-operator/pkg/splunk/resources"
-	"git.splunk.com/splunk-operator/pkg/splunk/spark"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // GetSplunkAppLabels returns a map of labels to use for Splunk instances.
