@@ -13,6 +13,7 @@ Users of Red Hat OpenShift may find that the default Security Context
 Constraint is too restrictive. You can fix this by granting the default
 Service Account the `nonroot` Security Context Constraint by running the
 following command within your namespace:
+
 ```
 oc adm policy add-scc-to-user nonroot -z default
 ```

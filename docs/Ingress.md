@@ -7,7 +7,7 @@ approach is using
 
 There are many Ingress Controllers available, each having their own pros and 
 cons. There are just as many ways to configure each of them, which depend
-upon  your specific infrastructure and organizational policies. Splunk’s
+upon  your specific infrastructure and organizational policies. Splunk
 Operator will automatically create and manage Kubernetes Services for all
 the relevant components, and we expect these will provide for easy integration
 with most (if not all) Ingress Controllers and configurations.
@@ -36,10 +36,13 @@ your ingress load balancer.
 
 ## Example: Configuring Ingress Using NGINX
 
-For instructions on how to install and configure the NGINX Ingress Controller for your specific infrastructure, please see its
+For instructions on how to install and configure the NGINX Ingress Controller
+for your specific infrastructure, please see its
 [GitHub repository](https://github.com/nginxinc/kubernetes-ingress/).
 
-It is highly recommended that you always use TLS encryption for your Splunk endpoints. To do this, you will need to have one or more Kubernetes TLS Secrets for all the hostnames you want to use with Splunk.
+It is highly recommended that you always use TLS encryption for your Splunk
+endpoints. To do this, you will need to have one or more Kubernetes TLS
+Secrets for all the hostnames you want to use with Splunk deployments.
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS
@@ -48,7 +51,6 @@ used to enable secure (TLS) access to all Splunk components from outside of
 your Kubernetes cluster:
 
 ```yaml
----
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
@@ -100,13 +102,13 @@ spec:
     secretName: splunk.example.com-tls
 ```
 
-The `certmanager.k8s.io/cluster-issuer` annotation may optionally be included
-to automatically have it create and manage Certificates for you. You may
+The `certmanager.k8s.io/cluster-issuer` annotation can be optionally included
+to automatically create and manage certificates for you. You may
 need to change this to match your desired Issuer.
 
 If you are not using cert-manager, you should remove this annotation and
 update the `tls` section appropriately. If you are manually importing your
-certificates into separate Secrets for each hostname, you can reference these
+certificates into separate secrets for each hostname, you can reference these
 by using multiple `tls` objects in your Ingress:
 
 ```yaml
@@ -132,9 +134,9 @@ infrastructure, please see its
 
 It is highly recommended that you always use TLS encryption for your Splunk
 endpoints. To do this, you will need to have one or more Kubernetes TLS
-Secrets for all the hostnames you want to use with Splunk. Note that these
-secrets must reside in the same namespace as your Istio Ingress pod, most
-likely `istio-system`.
+Secrets for all the hostnames you want to use with Splunk deployments. Note
+that these secrets must reside in the same namespace as your Istio Ingress
+pod, most likely `istio-system`.
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS certificates
@@ -142,7 +144,6 @@ in Kubernetes, the following example Certificate object can be created to
 populate a `splunk-example-com-tls` secret in the `istio-system` namespace:
 
 ```yaml
----
 apiVersion: certmanager.k8s.io/v1alpha1
 kind: Certificate
 metadata:
@@ -162,10 +163,9 @@ spec:
 ```
 
 Next, you will need to create an Istio Gateway that is associated with your
-Certificates:
+certificates:
 
 ```yaml
----
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
@@ -229,7 +229,6 @@ these by instead using multiple `port` objects in your Gateway:
 Next, you will need to create VirtualServices for each of the components that you want to expose outside of Kubernetes:
 
 ```yaml
----
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
@@ -245,7 +244,6 @@ spec:
       port:
         number: 8000
       host: splunk-example-search-head-service
-
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -262,7 +260,6 @@ spec:
       port:
         number: 8000
       host: splunk-example-deployer-service
-
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -279,7 +276,6 @@ spec:
       port:
         number: 8000
       host: splunk-example-cluster-master-service
-
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -302,7 +298,6 @@ Finally, you will need to create a DestinationRule to ensure user sessions are
 sticky to specific search heads:
 
 ```yaml
----
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:

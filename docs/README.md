@@ -1,7 +1,14 @@
 # Getting Started with the Splunk Operator for Kubernetes
 
+The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
+Administrators to deploy and operate Enterprise deployments in a Kubernetes
+infrastructure. Packaged as a container, it uses the
+[operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+to manage Splunk-specific [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
+following best practices to manage all the underlying Kubernetes objects for you. 
+
 This guide is intended to help new users get up and running with the
-Splunk Operator. It is divided into the following sections:
+Splunk Operator for Kubernetes. It is divided into the following sections:
 
 * [Known Issues for the Splunk Operator](#known-issues-for-the-splunk-operator)
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
@@ -44,16 +51,16 @@ Kubernetes, version 1.12 or later. Setting up, configuring and managing
 Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
 of support. For evaluation, we recommend using EKS or GKE.
 
-The Splunk operator requires three docker images to be present or available
+The Splunk Operator requires three docker images to be present or available
 to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
-* `splunk/splunk:8.0`: The Splunk Enterprise image (8.0 or later)
-* `splunk/spark`: The default Spark image (used when DFS is enabled)
+* `splunk/splunk:8.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.0 or later)
+* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
 If your cluster does not have access to pull from Docker Hub, please see the
-[Air Gap Documentation](AirGap.md).
+[Required Images Documentation](Images.md).
 
 The Splunk Operator uses
 [Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims)
@@ -85,7 +92,7 @@ installing as a regular user (who is not a Kubernetes cluster administrator).
 
 *Note: The `splunk/splunk:8.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
-Kubernetes workers as per the [Air Gap Documentation](AirGap.md),
+Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),
 before creating any large Splunk deployments.*
 
@@ -140,10 +147,11 @@ kubectl get secret splunk-s1-secrets -o jsonpath='{.data.password}' | base64 --d
 ```
 
 *Note: if your shell prints a `%` at the end, leave that out when you
-copy/paste the output.*
+copy the output.*
 
 To log into your instance, you can forward port 8000 from your local
 machine by running:
+
 ```
 kubectl port-forward splunk-s1-standalone-5d54bcc4bf-bpzx7 8000
 ```
@@ -152,13 +160,15 @@ You should then be able to log into Splunk at http://localhost:8000 using the
 `admin` account with the password that you obtained from `splunk-s1-secrets`.
 
 To delete your deployment, just run:
+
 ```
 kubectl delete splunkenterprise/s1
 ```
 
 The `SplunkEnterprise` resource supports many additional configuration parameters.
 Please see [SplunkEnterprise Parameters](SplunkEnterprise.md) for more information.
-For more deployment examples, please see [SplunkEnterprise Examples](Examples.md).
+For more deployment examples, please see    
+[Configuring Splunk Enterprise Deployments](Examples.md).
 
 Please see [Configuring Ingress](Ingress.md) for guidance on making your Splunk
 clusters accessible outside of Kubernetes.

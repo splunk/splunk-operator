@@ -1,4 +1,4 @@
-# SplunkEnterprise Examples
+# Configuring Splunk Enterprise Deployments
 
 ## Creating a ConfigMap for Your License
 
@@ -30,7 +30,7 @@ configure your deployment to use the `enterprise.lic` file within it.
 
 Note that `licenseUrl` may specify a local path or URL such as
 "https://myco.com/enterprise.lic", and the `splunkVolumes` parameter can
-be used to mount any type of Kubernetes Volume mounts.
+be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
 
 
 ## Creating a Clustered Deployment
@@ -61,7 +61,7 @@ EOF
 ```
 
 *Note that this example also demonstrates overriding the default storage
-resource allocations*
+resource allocations.*
 
 Within a few minutes, you should have a fully configured cluster up and
 ready to use:
@@ -81,7 +81,7 @@ splunk-cluster-search-head-2       1/1     Running   0          50s
 splunk-operator-67596d99f4-vwm7r   1/1     Running   0          81m
 ```
 
-To login, you can forward port 8000 to one of the search heads, or use a load
+To login you can forward port 8000 to one of the search heads, or use a load
 balancing service that is automatically created for your deployment:
 
 ```
@@ -96,6 +96,7 @@ kubectl get secret splunk-cluster-secrets -o jsonpath='{.data.password}' | base6
 ```
 
 To delete your cluster, run
+
 ```
 kubectl delete splunkenterprise/cluster
 ```
@@ -163,6 +164,7 @@ kubectl get secret splunk-dfscluster-secrets -o jsonpath='{.data.password}' | ba
 ```
 
 To delete your cluster, run
+
 ```
 kubectl delete splunkenterprise/dfscluster
 ```
@@ -172,8 +174,8 @@ kubectl delete splunkenterprise/dfscluster
 
 The Splunk Enterprise container supports many
 [default configuration settings](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md)
-which are used to setup and configure new deployments. The Splunk Operator
-provides several different ways to configure these.
+which are used to set up and configure new deployments. The Splunk Operator
+provides several ways to configure these.
 
 Suppose we create a ConfigMap named `splunk-defaults` that includes a
 `default.yml` in our kubernetes cluster:
@@ -201,7 +203,7 @@ spec:
 ```
 
 `defaultsUrl` may specify one or more local paths or URLs, each separated
-by a comma. For example, you may want to use a `generic.yml` with common
+by a comma. For example, you can use a `generic.yml` with common
 settings and an `apps.yml` that provides additional parameters for app
 installation.
 
@@ -229,6 +231,6 @@ spec:
       password: helloworld456
 ```
 
-*Setting passwords in your CRDs may be OK for testing, but it is discouraged*
+*Setting passwords in your CRDs may be OK for testing, but it is discouraged.*
 
 Inline `defaults` are always processed last, after any `defaultsUrl` files.

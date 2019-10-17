@@ -1,7 +1,8 @@
 .git
 .idea
-dfs-deployment-yml-files
-dockerfiles
 pkg
 test
 vendor
+build/_output/bin/splunk-operator-local
+splunk-operator-*.yaml
+splunk-operator-*.tar.gz

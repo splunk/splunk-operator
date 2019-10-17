@@ -1,9 +1,17 @@
 # Splunk Operator for Kubernetes
 
-This repository is used to build the
-[Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
-for Splunk. If you are just looking for documentation on how to deploy and use
-the latest release, please see the [Getting Started Documentation](docs/README.md).
+The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
+Administrators to deploy and operate Enterprise deployments in a Kubernetes
+infrastructure. Packaged as a container, it uses the
+[operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+to manage Splunk-specific [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
+following best practices to manage all the underlying Kubernetes objects for you. 
+
+This repository is used to build the Splunk
+[Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+for Kubernetes (SOK). If you are just looking for documentation on how to
+deploy and use the latest release, please see the
+[Getting Started Documentation](docs/README.md).
 
 
 ## Prerequisites 
@@ -49,7 +57,7 @@ You can skip the rest of this section.
 
 If possible, we recommend re-tagging your custom-built images and pushing
 them to a remote registry that your Kubernetes workers are able to pull from.
-Please see the [Air Gap Documentation](docs/AirGap.md) for more information.
+Please see the [Required Images Documentation](Images.md) for more information.
 
 
 ## Running the Splunk Operator
