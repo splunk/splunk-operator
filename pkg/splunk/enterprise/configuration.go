@@ -231,14 +231,6 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 	// prepare labels and other values
 	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
-	runAsUser := int64(41812)
-	fsGroup := int64(41812)
-
-	// prepare resource requirements
-	requirements, err := GetSplunkRequirements(cr)
-	if err != nil {
-		return nil, err
-	}
 
 	// prepare volume claims
 	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
@@ -247,38 +239,6 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 	}
 	for idx := range volumeClaims {
 		volumeClaims[idx].ObjectMeta.Name = fmt.Sprintf("pvc-%s", volumeClaims[idx].ObjectMeta.Name)
-	}
-
-	// use script to check if pod is alive
-	livenessProbe := corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/sbin/checkstate.sh",
-				},
-			},
-		},
-		InitialDelaySeconds:    300,
-		TimeoutSeconds:         30,
-		PeriodSeconds:          30,
-	}
-
-	// configure readiness; note that this also impacts whether or not the pod
-	// is available for network communications via headless services. if not
-	// "ready", there is no way for other pods to communicate with it.
-	readinessProbe := corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/bin/grep",
-					"started",
-					"/opt/container_artifact/splunk-container.state",
-				},
-			},
-		},
-		InitialDelaySeconds:    10,
-		TimeoutSeconds:         5,
-		PeriodSeconds:          5,
 	}
 
 	// create statefulset configuration
@@ -305,10 +265,6 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,
 					SchedulerName: cr.Spec.SchedulerName,
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsUser: &runAsUser,
-						FSGroup:   &fsGroup,
-					},
 					Containers: []corev1.Container{
 						{
 							Image:           GetSplunkImage(cr),
@@ -316,10 +272,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 							Name:            "splunk",
 							Ports:           getSplunkContainerPorts(),
 							Env:             envVariables,
-							Resources:       requirements,
 							VolumeMounts:    getSplunkVolumeMounts(),
-							LivenessProbe:   &livenessProbe,
-							ReadinessProbe:  &readinessProbe,
 						},
 					},
 				},
@@ -619,6 +572,58 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		if err != nil {
 			return err
 		}
+	}
+
+	// update security context
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser: &runAsUser,
+		FSGroup:   &fsGroup,
+	}
+
+	// prepare resource requirements
+	requirements, err := GetSplunkRequirements(cr)
+	if err != nil {
+		return nil
+	}
+
+	// use script provided by enterprise container to check if pod is alive
+	livenessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"/sbin/checkstate.sh",
+				},
+			},
+		},
+		InitialDelaySeconds:    300,
+		TimeoutSeconds:         30,
+		PeriodSeconds:          30,
+	}
+
+	// pod is ready if container artifact file is created with contents of "started".
+	// this indicates that all the the ansible plays executed at startup have completed.
+	readinessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"/bin/grep",
+					"started",
+					"/opt/container_artifact/splunk-container.state",
+				},
+			},
+		},
+		InitialDelaySeconds:    10,
+		TimeoutSeconds:         5,
+		PeriodSeconds:          5,
+	}
+
+	// update each container in pod
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].Resources = requirements
+		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
+		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 	}
 
 	return nil

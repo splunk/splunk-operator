@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -151,14 +152,11 @@ func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequire
 // GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a SplunkEnterprise resource.
 func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) (*appsv1.Deployment, error) {
 
+	// prepare labels and other values
 	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
 
-	requirements, err := GetSparkRequirements(cr)
-	if err != nil {
-		return nil, err
-	}
-
+	// create deployment configuration
 	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -188,7 +186,6 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 							Name:            "spark",
 							Ports:           ports,
 							Env:             envVariables,
-							Resources:       requirements,
 						},
 					},
 				},
@@ -196,7 +193,14 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 		},
 	}
 
+	// make SplunkEnterprise object the owner
 	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
+
+	// update with common spark pod config
+	err := updateSparkPodTemplateWithConfig(&deployment.Spec.Template, cr, instanceType)
+	if err != nil {
+		return nil, err
+	}
 
 	return deployment, nil
 }
@@ -204,14 +208,11 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanc
 // GetSparkStatefulSet returns a Kubernetes StatefulSet object for Spark workers configured for a SplunkEnterprise resource.
 func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) (*appsv1.StatefulSet, error) {
 
+	// prepare labels and other values
 	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
 
-	requirements, err := GetSparkRequirements(cr)
-	if err != nil {
-		return nil, err
-	}
-
+	// create StatefulSet configuration
 	statefulSet := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "StatefulSet",
@@ -242,7 +243,6 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstan
 							Name:            "spark",
 							Ports:           containerPorts,
 							Env:             envVariables,
-							Resources:       requirements,
 						},
 					},
 				},
@@ -251,6 +251,12 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstan
 	}
 
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), resources.AsOwner(cr)))
+
+	// update with common spark pod config
+	err := updateSparkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, instanceType)
+	if err != nil {
+		return nil, err
+	}
 
 	return statefulSet, nil
 }
@@ -294,4 +300,65 @@ func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceTy
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	return service
+}
+
+// updateSparkPodTemplateWithConfig modifies the podTemplateSpec object based on configuraton of the SplunkEnterprise resource.
+func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType SparkInstanceType) error {
+
+	// update security context
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser: &runAsUser,
+		FSGroup:   &fsGroup,
+	}
+
+	// prepare resource requirements
+	requirements, err := GetSparkRequirements(cr)
+	if err != nil {
+		return err
+	}
+
+	// master listens for HTTP requests on a different interface from worker
+	var httpPort intstr.IntOrString
+	if instanceType == SPARK_MASTER {
+		httpPort = intstr.FromInt(8009)
+	} else {
+		httpPort = intstr.FromInt(7000)
+	}
+
+	// probe to check if pod is alive
+	livenessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: httpPort,
+				Path: "/",
+			},
+		},
+		InitialDelaySeconds:    30,
+		TimeoutSeconds:         10,
+		PeriodSeconds:          10,
+	}
+
+	// probe to check if pod is ready
+	readinessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: httpPort,
+				Path: "/",
+			},
+		},
+		InitialDelaySeconds:    5,
+		TimeoutSeconds:         10,
+		PeriodSeconds:          10,
+	}
+
+	// update each container in pod
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].Resources = requirements
+		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
+		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
+	}
+
+	return nil
 }

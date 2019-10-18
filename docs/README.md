@@ -15,13 +15,27 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
 * [Creating SplunkEnterprise Deployments](#creating-splunkenterprise-deployments)
 
+COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source product
+developed by Splunkers with contributions from the community of partners and
+customers. This unique product will be enhanced, maintained and supported by
+the community, led by Splunkers with deep subject matter expertise. The primary
+reason why Splunk is taking this approach is to push product development closer
+to those that use and depend upon it. This direct connection will help us all
+be more successful and move at a rapid pace.
+
+**Community Support & Discussions on
+[Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator
+
+**File Issues or Enhancements in
+[GitHub](https://github.com/splunk/splunk-operator/issues)** splunk/splunk-operator
+
+
+## Known Issues for the Splunk Operator
+
 *Please note that the Splunk Operator is undergoing active development
 and considered to be an "alpha" quality release. We expect significant
 modifications will be made prior to its general availability, it is not
 covered by support, and we strongly discourage using it in production.*
-
-
-## Known Issues for the Splunk Operator
 
 We are working to resolve the following in future releases:
 
@@ -32,6 +46,9 @@ by ensuring that the cluster is always valid and complete. This can lead to
 data loss.  
 * The Deployment Monitoring Console is not currently configured properly
 for new deployments
+
+Please see the [Change Log](ChangeLog.md) for a history of changes made in
+previous releases.
 
 
 ## Prerequisites for the Splunk Operator
