@@ -41,6 +41,7 @@ func GetSparkMasterContainerPorts() []corev1.ContainerPort {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
+			Protocol:      "TCP",
 		})
 	}
 	return l
@@ -83,6 +84,7 @@ func GetSparkWorkerContainerPorts() []corev1.ContainerPort {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
+			Protocol:      "TCP",
 		})
 	}
 	return l

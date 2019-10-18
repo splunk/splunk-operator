@@ -45,7 +45,7 @@ The following configuration parameters can be used within a `spec` section:
 | licenseUrl            | string  | Full path or URL for a Splunk Enterprise license file                                                                                                                 |
 | imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
 | storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
-| schedulerName         | string  | Name of Scheduler to use for pod placement                                                                                                                            |
+| schedulerName         | string  | Name of Scheduler to use for pod placement (defaults to "default-scheduler")                                                                                          |
 | affinity              | [Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
 
 

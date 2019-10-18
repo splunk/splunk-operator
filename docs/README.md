@@ -25,14 +25,13 @@ covered by support, and we strongly discourage using it in production.*
 
 We are working to resolve the following in future releases:
 
-* Using the Splunk Operator to scale search heads, indexers and spark workers
-is not currently supported. These can be resized by modifying the StatefulSet
-objects directly, but is not recommended. Scaling up may work fine, but
-scaling down requires additional coordination that has not yet been implemented.
-* Managed Splunk Enterprise upgrades is not currently supported. The
-`image` parameter of StatefulSets can be manually updated to perform an
-upgrade, but we intend future release to provide more reliable, controlled
-paths for automating upgrades.
+* Scaling search heads after a clustered deployment has been created is not
+currently working. New search heads fail to join the cluster. 
+* Scale down of indexer cluster peers does not remove them in a clean manner
+by ensuring that the cluster is always valid and complete. This can lead to
+data loss.  
+* The Deployment Monitoring Console is not currently configured properly
+for new deployments
 
 
 ## Prerequisites for the Splunk Operator

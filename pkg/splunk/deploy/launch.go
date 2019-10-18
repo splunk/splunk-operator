@@ -28,7 +28,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 	// create splunk secrets
 	secrets := enterprise.GetSplunkSecrets(cr)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
-	if err := CreateResource(client, secrets); err != nil {
+	if err := ApplySecret(client, secrets); err != nil {
 		return err
 	}
 
@@ -36,7 +36,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client) error
 	if cr.Spec.Defaults != "" {
 		defaults := enterprise.GetSplunkDefaults(cr)
 		defaults.SetOwnerReferences(append(defaults.GetOwnerReferences(), resources.AsOwner(cr)))
-		if err := CreateResource(client, defaults); err != nil {
+		if err := ApplyConfigMap(client, defaults); err != nil {
 			return err
 		}
 	}
@@ -69,7 +69,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
 	}
 
-	err := CreateSplunkStatefulSet(
+	err := ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_STANDALONE,
@@ -119,12 +119,12 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 // LaunchLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
 func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_LICENSE_MASTER, false))
+	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_LICENSE_MASTER, false))
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(
+	err = ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_LICENSE_MASTER,
@@ -148,12 +148,12 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 // LaunchClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
 func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_CLUSTER_MASTER, false))
+	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_CLUSTER_MASTER, false))
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(
+	err = ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_CLUSTER_MASTER,
@@ -176,12 +176,12 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client client.Client) er
 // LaunchDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
 func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_DEPLOYER, false))
+	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_DEPLOYER, false))
 	if err != nil {
 		return err
 	}
 
-	err = CreateSplunkStatefulSet(
+	err = ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_DEPLOYER,
@@ -204,7 +204,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 // LaunchIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
 func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateSplunkStatefulSet(
+	err := ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_INDEXER,
@@ -221,7 +221,7 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
-	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_INDEXER, true))
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_INDEXER, true))
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
 	}
 
-	err := CreateSplunkStatefulSet(
+	err := ApplySplunkStatefulSet(
 		cr,
 		client,
 		enterprise.SPLUNK_SEARCH_HEAD,
@@ -251,12 +251,12 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 		return err
 	}
 
-	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, true))
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, true))
 	if err != nil {
 		return err
 	}
 
-	err = CreateResource(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, false))
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SPLUNK_SEARCH_HEAD, false))
 	if err != nil {
 		return err
 	}
@@ -267,17 +267,17 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client client.Client) erro
 // LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 
-	err := CreateResource(client, spark.GetSparkService(cr, spark.SPARK_MASTER, false, spark.GetSparkMasterServicePorts()))
+	err := ApplyService(client, spark.GetSparkService(cr, spark.SPARK_MASTER, false, spark.GetSparkMasterServicePorts()))
 	if err != nil {
 		return err
 	}
 
-	err = CreateSparkDeployment(cr, client, spark.SPARK_MASTER, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	err = ApplySparkDeployment(cr, client, spark.SPARK_MASTER, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
 	if err != nil {
 		return err
 	}
 
-	err = CreateSparkStatefulSet(cr,
+	err = ApplySparkStatefulSet(cr,
 		client,
 		spark.SPARK_WORKER,
 		cr.Spec.Topology.SparkWorkers,
@@ -287,7 +287,7 @@ func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) err
 		return err
 	}
 
-	err = CreateResource(client, spark.GetSparkService(cr, spark.SPARK_WORKER, true, spark.GetSparkWorkerServicePorts()))
+	err = ApplyService(client, spark.GetSparkService(cr, spark.SPARK_WORKER, true, spark.GetSparkWorkerServicePorts()))
 	if err != nil {
 		return err
 	}

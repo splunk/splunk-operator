@@ -25,11 +25,11 @@ const (
 func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, error) {
 	currentTime := metav1.Now()
 
-	// nothing to do if deletion time is in the future
+	// just log warning if deletion time is in the future
 	if !cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
-		log.Printf("Deletion deferred to future for SplunkEnterprise %s/%s (Now='%s', DeletionTimestamp='%s')\n",
+		log.Printf("DeletionTimestamp is in the future for SplunkEnterprise %s/%s (Now='%s', DeletionTimestamp='%s')\n",
 			cr.GetNamespace(), cr.GetIdentifier(), currentTime, cr.ObjectMeta.DeletionTimestamp)
-		return false, nil
+		//return false, nil
 	}
 
 	log.Printf("Deletion requested for SplunkEnterprise %s/%s\n", cr.GetNamespace(), cr.GetIdentifier())

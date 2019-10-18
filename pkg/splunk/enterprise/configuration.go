@@ -11,8 +11,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -228,16 +228,19 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 // GetSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a SplunkEnterprise resource.
 func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
+	// prepare labels and other values
 	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
 
+	// prepare resource requirements
 	requirements, err := GetSplunkRequirements(cr)
 	if err != nil {
 		return nil, err
 	}
 
+	// prepare volume claims
 	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
 	if err != nil {
 		return nil, err
@@ -246,6 +249,39 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 		volumeClaims[idx].ObjectMeta.Name = fmt.Sprintf("pvc-%s", volumeClaims[idx].ObjectMeta.Name)
 	}
 
+	// use script to check if pod is alive
+	livenessProbe := corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"/sbin/checkstate.sh",
+				},
+			},
+		},
+		InitialDelaySeconds:    300,
+		TimeoutSeconds:         30,
+		PeriodSeconds:          30,
+	}
+
+	// configure readiness; note that this also impacts whether or not the pod
+	// is available for network communications via headless services. if not
+	// "ready", there is no way for other pods to communicate with it.
+	readinessProbe := corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: []string{
+					"/bin/grep",
+					"started",
+					"/opt/container_artifact/splunk-container.state",
+				},
+			},
+		},
+		InitialDelaySeconds:    10,
+		TimeoutSeconds:         5,
+		PeriodSeconds:          5,
+	}
+
+	// create statefulset configuration
 	statefulSet := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "StatefulSet",
@@ -282,6 +318,8 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 							Env:             envVariables,
 							Resources:       requirements,
 							VolumeMounts:    getSplunkVolumeMounts(),
+							LivenessProbe:   &livenessProbe,
+							ReadinessProbe:  &readinessProbe,
 						},
 					},
 				},
@@ -290,8 +328,10 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 		},
 	}
 
+	// make SplunkEnterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), resources.AsOwner(cr)))
 
+	// update with common splunk pod config
 	err = updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, instanceType)
 	if err != nil {
 		return nil, err
@@ -334,6 +374,8 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstance
 
 	if isHeadless {
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+		// required for SHC bootstrap process; use services with heads when readiness is desired
+		service.Spec.PublishNotReadyAddresses = true
 	}
 
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))
@@ -381,6 +423,11 @@ func ValidateSplunkCustomResource(cr *v1alpha1.SplunkEnterprise) error {
 	default:
 		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"",
 			cr.Spec.ImagePullPolicy)
+	}
+
+	// SchedulerName
+	if cr.Spec.SchedulerName == "" {
+		cr.Spec.SchedulerName = "default-scheduler"
 	}
 
 	return nil
@@ -449,6 +496,7 @@ func getSplunkContainerPorts() []corev1.ContainerPort {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
+			Protocol:      "TCP",
 		})
 	}
 	return l
