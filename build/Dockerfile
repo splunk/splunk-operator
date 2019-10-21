@@ -4,11 +4,22 @@ ENV OPERATOR=/usr/local/bin/splunk-operator \
     USER_UID=1001 \
     USER_NAME=splunk-operator
 
+LABEL LABEL name="splunk" \
+      maintainer="support@splunk.com" \
+      vendor="splunk" \
+      version="0.0.4" \
+      release="1" \
+      summary="" \
+      description=""
+
 # install operator binary
 COPY build/_output/bin/splunk-operator ${OPERATOR}
 
 COPY build/bin /usr/local/bin
-RUN  /usr/local/bin/user_setup
+RUN mkdir /licenses \
+    && curl -o /licenses/apache-2.0.txt https://www.apache.org/licenses/LICENSE-2.0.txt \
+    && curl -o /licenses/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf https://www.redhat.com/licenses/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf \
+    && /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 
