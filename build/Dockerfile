@@ -4,13 +4,13 @@ ENV OPERATOR=/usr/local/bin/splunk-operator \
     USER_UID=1001 \
     USER_NAME=splunk-operator
 
-LABEL LABEL name="splunk" \
+LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
       version="0.0.4" \
       release="1" \
-      summary="" \
-      description=""
+      summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
+      description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."
 
 # install operator binary
 COPY build/_output/bin/splunk-operator ${OPERATOR}
