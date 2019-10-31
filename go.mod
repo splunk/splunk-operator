@@ -1,7 +1,6 @@
 module github.com/splunk/splunk-operator
 
 require (
-	github.com/NYTimes/gziphandler v1.0.1 // indirect
 	github.com/operator-framework/operator-sdk v0.11.1-0.20191014155558-888dde512025
 	github.com/spf13/pflag v1.0.3
 	google.golang.org/api v0.3.0
@@ -32,3 +31,5 @@ replace (
 )
 
 replace github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.0
+
+go 1.13

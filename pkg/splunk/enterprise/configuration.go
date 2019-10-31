@@ -1,6 +1,16 @@
 // Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
-// Use of this source code is governed by an Apache 2 style
-// license that can be found in the LICENSE file.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package enterprise
 
@@ -11,8 +21,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -40,7 +50,7 @@ func AppendSplunkDfsOverrides(overrides map[string]string, identifier string, se
 
 	// append parameters for DFS
 	result["SPLUNK_ENABLE_DFS"] = "true"
-	result["SPARK_MASTER_HOST"] = spark.GetSparkServiceName(spark.SPARK_MASTER, identifier)
+	result["SPARK_MASTER_HOST"] = spark.GetSparkServiceName(spark.SparkMaster, identifier, false)
 	result["SPARK_MASTER_WEBUI_PORT"] = "8009"
 	result["SPARK_HOME"] = "/mnt/splunk-spark"
 	result["JAVA_HOME"] = "/mnt/splunk-jdk"
@@ -54,13 +64,13 @@ func AppendSplunkDfsOverrides(overrides map[string]string, identifier string, se
 }
 
 // GetSplunkConfiguration returns a collection of Kubernetes environment variables (EnvVar) to use for Splunk containers
-func GetSplunkConfiguration(overrides map[string]string, defaults string, defaultsUrl string) []corev1.EnvVar {
-	splunk_defaults := "/mnt/splunk-secrets/default.yml"
-	if defaultsUrl != "" {
-		splunk_defaults = fmt.Sprintf("%s,%s", splunk_defaults, defaultsUrl)
+func GetSplunkConfiguration(overrides map[string]string, defaults string, defaultsURL string) []corev1.EnvVar {
+	splunkDefaults := "/mnt/splunk-secrets/default.yml"
+	if defaultsURL != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", splunkDefaults, defaultsURL)
 	}
 	if defaults != "" {
-		splunk_defaults = fmt.Sprintf("%s,%s", splunk_defaults, "/mnt/splunk-defaults/default.yml")
+		splunkDefaults = fmt.Sprintf("%s,%s", splunkDefaults, "/mnt/splunk-defaults/default.yml")
 	}
 
 	conf := []corev1.EnvVar{
@@ -74,7 +84,7 @@ func GetSplunkConfiguration(overrides map[string]string, defaults string, defaul
 		},
 		{
 			Name:  "SPLUNK_DEFAULTS_URL",
-			Value: splunk_defaults,
+			Value: splunkDefaults,
 		},
 		{
 			Name:  "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
@@ -97,39 +107,39 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadClus
 	urls := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: GetSplunkServiceName(SPLUNK_CLUSTER_MASTER, cr.GetIdentifier()),
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetIdentifier(), false),
 		}, {
 			Name:  "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SPLUNK_INDEXER, cr.GetIdentifier(), cr.Spec.Topology.Indexers, false),
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetIdentifier(), cr.Spec.Topology.Indexers, false),
 		}, {
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: GetSplunkServiceName(SPLUNK_LICENSE_MASTER, cr.GetIdentifier()),
+			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetIdentifier(), false),
 		},
 	}
 
 	searchHeadConf := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_SEARCH_HEAD_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SPLUNK_SEARCH_HEAD, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads, false),
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkSearchHead, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads, false),
 		},
 	}
 
 	if searchHeadCluster {
 		searchHeadConf = append(searchHeadConf, corev1.EnvVar{
 			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
-			Value: GetSplunkStatefulsetUrl(cr.GetNamespace(), SPLUNK_SEARCH_HEAD, cr.GetIdentifier(), 0, false),
+			Value: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetIdentifier(), 0, false),
 		})
 		searchHeadConf = append(searchHeadConf, corev1.EnvVar{
 			Name:  "SPLUNK_DEPLOYER_URL",
-			Value: GetSplunkServiceName(SPLUNK_DEPLOYER, cr.GetIdentifier()),
+			Value: GetSplunkServiceName(SplunkDeployer, cr.GetIdentifier(), false),
 		})
 	}
 
-	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsUrl)...)
+	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsURL)...)
 }
 
-// GetSplunkVolumeMounts returns a standard collection of Kubernetes volume claims.
-func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+// GetSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
+func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
 	var err error
 	var etcStorage, varStorage resource.Quantity
 
@@ -138,7 +148,7 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType SplunkIns
 		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkEtcStorage", err)
 	}
 
-	if instanceType == SPLUNK_INDEXER {
+	if instanceType == SplunkIndexer {
 		varStorage, err = resources.ParseResourceQuantity(cr.Spec.Resources.SplunkIndexerStorage, "200Gi")
 		if err != nil {
 			return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "splunkIndexerStorage", err)
@@ -194,9 +204,9 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType SplunkIns
 
 // GetSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
 func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCpuRequest, "0.1")
+	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPURequest, "0.1")
 	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuRequest", err)
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPURequest", err)
 	}
 
 	memoryRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryRequest, "512Mi")
@@ -204,9 +214,9 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryRequest", err)
 	}
 
-	cpuLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCpuLimit, "4")
+	cpuLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPULimit, "4")
 	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCpuLimit", err)
+		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPULimit", err)
 	}
 
 	memoryLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryLimit, "8Gi")
@@ -226,7 +236,7 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 }
 
 // GetSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a SplunkEnterprise resource.
-func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare labels and other values
 	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
@@ -255,7 +265,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName:         GetSplunkHeadlessServiceName(instanceType, cr.GetIdentifier()),
+			ServiceName:         GetSplunkServiceName(instanceType, cr.GetIdentifier(), true),
 			Replicas:            &replicas32,
 			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
@@ -294,19 +304,10 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 }
 
 // GetSplunkService returns a Kubernetes Service object for Splunk instances configured for a SplunkEnterprise resource.
-func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType, isHeadless bool) *corev1.Service {
+func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
-	serviceName := GetSplunkServiceName(instanceType, cr.GetIdentifier())
-	if isHeadless {
-		serviceName = GetSplunkHeadlessServiceName(instanceType, cr.GetIdentifier())
-	}
-
-	serviceType := resources.SERVICE
-	if isHeadless {
-		serviceType = resources.HEADLESS_SERVICE
-	}
-
-	serviceTypeLabels := GetSplunkAppLabels(cr.GetIdentifier(), serviceType.ToString())
+	serviceName := GetSplunkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
+	serviceTypeLabels := GetSplunkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"))
 	selectLabels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 
 	service := &corev1.Service{
@@ -340,13 +341,13 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstance
 func ValidateSplunkCustomResource(cr *v1alpha1.SplunkEnterprise) error {
 	// cluster sanity checks
 	if cr.Spec.Topology.SearchHeads > 0 && cr.Spec.Topology.Indexers <= 0 {
-		return errors.New("You must specify how many indexers the cluster should have.")
+		return errors.New("You must specify how many indexers the cluster should have")
 	}
 	if cr.Spec.Topology.SearchHeads <= 0 && cr.Spec.Topology.Indexers > 0 {
-		return errors.New("You must specify how many search heads the cluster should have.")
+		return errors.New("You must specify how many search heads the cluster should have")
 	}
-	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 && cr.Spec.LicenseUrl == "" {
-		return errors.New("You must provide a license to create a cluster.")
+	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 && cr.Spec.LicenseURL == "" {
+		return errors.New("You must provide a license to create a cluster")
 	}
 
 	// default to using a single standalone instance
@@ -403,10 +404,10 @@ func GetSplunkDefaults(cr *v1alpha1.SplunkEnterprise) *corev1.ConfigMap {
 func GetSplunkSecrets(cr *v1alpha1.SplunkEnterprise) *corev1.Secret {
 	// generate some default secret values to share across the cluster
 	secretData := map[string][]byte{
-		"password":   resources.GenerateSecret(SPLUNK_SECRET_LEN),
-		"hec_token":  resources.GenerateSecret(SPLUNK_SECRET_LEN),
-		"idc_secret": resources.GenerateSecret(SPLUNK_SECRET_LEN),
-		"shc_secret": resources.GenerateSecret(SPLUNK_SECRET_LEN),
+		"password":   resources.GenerateSecret(splunkSecretLen),
+		"hec_token":  resources.GenerateSecret(splunkSecretLen),
+		"idc_secret": resources.GenerateSecret(splunkSecretLen),
+		"shc_secret": resources.GenerateSecret(splunkSecretLen),
 	}
 	secretData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
@@ -432,23 +433,23 @@ splunk:
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
-func getSplunkPorts(instanceType SplunkInstanceType) map[string]int {
+func getSplunkPorts(instanceType InstanceType) map[string]int {
 	result := map[string]int{
-		"splunkweb":   8000,
-		"splunkd":     8089,
+		"splunkweb": 8000,
+		"splunkd":   8089,
 	}
 
 	switch instanceType {
-	case SPLUNK_STANDALONE:
+	case SplunkStandalone:
 		result["dfccontrol"] = 17000
 		result["datarecieve"] = 19000
 		result["dfsmaster"] = 9000
 		result["hec"] = 8088
-	case SPLUNK_SEARCH_HEAD:
+	case SplunkSearchHead:
 		result["dfccontrol"] = 17000
 		result["datarecieve"] = 19000
 		result["dfsmaster"] = 9000
-	case SPLUNK_INDEXER:
+	case SplunkIndexer:
 		result["hec"] = 8088
 	}
 
@@ -456,7 +457,7 @@ func getSplunkPorts(instanceType SplunkInstanceType) map[string]int {
 }
 
 // getSplunkContainerPorts returns a list of Kubernetes ContainerPort objects for Splunk instances.
-func getSplunkContainerPorts(instanceType SplunkInstanceType) []corev1.ContainerPort {
+func getSplunkContainerPorts(instanceType InstanceType) []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
 	for key, value := range getSplunkPorts(instanceType) {
 		l = append(l, corev1.ContainerPort{
@@ -469,7 +470,7 @@ func getSplunkContainerPorts(instanceType SplunkInstanceType) []corev1.Container
 }
 
 // getSplunkServicePorts returns a list of Kubernetes ServicePort objects for Splunk instances.
-func getSplunkServicePorts(instanceType SplunkInstanceType) []corev1.ServicePort {
+func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSplunkPorts(instanceType) {
 		l = append(l, corev1.ServicePort{
@@ -546,8 +547,8 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.S
 	return nil
 }
 
-// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuraton of the SplunkEnterprise resource.
-func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstanceType) error {
+// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the SplunkEnterprise resource.
+func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType InstanceType) error {
 
 	// Add custom volumes to splunk containers
 	if cr.Spec.SplunkVolumes != nil {
@@ -581,7 +582,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	}
 
 	// add spark and java mounts to search head containers
-	if cr.Spec.EnableDFS && (instanceType == SPLUNK_SEARCH_HEAD || instanceType == SPLUNK_STANDALONE) {
+	if cr.Spec.EnableDFS && (instanceType == SplunkSearchHead || instanceType == SplunkStandalone) {
 		err := addDFCToPodTemplate(podTemplateSpec, cr)
 		if err != nil {
 			return err
@@ -611,9 +612,9 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 				},
 			},
 		},
-		InitialDelaySeconds:    300,
-		TimeoutSeconds:         30,
-		PeriodSeconds:          30,
+		InitialDelaySeconds: 300,
+		TimeoutSeconds:      30,
+		PeriodSeconds:       30,
 	}
 
 	// pod is ready if container artifact file is created with contents of "started".
@@ -628,9 +629,9 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 				},
 			},
 		},
-		InitialDelaySeconds:    10,
-		TimeoutSeconds:         5,
-		PeriodSeconds:          5,
+		InitialDelaySeconds: 10,
+		TimeoutSeconds:      5,
+		PeriodSeconds:       5,
 	}
 
 	// update each container in pod

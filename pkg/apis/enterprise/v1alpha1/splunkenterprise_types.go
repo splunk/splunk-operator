@@ -1,6 +1,16 @@
 // Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
-// Use of this source code is governed by an Apache 2 style
-// license that can be found in the LICENSE file.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1alpha1
 
@@ -14,13 +24,14 @@ import (
 // NOTE: Do not make struct fields private (i.e. make sure all struct fields start with an uppercase) otherwise the
 //		 serializer will not be able to access those fields and they will be left blank
 
+// SplunkResourcesSpec defines the resource requirements for a SplunkEnterprise deployment
 type SplunkResourcesSpec struct {
-	SplunkCpuRequest     string `json:"splunkCpuRequest"`
-	SparkCpuRequest      string `json:"sparkCpuRequest"`
+	SplunkCPURequest     string `json:"splunkCpuRequest"`
+	SparkCPURequest      string `json:"sparkCpuRequest"`
 	SplunkMemoryRequest  string `json:"splunkMemoryRequest"`
 	SparkMemoryRequest   string `json:"sparkMemoryRequest"`
-	SplunkCpuLimit       string `json:"splunkCpuLimit"`
-	SparkCpuLimit        string `json:"sparkCpuLimit"`
+	SplunkCPULimit       string `json:"splunkCpuLimit"`
+	SparkCPULimit        string `json:"sparkCpuLimit"`
 	SplunkMemoryLimit    string `json:"splunkMemoryLimit"`
 	SparkMemoryLimit     string `json:"sparkMemoryLimit"`
 	SplunkEtcStorage     string `json:"splunkEtcStorage"`
@@ -28,6 +39,7 @@ type SplunkResourcesSpec struct {
 	SplunkIndexerStorage string `json:"splunkIndexerStorage"`
 }
 
+// SplunkTopologySpec defines the topology for a SplunkEnterprise deployment
 type SplunkTopologySpec struct {
 	Standalones  int `json:"standalones"`
 	Indexers     int `json:"indexers"`
@@ -43,8 +55,8 @@ type SplunkEnterpriseSpec struct {
 	SparkImage       string              `json:"sparkImage"`
 	SplunkImage      string              `json:"splunkImage"`
 	SplunkVolumes    []v1.Volume         `json:"splunkVolumes"`
-	DefaultsUrl      string              `json:"defaultsUrl"`
-	LicenseUrl       string              `json:"licenseUrl"`
+	DefaultsURL      string              `json:"defaultsUrl"`
+	LicenseURL       string              `json:"licenseUrl"`
 	ImagePullPolicy  string              `json:"imagePullPolicy"`
 	StorageClassName string              `json:"storageClassName"`
 	SchedulerName    string              `json:"schedulerName"`
@@ -72,12 +84,12 @@ type SplunkEnterprise struct {
 	Status SplunkEnterpriseStatus `json:"status,omitempty"`
 }
 
-// convenience function to return unique identifier for the Splunk enterprise deployment
+// GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetIdentifier() string {
 	return cr.GetObjectMeta().GetName()
 }
 
-// convenience function to return namespace for a Splunk enterprise deployment
+// GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetNamespace() string {
 	return cr.GetObjectMeta().GetNamespace()
 }

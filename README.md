@@ -1,5 +1,8 @@
 # Splunk Operator for Kubernetes
 
+[![License](https://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+[![Go Report Card](https://goreportcard.com/badge/github.com/splunk/splunk-operator)](https://goreportcard.com/report/github.com/splunk/splunk-operator)
+
 The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
 Administrators to deploy and operate Enterprise deployments in a Kubernetes
 infrastructure. Packaged as a container, it uses the
@@ -55,10 +58,14 @@ You can build the operator by just running `make`.
 
 Other make targets include (more info below):
 
-* `make all`: builds the `splunk/splunk-operator` docker image (same as `make splunk-operator`)
-* `make splunk-operator`: builds the `splunk/splunk-operator` docker image
+* `make all`: builds the `splunk/splunk-operator` docker image (same as `make image`)
+* `make image`: builds the `splunk/splunk-operator` docker image
 * `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
+* `make local`: builds the splunk-operator-local binary for test and debugging purposes
+* `make clean`: removes the binary build output and `splunk/splunk-operator` container image
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
+* `make fmt`: runs `go fmt` on all `*.go` source files in this project
+* `make lint`: runs the `golint` utility on all `*.go` source files in this project
 
 
 ## Pushing Your Splunk Operator Image

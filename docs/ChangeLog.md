@@ -1,5 +1,10 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 0.0.5 Alpha (2019-10-31)
+
+* Added port 8088 to expose on indexers, and only exposting DFC ports on search heads
+* Bug fix: The spark-master deployment was always updated during reconciliation
+
 ## 0.0.4 Alpha (2019-10-22)
 
 * Updates to SplunkEnterprise objects are now handled, enabling deployments to be upgraded and modified after creation
