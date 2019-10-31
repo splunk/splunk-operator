@@ -1,5 +1,8 @@
 # Splunk Operator for Kubernetes
 
+[![License](https://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+[![Go Report Card](https://goreportcard.com/badge/github.com/splunk/splunk-operator)](https://goreportcard.com/report/github.com/splunk/splunk-operator)
+
 The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
 Administrators to deploy and operate Enterprise deployments in a Kubernetes
 infrastructure. Packaged as a container, it uses the

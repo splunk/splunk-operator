@@ -99,7 +99,8 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 
 // GetSplunkImage returns the docker image to use for Splunk instances.
 func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
-	name := defaultSplunkImage
+	var name string
+
 	if cr.Spec.SplunkImage != "" {
 		name = cr.Spec.SplunkImage
 	} else {
@@ -108,5 +109,6 @@ func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
 			name = defaultSplunkImage
 		}
 	}
+
 	return name
 }

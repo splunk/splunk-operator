@@ -303,7 +303,7 @@ func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, i
 	return service
 }
 
-// updateSparkPodTemplateWithConfig modifies the podTemplateSpec object based on configuraton of the SplunkEnterprise resource.
+// updateSparkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the SplunkEnterprise resource.
 func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType InstanceType) error {
 
 	// update security context

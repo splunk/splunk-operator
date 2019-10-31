@@ -547,7 +547,7 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.S
 	return nil
 }
 
-// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuraton of the SplunkEnterprise resource.
+// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the SplunkEnterprise resource.
 func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise, instanceType InstanceType) error {
 
 	// Add custom volumes to splunk containers

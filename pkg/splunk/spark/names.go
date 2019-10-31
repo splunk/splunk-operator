@@ -53,7 +53,8 @@ func GetSparkServiceName(instanceType InstanceType, identifier string, isHeadles
 
 // GetSparkImage returns the docker image to use for Spark instances.
 func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
-	name := defaultSparkImage
+	var name string
+
 	if cr.Spec.SparkImage != "" {
 		name = cr.Spec.SparkImage
 	} else {
@@ -62,5 +63,6 @@ func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
 			name = defaultSparkImage
 		}
 	}
+
 	return name
 }
