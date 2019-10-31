@@ -270,7 +270,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInst
 							Image:           GetSplunkImage(cr),
 							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name:            "splunk",
-							Ports:           getSplunkContainerPorts(),
+							Ports:           getSplunkContainerPorts(instanceType),
 							Env:             envVariables,
 							VolumeMounts:    getSplunkVolumeMounts(),
 						},
@@ -321,7 +321,7 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType SplunkInstance
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selectLabels,
-			Ports:    getSplunkServicePorts(),
+			Ports:    getSplunkServicePorts(instanceType),
 		},
 	}
 
@@ -432,20 +432,33 @@ splunk:
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
-func getSplunkPorts() map[string]int {
-	return map[string]int{
+func getSplunkPorts(instanceType SplunkInstanceType) map[string]int {
+	result := map[string]int{
 		"splunkweb":   8000,
 		"splunkd":     8089,
-		"dfccontrol":  17000,
-		"datarecieve": 19000,
-		"dfsmaster":   9000,
 	}
+
+	switch instanceType {
+	case SPLUNK_STANDALONE:
+		result["dfccontrol"] = 17000
+		result["datarecieve"] = 19000
+		result["dfsmaster"] = 9000
+		result["hec"] = 8088
+	case SPLUNK_SEARCH_HEAD:
+		result["dfccontrol"] = 17000
+		result["datarecieve"] = 19000
+		result["dfsmaster"] = 9000
+	case SPLUNK_INDEXER:
+		result["hec"] = 8088
+	}
+
+	return result
 }
 
 // getSplunkContainerPorts returns a list of Kubernetes ContainerPort objects for Splunk instances.
-func getSplunkContainerPorts() []corev1.ContainerPort {
+func getSplunkContainerPorts(instanceType SplunkInstanceType) []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
-	for key, value := range getSplunkPorts() {
+	for key, value := range getSplunkPorts(instanceType) {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
@@ -456,12 +469,13 @@ func getSplunkContainerPorts() []corev1.ContainerPort {
 }
 
 // getSplunkServicePorts returns a list of Kubernetes ServicePort objects for Splunk instances.
-func getSplunkServicePorts() []corev1.ServicePort {
+func getSplunkServicePorts(instanceType SplunkInstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
-	for key, value := range getSplunkPorts() {
+	for key, value := range getSplunkPorts(instanceType) {
 		l = append(l, corev1.ServicePort{
-			Name: key,
-			Port: int32(value),
+			Name:     key,
+			Port:     int32(value),
+			Protocol: "TCP",
 		})
 	}
 	return l
