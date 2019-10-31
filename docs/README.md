@@ -23,6 +23,8 @@ reason why Splunk is taking this approach is to push product development closer
 to those that use and depend upon it. This direct connection will help us all
 be more successful and move at a rapid pace.
 
+**For help, please first read our [Frequently Asked Questions](FAQ.md)**
+
 **Community Support & Discussions on
 [Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator
 

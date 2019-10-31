@@ -1,6 +1,16 @@
 // Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
-// Use of this source code is governed by an Apache 2 style
-// license that can be found in the LICENSE file.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package spark
 
@@ -12,44 +22,45 @@ import (
 )
 
 const (
-	DEPLOYMENT_TEMPLATE_STR       = "splunk-%s-%s"          // identifier, instance type (ex: spark-worker, spark-master)
-	STATEFULSET_TEMPLATE_STR      = "splunk-%s-%s"          // identifier, instance type (ex: spark-worker, spark-master)
-	SERVICE_TEMPLATE_STR          = "splunk-%s-%s-service"  // identifier, instance type (ex: spark-worker, spark-master)
-	HEADLESS_SERVICE_TEMPLATE_STR = "splunk-%s-%s-headless" // identifier, instance type (ex: spark-worker, spark-master)
-
-	SPLUNK_SPARK_IMAGE = "splunk/spark" // default docker image used for Spark instances
+	deploymentTemplateStr  = "splunk-%s-%s"    // identifier, instance type (ex: spark-worker, spark-master)
+	statefulSetTemplateStr = "splunk-%s-%s"    // identifier, instance type (ex: spark-worker, spark-master)
+	serviceTemplateStr     = "splunk-%s-%s-%s" // identifier, instance type (ex: spark-worker, spark-master), "headless" or "service"
+	defaultSparkImage      = "splunk/spark"    // default docker image used for Spark instances
 )
 
 // GetSparkStatefulsetName uses a template to name a Kubernetes StatefulSet for Spark instances.
-func GetSparkStatefulsetName(instanceType SparkInstanceType, identifier string) string {
-	return fmt.Sprintf(STATEFULSET_TEMPLATE_STR, identifier, instanceType)
+func GetSparkStatefulsetName(instanceType InstanceType, identifier string) string {
+	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType)
 }
 
 // GetSparkDeploymentName uses a template to name a Kubernetes Deployment for Spark instances.
-func GetSparkDeploymentName(instanceType SparkInstanceType, identifier string) string {
-	return fmt.Sprintf(DEPLOYMENT_TEMPLATE_STR, identifier, instanceType)
+func GetSparkDeploymentName(instanceType InstanceType, identifier string) string {
+	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType)
 }
 
 // GetSparkServiceName uses a template to name a Kubernetes Service for Spark instances.
-func GetSparkServiceName(instanceType SparkInstanceType, identifier string) string {
-	return fmt.Sprintf(SERVICE_TEMPLATE_STR, identifier, instanceType)
-}
+func GetSparkServiceName(instanceType InstanceType, identifier string, isHeadless bool) string {
+	var result string
 
-// GetSparkHeadlessServiceName uses a template to name a headless Kubernetes Service for Spark instances.
-func GetSparkHeadlessServiceName(instanceType SparkInstanceType, identifier string) string {
-	return fmt.Sprintf(HEADLESS_SERVICE_TEMPLATE_STR, identifier, instanceType)
+	if isHeadless {
+		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "headless")
+	} else {
+		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "service")
+	}
+
+	return result
 }
 
 // GetSparkImage returns the docker image to use for Spark instances.
 func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
-	sparkImage := SPLUNK_SPARK_IMAGE
+	name := defaultSparkImage
 	if cr.Spec.SparkImage != "" {
-		sparkImage = cr.Spec.SparkImage
+		name = cr.Spec.SparkImage
 	} else {
-		sparkImage = os.Getenv("SPARK_IMAGE")
-		if sparkImage == "" {
-			sparkImage = SPLUNK_SPARK_IMAGE
+		name = os.Getenv("SPARK_IMAGE")
+		if name == "" {
+			name = defaultSparkImage
 		}
 	}
-	return sparkImage
+	return name
 }

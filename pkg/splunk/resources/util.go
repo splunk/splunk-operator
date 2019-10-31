@@ -1,15 +1,29 @@
 // Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
-// Use of this source code is governed by an Apache 2 style
-// license that can be found in the LICENSE file.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package resources
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -17,7 +31,7 @@ import (
 )
 
 const (
-	SECRET_BYTES = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890%()*+,-./<=>?@[]^_{|}~"
+	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890%()*+,-./<=>?@[]^_{|}~"
 )
 
 func init() {
@@ -73,7 +87,112 @@ func GetServiceFQDN(namespace string, name string) string {
 func GenerateSecret(n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = SECRET_BYTES[rand.Int63()%int64(len(SECRET_BYTES))]
+		b[i] = secretBytes[rand.Int63()%int64(len(secretBytes))]
 	}
 	return b
+}
+
+// ComparePorts is a generic comparer of two Kubernetes ContainerPorts.
+// It returns true if there are material differences between them, or false otherwise.
+// TODO: could use refactoring; lots of boilerplate copy-pasta here
+func ComparePorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copy of a
+	aSorted := make([]corev1.ContainerPort, len(a))
+	copy(aSorted, a)
+	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].ContainerPort < aSorted[j].ContainerPort })
+
+	// make sorted copy of b
+	bSorted := make([]corev1.ContainerPort, len(b))
+	copy(bSorted, b)
+	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].ContainerPort < bSorted[j].ContainerPort })
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		if aSorted[n] != bSorted[n] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CompareEnvs is a generic comparer of two Kubernetes Env variables.
+// It returns true if there are material differences between them, or false otherwise.
+func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copy of a
+	aSorted := make([]corev1.EnvVar, len(a))
+	copy(aSorted, a)
+	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].Name < aSorted[j].Name })
+
+	// make sorted copy of b
+	bSorted := make([]corev1.EnvVar, len(b))
+	copy(bSorted, b)
+	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].Name < bSorted[j].Name })
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		if aSorted[n] != bSorted[n] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CompareVolumeMounts is a generic comparer of two Kubernetes VolumeMounts.
+// It returns true if there are material differences between them, or false otherwise.
+func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copy of a
+	aSorted := make([]corev1.VolumeMount, len(a))
+	copy(aSorted, a)
+	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].Name < aSorted[j].Name })
+
+	// make sorted copy of b
+	bSorted := make([]corev1.VolumeMount, len(b))
+	copy(bSorted, b)
+	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].Name < bSorted[j].Name })
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		if aSorted[n] != bSorted[n] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CompareByMarshall compares two Kubernetes objects by marshalling them to JSON.
+// It returns true if there are differences between the two marshalled values, or false otherwise.
+func CompareByMarshall(a interface{}, b interface{}) bool {
+	aBytes, err := json.Marshal(a)
+	if err != nil {
+		return true
+	}
+
+	bBytes, err := json.Marshal(b)
+	if err != nil {
+		return true
+	}
+
+	if bytes.Compare(aBytes, bBytes) != 0 {
+		return true
+	}
+
+	return false
 }
