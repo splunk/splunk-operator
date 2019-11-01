@@ -1,12 +1,15 @@
 #!/bin/bash
 # Script to export splunk-operator image to tarball and generated combined YAML
 
+# exit when any command fails
+set -e
+
 VERSION=$1
 if [[ "x$VERSION" == "x" ]]; then
     # Use latest commit id if no version is provided
     VERSION=`git rev-parse HEAD | cut -c1-12`
 fi
-IMAGE_ID=`docker images splunk-operator:latest -q`
+IMAGE_ID=`docker images splunk/splunk-operator:latest -q`
 
 echo Tagging image ${IMAGE_ID} as splunk/splunk-operator:${VERSION}
 docker tag ${IMAGE_ID} splunk/splunk-operator:${VERSION}
