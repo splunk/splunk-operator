@@ -92,6 +92,12 @@ spec:
       - backend:
           serviceName: splunk-example-spark-master-service
           servicePort: 8009
+  - host: hec.splunk.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: splunk-example-indexer-headless
+          servicePort: 8088
   tls:
   - hosts:
     - splunk.example.com
@@ -99,6 +105,7 @@ spec:
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
     - spark-master.splunk.example.com
+    - hec.splunk.example.com
     secretName: splunk.example.com-tls
 ```
 
@@ -157,6 +164,7 @@ spec:
     - deployer.splunk.example.com
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
+    - hec.splunk.example.com
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
@@ -183,6 +191,7 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
+    - "hec.splunk.example.com"
     tls:
       httpsRedirect: true
   - port:
@@ -197,6 +206,7 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
+    - "hec.splunk.example.com"
 ```
 
 Note that `credentialName` references the same `secretName` created and
@@ -241,9 +251,9 @@ spec:
   http:
   - route:
     - destination:
-      port:
-        number: 8000
-      host: splunk-example-search-head-service
+        port:
+          number: 8000
+        host: splunk-example-search-head-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -257,9 +267,9 @@ spec:
   http:
   - route:
     - destination:
-      port:
-        number: 8000
-      host: splunk-example-deployer-service
+        port:
+          number: 8000
+        host: splunk-example-deployer-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -273,9 +283,9 @@ spec:
   http:
   - route:
     - destination:
-      port:
-        number: 8000
-      host: splunk-example-cluster-master-service
+        port:
+          number: 8000
+        host: splunk-example-cluster-master-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -289,9 +299,25 @@ spec:
   http:
   - route:
     - destination:
-         port:
-        number: 8000
-         host: splunk-example-license-master-service
+        port:
+          number: 8000
+        host: splunk-example-license-master-service
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: splunk-hec
+spec:
+  hosts:
+  - "hec.splunk.example.com"
+  gateways:
+  - "splunk-gw"
+  http:
+  - route:
+    - destination:
+        port:
+          number: 8088
+        host: splunk-example-indexer-headless
 ```
 
 Finally, you will need to create a DestinationRule to ensure user sessions are

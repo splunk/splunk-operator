@@ -46,6 +46,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get watch namespace: %v", err)
 	}
+	log.Printf("Watching namespace: %s", namespace)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
