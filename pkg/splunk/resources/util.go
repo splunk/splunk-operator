@@ -30,10 +30,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
-const (
-	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890%()*+,-./<=>?@^_|~"
-)
-
 func init() {
 	// seed random number generator for splunk secret generation
 	rand.Seed(time.Now().UnixNano())
@@ -84,7 +80,7 @@ func GetServiceFQDN(namespace string, name string) string {
 }
 
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
-func GenerateSecret(n int) []byte {
+func GenerateSecret(secretBytes string, n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = secretBytes[rand.Int63()%int64(len(secretBytes))]

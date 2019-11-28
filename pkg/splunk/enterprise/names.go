@@ -24,14 +24,32 @@ import (
 )
 
 const (
-	deploymentTemplateStr     = "splunk-%s-%s"       // identifier, instanceType (ex: standalone, indexers, etc...)
-	statefulSetTemplateStr    = "splunk-%s-%s"       // identifier, instanceType (ex: standalone, indexers, etc...)
-	statefulSetPodTemplateStr = "splunk-%s-%s-%d"    // identifier, instanceType, index (ex: 0, 1, 2, ...)
-	serviceTemplateStr        = "splunk-%s-%s-%s"    // identifier, instanceType, "headless" or "service"
-	secretsTemplateStr        = "splunk-%s-secrets"  // identifier
-	defaultsTemplateStr       = "splunk-%s-defaults" // identifier
-	defaultSplunkImage        = "splunk/splunk"      // default docker image used for Splunk instances
-	splunkSecretLen           = 24
+	// identifier, instanceType (ex: standalone, indexers, etc...)
+	deploymentTemplateStr = "splunk-%s-%s"
+
+	// identifier, instanceType (ex: standalone, indexers, etc...)
+	statefulSetTemplateStr = "splunk-%s-%s"
+
+	// identifier, instanceType, index (ex: 0, 1, 2, ...)
+	statefulSetPodTemplateStr = "splunk-%s-%s-%d"
+
+	// identifier, instanceType, "headless" or "service"
+	serviceTemplateStr = "splunk-%s-%s-%s"
+
+	// identifier
+	secretsTemplateStr = "splunk-%s-secrets"
+
+	// identifier
+	defaultsTemplateStr = "splunk-%s-defaults"
+
+	// default docker image used for Splunk instances
+	defaultSplunkImage = "splunk/splunk"
+
+	// bytes used to generate random hexidecimal strings (e.g. HEC tokens)
+	hexBytes = "ABCDEF01234567890"
+
+	// bytes used to generate Splunk secrets
+	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

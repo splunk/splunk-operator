@@ -328,6 +328,9 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, 
 
 	if isHeadless {
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+	}
+
+	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
 		// required for SHC bootstrap process; use services with heads when readiness is desired
 		service.Spec.PublishNotReadyAddresses = true
 	}
@@ -404,22 +407,24 @@ func GetSplunkDefaults(cr *v1alpha1.SplunkEnterprise) *corev1.ConfigMap {
 func GetSplunkSecrets(cr *v1alpha1.SplunkEnterprise) *corev1.Secret {
 	// generate some default secret values to share across the cluster
 	secretData := map[string][]byte{
-		"password":   resources.GenerateSecret(splunkSecretLen),
-		"hec_token":  resources.GenerateSecret(splunkSecretLen),
-		"idc_secret": resources.GenerateSecret(splunkSecretLen),
-		"shc_secret": resources.GenerateSecret(splunkSecretLen),
+		"hec_token":  generateHECToken(),
+		"password":   generateSplunkSecret(),
+		"idc_secret": generateSplunkSecret(),
+		"shc_secret": generateSplunkSecret(),
 	}
 	secretData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
-    password: "%s"
+    hec_disabled: 0
+    hec_enableSSL: 0
     hec_token: "%s"
+    password: "%s"
     idc:
         secret: "%s"
     shc:
         secret: "%s"
 `,
-		secretData["password"],
 		secretData["hec_token"],
+		secretData["password"],
 		secretData["idc_secret"],
 		secretData["shc_secret"]))
 
@@ -430,6 +435,22 @@ splunk:
 		},
 		Data: secretData,
 	}
+}
+
+// generateSplunkSecret returns a randomly generated Splunk secret.
+func generateSplunkSecret() []byte {
+	return resources.GenerateSecret(secretBytes, 24)
+}
+
+// generateHECToken returns a randomly generated HEC token formatted like a UUID.
+// Note that it is not strictly a UUID, but rather just looks like one.
+func generateHECToken() []byte {
+	hecToken := resources.GenerateSecret(hexBytes, 36)
+	hecToken[8] = '-'
+	hecToken[13] = '-'
+	hecToken[18] = '-'
+	hecToken[23] = '-'
+	return hecToken
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
