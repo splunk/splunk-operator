@@ -16,17 +16,3 @@ spec:
     singular: splunkenterprise
   scope: Namespaced
   version: v1alpha1
----
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRole
-metadata:
-  labels:
-    rbac.authorization.k8s.io/aggregate-to-admin: "true"
-  name: splunk:splunk-enterprise-operator
-rules:
-  - apiGroups:
-      - enterprise.splunk.com
-    resources:
-      - '*'
-    verbs:
-      - '*'

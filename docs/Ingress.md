@@ -17,6 +17,7 @@ $ kubectl get services -o name
 service/splunk-cluster-cluster-master-service
 service/splunk-cluster-deployer-service
 service/splunk-cluster-indexer-headless
+service/splunk-cluster-indexer-service
 service/splunk-cluster-license-master-service
 service/splunk-cluster-search-head-headless
 service/splunk-cluster-search-head-service
@@ -70,7 +71,7 @@ spec:
           servicePort: 8000
       - path: /services/collector
         backend:
-          serviceName: splunk-example-indexer-headless
+          serviceName: splunk-example-indexer-service
           servicePort: 8088
   - host: deployer.splunk.example.com
     http:
@@ -256,7 +257,7 @@ spec:
     - destination:
         port:
           number: 8088
-        host: splunk-example-indexer-headless
+        host: splunk-example-indexer-service
   - route:
     - destination:
         port:
@@ -269,7 +270,7 @@ spec:
     - destination:
         port:
           number: 9997
-        host: splunk-example-indexer-headless
+        host: splunk-example-indexer-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService

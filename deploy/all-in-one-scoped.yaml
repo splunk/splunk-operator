@@ -1,4 +1,82 @@
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    k8s-app: splunk-kubecontroller
+  name: splunkenterprises.enterprise.splunk.com
+spec:
+  group: enterprise.splunk.com
+  names:
+    kind: SplunkEnterprise
+    listKind: SplunkEnterpriseList
+    plural: splunkenterprises
+    shortNames:
+      - enterprise
+    singular: splunkenterprise
+  scope: Namespaced
+  version: v1alpha1
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: splunk:operator:namespace-manager
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - configmaps
+  - secrets
+  - events
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+  name: splunk:operator:resource-manager
+rules:
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - '*'
+    verbs:
+      - '*'
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:

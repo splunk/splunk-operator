@@ -15,6 +15,46 @@ wget -O splunk-operator.yaml https://tiny.cc/splunk-operator-install
 ```
 
 
+## Installation for Multiple Namespaces
+
+If you wish to have a single instance of the operator managing Splunk
+objects for all the namespaces of your cluster, you can use the alternative
+cluster scope installation YAML:
+
+```
+wget -O splunk-operator.yaml https://tiny.cc/splunk-operator-cluster-install
+```
+
+When running at cluster scope, you will need to bind the
+`splunk:operator:namespace-manager` ClusterRole to the `splunk-operator`
+ServiceAccount in all namespaces you would like it to manage. For example,
+to create a new namespace called `splunk` that is managed by Splunk Operator:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: splunk:operator:namespace-manager
+  namespace: splunk
+subjects:
+- kind: ServiceAccount
+  name: splunk-operator
+  namespace: splunk-operator
+roleRef:
+  kind: ClusterRole
+  name: splunk:operator:namespace-manager
+  apiGroup: rbac.authorization.k8s.io
+EOF
+```
+
+
 ## Private Registries
 
 *Note: The `splunk/splunk:8.0` image is rather large, so we strongly
@@ -83,12 +123,58 @@ spec:
   scope: Namespaced
   version: v1alpha1
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: splunk:operator:namespace-manager
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - configmaps
+  - secrets
+  - events
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
-  name: splunk:splunk-enterprise-operator
+  name: splunk:operator:resource-manager
 rules:
   - apiGroups:
       - enterprise.splunk.com

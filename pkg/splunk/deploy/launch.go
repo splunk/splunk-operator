@@ -236,6 +236,11 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, false))
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 

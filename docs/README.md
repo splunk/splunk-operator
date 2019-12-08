@@ -105,8 +105,9 @@ Users of Red Hat OpenShift should read the additional
 [Red Hat OpenShift](OpenShift.md) documentation.
 
 Please see the [Advanced Installation Instructions](Install.md) for
-special considerations, including the use of private image registries and
-installing as a regular user (who is not a Kubernetes cluster administrator).
+special considerations, including the use of private image registries,
+installation at cluster scope, and installing as a regular user (who is
+not a Kubernetes cluster administrator).
 
 *Note: The `splunk/splunk:8.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your

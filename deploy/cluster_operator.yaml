@@ -1,16 +1,37 @@
 ---
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-operator
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: splunk-operator
+  namespace: splunk-operator
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: splunk:operator:resource-manager
+subjects:
+- kind: ServiceAccount
+  name: splunk-operator
+  namespace: splunk-operator
+roleRef:
+  kind: ClusterRole
+  name: splunk:operator:resource-manager
+  apiGroup: rbac.authorization.k8s.io
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: splunk:operator:namespace-manager
+  namespace: splunk-operator
 subjects:
 - kind: ServiceAccount
   name: splunk-operator
+  namespace: splunk-operator
 roleRef:
   kind: ClusterRole
   name: splunk:operator:namespace-manager
@@ -20,6 +41,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: splunk-operator
+  namespace: splunk-operator
 spec:
   replicas: 1
   selector:
@@ -42,9 +64,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
