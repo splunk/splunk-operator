@@ -335,6 +335,6 @@ spec:
     loadBalancer:
       consistentHash:
         httpCookie:
-        name: SPLUNK_ISTIO_SESSION
-        ttl: 3600s
+          name: SPLUNK_ISTIO_SESSION
+          ttl: 3600s
 ```

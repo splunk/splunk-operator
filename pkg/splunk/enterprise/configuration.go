@@ -271,6 +271,10 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
+					Annotations: map[string]string{
+						"traffic.sidecar.istio.io/excludeOutboundPorts": "8089",
+						"traffic.sidecar.istio.io/includeInboundPorts":  "19000,9000,8000,17000",
+					},
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,

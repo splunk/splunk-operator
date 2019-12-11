@@ -184,6 +184,10 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
+					Annotations: map[string]string{
+						"traffic.sidecar.istio.io/excludeOutboundPorts": "7777,17500",
+						"traffic.sidecar.istio.io/includeInboundPorts":  "7000,8009",
+					},
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,
@@ -242,6 +246,10 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTyp
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
+					Annotations: map[string]string{
+						"traffic.sidecar.istio.io/excludeOutboundPorts": "7777,17500",
+						"traffic.sidecar.istio.io/includeInboundPorts":  "7000,8009",
+					},
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,
