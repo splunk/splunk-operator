@@ -192,3 +192,34 @@ func CompareByMarshall(a interface{}, b interface{}) bool {
 
 	return false
 }
+
+// GetIstioAnnotations returns a map of istio annotations for a pod template
+func GetIstioAnnotations(ports []corev1.ContainerPort, excludeOutboundPorts []int32) map[string]string {
+	// calculate outbound port exclusions
+	excludeOutboundPortsLookup := make(map[int32]bool)
+	excludeOutboundPortsBuf := bytes.NewBufferString("")
+	for idx := range excludeOutboundPorts {
+		if excludeOutboundPortsBuf.Len() > 0 {
+			fmt.Fprint(excludeOutboundPortsBuf, ",")
+		}
+		fmt.Fprintf(excludeOutboundPortsBuf, "%d", excludeOutboundPorts[idx])
+		excludeOutboundPortsLookup[excludeOutboundPorts[idx]] = true
+	}
+
+	// calculate inbound port inclusions
+	includeInboundPortsBuf := bytes.NewBufferString("")
+	for idx := range ports {
+		_, skip := excludeOutboundPortsLookup[ports[idx].ContainerPort]
+		if !skip {
+			if includeInboundPortsBuf.Len() > 0 {
+				fmt.Fprint(includeInboundPortsBuf, ",")
+			}
+			fmt.Fprintf(includeInboundPortsBuf, "%d", ports[idx].ContainerPort)
+		}
+	}
+
+	return map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": excludeOutboundPortsBuf.String(),
+		"traffic.sidecar.istio.io/includeInboundPorts":  includeInboundPortsBuf.String(),
+	}
+}

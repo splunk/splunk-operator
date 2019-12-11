@@ -165,6 +165,7 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 	// prepare labels and other values
 	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
+	annotations := resources.GetIstioAnnotations(ports, []int32{7777, 17500})
 
 	// create deployment configuration
 	deployment := &appsv1.Deployment{
@@ -183,11 +184,8 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 			Replicas: &replicas32,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-					Annotations: map[string]string{
-						"traffic.sidecar.istio.io/excludeOutboundPorts": "7777,17500",
-						"traffic.sidecar.istio.io/includeInboundPorts":  "7000,8009",
-					},
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,
@@ -225,6 +223,7 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTyp
 	// prepare labels and other values
 	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
+	annotations := resources.GetIstioAnnotations(containerPorts, []int32{7777, 17500})
 
 	// create StatefulSet configuration
 	statefulSet := &appsv1.StatefulSet{
@@ -245,11 +244,8 @@ func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTyp
 			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-					Annotations: map[string]string{
-						"traffic.sidecar.istio.io/excludeOutboundPorts": "7777,17500",
-						"traffic.sidecar.istio.io/includeInboundPorts":  "7000,8009",
-					},
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,

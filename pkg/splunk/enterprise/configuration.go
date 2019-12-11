@@ -241,6 +241,8 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 	// prepare labels and other values
 	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
 	replicas32 := int32(replicas)
+	ports := getSplunkContainerPorts(instanceType)
+	annotations := resources.GetIstioAnnotations(ports, []int32{8089, 9997})
 
 	// prepare volume claims
 	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
@@ -270,11 +272,8 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-					Annotations: map[string]string{
-						"traffic.sidecar.istio.io/excludeOutboundPorts": "8089",
-						"traffic.sidecar.istio.io/includeInboundPorts":  "19000,9000,8000,17000",
-					},
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      cr.Spec.Affinity,
@@ -284,7 +283,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 							Image:           GetSplunkImage(cr),
 							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name:            "splunk",
-							Ports:           getSplunkContainerPorts(instanceType),
+							Ports:           ports,
 							Env:             envVariables,
 							VolumeMounts:    getSplunkVolumeMounts(),
 						},
