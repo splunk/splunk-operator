@@ -15,7 +15,29 @@ wget -O splunk-operator.yaml https://tiny.cc/splunk-operator-install
 ```
 
 
-## Installation for Multiple Namespaces
+## Installation By a Regular User
+
+Kubernetes only allows administrators to install new
+`CustomResourceDefinition`, `ClusterRole` and `ClusterRoleBinding` objects.
+All other objects included in the `splunk-operator.yaml` file can be installed
+by regular users within their own namespaces. If you are not an administrator,
+you can have someone else create these objects for you by running
+
+```
+kubectl apply -f https://tiny.cc/splunk-operator-cluster-admin
+```
+
+You should then be able download and use the following YAML to install the
+operator within your own namespace:
+
+```
+wget -O splunk-operator.yaml 
+kubectl config set-context --current --namespace=<NAMESPACE>
+kubectl apply -f splunk-operator.yaml
+```
+
+
+## Admin Installation for All Namespaces
 
 If you wish to have a single instance of the operator managing Splunk
 objects for all the namespaces of your cluster, you can use the alternative
@@ -84,120 +106,15 @@ to the appropriate locations.
 ```
 
 
-## For Kubernetes Administrators
+## Installing Splunk Operator
 
-If you are an administrator of your Kubernetes cluster, you can install and
-start the operator by running
+You can install and start the operator by running
 
 ```
 kubectl apply -f splunk-operator.yaml
 ```
 
-
-## For Other Kubernetes Users (Not Administrators)
-
-Please note that Kubernetes only allows administrators to install new
-`CustomResourceDefinition` and `ClusterRole` objects. All other objects
-included in the `splunk-operator.yaml` file can be installed by regular users
-within their own namespaces. If you are not an administrator, you can have
-someone else create these objects for you by running
-
-```yaml
-cat <<EOF | kubectl apply -f -
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  labels:
-    k8s-app: splunk-kubecontroller
-  name: splunkenterprises.enterprise.splunk.com
-spec:
-  group: enterprise.splunk.com
-  names:
-    kind: SplunkEnterprise
-    listKind: SplunkEnterpriseList
-    plural: splunkenterprises
-    shortNames:
-    - enterprise
-    singular: splunkenterprise
-  scope: Namespaced
-  version: v1alpha1
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: splunk:operator:namespace-manager
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - services
-  - endpoints
-  - persistentvolumeclaims
-  - configmaps
-  - secrets
-  - events
-  verbs:
-  - create
-  - delete
-  - deletecollection
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  - daemonsets
-  - replicasets
-  - statefulsets
-  verbs:
-  - create
-  - delete
-  - deletecollection
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - '*'
-  verbs:
-  - '*'
----
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRole
-metadata:
-  labels:
-    rbac.authorization.k8s.io/aggregate-to-admin: "true"
-  name: splunk:operator:resource-manager
-rules:
-  - apiGroups:
-      - enterprise.splunk.com
-    resources:
-      - '*'
-    verbs:
-      - '*'
-EOF
-```
-
-After removing the above content from the beginning of your 
-`splunk-operator.yaml` file, you should be able to install the Splunk 
-Operator within your own namespace by running
-
-```
-kubectl config set-context --current --namespace=<NAMESPACE>
-kubectl apply -f splunk-operator.yaml
-```
-
-
-## After Installation
-
-After starting the Splunk Operator, you should see a single pod running
+After starting the operator, you should see a single pod running
 within your namespace:
 
 ```

@@ -134,9 +134,6 @@ spec:
       containers:
         - name: splunk-operator
           image: splunk/splunk-operator
-          ports:
-          - containerPort: 60000
-            name: metrics
           command:
           - splunk-operator
           imagePullPolicy: IfNotPresent

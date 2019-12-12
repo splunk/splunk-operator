@@ -29,17 +29,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
-// GetSplunkAppLabels returns a map of labels to use for Splunk instances.
-func GetSplunkAppLabels(identifier string, typeLabel string) map[string]string {
-	labels := map[string]string{
-		"app":  "splunk",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
-	return labels
-}
-
 // AppendSplunkDfsOverrides returns new environment variable overrides that include additional DFS specific variables
 func AppendSplunkDfsOverrides(overrides map[string]string, identifier string, searchHeads int) map[string]string {
 	// make a copy of original map
@@ -239,10 +228,11 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare labels and other values
-	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	labels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), false)
 	replicas32 := int32(replicas)
 	ports := getSplunkContainerPorts(instanceType)
-	annotations := resources.GetIstioAnnotations(ports, []int32{8089, 9997})
+	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
+	annotations := resources.GetIstioAnnotations(ports)
 
 	// prepare volume claims
 	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
@@ -265,7 +255,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), true),
 			},
 			ServiceName:         GetSplunkServiceName(instanceType, cr.GetIdentifier(), true),
 			Replicas:            &replicas32,
@@ -276,7 +266,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:      cr.Spec.Affinity,
+					Affinity:      affinity,
 					SchedulerName: cr.Spec.SchedulerName,
 					Containers: []corev1.Container{
 						{
@@ -310,8 +300,8 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	serviceName := GetSplunkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
-	serviceTypeLabels := GetSplunkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"))
-	selectLabels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	serviceTypeLabels := resources.GetLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
+	selectLabels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), true)
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{

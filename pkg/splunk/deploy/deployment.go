@@ -52,7 +52,7 @@ func ApplyDeployment(client client.Client, deployment *appsv1.Deployment) error 
 		// found existing Deployment
 		if MergeDeploymentUpdates(&current, deployment) {
 			// only update if there are material differences, as determined by comparison function
-			err = UpdateResource(client, deployment)
+			err = UpdateResource(client, &current)
 		} else {
 			log.Printf("No changes for Deployment %s in namespace %s\n", deployment.GetObjectMeta().GetName(), deployment.GetObjectMeta().GetNamespace())
 		}
@@ -79,7 +79,7 @@ func MergeDeploymentUpdates(current *appsv1.Deployment, revised *appsv1.Deployme
 	}
 
 	// check for changes in Pod template
-	if MergePodUpdates(&current.Spec.Template, &revised.Spec.Template) {
+	if MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName()) {
 		result = true
 	}
 
