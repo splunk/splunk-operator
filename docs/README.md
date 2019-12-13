@@ -98,7 +98,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f https://tiny.cc/splunk-operator-install
+kubectl apply -f http://tiny.cc/splunk-operator-install
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -127,7 +127,7 @@ To remove all Splunk deployments and completely remove the
 Splunk Operator, run:
 ```
 kubectl delete splunkenterprises --all
-kubectl delete -f https://tiny.cc/splunk-operator-install
+kubectl delete -f http://tiny.cc/splunk-operator-install
 ```
 
 

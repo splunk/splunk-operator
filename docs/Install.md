@@ -11,7 +11,7 @@ Splunk Operator (as described below), please download a local copy of
 the installation YAML and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml https://tiny.cc/splunk-operator-install
+wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-install
 ```
 
 
@@ -24,14 +24,15 @@ by regular users within their own namespaces. If you are not an administrator,
 you can have someone else create these objects for you by running
 
 ```
-kubectl apply -f https://tiny.cc/splunk-operator-cluster-admin
+kubectl apply -f http://tiny.cc/splunk-operator-crds
+kubectl apply -f http://tiny.cc/splunk-operator-rbac
 ```
 
 You should then be able download and use the following YAML to install the
 operator within your own namespace:
 
 ```
-wget -O splunk-operator.yaml 
+wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-noadmin
 kubectl config set-context --current --namespace=<NAMESPACE>
 kubectl apply -f splunk-operator.yaml
 ```
@@ -44,7 +45,7 @@ objects for all the namespaces of your cluster, you can use the alternative
 cluster scope installation YAML:
 
 ```
-wget -O splunk-operator.yaml https://tiny.cc/splunk-operator-cluster-install
+wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-cluster
 ```
 
 When running at cluster scope, you will need to bind the
