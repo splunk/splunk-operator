@@ -112,8 +112,6 @@ spec:
       containers:
         - name: splunk-operator
           image: splunk/splunk-operator
-          command:
-          - splunk-operator
           imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
