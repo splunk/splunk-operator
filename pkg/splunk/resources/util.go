@@ -236,21 +236,20 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 
 // GetLabels returns a map of labels to use for managed components.
 func GetLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
-	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-
-	result := make(map[string]string)
-
-	if !isSelector {
-		result = map[string]string{
-			"app":                          "splunk",
-			"for":                          identifier,
-			"type":                         typeLabel,
-			"app.kubernetes.io/name":       fmt.Sprintf("splunk-%s", identifier),
-			"app.kubernetes.io/part-of":    "splunk",
-			"app.kubernetes.io/managed-by": "splunk-operator",
-		}
+	result := map[string]string{
+		"app":  "splunk",
+		"for":  identifier,
+		"type": typeLabel,
 	}
 
+	if isSelector {
+		return result
+	}
+
+	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
+	result["app.kubernetes.io/name"] = fmt.Sprintf("splunk-%s", identifier)
+	result["app.kubernetes.io/part-of"] = "splunk"
+	result["app.kubernetes.io/managed-by"] = "splunk-operator"
 	result["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)
 
 	return result
