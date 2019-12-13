@@ -236,6 +236,11 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client client.Client) error {
 		return err
 	}
 
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, false))
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
@@ -282,12 +287,17 @@ func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client client.Client) err
 		return err
 	}
 
-	err = ApplySparkDeployment(cr, client, spark.SparkMaster, 1, spark.GetSparkMasterConfiguration(), spark.GetSparkMasterContainerPorts())
+	err = ApplySparkDeployment(cr,
+		client,
+		spark.SparkMaster,
+		1,
+		spark.GetSparkMasterConfiguration(),
+		spark.GetSparkMasterContainerPorts())
 	if err != nil {
 		return err
 	}
 
-	err = ApplySparkStatefulSet(cr,
+	err = ApplySparkDeployment(cr,
 		client,
 		spark.SparkWorker,
 		cr.Spec.Topology.SparkWorkers,

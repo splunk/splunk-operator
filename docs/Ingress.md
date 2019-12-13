@@ -17,6 +17,7 @@ $ kubectl get services -o name
 service/splunk-cluster-cluster-master-service
 service/splunk-cluster-deployer-service
 service/splunk-cluster-indexer-headless
+service/splunk-cluster-indexer-service
 service/splunk-cluster-license-master-service
 service/splunk-cluster-search-head-headless
 service/splunk-cluster-search-head-service
@@ -58,16 +59,20 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/affinity: cookie
-    nginx.ingress.kubernetes.io/rewrite-target: /
     certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
 spec:
   rules:
   - host: splunk.example.com
     http:
       paths:
-      - backend:
-          serviceName: splunk-dfscluster-search-head-service
+      - path: /
+        backend:
+          serviceName: splunk-example-search-head-service
           servicePort: 8000
+      - path: /services/collector
+        backend:
+          serviceName: splunk-example-indexer-service
+          servicePort: 8088
   - host: deployer.splunk.example.com
     http:
       paths:
@@ -92,12 +97,6 @@ spec:
       - backend:
           serviceName: splunk-example-spark-master-service
           servicePort: 8009
-  - host: hec.splunk.example.com
-    http:
-      paths:
-      - backend:
-          serviceName: splunk-example-indexer-headless
-          servicePort: 8088
   tls:
   - hosts:
     - splunk.example.com
@@ -105,7 +104,6 @@ spec:
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
     - spark-master.splunk.example.com
-    - hec.splunk.example.com
     secretName: splunk.example.com-tls
 ```
 
@@ -164,7 +162,6 @@ spec:
     - deployer.splunk.example.com
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
-    - hec.splunk.example.com
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
@@ -191,7 +188,6 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
-    - "hec.splunk.example.com"
     tls:
       httpsRedirect: true
   - port:
@@ -206,7 +202,12 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
-    - "hec.splunk.example.com"
+  - port:
+      number: 9997
+      name: tcp
+      protocol: TCP
+    hosts:
+    - "*"
 ```
 
 Note that `credentialName` references the same `secretName` created and
@@ -242,18 +243,34 @@ Next, you will need to create VirtualServices for each of the components that yo
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
-  name: splunk-search-head
+  name: splunk
 spec:
   hosts:
   - "splunk.example.com"
   gateways:
   - "splunk-gw"
   http:
+  - match:
+    - uri:
+        prefix: "/services/collector"
+    route:
+    - destination:
+        port:
+          number: 8088
+        host: splunk-example-indexer-service
   - route:
     - destination:
         port:
           number: 8000
         host: splunk-example-search-head-service
+  tcp:
+  - match:
+    - port: 9997
+    route:
+    - destination:
+        port:
+          number: 9997
+        host: splunk-example-indexer-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -302,22 +319,6 @@ spec:
         port:
           number: 8000
         host: splunk-example-license-master-service
----
-apiVersion: networking.istio.io/v1alpha3
-kind: VirtualService
-metadata:
-  name: splunk-hec
-spec:
-  hosts:
-  - "hec.splunk.example.com"
-  gateways:
-  - "splunk-gw"
-  http:
-  - route:
-    - destination:
-        port:
-          number: 8088
-        host: splunk-example-indexer-headless
 ```
 
 Finally, you will need to create a DestinationRule to ensure user sessions are
@@ -334,6 +335,6 @@ spec:
     loadBalancer:
       consistentHash:
         httpCookie:
-        name: SPLUNK_ISTIO_SESSION
-        ttl: 3600s
+          name: SPLUNK_ISTIO_SESSION
+          ttl: 3600s
 ```

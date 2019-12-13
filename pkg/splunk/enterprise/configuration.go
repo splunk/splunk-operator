@@ -29,17 +29,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
-// GetSplunkAppLabels returns a map of labels to use for Splunk instances.
-func GetSplunkAppLabels(identifier string, typeLabel string) map[string]string {
-	labels := map[string]string{
-		"app":  "splunk",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
-	return labels
-}
-
 // AppendSplunkDfsOverrides returns new environment variable overrides that include additional DFS specific variables
 func AppendSplunkDfsOverrides(overrides map[string]string, identifier string, searchHeads int) map[string]string {
 	// make a copy of original map
@@ -239,8 +228,11 @@ func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequir
 func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare labels and other values
-	labels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	labels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), false)
 	replicas32 := int32(replicas)
+	ports := getSplunkContainerPorts(instanceType)
+	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
+	annotations := resources.GetIstioAnnotations(ports)
 
 	// prepare volume claims
 	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
@@ -263,24 +255,25 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), true),
 			},
 			ServiceName:         GetSplunkServiceName(instanceType, cr.GetIdentifier(), true),
 			Replicas:            &replicas32,
 			PodManagementPolicy: "Parallel",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:      cr.Spec.Affinity,
+					Affinity:      affinity,
 					SchedulerName: cr.Spec.SchedulerName,
 					Containers: []corev1.Container{
 						{
 							Image:           GetSplunkImage(cr),
 							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name:            "splunk",
-							Ports:           getSplunkContainerPorts(instanceType),
+							Ports:           ports,
 							Env:             envVariables,
 							VolumeMounts:    getSplunkVolumeMounts(),
 						},
@@ -307,8 +300,8 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	serviceName := GetSplunkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
-	serviceTypeLabels := GetSplunkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"))
-	selectLabels := GetSplunkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	serviceTypeLabels := resources.GetLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
+	selectLabels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), true)
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -328,6 +321,9 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, 
 
 	if isHeadless {
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+	}
+
+	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
 		// required for SHC bootstrap process; use services with heads when readiness is desired
 		service.Spec.PublishNotReadyAddresses = true
 	}
@@ -404,22 +400,24 @@ func GetSplunkDefaults(cr *v1alpha1.SplunkEnterprise) *corev1.ConfigMap {
 func GetSplunkSecrets(cr *v1alpha1.SplunkEnterprise) *corev1.Secret {
 	// generate some default secret values to share across the cluster
 	secretData := map[string][]byte{
-		"password":   resources.GenerateSecret(splunkSecretLen),
-		"hec_token":  resources.GenerateSecret(splunkSecretLen),
-		"idc_secret": resources.GenerateSecret(splunkSecretLen),
-		"shc_secret": resources.GenerateSecret(splunkSecretLen),
+		"hec_token":  generateHECToken(),
+		"password":   generateSplunkSecret(),
+		"idc_secret": generateSplunkSecret(),
+		"shc_secret": generateSplunkSecret(),
 	}
 	secretData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
-    password: "%s"
+    hec_disabled: 0
+    hec_enableSSL: 0
     hec_token: "%s"
+    password: "%s"
     idc:
         secret: "%s"
     shc:
         secret: "%s"
 `,
-		secretData["password"],
 		secretData["hec_token"],
+		secretData["password"],
 		secretData["idc_secret"],
 		secretData["shc_secret"]))
 
@@ -430,6 +428,22 @@ splunk:
 		},
 		Data: secretData,
 	}
+}
+
+// generateSplunkSecret returns a randomly generated Splunk secret.
+func generateSplunkSecret() []byte {
+	return resources.GenerateSecret(secretBytes, 24)
+}
+
+// generateHECToken returns a randomly generated HEC token formatted like a UUID.
+// Note that it is not strictly a UUID, but rather just looks like one.
+func generateHECToken() []byte {
+	hecToken := resources.GenerateSecret(hexBytes, 36)
+	hecToken[8] = '-'
+	hecToken[13] = '-'
+	hecToken[18] = '-'
+	hecToken[23] = '-'
+	return hecToken
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.

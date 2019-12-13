@@ -30,10 +30,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
 
-const (
-	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890%()*+,-./<=>?@^_|~"
-)
-
 func init() {
 	// seed random number generator for splunk secret generation
 	rand.Seed(time.Now().UnixNano())
@@ -84,12 +80,20 @@ func GetServiceFQDN(namespace string, name string) string {
 }
 
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
-func GenerateSecret(n int) []byte {
+func GenerateSecret(secretBytes string, n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = secretBytes[rand.Int63()%int64(len(secretBytes))]
 	}
 	return b
+}
+
+// SortPorts returns a sorted list of Kubernetes ContainerPorts.
+func SortPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
+	sorted := make([]corev1.ContainerPort, len(ports))
+	copy(sorted, ports)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ContainerPort < sorted[j].ContainerPort })
+	return sorted
 }
 
 // ComparePorts is a generic comparer of two Kubernetes ContainerPorts.
@@ -101,15 +105,9 @@ func ComparePorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
 		return true
 	}
 
-	// make sorted copy of a
-	aSorted := make([]corev1.ContainerPort, len(a))
-	copy(aSorted, a)
-	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].ContainerPort < aSorted[j].ContainerPort })
-
-	// make sorted copy of b
-	bSorted := make([]corev1.ContainerPort, len(b))
-	copy(bSorted, b)
-	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].ContainerPort < bSorted[j].ContainerPort })
+	// make sorted copies of a and b
+	aSorted := SortPorts(a)
+	bSorted := SortPorts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
@@ -119,6 +117,14 @@ func ComparePorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
 	}
 
 	return false
+}
+
+// SortEnvs returns a sorted list of Kubernetes EnvVar.
+func SortEnvs(envvars []corev1.EnvVar) []corev1.EnvVar {
+	sorted := make([]corev1.EnvVar, len(envvars))
+	copy(sorted, envvars)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	return sorted
 }
 
 // CompareEnvs is a generic comparer of two Kubernetes Env variables.
@@ -129,15 +135,9 @@ func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
 		return true
 	}
 
-	// make sorted copy of a
-	aSorted := make([]corev1.EnvVar, len(a))
-	copy(aSorted, a)
-	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].Name < aSorted[j].Name })
-
-	// make sorted copy of b
-	bSorted := make([]corev1.EnvVar, len(b))
-	copy(bSorted, b)
-	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].Name < bSorted[j].Name })
+	// make sorted copies of a and b
+	aSorted := SortEnvs(a)
+	bSorted := SortEnvs(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
@@ -149,6 +149,14 @@ func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
 	return false
 }
 
+// SortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
+func SortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	sorted := make([]corev1.VolumeMount, len(mounts))
+	copy(sorted, mounts)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	return sorted
+}
+
 // CompareVolumeMounts is a generic comparer of two Kubernetes VolumeMounts.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
@@ -157,15 +165,9 @@ func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
 		return true
 	}
 
-	// make sorted copy of a
-	aSorted := make([]corev1.VolumeMount, len(a))
-	copy(aSorted, a)
-	sort.Slice(aSorted, func(i, j int) bool { return aSorted[i].Name < aSorted[j].Name })
-
-	// make sorted copy of b
-	bSorted := make([]corev1.VolumeMount, len(b))
-	copy(bSorted, b)
-	sort.Slice(bSorted, func(i, j int) bool { return bSorted[i].Name < bSorted[j].Name })
+	// make sorted copies of a and b
+	aSorted := SortVolumeMounts(a)
+	bSorted := SortVolumeMounts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
@@ -195,4 +197,95 @@ func CompareByMarshall(a interface{}, b interface{}) bool {
 	}
 
 	return false
+}
+
+// GetIstioAnnotations returns a map of istio annotations for a pod template
+func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
+	// list of ports within the deployments that we want istio to leave alone
+	excludeOutboundPorts := []int32{8089, 8191, 9997, 7777, 9000, 17000, 17500, 19000}
+
+	// calculate outbound port exclusions
+	excludeOutboundPortsLookup := make(map[int32]bool)
+	excludeOutboundPortsBuf := bytes.NewBufferString("")
+	for idx := range excludeOutboundPorts {
+		if excludeOutboundPortsBuf.Len() > 0 {
+			fmt.Fprint(excludeOutboundPortsBuf, ",")
+		}
+		fmt.Fprintf(excludeOutboundPortsBuf, "%d", excludeOutboundPorts[idx])
+		excludeOutboundPortsLookup[excludeOutboundPorts[idx]] = true
+	}
+
+	// calculate inbound port inclusions
+	includeInboundPortsBuf := bytes.NewBufferString("")
+	sortedPorts := SortPorts(ports)
+	for idx := range sortedPorts {
+		_, skip := excludeOutboundPortsLookup[sortedPorts[idx].ContainerPort]
+		if !skip {
+			if includeInboundPortsBuf.Len() > 0 {
+				fmt.Fprint(includeInboundPortsBuf, ",")
+			}
+			fmt.Fprintf(includeInboundPortsBuf, "%d", sortedPorts[idx].ContainerPort)
+		}
+	}
+
+	return map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": excludeOutboundPortsBuf.String(),
+		"traffic.sidecar.istio.io/includeInboundPorts":  includeInboundPortsBuf.String(),
+	}
+}
+
+// GetLabels returns a map of labels to use for managed components.
+func GetLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
+	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
+
+	result := make(map[string]string)
+
+	if !isSelector {
+		result = map[string]string{
+			"app":                          "splunk",
+			"for":                          identifier,
+			"type":                         typeLabel,
+			"app.kubernetes.io/name":       fmt.Sprintf("splunk-%s", identifier),
+			"app.kubernetes.io/part-of":    "splunk",
+			"app.kubernetes.io/managed-by": "splunk-operator",
+		}
+	}
+
+	result["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)
+
+	return result
+}
+
+// AppendPodAntiAffinity appends a Kubernetes Affinity object to include anti-affinity for pods of the same type, and returns the result.
+func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLabel string) *corev1.Affinity {
+	if affinity == nil {
+		affinity = &corev1.Affinity{}
+	} else {
+		affinity = affinity.DeepCopy()
+	}
+
+	if affinity.PodAntiAffinity == nil {
+		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
+	}
+
+	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
+		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+		corev1.WeightedPodAffinityTerm{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app.kubernetes.io/instance",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
+						},
+					},
+				},
+				TopologyKey: "kubernetes.io/hostname",
+			},
+		},
+	)
+
+	return affinity
 }

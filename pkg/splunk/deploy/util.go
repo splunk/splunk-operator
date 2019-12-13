@@ -17,6 +17,7 @@ package deploy
 import (
 	"context"
 	"log"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -126,23 +127,21 @@ func ApplyService(client client.Client, service *corev1.Service) error {
 // config and a revised config. It merges material changes from revised to
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
-func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec) bool {
+func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec, name string) bool {
 	result := false
 
 	// check for changes in Affinity
 	if resources.CompareByMarshall(current.Spec.Affinity, revised.Spec.Affinity) {
 		log.Printf("Affinity differs for %s: \"%v\" != \"%v\"",
-			current.GetObjectMeta().GetName(), current.Spec.Affinity,
-			revised.Spec.Affinity)
+			name, current.Spec.Affinity, revised.Spec.Affinity)
 		current.Spec.Affinity = revised.Spec.Affinity
 		result = true
 	}
 
 	// check for changes in SchedulerName
-	if resources.CompareByMarshall(current.Spec.SchedulerName, revised.Spec.SchedulerName) {
-		log.Printf("SchedulerName differs for %s: \"%v\" != \"%v\"",
-			current.GetObjectMeta().GetName(), current.Spec.SchedulerName,
-			revised.Spec.SchedulerName)
+	if current.Spec.SchedulerName != revised.Spec.SchedulerName {
+		log.Printf("SchedulerName differs for %s: \"%s\" != \"%s\"",
+			name, current.Spec.SchedulerName, revised.Spec.SchedulerName)
 		current.Spec.SchedulerName = revised.Spec.SchedulerName
 		result = true
 	}
@@ -150,8 +149,7 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Spec.Containers) != len(revised.Spec.Containers) {
 		log.Printf("Container counts differ for %s: %d != %d",
-			current.GetObjectMeta().GetName(), len(current.Spec.Containers),
-			len(revised.Spec.Containers))
+			name, len(current.Spec.Containers), len(revised.Spec.Containers))
 		current.Spec.Containers = revised.Spec.Containers
 		result = true
 	} else {
@@ -159,17 +157,31 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 			// check Image
 			if current.Spec.Containers[idx].Image != revised.Spec.Containers[idx].Image {
 				log.Printf("Container Images differ for %s: \"%s\" != \"%s\"",
-					current.GetObjectMeta().GetName(), current.Spec.Containers[idx].Image,
-					revised.Spec.Containers[idx].Image)
+					name, current.Spec.Containers[idx].Image, revised.Spec.Containers[idx].Image)
 				current.Spec.Containers[idx].Image = revised.Spec.Containers[idx].Image
+				result = true
+			}
+
+			// check Annotations
+			if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
+				log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
+					name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
+				current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
+				result = true
+			}
+
+			// check Labels
+			if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
+				log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
+					name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
+				current.ObjectMeta.Labels = revised.ObjectMeta.Labels
 				result = true
 			}
 
 			// check Ports
 			if resources.ComparePorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
 				log.Printf("Container Ports differ for %s: \"%v\" != \"%v\"",
-					current.GetObjectMeta().GetName(), current.Spec.Containers[idx].Ports,
-					revised.Spec.Containers[idx].Ports)
+					name, current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports)
 				current.Spec.Containers[idx].Ports = revised.Spec.Containers[idx].Ports
 				result = true
 			}
@@ -177,8 +189,7 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 			// check VolumeMounts
 			if resources.CompareVolumeMounts(current.Spec.Containers[idx].VolumeMounts, revised.Spec.Containers[idx].VolumeMounts) {
 				log.Printf("Container VolumeMounts differ for %s: \"%v\" != \"%v\"",
-					current.GetObjectMeta().GetName(), current.Spec.Containers[idx].VolumeMounts,
-					revised.Spec.Containers[idx].VolumeMounts)
+					name, current.Spec.Containers[idx].VolumeMounts, revised.Spec.Containers[idx].VolumeMounts)
 				current.Spec.Containers[idx].VolumeMounts = revised.Spec.Containers[idx].VolumeMounts
 				result = true
 			}
@@ -186,8 +197,7 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 			// check Resources
 			if resources.CompareByMarshall(&current.Spec.Containers[idx].Resources, &revised.Spec.Containers[idx].Resources) {
 				log.Printf("Container Resources differ for %s: \"%v\" != \"%v\"",
-					current.GetObjectMeta().GetName(), current.Spec.Containers[idx].Resources,
-					revised.Spec.Containers[idx].Resources)
+					name, current.Spec.Containers[idx].Resources, revised.Spec.Containers[idx].Resources)
 				current.Spec.Containers[idx].Resources = revised.Spec.Containers[idx].Resources
 				result = true
 			}

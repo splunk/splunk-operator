@@ -68,44 +68,24 @@ Other make targets include (more info below):
 * `make lint`: runs the `golint` utility on all `*.go` source files in this project
 
 
-## Pushing Your Splunk Operator Image
-
-If you are using a local, single-node Kubernetes cluster like
-[minikube](https://minikube.sigs.k8s.io/) or [Docker Desktop](https://www.docker.com/products/docker-desktop),
-you only need to build the `splunk/splunk-operator` image.
-You can skip the rest of this section.
-
-If possible, we recommend re-tagging your custom-built images and pushing
-them to a remote registry that your Kubernetes workers are able to pull from.
-Please see the [Required Images Documentation](Images.md) for more information.
-
-
 ## Running the Splunk Operator
 
-### Running as a foreground process
+Ensure that you have the `SplunkEnterprise` Custom Resource Definition installed
+in your cluster:
+
+```
+kubectl apply -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+```
 
 Use this to run the operator as a local foreground process on your machine:
+
 ```
 make run
 ```
-This will use your current Kubernetes context from `~/.kube/config`.
 
-
-### Running in Local and Remote Clusters
-
-You can install and start the operator by running
-```
-kubectl apply -f deploy/all-in-one.yaml
-```
-
-Note that `deploy/all-in-one.yaml` uses the image name `splunk/splunk-operator`.
-If you pushed this image to a remote registry, you need to change the `image`
-parameter in this file to refer to the correct location.
-
-You can stop and remove the operator by running
-```
-kubectl delete -f deploy/all-in-one.yaml
-```
+This will use your current Kubernetes context from `~/.kube/config` to manage
+resources in your current namespace.
 
 Please see the [Getting Started Documentation](docs/README.md) for more
-information.
+information, including instructions on how to install the operator in your
+cluster.

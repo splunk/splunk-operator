@@ -25,24 +25,12 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
-	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // ApplySplunkStatefulSet creates or updates a Kubernetes StatefulSet for a given type of Splunk Enterprise instance (indexers or search heads).
 func ApplySplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType enterprise.InstanceType, replicas int, envVariables []corev1.EnvVar) error {
 
 	statefulSet, err := enterprise.GetSplunkStatefulSet(cr, instanceType, replicas, envVariables)
-	if err != nil {
-		return err
-	}
-
-	return ApplyStatefulSet(client, statefulSet)
-}
-
-// ApplySparkStatefulSet creates or updates a Kubernetes StatefulSet for a given type of Spark instance (master or workers).
-func ApplySparkStatefulSet(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.InstanceType, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) error {
-
-	statefulSet, err := spark.GetSparkStatefulSet(cr, instanceType, replicas, envVariables, containerPorts)
 	if err != nil {
 		return err
 	}
@@ -91,7 +79,7 @@ func MergeStatefulSetUpdates(current *appsv1.StatefulSet, revised *appsv1.Statef
 	}
 
 	// check for changes in Pod template
-	if MergePodUpdates(&current.Spec.Template, &revised.Spec.Template) {
+	if MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName()) {
 		result = true
 	}
 

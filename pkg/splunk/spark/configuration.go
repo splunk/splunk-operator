@@ -26,14 +26,10 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// GetSparkAppLabels returns a map of labels to use for Spark instances.
-func GetSparkAppLabels(identifier string, typeLabel string) map[string]string {
-	labels := map[string]string{
-		"app":  "spark",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
+// GetSparkAppLabels returns a map of labels to use for Spark components.
+func GetSparkAppLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
+	labels := resources.GetLabels(identifier, typeLabel, isSelector)
+	labels["app"] = "spark"
 	return labels
 }
 
@@ -122,6 +118,9 @@ func GetSparkWorkerConfiguration(identifier string) []corev1.EnvVar {
 		}, {
 			Name:  "SPARK_MASTER_HOSTNAME",
 			Value: GetSparkServiceName(SparkMaster, identifier, false),
+		}, {
+			Name:  "SPARK_WORKER_PORT", // this is set in new versions of splunk/spark container, but defined here for backwards-compatability
+			Value: "7777",
 		},
 	}
 }
@@ -162,9 +161,10 @@ func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequire
 // GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a SplunkEnterprise resource.
 func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) (*appsv1.Deployment, error) {
 
-	// prepare labels and other values
-	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	// prepare values
 	replicas32 := int32(replicas)
+	annotations := resources.GetIstioAnnotations(ports)
+	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
 	// create deployment configuration
 	deployment := &appsv1.Deployment{
@@ -178,15 +178,16 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true),
 			},
 			Replicas: &replicas32,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false),
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:      cr.Spec.Affinity,
+					Affinity:      affinity,
 					SchedulerName: cr.Spec.SchedulerName,
 					Hostname:      GetSparkServiceName(instanceType, cr.GetIdentifier(), false),
 					Containers: []corev1.Container{
@@ -215,68 +216,12 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 	return deployment, nil
 }
 
-// GetSparkStatefulSet returns a Kubernetes StatefulSet object for Spark workers configured for a SplunkEnterprise resource.
-func GetSparkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar, containerPorts []corev1.ContainerPort) (*appsv1.StatefulSet, error) {
-
-	// prepare labels and other values
-	labels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
-	replicas32 := int32(replicas)
-
-	// create StatefulSet configuration
-	statefulSet := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StatefulSet",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSparkStatefulsetName(instanceType, cr.GetIdentifier()),
-			Namespace: cr.Namespace,
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			ServiceName:         GetSparkServiceName(instanceType, cr.GetIdentifier(), true),
-			Replicas:            &replicas32,
-			PodManagementPolicy: "Parallel",
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					Affinity:      cr.Spec.Affinity,
-					SchedulerName: cr.Spec.SchedulerName,
-					Containers: []corev1.Container{
-						{
-							Image:           GetSparkImage(cr),
-							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
-							Name:            "spark",
-							Ports:           containerPorts,
-							Env:             envVariables,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), resources.AsOwner(cr)))
-
-	// update with common spark pod config
-	err := updateSparkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, instanceType)
-	if err != nil {
-		return nil, err
-	}
-
-	return statefulSet, nil
-}
-
 // GetSparkService returns a Kubernetes Service object for Spark instances configured for a SplunkEnterprise resource.
 func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool, ports []corev1.ServicePort) *corev1.Service {
 
 	serviceName := GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
-	serviceTypeLabels := GetSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"))
-	selectLabels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString())
+	serviceTypeLabels := GetSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
+	selectLabels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
