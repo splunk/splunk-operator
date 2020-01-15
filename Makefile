@@ -42,10 +42,10 @@ fmt:
 lint:
 	@golint ./...
 
-deploy/all-in-one-scoped.yaml: deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/operator.yaml
+deploy/all-in-one-scoped.yaml: deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/operator.yaml
 	@echo Rebuilding deploy/all-in-one-scoped.yaml
-	@cat deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/operator.yaml > deploy/all-in-one-scoped.yaml
+	@cat deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/operator.yaml > deploy/all-in-one-scoped.yaml
 
-deploy/all-in-one-cluster.yaml: deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml
+deploy/all-in-one-cluster.yaml: deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml
 	@echo Rebuilding deploy/all-in-one-cluster.yaml
-	@cat deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml > deploy/all-in-one-cluster.yaml
+	@cat deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml > deploy/all-in-one-cluster.yaml

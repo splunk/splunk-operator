@@ -1,0 +1,50 @@
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: splunkenterprises.enterprise.splunk.com
+spec:
+  group: enterprise.splunk.com
+  names:
+    kind: SplunkEnterprise
+    listKind: SplunkEnterpriseList
+    plural: splunkenterprises
+    singular: splunkenterprise
+    shortNames:
+    - enterprise
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: SplunkEnterprise is the Schema for the splunkenterprises API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: SplunkEnterpriseSpec defines the desired state of SplunkEnterprise
+          type: object
+        status:
+          description: SplunkEnterpriseStatus defines the observed state of SplunkEnterprise
+          type: object
+      type: object
+  version: v1alpha2
+  versions:
+  - name: v1alpha2
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false
+  conversion:
+    strategy: None

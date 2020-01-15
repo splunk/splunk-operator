@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package deploy
 
 import (
 	"context"
-	"log"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,9 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
+
+// logger used by splunk.deploy package
+var log = logf.Log.WithName("splunk.deploy")
 
 // The ResourceObject type implements methods of runtime.Object and GetObjectMeta()
 type ResourceObject interface {
@@ -42,34 +45,43 @@ type ControllerClient interface {
 
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(client ControllerClient, obj ResourceObject) error {
+	scopedLog := log.WithName("CreateResource").WithValues(
+		"name", obj.GetObjectMeta().GetName(),
+		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Create(context.TODO(), obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Printf("Failed to create object : %v", err)
+		scopedLog.Error(err, "Failed to create resource")
 		return err
 	}
 
-	log.Printf("Created %s in namespace %s\n", obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace())
+	scopedLog.Info("Created resource")
 
 	return nil
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
 func UpdateResource(client ControllerClient, obj ResourceObject) error {
+	scopedLog := log.WithName("UpdateResource").WithValues(
+		"name", obj.GetObjectMeta().GetName(),
+		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Update(context.TODO(), obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Printf("Failed to update object : %v", err)
+		scopedLog.Error(err, "Failed to update resource")
 		return err
 	}
 
-	log.Printf("Updated %s in namespace %s\n", obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace())
+	scopedLog.Info("Updated resource")
 
 	return nil
 }
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
 func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error {
+	scopedLog := log.WithName("ApplyConfigMap").WithValues(
+		"name", configMap.GetObjectMeta().GetName(),
+		"namespace", configMap.GetObjectMeta().GetNamespace())
 
 	var oldConfigMap corev1.ConfigMap
 	namespacedName := types.NamespacedName{
@@ -80,7 +92,7 @@ func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error 
 	err := client.Get(context.TODO(), namespacedName, &oldConfigMap)
 	if err == nil {
 		// found existing ConfigMap: do nothing
-		log.Printf("Found existing ConfigMap %s in namespace %s\n", configMap.GetObjectMeta().GetName(), configMap.GetObjectMeta().GetNamespace())
+		scopedLog.Info("Found existing ConfigMap")
 	} else {
 		err = CreateResource(client, configMap)
 	}
@@ -90,6 +102,9 @@ func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error 
 
 // ApplySecret creates or updates a Kubernetes Secret
 func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
+	scopedLog := log.WithName("ApplySecret").WithValues(
+		"name", secret.GetObjectMeta().GetName(),
+		"namespace", secret.GetObjectMeta().GetNamespace())
 
 	var oldSecret corev1.Secret
 	namespacedName := types.NamespacedName{
@@ -100,7 +115,7 @@ func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
 	err := client.Get(context.TODO(), namespacedName, &oldSecret)
 	if err == nil {
 		// found existing Secret: do nothing
-		log.Printf("Found existing Secret %s in namespace %s\n", secret.GetObjectMeta().GetName(), secret.GetObjectMeta().GetNamespace())
+		scopedLog.Info("Found existing Secret")
 	} else {
 		err = CreateResource(client, secret)
 	}
@@ -110,6 +125,9 @@ func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
 
 // ApplyService creates or updates a Kubernetes Service
 func ApplyService(client ControllerClient, service *corev1.Service) error {
+	scopedLog := log.WithName("ApplyService").WithValues(
+		"name", service.GetObjectMeta().GetName(),
+		"namespace", service.GetObjectMeta().GetNamespace())
 
 	var oldService corev1.Service
 	namespacedName := types.NamespacedName{
@@ -120,7 +138,7 @@ func ApplyService(client ControllerClient, service *corev1.Service) error {
 	err := client.Get(context.TODO(), namespacedName, &oldService)
 	if err == nil {
 		// found existing Service: do nothing
-		log.Printf("Found existing Service %s in namespace %s\n", service.GetObjectMeta().GetName(), service.GetObjectMeta().GetNamespace())
+		scopedLog.Info("Found existing Service")
 	} else {
 		err = CreateResource(client, service)
 	}
@@ -133,20 +151,23 @@ func ApplyService(client ControllerClient, service *corev1.Service) error {
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec, name string) bool {
+	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
 
 	// check for changes in Affinity
 	if resources.CompareByMarshall(current.Spec.Affinity, revised.Spec.Affinity) {
-		log.Printf("Affinity differs for %s: \"%v\" != \"%v\"",
-			name, current.Spec.Affinity, revised.Spec.Affinity)
+		scopedLog.Info("Pod Affinity differs",
+			"current", current.Spec.Affinity,
+			"revised", revised.Spec.Affinity)
 		current.Spec.Affinity = revised.Spec.Affinity
 		result = true
 	}
 
 	// check for changes in SchedulerName
 	if current.Spec.SchedulerName != revised.Spec.SchedulerName {
-		log.Printf("SchedulerName differs for %s: \"%s\" != \"%s\"",
-			name, current.Spec.SchedulerName, revised.Spec.SchedulerName)
+		scopedLog.Info("Pod SchedulerName differs",
+			"current", current.Spec.SchedulerName,
+			"revised", revised.Spec.SchedulerName)
 		current.Spec.SchedulerName = revised.Spec.SchedulerName
 		result = true
 	}
@@ -169,16 +190,18 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Spec.Containers) != len(revised.Spec.Containers) {
-		log.Printf("Container counts differ for %s: %d != %d",
-			name, len(current.Spec.Containers), len(revised.Spec.Containers))
+		scopedLog.Info("Pod Container counts differ",
+			"current", len(current.Spec.Containers),
+			"revised", len(revised.Spec.Containers))
 		current.Spec.Containers = revised.Spec.Containers
 		result = true
 	} else {
 		for idx := range current.Spec.Containers {
 			// check Image
 			if current.Spec.Containers[idx].Image != revised.Spec.Containers[idx].Image {
-				log.Printf("Container Images differ for %s: \"%s\" != \"%s\"",
-					name, current.Spec.Containers[idx].Image, revised.Spec.Containers[idx].Image)
+				scopedLog.Info("Pod Container Images differ",
+					"current", current.Spec.Containers[idx].Image,
+					"revised", revised.Spec.Containers[idx].Image)
 				current.Spec.Containers[idx].Image = revised.Spec.Containers[idx].Image
 				result = true
 			}
@@ -193,16 +216,18 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 
 			// check VolumeMounts
 			if resources.CompareVolumeMounts(current.Spec.Containers[idx].VolumeMounts, revised.Spec.Containers[idx].VolumeMounts) {
-				log.Printf("Container VolumeMounts differ for %s: \"%v\" != \"%v\"",
-					name, current.Spec.Containers[idx].VolumeMounts, revised.Spec.Containers[idx].VolumeMounts)
+				scopedLog.Info("Pod Container VolumeMounts differ",
+					"current", current.Spec.Containers[idx].VolumeMounts,
+					"revised", revised.Spec.Containers[idx].VolumeMounts)
 				current.Spec.Containers[idx].VolumeMounts = revised.Spec.Containers[idx].VolumeMounts
 				result = true
 			}
 
 			// check Resources
 			if resources.CompareByMarshall(&current.Spec.Containers[idx].Resources, &revised.Spec.Containers[idx].Resources) {
-				log.Printf("Container Resources differ for %s: \"%v\" != \"%v\"",
-					name, current.Spec.Containers[idx].Resources, revised.Spec.Containers[idx].Resources)
+				scopedLog.Info("Pod Container Resources differ",
+					"current", current.Spec.Containers[idx].Resources,
+					"revised", revised.Spec.Containers[idx].Resources)
 				current.Spec.Containers[idx].Resources = revised.Spec.Containers[idx].Resources
 				result = true
 			}

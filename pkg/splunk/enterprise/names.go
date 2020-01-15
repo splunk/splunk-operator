@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -116,7 +116,7 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 }
 
 // GetSplunkImage returns the docker image to use for Splunk instances.
-func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
+func GetSplunkImage(cr *v1alpha2.SplunkEnterprise) string {
 	var name string
 
 	if cr.Spec.SplunkImage != "" {

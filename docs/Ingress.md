@@ -23,6 +23,9 @@ service/splunk-cluster-search-head-headless
 service/splunk-cluster-search-head-service
 ```
 
+*Please note that services are currently only created for managed clusters. No
+services will be created for single instance deployments.*
+
 Below we provide some examples for configuring two of the most popular Ingress controllers: the
 [NGINX Ingress Controller](https://www.nginx.com/products/nginx/kubernetes-ingress-controller)
 and [Istio](https://istio.io/). We hope these will serve as a useful starting
