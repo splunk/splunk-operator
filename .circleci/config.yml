@@ -1,25 +1,16 @@
 version: 2
 jobs:
-  build-image:
+  compile-binary:
     machine:
-      image: circleci/classic:latest
+      image: splunk/splunk-operator-builder:master
     steps:
       - checkout
       - run:
-          name: Build operator Docker image
-          command: make image
-  build-binary:
-    machine:
-      image: circleci/classic:latest
-    steps:
-      - checkout
-      - run:
-          name: Build operator binary
-          command: make local
+          name: Build splunk-operator binary
+          command: go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager
 workflows:
   version: 2
   build:
     jobs:
-      - build-image
-      - build-binary
+      - compile-binary
 

@@ -1,15 +1,13 @@
 module github.com/splunk/splunk-operator
 
 require (
+	github.com/NYTimes/gziphandler v1.0.1 // indirect
 	github.com/operator-framework/operator-sdk v0.11.1-0.20191014155558-888dde512025
-	github.com/spf13/pflag v1.0.3
-	google.golang.org/api v0.3.0
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/kube-openapi v0.0.0-20190603182131-db7b694dc208 // indirect
 	sigs.k8s.io/controller-runtime v0.1.12
-	sigs.k8s.io/controller-tools v0.1.10
 )
 
 // Pinned to kubernetes-1.13.4
@@ -21,6 +19,7 @@ replace (
 )
 
 replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d
 	github.com/coreos/prometheus-operator => github.com/coreos/prometheus-operator v0.29.0
 	// Pinned to v2.9.2 (kubernetes-1.13.1) so https://proxy.golang.org can
 	// resolve it correctly.
