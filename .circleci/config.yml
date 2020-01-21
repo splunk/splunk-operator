@@ -1,0 +1,16 @@
+version: 2
+jobs:
+  compile-binary:
+    docker:
+      - image: splunk/splunk-operator-builder:master
+    steps:
+      - checkout
+      - run:
+          name: Build splunk-operator binary
+          command: go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager
+workflows:
+  version: 2
+  build:
+    jobs:
+      - compile-binary
+

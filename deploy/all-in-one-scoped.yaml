@@ -30,7 +30,6 @@ rules:
   - persistentvolumeclaims
   - configmaps
   - secrets
-  - events
   verbs:
   - create
   - delete
@@ -39,6 +38,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - apps
