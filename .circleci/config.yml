@@ -1,7 +1,7 @@
 version: 2
 jobs:
   compile-binary:
-    machine:
+    docker:
       image: splunk/splunk-operator-builder:master
     steps:
       - checkout

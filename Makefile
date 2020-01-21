@@ -11,7 +11,7 @@ builder-image:
 builder: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@echo Using container to build splunk-operator
 	@mkdir -p ./build/_output/bin
-	@docker run -v ${PWD}:/root/splunk-operator -it splunk-operator-builder bash -c "cd /root/splunk-operator && go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager"
+	@docker run -v ${PWD}:/opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "cd /opt/app-root/src/splunk-operator && go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager"
 
 image: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@echo Building splunk-operator image
