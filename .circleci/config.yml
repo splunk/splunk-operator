@@ -84,10 +84,10 @@ jobs:
           command: docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
       - run: 
           name: Debug
-          command: pwd && ls -la && ls -la build/_output/bin
+          command: ls -laR build
       - run: 
           name: Build splunk/splunk-operator image
-          command: operator-sdk build ${IMAGE_NAME}:${CIRCLE_SHA1}
+          command: operator-sdk build --verbose ${IMAGE_NAME}:${CIRCLE_SHA1}
       - save_image
       - persist_to_workspace:
           name: Persist images to workspace
