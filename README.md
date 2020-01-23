@@ -60,10 +60,12 @@ You can build the operator by just running `make`.
 
 Other make targets include (more info below):
 
-* `make all`: builds the `splunk/splunk-operator` docker image (same as `make image`)
-* `make image`: builds the `splunk/splunk-operator` docker image
-* `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
+* `make all`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image (same as `make builder builder-image`)
+* `make builder`: builds the `splunk/splunk-operator-builder` docker image
+* `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
+* `make image`: builds the `splunk/splunk-operator` docker image without using `splunk/splunk-operator-builder`
 * `make local`: builds the splunk-operator-local binary for test and debugging purposes
+* `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
 * `make clean`: removes the binary build output and `splunk/splunk-operator` container image
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project

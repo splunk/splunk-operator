@@ -1,28 +1,29 @@
 # Makefile for Splunk Operator
 
-.PHONY: all image package local clean run fmt lint
+.PHONY: all builder builder-image image package local clean run fmt lint
 
-all: image
+all: builder builder-image
 
-builder-image:
+builder: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@echo Creating container image to build splunk-operator
 	@docker build -f ./build/Dockerfile.builder -t splunk/splunk-operator-builder .
 
-builder: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
-	@echo Using container to build splunk-operator
+builder-image:
+	@echo Using builder container to build splunk-operator
 	@mkdir -p ./build/_output/bin
-	@docker run -v ${PWD}:/opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "cd /opt/app-root/src/splunk-operator && go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager"
+	@docker run -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/opt/app-root/src/splunk-operator -w /opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "operator-sdk build --verbose splunk/splunk-operator"
 
 image: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@echo Building splunk-operator image
-	@operator-sdk build splunk/splunk-operator
+	@operator-sdk build --verbose splunk/splunk-operator
+
+local: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
+	@echo Building splunk-operator-local binary only
+	@mkdir -p ./build/_output/bin
+	@go build -v -o ./build/_output/bin/splunk-operator-local ./cmd/manager
 
 package: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@build/package.sh
-
-local: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
-	@mkdir -p ./build/_output/bin
-	@go build -v -o ./build/_output/bin/splunk-operator-local ./cmd/manager
 
 clean:
 	@rm -rf ./build/_output
