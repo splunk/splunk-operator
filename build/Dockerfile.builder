@@ -18,6 +18,12 @@ RUN dnf install -y git openssh tar gzip ca-certificates \
 
 USER default
 
-COPY --chown=default:root go.mod go.sum ${HOME}/
+COPY --chown=default:root go.mod go.sum ${HOME}/initcache/
 
-RUN go mod download && rm -rf go/pkg/mod/cache/vcs
+ENV GOBIN /opt/app-root/bin
+
+RUN mkdir -p ${GOBIN} \
+    && go get -u golang.org/x/lint/golint \
+    && cd ${HOME}/initcache \
+    && go mod download \
+    && rm -rf ${HOME}/go/pkg/mod/cache/vcs
