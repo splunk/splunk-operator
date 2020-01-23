@@ -36,6 +36,7 @@ executors:
     environment:
       IMAGE_NAME: splunk/splunk-operator
       IMAGE_FILENAME: splunk-operator
+    working_directory: /opt/app-root/src/splunk-operator
     docker:
       - image: splunk/splunk-operator-builder:develop
   docker-publisher:
@@ -82,9 +83,6 @@ jobs:
       - run: 
           name: Pull base image updates
           command: docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-      - run: 
-          name: Debug
-          command: ls -laR build
       - run: 
           name: Build splunk/splunk-operator image
           command: operator-sdk build --verbose ${IMAGE_NAME}:${CIRCLE_SHA1}
