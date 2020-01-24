@@ -4,28 +4,32 @@ workflows:
   version: 2
   build-and-push:
     jobs:
-      - build
-      - test
+      - build-image
+      - unit-tests
+      - sdk-tests
       - push-latest:
           requires:
-            - build
-            - test
+            - build-image
+            - unit-tests
+            - sdk-tests
           filters:
             branches:
               only:
                 - master
       - push-edge:
           requires:
-            - build
-            - test
+            - build-image
+            - unit-tests
+            - sdk-tests
           filters:
             branches:
               only:
                 - develop
       - push-release:
           requires:
-            - build
-            - test
+            - build-image
+            - unit-tests
+            - sdk-tests
           filters:
             tags:
               only: /^\d+\.\d+\.\d+/
@@ -54,16 +58,19 @@ commands:
           command: |
             mkdir -p /tmp/images
             docker image save -o /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar ${IMAGE_NAME}:${CIRCLE_SHA1}
+  load_image:
+    description: "Load image"
+    steps:
+      - run:
+          name: "Load image"
+          command: docker load -i /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar
   push_image:
     description: "Load, tag and push an image"
     parameters:
       tag:
         type: string
     steps:
-      - run: 
-          name: Load image
-          command: |
-            docker load -i /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar
+      - load_image
       - run: 
           name: Tag image
           command: |
@@ -74,7 +81,7 @@ commands:
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push ${IMAGE_NAME}:<< parameters.tag >>
 jobs:
-  build:
+  build-image:
     executor: golang-builder
     steps:
       - checkout
@@ -92,7 +99,10 @@ jobs:
           root: /tmp
           paths:
             - images
-  test:
+      - store_artifacts:
+          name: Save images as artifacts
+          path: /tmp/images
+  unit-tests:
     executor: golang-builder
     steps:
       - checkout
@@ -102,6 +112,19 @@ jobs:
       - run: 
           name: Run linter
           command: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+  sdk-tests:
+    executor: golang-builder
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - load_image
+      - run: 
+          name: Operator SDK scorecard
+          command: operator-sdk scorecard
   push-latest:
     executor: docker-publisher
     steps:
