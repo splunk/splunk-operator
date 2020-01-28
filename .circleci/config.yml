@@ -119,7 +119,7 @@ jobs:
           command: make test
       - run:
           name: Upload coverage.out
-          command: $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/goveralls -coverprofile=coverage.out -service=circle-ci -repotoken $COVERALLS_TOKEN
+          command: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken $COVERALLS_TOKEN
       - store_artifacts:
           name: Save coverage.out as artifact
           path: coverage.out
