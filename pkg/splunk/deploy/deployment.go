@@ -21,14 +21,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // ApplySparkDeployment creates or updates a Kubernetes Deployment for a given type of Spark instance.
-func ApplySparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, instanceType spark.InstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
+func ApplySparkDeployment(cr *v1alpha1.SplunkEnterprise, client ControllerClient, instanceType spark.InstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
 
 	deployment, err := spark.GetSparkDeployment(cr, instanceType, replicas, envVariables, ports)
 	if err != nil {
@@ -39,7 +38,7 @@ func ApplySparkDeployment(cr *v1alpha1.SplunkEnterprise, client client.Client, i
 }
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
-func ApplyDeployment(client client.Client, deployment *appsv1.Deployment) error {
+func ApplyDeployment(client ControllerClient, deployment *appsv1.Deployment) error {
 
 	var current appsv1.Deployment
 	namespacedName := types.NamespacedName{

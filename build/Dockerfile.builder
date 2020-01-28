@@ -24,6 +24,8 @@ ENV GOBIN /opt/app-root/bin
 
 RUN mkdir -p ${GOBIN} \
     && go get -u golang.org/x/lint/golint \
+    && go get -u golang.org/x/tools/cmd/cover \
+    && go get -u github.com/mattn/goveralls \
     && cd ${HOME}/initcache \
     && go mod download \
     && rm -rf ${HOME}/go/pkg/mod/cache/vcs

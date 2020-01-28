@@ -110,8 +110,17 @@ jobs:
           name: Check source formatting
           command: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
       - run: 
-          name: Run linter
+          name: Lint source code
           command: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - run:
+          name: Run package tests
+          command: make test
+      - run:
+          name: Upload coverage.out
+          command: $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/goveralls -coverprofile=coverage.out -service=circle-ci -repotoken $COVERALLS_TOKEN
+      - store_artifacts:
+          name: Save coverage.out as artifact
+          path: coverage.out
   sdk-tests:
     executor: golang-builder
     steps:
@@ -123,8 +132,8 @@ jobs:
           at: /tmp
       - load_image
       - run: 
-          name: Operator SDK scorecard
-          command: operator-sdk scorecard
+          name: Placeholder for e2e tests
+          command: docker inspect ${IMAGE_NAME}:${CIRCLE_SHA1}
   push-latest:
     executor: docker-publisher
     steps:
