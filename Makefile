@@ -23,7 +23,7 @@ local: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@go build -v -o ./build/_output/bin/splunk-operator-local ./cmd/manager
 
 test:
-	@Echo Running unit tests for splunk-operator
+	@echo Running unit tests for splunk-operator
 	@go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/deploy
 
 package: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml

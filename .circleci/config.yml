@@ -6,7 +6,9 @@ workflows:
     jobs:
       - build-image
       - unit-tests
-      - sdk-tests
+      - sdk-tests:
+          requires:
+            - build-image
       - push-latest:
           requires:
             - build-image
