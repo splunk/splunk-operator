@@ -230,7 +230,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 	// prepare labels and other values
 	labels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), false)
 	replicas32 := int32(replicas)
-	ports := getSplunkContainerPorts(instanceType)
+	ports := resources.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 	annotations := resources.GetIstioAnnotations(ports)
 
@@ -315,7 +315,7 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, 
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selectLabels,
-			Ports:    getSplunkServicePorts(instanceType),
+			Ports:    resources.SortServicePorts(getSplunkServicePorts(instanceType)), // note that port order is important for tests
 		},
 	}
 
@@ -529,9 +529,15 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 
 // addDFCToPodTemplate modifies the podTemplateSpec object to incorporate support for DFS.
 func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
-	requirements, err := spark.GetSparkRequirements(cr)
-	if err != nil {
-		return err
+	requirements := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("0.25"),
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
 	}
 
 	// create an init container in the pod, which is just used to populate the jdk and spark mount directories

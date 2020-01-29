@@ -184,7 +184,7 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 			}
 
 			// check Ports
-			if resources.ComparePorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
+			if resources.CompareContainerPorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
 				log.Printf("Container Ports differ for %s: \"%v\" != \"%v\"",
 					name, current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports)
 				current.Spec.Containers[idx].Ports = revised.Spec.Containers[idx].Ports

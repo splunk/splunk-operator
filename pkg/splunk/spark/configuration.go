@@ -26,25 +26,25 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// GetSparkAppLabels returns a map of labels to use for Spark components.
-func GetSparkAppLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
+// getSparkAppLabels returns a map of labels to use for Spark components.
+func getSparkAppLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
 	labels := resources.GetLabels(identifier, typeLabel, isSelector)
 	labels["app"] = "spark"
 	return labels
 }
 
-// GetSparkMasterPorts returns a map of ports to use for Spark master instances.
-func GetSparkMasterPorts() map[string]int {
+// getSparkMasterPorts returns a map of ports to use for Spark master instances.
+func getSparkMasterPorts() map[string]int {
 	return map[string]int{
 		"sparkmaster": 7777,
 		"sparkwebui":  8009,
 	}
 }
 
-// GetSparkMasterContainerPorts returns a list of Kubernetes ContainerPort objects for Spark master instances.
-func GetSparkMasterContainerPorts() []corev1.ContainerPort {
+// getSparkMasterContainerPorts returns a list of Kubernetes ContainerPort objects for Spark master instances.
+func getSparkMasterContainerPorts() []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
-	for key, value := range GetSparkMasterPorts() {
+	for key, value := range getSparkMasterPorts() {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
@@ -54,10 +54,10 @@ func GetSparkMasterContainerPorts() []corev1.ContainerPort {
 	return l
 }
 
-// GetSparkMasterServicePorts returns a list of Kubernetes ServicePort objects for Spark master instances.
-func GetSparkMasterServicePorts() []corev1.ServicePort {
+// getSparkMasterServicePorts returns a list of Kubernetes ServicePort objects for Spark master instances.
+func getSparkMasterServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
-	for key, value := range GetSparkMasterPorts() {
+	for key, value := range getSparkMasterPorts() {
 		l = append(l, corev1.ServicePort{
 			Name: key,
 			Port: int32(value),
@@ -66,28 +66,18 @@ func GetSparkMasterServicePorts() []corev1.ServicePort {
 	return l
 }
 
-// GetSparkMasterConfiguration returns a list of Kubernetes EnvVar objects for Spark master instances.
-func GetSparkMasterConfiguration() []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_ROLE",
-			Value: "splunk_spark_master",
-		},
-	}
-}
-
-// GetSparkWorkerPorts returns a map of ports to use for Spark worker instances.
-func GetSparkWorkerPorts() map[string]int {
+// getSparkWorkerPorts returns a map of ports to use for Spark worker instances.
+func getSparkWorkerPorts() map[string]int {
 	return map[string]int{
 		"dfwreceivedata": 17500,
 		"workerwebui":    7000,
 	}
 }
 
-// GetSparkWorkerContainerPorts returns a list of Kubernetes ContainerPort objects for Spark worker instances.
-func GetSparkWorkerContainerPorts() []corev1.ContainerPort {
+// getSparkWorkerContainerPorts returns a list of Kubernetes ContainerPort objects for Spark worker instances.
+func getSparkWorkerContainerPorts() []corev1.ContainerPort {
 	l := []corev1.ContainerPort{}
-	for key, value := range GetSparkWorkerPorts() {
+	for key, value := range getSparkWorkerPorts() {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
@@ -97,10 +87,10 @@ func GetSparkWorkerContainerPorts() []corev1.ContainerPort {
 	return l
 }
 
-// GetSparkWorkerServicePorts returns a list of Kubernetes ServicePort objects for Spark worker instances.
-func GetSparkWorkerServicePorts() []corev1.ServicePort {
+// getSparkWorkerServicePorts returns a list of Kubernetes ServicePort objects for Spark worker instances.
+func getSparkWorkerServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
-	for key, value := range GetSparkWorkerPorts() {
+	for key, value := range getSparkWorkerPorts() {
 		l = append(l, corev1.ServicePort{
 			Name: key,
 			Port: int32(value),
@@ -109,24 +99,8 @@ func GetSparkWorkerServicePorts() []corev1.ServicePort {
 	return l
 }
 
-// GetSparkWorkerConfiguration returns a list of Kubernetes EnvVar objects for Spark worker instances.
-func GetSparkWorkerConfiguration(identifier string) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_ROLE",
-			Value: "splunk_spark_worker",
-		}, {
-			Name:  "SPARK_MASTER_HOSTNAME",
-			Value: GetSparkServiceName(SparkMaster, identifier, false),
-		}, {
-			Name:  "SPARK_WORKER_PORT", // this is set in new versions of splunk/spark container, but defined here for backwards-compatability
-			Value: "7777",
-		},
-	}
-}
-
-// GetSparkRequirements returns the Kubernetes ResourceRequirements to use for Spark instances.
-func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
+// getSparkRequirements returns the Kubernetes ResourceRequirements to use for Spark instances.
+func getSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
 	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCPURequest, "0.1")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCPURequest", err)
@@ -159,9 +133,36 @@ func GetSparkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequire
 }
 
 // GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a SplunkEnterprise resource.
-func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) (*appsv1.Deployment, error) {
+func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, replicas int) (*appsv1.Deployment, error) {
+	// prepare type specific variables (note that port order is important for tests)
+	var ports []corev1.ContainerPort
+	var envVariables []corev1.EnvVar
+	switch instanceType {
+	case SparkMaster:
+		ports = resources.SortContainerPorts(getSparkMasterContainerPorts())
+		envVariables = []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_ROLE",
+				Value: "splunk_spark_master",
+			},
+		}
+	case SparkWorker:
+		ports = resources.SortContainerPorts(getSparkWorkerContainerPorts())
+		envVariables = []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_ROLE",
+				Value: "splunk_spark_worker",
+			}, {
+				Name:  "SPARK_MASTER_HOSTNAME",
+				Value: GetSparkServiceName(SparkMaster, cr.GetIdentifier(), false),
+			}, {
+				Name:  "SPARK_WORKER_PORT", // this is set in new versions of splunk/spark container, but defined here for backwards-compatability
+				Value: "7777",
+			},
+		}
+	}
 
-	// prepare values
+	// prepare other values
 	replicas32 := int32(replicas)
 	annotations := resources.GetIstioAnnotations(ports)
 	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
@@ -178,12 +179,12 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true),
+				MatchLabels: getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true),
 			},
 			Replicas: &replicas32,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false),
+					Labels:      getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false),
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -217,11 +218,20 @@ func GetSparkDeployment(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType
 }
 
 // GetSparkService returns a Kubernetes Service object for Spark instances configured for a SplunkEnterprise resource.
-func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool, ports []corev1.ServicePort) *corev1.Service {
+func GetSparkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, isHeadless bool) *corev1.Service {
+	// prepare ports (note that port order is important for tests)
+	var ports []corev1.ServicePort
+	switch instanceType {
+	case SparkMaster:
+		ports = resources.SortServicePorts(getSparkMasterServicePorts())
+	case SparkWorker:
+		ports = resources.SortServicePorts(getSparkWorkerServicePorts())
+	}
 
+	// prepare other values
 	serviceName := GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
-	serviceTypeLabels := GetSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
-	selectLabels := GetSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
+	serviceTypeLabels := getSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
+	selectLabels := getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
 
 	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -260,7 +270,7 @@ func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, c
 	}
 
 	// prepare resource requirements
-	requirements, err := GetSparkRequirements(cr)
+	requirements, err := getSparkRequirements(cr)
 	if err != nil {
 		return err
 	}

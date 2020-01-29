@@ -149,15 +149,15 @@ func compareTester(t *testing.T, method string, f func() bool, a interface{}, b 
 	}
 }
 
-func TestComparePorts(t *testing.T) {
+func TestCompareContainerPorts(t *testing.T) {
 	var a []corev1.ContainerPort
 	var b []corev1.ContainerPort
 
 	test := func(want bool) {
 		f := func() bool {
-			return ComparePorts(a, b)
+			return CompareContainerPorts(a, b)
 		}
-		compareTester(t, "ComparePorts", f, a, b, want)
+		compareTester(t, "CompareContainerPorts", f, a, b, want)
 	}
 
 	test(false)
@@ -201,6 +201,61 @@ func TestComparePorts(t *testing.T) {
 
 	a = []corev1.ContainerPort{s2sPort}
 	b = []corev1.ContainerPort{s2sPort, splunkWebPort}
+	test(true)
+}
+
+func TestCompareServicePorts(t *testing.T) {
+	var a []corev1.ServicePort
+	var b []corev1.ServicePort
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareServicePorts(a, b)
+		}
+		compareTester(t, "CompareServicePorts", f, a, b, want)
+	}
+
+	test(false)
+
+	var nullPort corev1.ServicePort
+	httpPort := corev1.ServicePort{
+		Name:     "http",
+		Port:     80,
+		Protocol: "TCP",
+	}
+	splunkWebPort := corev1.ServicePort{
+		Name:     "splunk",
+		Port:     8000,
+		Protocol: "TCP",
+	}
+	s2sPort := corev1.ServicePort{
+		Name:     "s2s",
+		Port:     9997,
+		Protocol: "TCP",
+	}
+
+	a = []corev1.ServicePort{nullPort, nullPort}
+	b = []corev1.ServicePort{nullPort, nullPort}
+	test(false)
+
+	a = []corev1.ServicePort{nullPort, nullPort}
+	b = []corev1.ServicePort{nullPort, nullPort, nullPort}
+	test(true)
+
+	a = []corev1.ServicePort{httpPort, splunkWebPort}
+	b = []corev1.ServicePort{httpPort, splunkWebPort}
+	test(false)
+
+	a = []corev1.ServicePort{httpPort, s2sPort, splunkWebPort}
+	b = []corev1.ServicePort{s2sPort, splunkWebPort, httpPort}
+	test(false)
+
+	a = []corev1.ServicePort{httpPort, s2sPort}
+	b = []corev1.ServicePort{s2sPort, splunkWebPort}
+	test(true)
+
+	a = []corev1.ServicePort{s2sPort}
+	b = []corev1.ServicePort{s2sPort, splunkWebPort}
 	test(true)
 }
 

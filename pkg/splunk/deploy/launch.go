@@ -280,32 +280,22 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client ControllerClient) e
 // LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
 func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
 
-	err := ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false, spark.GetSparkMasterServicePorts()))
+	err := ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false))
 	if err != nil {
 		return err
 	}
 
-	err = ApplySparkDeployment(cr,
-		client,
-		spark.SparkMaster,
-		1,
-		spark.GetSparkMasterConfiguration(),
-		spark.GetSparkMasterContainerPorts())
+	err = ApplySparkDeployment(cr, client, spark.SparkMaster, 1)
 	if err != nil {
 		return err
 	}
 
-	err = ApplySparkDeployment(cr,
-		client,
-		spark.SparkWorker,
-		cr.Spec.Topology.SparkWorkers,
-		spark.GetSparkWorkerConfiguration(cr.GetIdentifier()),
-		spark.GetSparkWorkerContainerPorts())
+	err = ApplySparkDeployment(cr, client, spark.SparkWorker, cr.Spec.Topology.SparkWorkers)
 	if err != nil {
 		return err
 	}
 
-	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkWorker, true, spark.GetSparkWorkerServicePorts()))
+	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkWorker, true))
 	if err != nil {
 		return err
 	}

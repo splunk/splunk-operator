@@ -19,7 +19,6 @@ import (
 	"log"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
@@ -27,9 +26,9 @@ import (
 )
 
 // ApplySparkDeployment creates or updates a Kubernetes Deployment for a given type of Spark instance.
-func ApplySparkDeployment(cr *v1alpha1.SplunkEnterprise, client ControllerClient, instanceType spark.InstanceType, replicas int, envVariables []corev1.EnvVar, ports []corev1.ContainerPort) error {
+func ApplySparkDeployment(cr *v1alpha1.SplunkEnterprise, client ControllerClient, instanceType spark.InstanceType, replicas int) error {
 
-	deployment, err := spark.GetSparkDeployment(cr, instanceType, replicas, envVariables, ports)
+	deployment, err := spark.GetSparkDeployment(cr, instanceType, replicas)
 	if err != nil {
 		return err
 	}
