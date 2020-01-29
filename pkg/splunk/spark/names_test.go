@@ -15,13 +15,56 @@
 package spark
 
 import (
+	"os"
 	"testing"
+
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 )
+
+func TestGetSparkStatefulsetName(t *testing.T) {
+	got := GetSparkStatefulsetName(SparkWorker, "s1")
+	want := "splunk-s1-spark-worker"
+	if got != want {
+		t.Errorf("GetSparkStatefulsetName(\"%s\",\"%s\") = %s; want %s", SparkWorker.ToString(), "s1", got, want)
+	}
+}
 
 func TestGetSparkDeploymentName(t *testing.T) {
 	got := GetSparkDeploymentName(SparkMaster, "s1")
 	want := "splunk-s1-spark-master"
 	if got != want {
-		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SparkMaster.ToString(), "t1", got, want)
+		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SparkMaster.ToString(), "s1", got, want)
 	}
+}
+
+func TestGetSparkServiceName(t *testing.T) {
+	test := func(want string, instanceType InstanceType, identifier string, isHeadless bool) {
+		got := GetSparkServiceName(instanceType, identifier, isHeadless)
+		if got != want {
+			t.Errorf("GetSparkServiceName(\"%s\",\"%s\",%t) = %s; want %s",
+				instanceType.ToString(), identifier, isHeadless, got, want)
+		}
+	}
+
+	test("splunk-s1-spark-master-headless", SparkMaster, "s1", true)
+	test("splunk-s2-spark-master-service", SparkMaster, "s2", false)
+}
+
+func TestGetSparkImage(t *testing.T) {
+	cr := v1alpha1.SplunkEnterprise{}
+
+	test := func(want string) {
+		got := GetSparkImage(&cr)
+		if got != want {
+			t.Errorf("GetSparkImage() = %s; want %s", got, want)
+		}
+	}
+
+	test("splunk/spark")
+
+	os.Setenv("SPARK_IMAGE", "splunk-test/spark")
+	test("splunk-test/spark")
+
+	cr.Spec.SparkImage = "splunk/spark-test"
+	test("splunk/spark-test")
 }

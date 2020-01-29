@@ -127,8 +127,8 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadClus
 	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsURL)...)
 }
 
-// GetSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+// getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
+func getSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
 	var err error
 	var etcStorage, varStorage resource.Quantity
 
@@ -191,8 +191,8 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceT
 	return volumeClaims, nil
 }
 
-// GetSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
-func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
+// getSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
+func getSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
 	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPURequest, "0.1")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPURequest", err)
@@ -235,7 +235,7 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 	annotations := resources.GetIstioAnnotations(ports)
 
 	// prepare volume claims
-	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
+	volumeClaims, err := getSplunkVolumeClaims(cr, instanceType, labels)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +613,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	}
 
 	// prepare resource requirements
-	requirements, err := GetSplunkRequirements(cr)
+	requirements, err := getSplunkRequirements(cr)
 	if err != nil {
 		return nil
 	}
