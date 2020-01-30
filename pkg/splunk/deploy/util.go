@@ -151,6 +151,22 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 		result = true
 	}
 
+	// check Annotations
+	if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
+		log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
+			name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
+		current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
+		result = true
+	}
+
+	// check Labels
+	if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
+		log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
+			name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
+		current.ObjectMeta.Labels = revised.ObjectMeta.Labels
+		result = true
+	}
+
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Spec.Containers) != len(revised.Spec.Containers) {
 		log.Printf("Container counts differ for %s: %d != %d",
@@ -164,22 +180,6 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 				log.Printf("Container Images differ for %s: \"%s\" != \"%s\"",
 					name, current.Spec.Containers[idx].Image, revised.Spec.Containers[idx].Image)
 				current.Spec.Containers[idx].Image = revised.Spec.Containers[idx].Image
-				result = true
-			}
-
-			// check Annotations
-			if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
-				log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
-					name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
-				current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
-				result = true
-			}
-
-			// check Labels
-			if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
-				log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
-					name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
-				current.ObjectMeta.Labels = revised.ObjectMeta.Labels
 				result = true
 			}
 
