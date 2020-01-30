@@ -127,8 +127,8 @@ func GetSplunkClusterConfiguration(cr *v1alpha1.SplunkEnterprise, searchHeadClus
 	return append(append(urls, searchHeadConf...), GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsURL)...)
 }
 
-// GetSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+// getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
+func getSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, labels map[string]string) ([]corev1.PersistentVolumeClaim, error) {
 	var err error
 	var etcStorage, varStorage resource.Quantity
 
@@ -191,8 +191,8 @@ func GetSplunkVolumeClaims(cr *v1alpha1.SplunkEnterprise, instanceType InstanceT
 	return volumeClaims, nil
 }
 
-// GetSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
-func GetSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
+// getSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
+func getSplunkRequirements(cr *v1alpha1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
 	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPURequest, "0.1")
 	if err != nil {
 		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPURequest", err)
@@ -230,12 +230,12 @@ func GetSplunkStatefulSet(cr *v1alpha1.SplunkEnterprise, instanceType InstanceTy
 	// prepare labels and other values
 	labels := resources.GetLabels(cr.GetIdentifier(), instanceType.ToString(), false)
 	replicas32 := int32(replicas)
-	ports := getSplunkContainerPorts(instanceType)
+	ports := resources.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 	annotations := resources.GetIstioAnnotations(ports)
 
 	// prepare volume claims
-	volumeClaims, err := GetSplunkVolumeClaims(cr, instanceType, labels)
+	volumeClaims, err := getSplunkVolumeClaims(cr, instanceType, labels)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +315,7 @@ func GetSplunkService(cr *v1alpha1.SplunkEnterprise, instanceType InstanceType, 
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selectLabels,
-			Ports:    getSplunkServicePorts(instanceType),
+			Ports:    resources.SortServicePorts(getSplunkServicePorts(instanceType)), // note that port order is important for tests
 		},
 	}
 
@@ -529,9 +529,15 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 
 // addDFCToPodTemplate modifies the podTemplateSpec object to incorporate support for DFS.
 func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha1.SplunkEnterprise) error {
-	requirements, err := spark.GetSparkRequirements(cr)
-	if err != nil {
-		return err
+	requirements := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("0.25"),
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
 	}
 
 	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
@@ -613,7 +619,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	}
 
 	// prepare resource requirements
-	requirements, err := GetSplunkRequirements(cr)
+	requirements, err := getSplunkRequirements(cr)
 	if err != nil {
 		return nil
 	}

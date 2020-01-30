@@ -88,26 +88,57 @@ func GenerateSecret(secretBytes string, n int) []byte {
 	return b
 }
 
-// SortPorts returns a sorted list of Kubernetes ContainerPorts.
-func SortPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
+// SortContainerPorts returns a sorted list of Kubernetes ContainerPorts.
+func SortContainerPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
 	sorted := make([]corev1.ContainerPort, len(ports))
 	copy(sorted, ports)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ContainerPort < sorted[j].ContainerPort })
 	return sorted
 }
 
-// ComparePorts is a generic comparer of two Kubernetes ContainerPorts.
+// CompareContainerPorts is a generic comparer of two Kubernetes ContainerPorts.
 // It returns true if there are material differences between them, or false otherwise.
 // TODO: could use refactoring; lots of boilerplate copy-pasta here
-func ComparePorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
+func CompareContainerPorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
 	// first, check for short-circuit opportunity
 	if len(a) != len(b) {
 		return true
 	}
 
 	// make sorted copies of a and b
-	aSorted := SortPorts(a)
-	bSorted := SortPorts(b)
+	aSorted := SortContainerPorts(a)
+	bSorted := SortContainerPorts(b)
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		if aSorted[n] != bSorted[n] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SortServicePorts returns a sorted list of Kubernetes ServicePorts.
+func SortServicePorts(ports []corev1.ServicePort) []corev1.ServicePort {
+	sorted := make([]corev1.ServicePort, len(ports))
+	copy(sorted, ports)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Port < sorted[j].Port })
+	return sorted
+}
+
+// CompareServicePorts is a generic comparer of two Kubernetes ServicePorts.
+// It returns true if there are material differences between them, or false otherwise.
+// TODO: could use refactoring; lots of boilerplate copy-pasta here
+func CompareServicePorts(a []corev1.ServicePort, b []corev1.ServicePort) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copies of a and b
+	aSorted := SortServicePorts(a)
+	bSorted := SortServicePorts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
@@ -217,7 +248,7 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 
 	// calculate inbound port inclusions
 	includeInboundPortsBuf := bytes.NewBufferString("")
-	sortedPorts := SortPorts(ports)
+	sortedPorts := SortContainerPorts(ports)
 	for idx := range sortedPorts {
 		_, skip := excludeOutboundPortsLookup[sortedPorts[idx].ContainerPort]
 		if !skip {

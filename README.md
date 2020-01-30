@@ -4,6 +4,7 @@
 [![GoDoc](https://godoc.org/github.com/splunk/splunk-operator?status.svg)](https://godoc.org/github.com/splunk/splunk-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/splunk/splunk-operator)](https://goreportcard.com/report/github.com/splunk/splunk-operator)
 [![CircleCI](https://circleci.com/gh/splunk/splunk-operator/tree/develop.svg?style=shield)](https://circleci.com/gh/splunk/splunk-operator/tree/develop)
+[![Coverage Status](https://coveralls.io/repos/github/splunk/splunk-operator/badge.svg?branch=develop)](https://coveralls.io/github/splunk/splunk-operator?branch=develop)
 
 The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
 Administrators to deploy and operate Enterprise deployments in a Kubernetes
@@ -60,10 +61,13 @@ You can build the operator by just running `make`.
 
 Other make targets include (more info below):
 
-* `make all`: builds the `splunk/splunk-operator` docker image (same as `make image`)
-* `make image`: builds the `splunk/splunk-operator` docker image
-* `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
+* `make all`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image (same as `make builder builder-image`)
+* `make builder`: builds the `splunk/splunk-operator-builder` docker image
+* `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
+* `make image`: builds the `splunk/splunk-operator` docker image without using `splunk/splunk-operator-builder`
 * `make local`: builds the splunk-operator-local binary for test and debugging purposes
+* `make test`: Runs unit tests with Coveralls code coverage output to coverage.out
+* `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
 * `make clean`: removes the binary build output and `splunk/splunk-operator` container image
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project

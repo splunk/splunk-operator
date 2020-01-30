@@ -32,7 +32,7 @@ const (
 
 // CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
 // If so, it will process and remove any remaining finalizers.
-func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, error) {
+func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c ControllerClient) (bool, error) {
 	currentTime := metav1.Now()
 
 	// just log warning if deletion time is in the future
@@ -65,7 +65,7 @@ func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c client.Client) (bool, 
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
-func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
+func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c ControllerClient) error {
 
 	// get list of PVCs for this cluster
 	labels := map[string]string{
@@ -92,7 +92,7 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c client.Client) error {
 }
 
 // RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
-func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c client.Client, finalizer string) error {
+func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c ControllerClient, finalizer string) error {
 	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", cr.GetNamespace(), cr.GetIdentifier(), finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed

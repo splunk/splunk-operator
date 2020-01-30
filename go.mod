@@ -1,7 +1,6 @@
 module github.com/splunk/splunk-operator
 
 require (
-	github.com/NYTimes/gziphandler v1.0.1 // indirect
 	github.com/operator-framework/operator-sdk v0.11.1-0.20191014155558-888dde512025
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad

@@ -35,8 +35,13 @@ type ResourceObject interface {
 	GetObjectMeta() metav1.Object
 }
 
+// The ControllerClient interfaces implements methods of the Kubernetes controller-runtime client
+type ControllerClient interface {
+	client.Client
+}
+
 // CreateResource creates a new Kubernetes resource using the REST API.
-func CreateResource(client client.Client, obj ResourceObject) error {
+func CreateResource(client ControllerClient, obj ResourceObject) error {
 	err := client.Create(context.TODO(), obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -50,7 +55,7 @@ func CreateResource(client client.Client, obj ResourceObject) error {
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
-func UpdateResource(client client.Client, obj ResourceObject) error {
+func UpdateResource(client ControllerClient, obj ResourceObject) error {
 	err := client.Update(context.TODO(), obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -64,7 +69,7 @@ func UpdateResource(client client.Client, obj ResourceObject) error {
 }
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
-func ApplyConfigMap(client client.Client, configMap *corev1.ConfigMap) error {
+func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error {
 
 	var oldConfigMap corev1.ConfigMap
 	namespacedName := types.NamespacedName{
@@ -84,7 +89,7 @@ func ApplyConfigMap(client client.Client, configMap *corev1.ConfigMap) error {
 }
 
 // ApplySecret creates or updates a Kubernetes Secret
-func ApplySecret(client client.Client, secret *corev1.Secret) error {
+func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
 
 	var oldSecret corev1.Secret
 	namespacedName := types.NamespacedName{
@@ -104,7 +109,7 @@ func ApplySecret(client client.Client, secret *corev1.Secret) error {
 }
 
 // ApplyService creates or updates a Kubernetes Service
-func ApplyService(client client.Client, service *corev1.Service) error {
+func ApplyService(client ControllerClient, service *corev1.Service) error {
 
 	var oldService corev1.Service
 	namespacedName := types.NamespacedName{
@@ -146,6 +151,22 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 		result = true
 	}
 
+	// check Annotations
+	if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
+		log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
+			name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
+		current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
+		result = true
+	}
+
+	// check Labels
+	if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
+		log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
+			name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
+		current.ObjectMeta.Labels = revised.ObjectMeta.Labels
+		result = true
+	}
+
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Spec.Containers) != len(revised.Spec.Containers) {
 		log.Printf("Container counts differ for %s: %d != %d",
@@ -162,24 +183,8 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 				result = true
 			}
 
-			// check Annotations
-			if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
-				log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
-					name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
-				current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
-				result = true
-			}
-
-			// check Labels
-			if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
-				log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
-					name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
-				current.ObjectMeta.Labels = revised.ObjectMeta.Labels
-				result = true
-			}
-
 			// check Ports
-			if resources.ComparePorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
+			if resources.CompareContainerPorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
 				log.Printf("Container Ports differ for %s: \"%v\" != \"%v\"",
 					name, current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports)
 				current.Spec.Containers[idx].Ports = revised.Spec.Containers[idx].Ports
