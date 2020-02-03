@@ -400,10 +400,11 @@ func GetSplunkDefaults(cr *v1alpha1.SplunkEnterprise) *corev1.ConfigMap {
 func GetSplunkSecrets(cr *v1alpha1.SplunkEnterprise) *corev1.Secret {
 	// generate some default secret values to share across the cluster
 	secretData := map[string][]byte{
-		"hec_token":  generateHECToken(),
-		"password":   generateSplunkSecret(),
-		"idc_secret": generateSplunkSecret(),
-		"shc_secret": generateSplunkSecret(),
+		"hec_token":    generateHECToken(),
+		"password":     generateSplunkSecret(),
+		"pass4SymmKey": generateSplunkSecret(),
+		"idc_secret":   generateSplunkSecret(),
+		"shc_secret":   generateSplunkSecret(),
 	}
 	secretData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
@@ -411,13 +412,15 @@ splunk:
     hec_enableSSL: 0
     hec_token: "%s"
     password: "%s"
-    idc:
+    pass4SymmKey: "%s"
+    idxc:
         secret: "%s"
     shc:
         secret: "%s"
 `,
 		secretData["hec_token"],
 		secretData["password"],
+		secretData["pass4SymmKey"],
 		secretData["idc_secret"],
 		secretData["shc_secret"]))
 
