@@ -539,10 +539,10 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha2.S
 		Name:            "init",
 		Command:         []string{"bash", "-c", "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"},
 		VolumeMounts: []corev1.VolumeMount{
-			{ Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk" },
-			{ Name: "mnt-splunk-spark", MountPath: "/mnt/spark" },
+			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
+			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
 		},
-		Resources:       corev1.ResourceRequirements{
+		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("0.25"),
 				corev1.ResourceMemory: resource.MustParse("128Mi"),

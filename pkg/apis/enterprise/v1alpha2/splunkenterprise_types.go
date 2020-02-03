@@ -19,6 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// default all fields to being optional
+// +kubebuilder:validation:Optional
+
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 // Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
@@ -113,6 +116,10 @@ type SplunkEnterpriseSpec struct {
 	SchedulerName string `json:"schedulerName"`
 
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes
+	// Unfortunately, this flag is only supported by k8s v1.14 or later and there seems to be
+	// no other way to allow this to be null when using kubebuilder and "operator-sdk generate crds"
+	// TODO: for this reason, we forced to strip the "validation" section from our CRDS
+	// +nullable
 	Affinity *v1.Affinity `json:"affinity"`
 
 	// resource requirements for a SplunkEnterprise deployment

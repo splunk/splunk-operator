@@ -17,9 +17,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
 	"reflect"
 	"testing"
 
@@ -54,7 +51,7 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 type mockFuncCall struct {
 	ctx      context.Context
 	key      client.ObjectKey
-	opts     *client.ListOptions
+	listOpts []client.ListOption
 	obj      runtime.Object
 	metaName string
 }
@@ -69,7 +66,16 @@ type mockStatusWriter struct {
 }
 
 // Update returns status writer's err field
-func (c mockStatusWriter) Update(ctx context.Context, obj runtime.Object) error {
+func (c mockStatusWriter) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+	c.calls = append(c.calls, mockFuncCall{
+		ctx: ctx,
+		obj: obj,
+	})
+	return c.err
+}
+
+// Patch returns status writer's err field
+func (c mockStatusWriter) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
 	c.calls = append(c.calls, mockFuncCall{
 		ctx: ctx,
 		obj: obj,
@@ -108,11 +114,11 @@ func (c mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 }
 
 // List returns mock client's err field
-func (c mockClient) List(ctx context.Context, opts *client.ListOptions, obj runtime.Object) error {
+func (c mockClient) List(ctx context.Context, obj runtime.Object, opts ...client.ListOption) error {
 	c.calls["List"] = append(c.calls["List"], mockFuncCall{
-		ctx:  ctx,
-		opts: opts,
-		obj:  obj,
+		ctx:      ctx,
+		listOpts: opts,
+		obj:      obj,
 	})
 	if c.errors["List"] == nil && c.listObj != nil {
 		copyResource(obj, c.listObj)
@@ -121,7 +127,7 @@ func (c mockClient) List(ctx context.Context, opts *client.ListOptions, obj runt
 }
 
 // Create returns mock client's err field
-func (c mockClient) Create(ctx context.Context, obj runtime.Object) error {
+func (c mockClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
 	c.calls["Create"] = append(c.calls["Create"], mockFuncCall{
 		ctx: ctx,
 		obj: obj,
@@ -130,7 +136,7 @@ func (c mockClient) Create(ctx context.Context, obj runtime.Object) error {
 }
 
 // Delete returns mock client's err field
-func (c mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOptionFunc) error {
+func (c mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOption) error {
 	c.calls["Delete"] = append(c.calls["Delete"], mockFuncCall{
 		ctx: ctx,
 		obj: obj,
@@ -139,12 +145,30 @@ func (c mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...clie
 }
 
 // Update returns mock client's err field
-func (c mockClient) Update(ctx context.Context, obj runtime.Object) error {
+func (c mockClient) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 	c.calls["Update"] = append(c.calls["Update"], mockFuncCall{
 		ctx: ctx,
 		obj: obj,
 	})
 	return c.errors["Update"]
+}
+
+// Patch returns mock client's err field
+func (c mockClient) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
+	c.calls["Patch"] = append(c.calls["Patch"], mockFuncCall{
+		ctx: ctx,
+		obj: obj,
+	})
+	return c.errors["Patch"]
+}
+
+// DeleteAllOf returns mock client's err field
+func (c mockClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
+	c.calls["DeleteAllOf"] = append(c.calls["DeleteAllOf"], mockFuncCall{
+		ctx: ctx,
+		obj: obj,
+	})
+	return c.errors["DeleteAllOf"]
 }
 
 // Status returns the mock client's StatusWriter
@@ -157,11 +181,13 @@ func newMockClient() *mockClient {
 	c := &mockClient{
 		calls: make(map[string][]mockFuncCall),
 		errors: map[string]error{
-			"Get":    nil,
-			"List":   nil,
-			"Create": nil,
-			"Delete": nil,
-			"Update": nil,
+			"Get":         nil,
+			"List":        nil,
+			"Create":      nil,
+			"Delete":      nil,
+			"Update":      nil,
+			"Patch":       nil,
+			"DeleteAllOf": nil,
 		},
 	}
 	return c
@@ -187,8 +213,8 @@ func (c *mockClient) checkCalls(t *testing.T, metaOnly bool, testname string, wa
 						t.Errorf("%s: MockClient %s() call #%d = %s; want %s", testname, methodName, n, gotFuncCalls[n].key.Name, wantFuncCalls[n].metaName)
 					}
 				case "List":
-					if !reflect.DeepEqual(gotFuncCalls[n].opts, wantFuncCalls[n].opts) {
-						t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n].opts, wantFuncCalls[n].opts)
+					if !reflect.DeepEqual(gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts) {
+						t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts)
 					}
 				default:
 					if gotFuncCalls[n].obj.(ResourceObject).GetObjectMeta().GetName() != wantFuncCalls[n].metaName {
@@ -198,7 +224,7 @@ func (c *mockClient) checkCalls(t *testing.T, metaOnly bool, testname string, wa
 					}
 				}
 			} else {
-				if gotFuncCalls[n] != wantFuncCalls[n] {
+				if !reflect.DeepEqual(gotFuncCalls[n], wantFuncCalls[n]) {
 					t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n], wantFuncCalls[n])
 				}
 			}
@@ -208,12 +234,6 @@ func (c *mockClient) checkCalls(t *testing.T, metaOnly bool, testname string, wa
 	if len(wantCalls) != len(c.calls) {
 		t.Errorf("%s: MockClient functions called = %d; want %d", testname, len(c.calls), len(wantCalls))
 	}
-}
-
-// TestMain() is called before any test cases; we use it to disable logging
-func TestMain(m *testing.M) {
-	log.SetOutput(ioutil.Discard)
-	os.Exit(m.Run())
 }
 
 func TestCreateResource(t *testing.T) {

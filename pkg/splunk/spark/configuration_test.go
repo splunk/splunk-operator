@@ -20,11 +20,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestGetSparkDeployment(t *testing.T) {
-	cr := v1alpha1.SplunkEnterprise{
+	cr := v1alpha2.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -51,7 +51,7 @@ func TestGetSparkDeployment(t *testing.T) {
 }
 
 func TestGetSparkService(t *testing.T) {
-	cr := v1alpha1.SplunkEnterprise{
+	cr := v1alpha2.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",

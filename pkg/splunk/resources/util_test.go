@@ -26,12 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 // newSplunkEnterprise returns a new SplunkEnterprise object
-func newSplunkEnterprise() *v1alpha1.SplunkEnterprise {
-	cr := v1alpha1.SplunkEnterprise{
+func newSplunkEnterprise() *v1alpha2.SplunkEnterprise {
+	cr := v1alpha2.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",

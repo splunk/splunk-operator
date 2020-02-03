@@ -19,18 +19,18 @@ RUN ln -s /usr/bin/microdnf /usr/bin/dnf \
     && rm -f /tmp/go.tar.gz \
     && mkdir -p /opt/app-root \
     && useradd -r -m -u 1000 -G root -d ${HOME} default \
-    && chown -R default.root ${HOME}
+    && chown -R default.root /opt/app-root
 ###############################################################
 ## END: REPLACE ME WHEN go-toolset IS UPDATED TO GOLANG 1.13 ##
 ###############################################################
 
 USER root
 
-ENV OPERATOR_SDK_VERSION 0.14.0
+ENV OPERATOR_SDK_VERSION 0.15.1
 ENV OPERATOR_SDK_URL https://github.com/operator-framework/operator-sdk/releases/download/v${OPERATOR_SDK_VERSION}/operator-sdk-v${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 ENV DOCKER_CLI_URL https://download.docker.com/linux/centos/7/x86_64/stable/Packages/docker-ce-cli-19.03.5-3.el7.x86_64.rpm
 
-RUN dnf install -y git openssh tar gzip ca-certificates \
+RUN dnf install -y git make gcc findutils openssh tar gzip ca-certificates \
     && dnf clean all \
     && wget -O /usr/local/bin/operator-sdk ${OPERATOR_SDK_URL} \
     && chmod a+x /usr/local/bin/operator-sdk \
@@ -43,6 +43,7 @@ USER default
 COPY --chown=default:root go.mod go.sum ${HOME}/initcache/
 
 ENV GOBIN /opt/app-root/bin
+ENV PATH ${PATH}:${GOBIN}
 
 RUN mkdir -p ${GOBIN} \
     && go get -u golang.org/x/lint/golint \

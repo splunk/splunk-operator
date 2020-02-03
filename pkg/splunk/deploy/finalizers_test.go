@@ -22,13 +22,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestCheckSplunkDeletion(t *testing.T) {
 	now := time.Now().Add(time.Second * 100)
 	currentTime := metav1.Time{now}
-	cr := v1alpha1.SplunkEnterprise{
+	cr := v1alpha2.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "stack1",
 			Namespace:         "test",
@@ -37,8 +37,8 @@ func TestCheckSplunkDeletion(t *testing.T) {
 				"enterprise.splunk.com/delete-pvc",
 			},
 		},
-		Spec: v1alpha1.SplunkEnterpriseSpec{
-			Topology: v1alpha1.SplunkTopologySpec{
+		Spec: v1alpha2.SplunkEnterpriseSpec{
+			Topology: v1alpha2.SplunkTopologySpec{
 				Standalones: 1,
 			},
 		},
@@ -49,9 +49,10 @@ func TestCheckSplunkDeletion(t *testing.T) {
 		"app": "splunk",
 		"for": cr.GetIdentifier(),
 	}
-	var listopts client.ListOptions
-	listopts.InNamespace(cr.GetNamespace())
-	listopts.MatchingLabels(labels)
+	listOpts := []client.ListOption{
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels(labels),
+	}
 	pvclist := corev1.PersistentVolumeClaimList{
 		Items: []corev1.PersistentVolumeClaim{
 			{
@@ -76,7 +77,7 @@ func TestCheckSplunkDeletion(t *testing.T) {
 			{metaName: "splunk-pvc-stack1-var"},
 		},
 		"List": {
-			{opts: &listopts},
+			{listOpts: listOpts},
 		},
 	})
 

@@ -174,16 +174,18 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 
 	// check Annotations
 	if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
-		log.Printf("Container Annotations differ for %s: \"%v\" != \"%v\"",
-			name, current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations)
+		scopedLog.Info("Container Annotations differ",
+			"current", current.ObjectMeta.Annotations,
+			"revised", revised.ObjectMeta.Annotations)
 		current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
 		result = true
 	}
 
 	// check Labels
 	if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
-		log.Printf("Container Labels differ for %s: \"%v\" != \"%v\"",
-			name, current.ObjectMeta.Labels, revised.ObjectMeta.Labels)
+		scopedLog.Info("Container Labels differ",
+			"current", current.ObjectMeta.Labels,
+			"revised", revised.ObjectMeta.Labels)
 		current.ObjectMeta.Labels = revised.ObjectMeta.Labels
 		result = true
 	}
@@ -208,8 +210,9 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 
 			// check Ports
 			if resources.CompareContainerPorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
-				log.Printf("Container Ports differ for %s: \"%v\" != \"%v\"",
-					name, current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports)
+				scopedLog.Info("Pod Container Ports differ",
+					"current", current.Spec.Containers[idx].Ports,
+					"revised", revised.Spec.Containers[idx].Ports)
 				current.Spec.Containers[idx].Ports = revised.Spec.Containers[idx].Ports
 				result = true
 			}
