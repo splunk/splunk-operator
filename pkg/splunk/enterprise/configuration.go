@@ -100,10 +100,13 @@ func GetSplunkClusterConfiguration(cr *v1alpha2.SplunkEnterprise, searchHeadClus
 		}, {
 			Name:  "SPLUNK_INDEXER_URL",
 			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetIdentifier(), cr.Spec.Topology.Indexers, false),
-		}, {
+		},
+	}
+	if cr.Spec.LicenseURL != "" {
+		urls = append(urls, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
 			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetIdentifier(), false),
-		},
+		})
 	}
 
 	searchHeadConf := []corev1.EnvVar{
@@ -341,9 +344,6 @@ func ValidateSplunkCustomResource(cr *v1alpha2.SplunkEnterprise) error {
 	}
 	if cr.Spec.Topology.SearchHeads <= 0 && cr.Spec.Topology.Indexers > 0 {
 		return errors.New("You must specify how many search heads the cluster should have")
-	}
-	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 && cr.Spec.LicenseURL == "" {
-		return errors.New("You must provide a license to create a cluster")
 	}
 
 	// default to using a single standalone instance
