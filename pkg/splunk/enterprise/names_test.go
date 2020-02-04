@@ -18,7 +18,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
@@ -90,7 +90,7 @@ func TestGetSplunkStatefulsetUrls(t *testing.T) {
 }
 
 func TestGetSplunkImage(t *testing.T) {
-	cr := v1alpha1.SplunkEnterprise{}
+	cr := v1alpha2.SplunkEnterprise{}
 
 	test := func(want string) {
 		got := GetSplunkImage(&cr)

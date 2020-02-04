@@ -20,17 +20,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestLaunchDeployment(t *testing.T) {
-	cr := v1alpha1.SplunkEnterprise{
+	cr := v1alpha2.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: v1alpha1.SplunkEnterpriseSpec{
-			Topology: v1alpha1.SplunkTopologySpec{
+		Spec: v1alpha2.SplunkEnterpriseSpec{
+			Topology: v1alpha2.SplunkTopologySpec{
 				Standalones: 1,
 			},
 			EnableDFS:  true,
@@ -68,8 +68,8 @@ func TestLaunchDeployment(t *testing.T) {
 	})
 
 	// test cluster with DFS
-	cr.Spec = v1alpha1.SplunkEnterpriseSpec{
-		Topology: v1alpha1.SplunkTopologySpec{
+	cr.Spec = v1alpha2.SplunkEnterpriseSpec{
+		Topology: v1alpha2.SplunkTopologySpec{
 			Indexers:    3,
 			SearchHeads: 3,
 		},

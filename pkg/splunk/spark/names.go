@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 const (
@@ -52,7 +52,7 @@ func GetSparkServiceName(instanceType InstanceType, identifier string, isHeadles
 }
 
 // GetSparkImage returns the docker image to use for Spark instances.
-func GetSparkImage(cr *v1alpha1.SplunkEnterprise) string {
+func GetSparkImage(cr *v1alpha2.SplunkEnterprise) string {
 	var name string
 
 	if cr.Spec.SparkImage != "" {

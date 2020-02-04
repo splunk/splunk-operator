@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func init() {
@@ -36,7 +36,7 @@ func init() {
 }
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
-func AsOwner(cr *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
+func AsOwner(cr *v1alpha2.SplunkEnterprise) metav1.OwnerReference {
 	trueVar := true
 
 	return metav1.OwnerReference{

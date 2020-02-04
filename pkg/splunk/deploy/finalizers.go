@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,13 +17,12 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"log"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 const (
@@ -32,17 +31,21 @@ const (
 
 // CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
 // If so, it will process and remove any remaining finalizers.
-func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c ControllerClient) (bool, error) {
+func CheckSplunkDeletion(cr *v1alpha2.SplunkEnterprise, c ControllerClient) (bool, error) {
+	scopedLog := log.WithName("CheckSplunkDeletion").WithValues(
+		"SplunkEnterprise", cr.GetIdentifier(),
+		"namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
 	// just log warning if deletion time is in the future
 	if !cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
-		log.Printf("DeletionTimestamp is in the future for SplunkEnterprise %s/%s (Now='%s', DeletionTimestamp='%s')\n",
-			cr.GetNamespace(), cr.GetIdentifier(), currentTime, cr.ObjectMeta.DeletionTimestamp)
+		scopedLog.Info("DeletionTimestamp is in the future",
+			"Now", currentTime,
+			"DeletionTimestamp", cr.ObjectMeta.DeletionTimestamp)
 		//return false, nil
 	}
 
-	log.Printf("Deletion requested for SplunkEnterprise %s/%s\n", cr.GetNamespace(), cr.GetIdentifier())
+	scopedLog.Info("Deletion requested")
 
 	// process each finalizer
 	for _, finalizer := range cr.ObjectMeta.Finalizers {
@@ -59,30 +62,34 @@ func CheckSplunkDeletion(cr *v1alpha1.SplunkEnterprise, c ControllerClient) (boo
 		}
 	}
 
-	log.Printf("Deletion complete for SplunkEnterprise %s/%s\n", cr.GetNamespace(), cr.GetIdentifier())
+	scopedLog.Info("Deletion complete")
 
 	return true, nil
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
-func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c ControllerClient) error {
+func DeleteSplunkPvc(cr *v1alpha2.SplunkEnterprise, c ControllerClient) error {
+	scopedLog := log.WithName("DeleteSplunkPvc").WithValues(
+		"SplunkEnterprise", cr.GetIdentifier(),
+		"namespace", cr.GetNamespace())
 
 	// get list of PVCs for this cluster
 	labels := map[string]string{
 		"app": "splunk",
 		"for": cr.GetIdentifier(),
 	}
-	var listopts client.ListOptions
-	listopts.InNamespace(cr.GetNamespace())
-	listopts.MatchingLabels(labels)
+	listOpts := []client.ListOption{
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels(labels),
+	}
 	pvclist := corev1.PersistentVolumeClaimList{}
-	if err := c.List(context.Background(), &listopts, &pvclist); err != nil {
+	if err := c.List(context.Background(), &pvclist, listOpts...); err != nil {
 		return err
 	}
 
 	// delete each PVC
 	for _, pvc := range pvclist.Items {
-		log.Printf("Deleting PVC for SplunkEnterprise %s/%s: %s\n", cr.GetNamespace(), cr.GetIdentifier(), pvc.ObjectMeta.Name)
+		scopedLog.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)
 		if err := c.Delete(context.Background(), &pvc); err != nil {
 			return err
 		}
@@ -92,8 +99,11 @@ func DeleteSplunkPvc(cr *v1alpha1.SplunkEnterprise, c ControllerClient) error {
 }
 
 // RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
-func RemoveSplunkFinalizer(cr *v1alpha1.SplunkEnterprise, c ControllerClient, finalizer string) error {
-	log.Printf("Removing finalizer for SplunkEnterprise %s/%s: %s\n", cr.GetNamespace(), cr.GetIdentifier(), finalizer)
+func RemoveSplunkFinalizer(cr *v1alpha2.SplunkEnterprise, c ControllerClient, finalizer string) error {
+	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues(
+		"SplunkEnterprise", cr.GetIdentifier(),
+		"namespace", cr.GetNamespace())
+	scopedLog.Info("Removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed
 	var newFinalizers []string

@@ -13,6 +13,10 @@ builder-image:
 	@mkdir -p ./build/_output/bin
 	@docker run -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/opt/app-root/src/splunk-operator -w /opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "operator-sdk build --verbose splunk/splunk-operator"
 
+builder-test:
+	@echo Running unit tests for splunk-operator inside of builder container
+	@docker run -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/opt/app-root/src/splunk-operator -w /opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/deploy"
+
 image: deploy/all-in-one-scoped.yaml deploy/all-in-one-cluster.yaml
 	@echo Building splunk-operator image
 	@operator-sdk build --verbose splunk/splunk-operator
@@ -34,7 +38,7 @@ clean:
 	@docker rmi splunk/splunk-operator || true
 
 run:
-	@OPERATOR_NAME=splunk-operator operator-sdk up local
+	@OPERATOR_NAME=splunk-operator operator-sdk run --local
 
 fmt:
 	@gofmt -l -w `find ./ -name "*.go"`
@@ -42,10 +46,10 @@ fmt:
 lint:
 	@golint ./...
 
-deploy/all-in-one-scoped.yaml: deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/operator.yaml
+deploy/all-in-one-scoped.yaml: deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/operator.yaml
 	@echo Rebuilding deploy/all-in-one-scoped.yaml
-	@cat deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/operator.yaml > deploy/all-in-one-scoped.yaml
+	@cat deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/operator.yaml > deploy/all-in-one-scoped.yaml
 
-deploy/all-in-one-cluster.yaml: deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml
+deploy/all-in-one-cluster.yaml: deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml
 	@echo Rebuilding deploy/all-in-one-cluster.yaml
-	@cat deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml > deploy/all-in-one-cluster.yaml
+	@cat deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml deploy/rbac.yaml deploy/cluster_operator.yaml > deploy/all-in-one-cluster.yaml

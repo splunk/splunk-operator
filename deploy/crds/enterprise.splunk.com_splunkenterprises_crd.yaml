@@ -1,0 +1,54 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: splunkenterprises.enterprise.splunk.com
+spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.status.searchPhase
+    description: Status of search head cluster
+    name: Search
+    type: integer
+  - JSONPath: .spec.status.indexingPhase
+    description: Status of indexer cluster
+    name: Indexing
+    type: integer
+  - JSONPath: .spec.topology.dfsPhase
+    description: Status of DFS spark workers
+    name: DFS
+    type: integer
+  - JSONPath: .spec.topology.standalonePhase
+    description: Status of standlone instances
+    name: Standalone
+    type: integer
+  - JSONPath: .status.licenseMasterPhase
+    description: Status of license master
+    name: LM
+    type: string
+  - JSONPath: .status.clusterMasterPhase
+    description: Status of cluster master
+    name: CM
+    type: string
+  - JSONPath: .status.deployerPhase
+    description: Status of deployer
+    name: Dep
+    type: string
+  group: enterprise.splunk.com
+  names:
+    kind: SplunkEnterprise
+    listKind: SplunkEnterpriseList
+    plural: splunkenterprises
+    shortNames:
+    - enterprise
+    - se
+    singular: splunkenterprise
+  scope: Namespaced
+  subresources:
+    status: {}
+  version: v1alpha2
+  versions:
+  - name: v1alpha2
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false

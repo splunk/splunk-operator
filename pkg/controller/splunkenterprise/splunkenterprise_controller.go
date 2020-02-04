@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,21 +16,28 @@ package splunkenterprise
 
 import (
 	"context"
-	"log"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	enterprisev1alpha1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	enterprisev1alpha2 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/deploy"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
+
+var log = logf.Log.WithName("controller_splunkenterprise")
+
+/**
+* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
+* business logic.  Delete these comments after modifying this file.*
+ */
 
 // Add creates a new SplunkEnterprise Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -60,7 +67,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource SplunkEnterprise
-	err = c.Watch(&source.Kind{Type: &enterprisev1alpha1.SplunkEnterprise{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &enterprisev1alpha2.SplunkEnterprise{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -69,7 +76,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to secondary resource Pods and requeue the owner SplunkEnterprise
 	//err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
 	//	IsController: true,
-	//	OwnerType:    &enterprisev1alpha1.SplunkEnterprise{},
+	//	OwnerType:    &enterprisev1alpha2.SplunkEnterprise{},
 	//})
 	//if err != nil {
 	//	return err
@@ -78,6 +85,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
+// blank assignment to verify that ReconcileSplunkEnterprise implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileSplunkEnterprise{}
 
 // ReconcileSplunkEnterprise reconciles a SplunkEnterprise object
@@ -94,10 +102,11 @@ type ReconcileSplunkEnterprise struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	log.Printf("Reconciling SplunkEnterprise %s/%s\n", request.Namespace, request.Name)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	reqLogger.Info("Reconciling SplunkEnterprise")
 
 	// Fetch the SplunkEnterprise instance
-	instance := &enterprisev1alpha1.SplunkEnterprise{}
+	instance := &enterprisev1alpha2.SplunkEnterprise{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -110,14 +119,14 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 
-	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha1"
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "SplunkEnterprise"
 
 	// check if deletion has been requested
 	if instance.ObjectMeta.DeletionTimestamp != nil {
 		_, err := deploy.CheckSplunkDeletion(instance, r.client)
 		if err != nil {
-			log.Printf("Unable to delete SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
+			reqLogger.Error(err, "Unable to delete SplunkEnterprise")
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil
@@ -125,16 +134,16 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 
 	err = enterprise.ValidateSplunkCustomResource(instance)
 	if err != nil {
-		log.Printf("Validation failed for SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
+		reqLogger.Error(err, "SplunkEnterprise validation failed")
 		return reconcile.Result{}, err
 	}
 
 	err = deploy.LaunchDeployment(instance, r.client)
 	if err != nil {
-		log.Printf("Reconciliation failed for SplunkEnterprise %s/%s: %s\n", request.Namespace, request.Name, err)
+		reqLogger.Error(err, "SplunkEnterprise reconciliation failed")
 		return reconcile.Result{}, err
 	}
 
-	log.Printf("Reconciliation complete for SplunkEnterprise %s/%s\n", request.Namespace, request.Name)
+	reqLogger.Info("SplunkEnterprise reconciliation complete")
 	return reconcile.Result{}, nil
 }

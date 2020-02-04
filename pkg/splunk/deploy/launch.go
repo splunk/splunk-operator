@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 package deploy
 
 import (
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
@@ -23,7 +23,7 @@ import (
 
 // LaunchDeployment creates all Kubernetes resources necessary to represent the
 // configuration state represented by the SplunkEnterprise CRD.
-func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchDeployment(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	// launch a spark cluster if EnableDFS == true
 	if cr.Spec.EnableDFS {
@@ -67,7 +67,7 @@ func LaunchDeployment(cr *v1alpha1.SplunkEnterprise, client ControllerClient) er
 }
 
 // LaunchStandalones creates a Kubernetes deployment for N standalone instances of Splunk Enterprise.
-func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchStandalones(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_standalone"}
 	if cr.Spec.LicenseURL != "" {
@@ -92,7 +92,7 @@ func LaunchStandalones(cr *v1alpha1.SplunkEnterprise, client ControllerClient) e
 }
 
 // LaunchCluster creates all Kubernetes resources necessary to represent a complete Splunk Enterprise cluster.
-func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchCluster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := LaunchLicenseMaster(cr, client)
 	if err != nil {
@@ -125,7 +125,7 @@ func LaunchCluster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error
 }
 
 // LaunchLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
-func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchLicenseMaster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkLicenseMaster, false))
 	if err != nil {
@@ -154,7 +154,7 @@ func LaunchLicenseMaster(cr *v1alpha1.SplunkEnterprise, client ControllerClient)
 }
 
 // LaunchClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
-func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchClusterMaster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkClusterMaster, false))
 	if err != nil {
@@ -182,7 +182,7 @@ func LaunchClusterMaster(cr *v1alpha1.SplunkEnterprise, client ControllerClient)
 }
 
 // LaunchDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
-func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchDeployer(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkDeployer, false))
 	if err != nil {
@@ -210,7 +210,7 @@ func LaunchDeployer(cr *v1alpha1.SplunkEnterprise, client ControllerClient) erro
 }
 
 // LaunchIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
-func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchIndexers(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := ApplySplunkStatefulSet(
 		cr,
@@ -243,7 +243,7 @@ func LaunchIndexers(cr *v1alpha1.SplunkEnterprise, client ControllerClient) erro
 }
 
 // LaunchSearchHeads create a Kubernetes StatefulSet and services for a Splunk Enterprise search head cluster.
-func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchSearchHeads(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
 	if cr.Spec.EnableDFS {
 		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
@@ -278,7 +278,7 @@ func LaunchSearchHeads(cr *v1alpha1.SplunkEnterprise, client ControllerClient) e
 }
 
 // LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
-func LaunchSparkCluster(cr *v1alpha1.SplunkEnterprise, client ControllerClient) error {
+func LaunchSparkCluster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
 	err := ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false))
 	if err != nil {

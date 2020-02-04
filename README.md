@@ -26,7 +26,7 @@ You must have [Docker Engine](https://docs.docker.com/install/) installed to
 build the Splunk Operator.
 
 This project now uses [Go modules](https://blog.golang.org/using-go-modules),
-which requires [golang](https://golang.org/doc/install) 1.12 or later.
+which requires [golang](https://golang.org/doc/install) 1.13 or later.
 You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
@@ -34,8 +34,9 @@ The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk
 must also be installed to build this project.
 
 ```
-git clone -b v0.10.0 https://github.com/operator-framework/operator-sdk
+git clone -b v0.15.1 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
+make tidy
 make install
 ```
 
@@ -64,6 +65,7 @@ Other make targets include (more info below):
 * `make all`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image (same as `make builder builder-image`)
 * `make builder`: builds the `splunk/splunk-operator-builder` docker image
 * `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
+* `make builder-test`: Runs unit tests using the `splunk/splunk-operator-builder` image
 * `make image`: builds the `splunk/splunk-operator` docker image without using `splunk/splunk-operator-builder`
 * `make local`: builds the splunk-operator-local binary for test and debugging purposes
 * `make test`: Runs unit tests with Coveralls code coverage output to coverage.out
