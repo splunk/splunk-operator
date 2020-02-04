@@ -42,7 +42,7 @@ The following configuration parameters can be used within a `spec` section:
 | splunkVolumes         | [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all Splunk containers as as `/mnt/&lt;name&gt;` |
 | defaults              | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment     |
 | defaultsUrl           | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas    |
-| licenseUrl            | string  | Full path or URL for a Splunk Enterprise license file                                                                                                                 |
+| licenseUrl            | string  | Full path or URL for a Splunk Enterprise license file. If defined, a license master will be created and used to manage licensing for your deployment.                 |
 | imagePullPolicy       | string  | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                      |
 | storageClassName      | string  | Name of StorageClass to use for persistent volume claims                                                                                                              |
 | schedulerName         | string  | Name of Scheduler to use for pod placement (defaults to "default-scheduler")                                                                                          |

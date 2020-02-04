@@ -107,6 +107,7 @@ func TestGetSplunkClusterConfiguration(t *testing.T) {
 				Indexers:    3,
 				SearchHeads: 3,
 			},
+			LicenseURL: "/path/to/splunk.lic",
 		},
 	}
 	searchHeadCluster := true
@@ -158,6 +159,15 @@ func TestGetSplunkClusterConfiguration(t *testing.T) {
 		},
 	}
 
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GetSplunkClusterConfiguration(,%t,%v) = %v; want %v",
+			searchHeadCluster, overrides, got, want)
+	}
+
+	// don't set SPLUNK_LICENSE_MASTER_URL if LicenseURL is empty
+	cr.Spec.LicenseURL = ""
+	got = GetSplunkClusterConfiguration(&cr, searchHeadCluster, overrides)
+	want = append(want[:2], want[3:]...)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GetSplunkClusterConfiguration(,%t,%v) = %v; want %v",
 			searchHeadCluster, overrides, got, want)
@@ -270,7 +280,7 @@ func TestValidateSplunkCustomResource(t *testing.T) {
 			SearchHeads: 3,
 		},
 	}
-	test(errors.New("You must provide a license to create a cluster"))
+	test(nil)
 }
 
 func TestGetSplunkDefaults(t *testing.T) {

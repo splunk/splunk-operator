@@ -94,12 +94,13 @@ func LaunchStandalones(cr *v1alpha2.SplunkEnterprise, client ControllerClient) e
 // LaunchCluster creates all Kubernetes resources necessary to represent a complete Splunk Enterprise cluster.
 func LaunchCluster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
 
-	err := LaunchLicenseMaster(cr, client)
-	if err != nil {
-		return err
+	if cr.Spec.LicenseURL != "" {
+		if err := LaunchLicenseMaster(cr, client); err != nil {
+			return err
+		}
 	}
 
-	err = LaunchClusterMaster(cr, client)
+	err := LaunchClusterMaster(cr, client)
 	if err != nil {
 		return err
 	}
