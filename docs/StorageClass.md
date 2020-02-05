@@ -1,5 +1,41 @@
 # Setting Up a Storage Class for Splunk
 
+The Splunk Operator for Kubernetes uses
+[Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+to create and manage two Persistent Volumes for all of the Splunk pods in your
+deployments. For each pod, the following two volumes will be mounted:
+
+| Path            | Purpose                                                        |
+| --------------- | -------------------------------------------------------------- |
+| /opt/splunk/etc | This is used to store all configuration and any installed apps |
+| /opt/splunk/var | This is used to store all indexed events, logs, and other data |
+
+The `kubectl` command can be used to see which Storage Classes are available in
+your Kubernetes cluster:
+
+```
+$ kubectl get storageclass
+NAME            PROVISIONER             AGE
+gp2 (default)   kubernetes.io/aws-ebs   176d
+```
+
+You can use the `storageClassName` parameter to specify the Storage Class you
+would like to use:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha1
+kind: SplunkEnterprise
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  storageClassName: "gp2"
+```
+
+If no `storageClassName` is provided, the default Storage Class for your
+Kubernetes cluster will be used.
+
 ## Amazon Elastic Kubernetes Service (EKS)
 
 Users of EKS can create Storage Classes that use
