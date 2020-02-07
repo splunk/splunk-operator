@@ -20,17 +20,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-func TestLaunchDeployment(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+func TestApplySplunkEnterprise(t *testing.T) {
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: v1alpha2.SplunkEnterpriseSpec{
-			Topology: v1alpha2.SplunkTopologySpec{
+		Spec: enterprisev1.SplunkEnterpriseSpec{
+			Topology: enterprisev1.SplunkTopologySpec{
 				Standalones: 1,
 			},
 			EnableDFS:  true,
@@ -42,25 +42,25 @@ func TestLaunchDeployment(t *testing.T) {
 	// test standalone instance
 	c := newMockClient()
 	c.errors["Get"] = fmt.Errorf("NotFound")
-	err := LaunchDeployment(&cr, c)
+	err := ApplySplunkEnterprise(&cr, c)
 	if err != nil {
-		t.Errorf("LaunchDeployment() returned %v; want nil", err)
+		t.Errorf("ApplySplunkEnterprise() returned %v; want nil", err)
 	}
-	c.checkCalls(t, true, "TestLaunchDeployment", map[string][]mockFuncCall{
+	c.checkCalls(t, true, "TestApplySplunkEnterprise", map[string][]mockFuncCall{
 		"Get": {
 			{metaName: "splunk-stack1-spark-master-service"},
+			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-spark-master"},
 			{metaName: "splunk-stack1-spark-worker"},
-			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-secrets"},
 			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-standalone"},
 		},
 		"Create": {
 			{metaName: "splunk-stack1-spark-master-service"},
+			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-spark-master"},
 			{metaName: "splunk-stack1-spark-worker"},
-			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-secrets"},
 			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-standalone"},
@@ -68,8 +68,8 @@ func TestLaunchDeployment(t *testing.T) {
 	})
 
 	// test cluster with DFS
-	cr.Spec = v1alpha2.SplunkEnterpriseSpec{
-		Topology: v1alpha2.SplunkTopologySpec{
+	cr.Spec = enterprisev1.SplunkEnterpriseSpec{
+		Topology: enterprisev1.SplunkTopologySpec{
 			Indexers:    3,
 			SearchHeads: 3,
 		},
@@ -79,50 +79,66 @@ func TestLaunchDeployment(t *testing.T) {
 	}
 	c = newMockClient()
 	c.errors["Get"] = fmt.Errorf("NotFound")
-	err = LaunchDeployment(&cr, c)
+	err = ApplySplunkEnterprise(&cr, c)
 	if err != nil {
-		t.Errorf("LaunchDeployment() returned %v; want nil", err)
+		t.Errorf("ApplySplunkEnterprise() returned %v; want nil", err)
 	}
-	c.checkCalls(t, true, "TestLaunchDeployment", map[string][]mockFuncCall{
+	c.checkCalls(t, true, "TestApplySplunkEnterprise", map[string][]mockFuncCall{
 		"Get": {
 			{metaName: "splunk-stack1-spark-master-service"},
+			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-spark-master"},
 			{metaName: "splunk-stack1-spark-worker"},
-			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-secrets"},
 			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-license-master-service"},
 			{metaName: "splunk-stack1-license-master"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-cluster-master-service"},
 			{metaName: "splunk-stack1-cluster-master"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-deployer-service"},
 			{metaName: "splunk-stack1-deployer"},
-			{metaName: "splunk-stack1-indexer"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-indexer-headless"},
 			{metaName: "splunk-stack1-indexer-service"},
-			{metaName: "splunk-stack1-search-head"},
+			{metaName: "splunk-stack1-indexer"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-search-head-headless"},
 			{metaName: "splunk-stack1-search-head-service"},
+			{metaName: "splunk-stack1-search-head"},
 		},
 		"Create": {
 			{metaName: "splunk-stack1-spark-master-service"},
+			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-spark-master"},
 			{metaName: "splunk-stack1-spark-worker"},
-			{metaName: "splunk-stack1-spark-worker-headless"},
 			{metaName: "splunk-stack1-secrets"},
 			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-license-master-service"},
 			{metaName: "splunk-stack1-license-master"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-cluster-master-service"},
 			{metaName: "splunk-stack1-cluster-master"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-deployer-service"},
 			{metaName: "splunk-stack1-deployer"},
-			{metaName: "splunk-stack1-indexer"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-indexer-headless"},
 			{metaName: "splunk-stack1-indexer-service"},
-			{metaName: "splunk-stack1-search-head"},
+			{metaName: "splunk-stack1-indexer"},
+			{metaName: "splunk-stack1-secrets"},
+			{metaName: "splunk-stack1-defaults"},
 			{metaName: "splunk-stack1-search-head-headless"},
 			{metaName: "splunk-stack1-search-head-service"},
+			{metaName: "splunk-stack1-search-head"},
 		},
 	})
 }

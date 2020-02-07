@@ -17,8 +17,6 @@ package enterprise
 import (
 	"os"
 	"testing"
-
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
@@ -90,10 +88,10 @@ func TestGetSplunkStatefulsetUrls(t *testing.T) {
 }
 
 func TestGetSplunkImage(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{}
+	var specImage string
 
 	test := func(want string) {
-		got := GetSplunkImage(&cr)
+		got := GetSplunkImage(specImage)
 		if got != want {
 			t.Errorf("GetSplunkImage() = %s; want %s", got, want)
 		}
@@ -104,6 +102,6 @@ func TestGetSplunkImage(t *testing.T) {
 	os.Setenv("SPLUNK_IMAGE", "splunk-test/splunk")
 	test("splunk-test/splunk")
 
-	cr.Spec.SplunkImage = "splunk/splunk-test"
+	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
 }

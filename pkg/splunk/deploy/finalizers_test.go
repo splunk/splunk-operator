@@ -22,13 +22,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestCheckSplunkDeletion(t *testing.T) {
 	now := time.Now().Add(time.Second * 100)
-	currentTime := metav1.Time{now}
-	cr := v1alpha2.SplunkEnterprise{
+	currentTime := metav1.NewTime(now)
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "stack1",
 			Namespace:         "test",
@@ -37,8 +37,8 @@ func TestCheckSplunkDeletion(t *testing.T) {
 				"enterprise.splunk.com/delete-pvc",
 			},
 		},
-		Spec: v1alpha2.SplunkEnterpriseSpec{
-			Topology: v1alpha2.SplunkTopologySpec{
+		Spec: enterprisev1.SplunkEnterpriseSpec{
+			Topology: enterprisev1.SplunkTopologySpec{
 				Standalones: 1,
 			},
 		},

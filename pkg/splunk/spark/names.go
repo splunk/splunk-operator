@@ -17,8 +17,6 @@ package spark
 import (
 	"fmt"
 	"os"
-
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 const (
@@ -52,11 +50,11 @@ func GetSparkServiceName(instanceType InstanceType, identifier string, isHeadles
 }
 
 // GetSparkImage returns the docker image to use for Spark instances.
-func GetSparkImage(cr *v1alpha2.SplunkEnterprise) string {
+func GetSparkImage(specImage string) string {
 	var name string
 
-	if cr.Spec.SparkImage != "" {
-		name = cr.Spec.SparkImage
+	if specImage != "" {
+		name = specImage
 	} else {
 		name = os.Getenv("SPARK_IMAGE")
 		if name == "" {

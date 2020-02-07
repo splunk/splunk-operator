@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 
 // CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
 // If so, it will process and remove any remaining finalizers.
-func CheckSplunkDeletion(cr *v1alpha2.SplunkEnterprise, c ControllerClient) (bool, error) {
+func CheckSplunkDeletion(cr *enterprisev1.SplunkEnterprise, c ControllerClient) (bool, error) {
 	scopedLog := log.WithName("CheckSplunkDeletion").WithValues(
 		"SplunkEnterprise", cr.GetIdentifier(),
 		"namespace", cr.GetNamespace())
@@ -68,7 +68,7 @@ func CheckSplunkDeletion(cr *v1alpha2.SplunkEnterprise, c ControllerClient) (boo
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
-func DeleteSplunkPvc(cr *v1alpha2.SplunkEnterprise, c ControllerClient) error {
+func DeleteSplunkPvc(cr *enterprisev1.SplunkEnterprise, c ControllerClient) error {
 	scopedLog := log.WithName("DeleteSplunkPvc").WithValues(
 		"SplunkEnterprise", cr.GetIdentifier(),
 		"namespace", cr.GetNamespace())
@@ -99,7 +99,7 @@ func DeleteSplunkPvc(cr *v1alpha2.SplunkEnterprise, c ControllerClient) error {
 }
 
 // RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
-func RemoveSplunkFinalizer(cr *v1alpha2.SplunkEnterprise, c ControllerClient, finalizer string) error {
+func RemoveSplunkFinalizer(cr *enterprisev1.SplunkEnterprise, c ControllerClient, finalizer string) error {
 	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues(
 		"SplunkEnterprise", cr.GetIdentifier(),
 		"namespace", cr.GetNamespace())

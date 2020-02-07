@@ -41,3 +41,23 @@ const (
 func (instanceType InstanceType) ToString() string {
 	return string(instanceType)
 }
+
+// ToRole returns ansible/container role for a given InstanceType
+func (instanceType InstanceType) ToRole() string {
+	var role string
+	switch instanceType {
+	case SplunkStandalone:
+		role = "splunk_standalone"
+	case SplunkClusterMaster:
+		role = "splunk_cluster_master"
+	case SplunkSearchHead:
+		role = "splunk_search_head"
+	case SplunkIndexer:
+		role = "splunk_indexer"
+	case SplunkDeployer:
+		role = "splunk_deployer"
+	case SplunkLicenseMaster:
+		role = "splunk_license_master"
+	}
+	return role
+}

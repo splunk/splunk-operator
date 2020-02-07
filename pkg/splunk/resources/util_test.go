@@ -26,12 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 // newSplunkEnterprise returns a new SplunkEnterprise object
-func newSplunkEnterprise() *v1alpha2.SplunkEnterprise {
-	cr := v1alpha2.SplunkEnterprise{
+func newSplunkEnterprise() *enterprisev1.SplunkEnterprise {
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -501,4 +501,49 @@ func TestAppendPodAffinity(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestValidateCommonSpec(t *testing.T) {
+	spec := enterprisev1.CommonSpec{}
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("0.1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	test := func(pullPolicy, scheduler string) {
+		err := ValidateCommonSpec(&spec, defaultResources)
+		if err != nil {
+			t.Errorf("ValidateCommonSpec() returned %v; want nil", err)
+		}
+		if spec.ImagePullPolicy != pullPolicy {
+			t.Errorf("ValidateCommonSpec() ImagePullPolicy = %s; want %s", spec.ImagePullPolicy, pullPolicy)
+		}
+		if spec.SchedulerName != scheduler {
+			t.Errorf("ValidateCommonSpec() SchedulerName = %s; want %s", spec.SchedulerName, scheduler)
+		}
+		if !reflect.DeepEqual(spec.Resources, defaultResources) {
+			t.Errorf("ValidateCommonSpec() Resources = %v; want %v", spec.Resources, defaultResources)
+		}
+	}
+
+	test("IfNotPresent", "default-scheduler")
+
+	spec.ImagePullPolicy = "Always"
+	spec.SchedulerName = "blah"
+	test("Always", "blah")
+
+	spec.ImagePullPolicy = "IfNotPresent"
+	test("IfNotPresent", "blah")
+
+	spec.ImagePullPolicy = "Invalid"
+	err := ValidateCommonSpec(&spec, defaultResources)
+	if err == nil {
+		t.Error("ValidateCommonSpec() returned nil; want ERROR")
+	}
 }

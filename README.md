@@ -56,20 +56,47 @@ cd splunk-operator
 ```
 
 
+## Repository overview
+
+This repository consists of the following code used to build the splunk-operator binary:
+
+* `cmd/manager/main.go`: Provides the main() function, where everything begins
+* `pkg/apis/`: Source code for the operator's custom resource definition types
+* `pkg/controllers/`: Source code for CRD controllers that watch for changes
+* `pkg/splunk/deploy/`: Source code the controllers use to interact with Kubernetes APIs
+* `pkg/splunk/enterprise/`: Source code for managing Splunk Enterprise deployments
+* `pkg/splunk/spark/`: Source code for managing Spark cluster deployments
+* `pkg/splunk/resources/`: Generic utility code used by other splunk modules
+
+`main()` basically just instantiates the `controllers`, and the `controllers` call
+into the `deploy` module to perform actions. The `deploy` module uses the `enterprise`
+and `spark` modules. The types provided by `pkg/apis/` and generic utility code in
+`pkg/splunk/resources/` are used universally. Note that the source code for `main()`,
+`pkg/apis` and `pkg/controllers` are all generated from templates provided by the
+Operator SDK.
+
+In addition to the source code, this repository includes:
+
+* `build`: Build scripts, templates, etc. used to build the container image
+* `deploy`: Kubernetes YAML templates used to install the Splunk Operator
+* `docs`: Getting Started Guide and other documentation in Markdown format
+
+
 ## Building the operator
 
 You can build the operator by just running `make`.
 
 Other make targets include (more info below):
 
-* `make all`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image (same as `make builder builder-image`)
-* `make builder`: builds the `splunk/splunk-operator-builder` docker image
+* `make all`: builds `splunk/splunk-operator` container image (same as `make image`)
+* `make builder`: builds the `splunk/splunk-operator-builder` container image
 * `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
 * `make builder-test`: Runs unit tests using the `splunk/splunk-operator-builder` image
-* `make image`: builds the `splunk/splunk-operator` docker image without using `splunk/splunk-operator-builder`
+* `make image`: builds the `splunk/splunk-operator` container image without using `splunk/splunk-operator-builder`
 * `make local`: builds the splunk-operator-local binary for test and debugging purposes
 * `make test`: Runs unit tests with Coveralls code coverage output to coverage.out
-* `make package`: generates tarball of the `splunk/splunk-operator` docker image and installation YAML file
+* `make generate`: runs operator-generate k8s and crds commands, updating installation YAML files
+* `make package`: generates tarball of the `splunk/splunk-operator` container image and installation YAML file
 * `make clean`: removes the binary build output and `splunk/splunk-operator` container image
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project

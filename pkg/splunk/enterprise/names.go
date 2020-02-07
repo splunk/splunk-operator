@@ -19,7 +19,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -116,11 +115,11 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 }
 
 // GetSplunkImage returns the docker image to use for Splunk instances.
-func GetSplunkImage(cr *v1alpha2.SplunkEnterprise) string {
+func GetSplunkImage(specImage string) string {
 	var name string
 
-	if cr.Spec.SplunkImage != "" {
-		name = cr.Spec.SplunkImage
+	if specImage != "" {
+		name = specImage
 	} else {
 		name = os.Getenv("SPLUNK_IMAGE")
 		if name == "" {

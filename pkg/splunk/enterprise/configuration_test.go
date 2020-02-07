@@ -17,160 +17,219 @@ package enterprise
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-func TestAppendSplunkDfsOverrides(t *testing.T) {
-	var overrides map[string]string
-	identifier := "test"
-	searchHeads := 1
-
-	test := func(want map[string]string) {
-		got := AppendSplunkDfsOverrides(overrides, identifier, searchHeads)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("AppendSplunkDfsOverrides(%v,\"%s\",%d) = %v; want %v",
-				overrides, identifier, searchHeads, got, want)
-		}
-	}
-
-	test(map[string]string{
-		"SPLUNK_ENABLE_DFS":            "true",
-		"SPARK_MASTER_HOST":            "splunk-test-spark-master-service",
-		"SPARK_MASTER_WEBUI_PORT":      "8009",
-		"SPARK_HOME":                   "/mnt/splunk-spark",
-		"JAVA_HOME":                    "/mnt/splunk-jdk",
-		"SPLUNK_DFW_NUM_SLOTS_ENABLED": "false",
-	})
-
-	searchHeads = 3
-	overrides = map[string]string{"a": "b"}
-	test(map[string]string{
-		"a":                            "b",
-		"SPLUNK_ENABLE_DFS":            "true",
-		"SPARK_MASTER_HOST":            "splunk-test-spark-master-service",
-		"SPARK_MASTER_WEBUI_PORT":      "8009",
-		"SPARK_HOME":                   "/mnt/splunk-spark",
-		"JAVA_HOME":                    "/mnt/splunk-jdk",
-		"SPLUNK_DFW_NUM_SLOTS_ENABLED": "true",
-	})
-}
-
-func TestGetSplunkConfiguration(t *testing.T) {
-	overrides := map[string]string{"A": "a"}
-	defaults := "defaults_string"
-	defaultsURL := "http://defaults.example.com"
-
-	got := GetSplunkConfiguration(overrides, defaults, defaultsURL)
-	want := []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_HOME",
-			Value: "/opt/splunk",
-		},
-		{
-			Name:  "SPLUNK_START_ARGS",
-			Value: "--accept-license",
-		},
-		{
-			Name:  "SPLUNK_DEFAULTS_URL",
-			Value: "/mnt/splunk-secrets/default.yml,http://defaults.example.com,/mnt/splunk-defaults/default.yml",
-		},
-		{
-			Name:  "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
-			Value: "false",
-		},
-		{
-			Name:  "A",
-			Value: "a",
-		},
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("GetSplunkConfiguration(%v,\"%s\",\"%s\") = %v; want %v",
-			overrides, defaults, defaultsURL, got, want)
-	}
-}
-
-func TestGetSplunkClusterConfiguration(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+// getSplunkEnterprise returns a complete SplunkEnterprise object
+func getSplunkEnterprise() *enterprisev1.SplunkEnterprise {
+	return &enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: v1alpha2.SplunkEnterpriseSpec{
-			Topology: v1alpha2.SplunkTopologySpec{
-				Indexers:    3,
-				SearchHeads: 3,
+		Spec: enterprisev1.SplunkEnterpriseSpec{
+			SplunkImage:      "test/splunk",
+			SparkImage:       "test/spark",
+			ImagePullPolicy:  "Always",
+			StorageClassName: "gp2",
+			SchedulerName:    "default",
+			Defaults:         "defaults_string",
+			DefaultsURL:      "http://defaults.example.com",
+			Topology: enterprisev1.SplunkTopologySpec{
+				Indexers:     3,
+				SearchHeads:  3,
+				SparkWorkers: 3,
 			},
-			LicenseURL: "/path/to/splunk.lic",
+			Resources: enterprisev1.SplunkResourcesSpec{
+				SplunkCPURequest:     "0.1",
+				SplunkCPULimit:       "1.0",
+				SplunkMemoryRequest:  "4Gi",
+				SplunkMemoryLimit:    "32Gi",
+				SparkCPURequest:      "0.2",
+				SparkCPULimit:        "2.0",
+				SparkMemoryRequest:   "2Gi",
+				SparkMemoryLimit:     "64Gi",
+				SplunkEtcStorage:     "4Gi",
+				SplunkVarStorage:     "20Gi",
+				SplunkIndexerStorage: "100Gi",
+			},
 		},
 	}
-	searchHeadCluster := true
-	overrides := map[string]string{"A": "a"}
+}
 
-	got := GetSplunkClusterConfiguration(&cr, searchHeadCluster, overrides)
-	want := []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: "splunk-stack1-cluster-master-service",
-		}, {
-			Name:  "SPLUNK_INDEXER_URL",
-			Value: "splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local,splunk-stack1-indexer-1.splunk-stack1-indexer-headless.test.svc.cluster.local,splunk-stack1-indexer-2.splunk-stack1-indexer-headless.test.svc.cluster.local",
-		}, {
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service",
-		},
-		{
-			Name:  "SPLUNK_SEARCH_HEAD_URL",
-			Value: "splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local",
-		},
-		{
-			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
-			Value: "splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local",
-		},
-		{
-			Name:  "SPLUNK_DEPLOYER_URL",
-			Value: "splunk-stack1-deployer-service",
-		},
-		{
-			Name:  "SPLUNK_HOME",
-			Value: "/opt/splunk",
-		},
-		{
-			Name:  "SPLUNK_START_ARGS",
-			Value: "--accept-license",
-		},
-		{
-			Name:  "SPLUNK_DEFAULTS_URL",
-			Value: "/mnt/splunk-secrets/default.yml",
-		},
-		{
-			Name:  "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
-			Value: "false",
-		},
-		{
-			Name:  "A",
-			Value: "a",
-		},
+func testCommonSpec(t *testing.T, method string, dst *enterprisev1.CommonSpec, src *enterprisev1.SplunkEnterpriseSpec, isSpark bool) {
+	if dst.Image != src.SplunkImage {
+		t.Errorf("%s() Spec.Image = %s; want %s", method, dst.Image, src.SplunkImage)
+	}
+	if dst.ImagePullPolicy != src.ImagePullPolicy {
+		t.Errorf("%s() Spec.ImagePullPolicy = %s; want %s", method, dst.ImagePullPolicy, src.ImagePullPolicy)
+	}
+	if dst.StorageClassName != src.StorageClassName {
+		t.Errorf("%s() Spec.StorageClassName = %s; want %s", method, dst.StorageClassName, src.StorageClassName)
+	}
+	if dst.SchedulerName != src.SchedulerName {
+		t.Errorf("%s() Spec.SchedulerName = %s; want %s", method, dst.SchedulerName, src.SchedulerName)
+	}
+	if !reflect.DeepEqual(dst.Affinity, src.Affinity) {
+		t.Errorf("%s() Spec.Affinity = %v; want %v", method, dst.Affinity, src.Affinity)
 	}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("GetSplunkClusterConfiguration(,%t,%v) = %v; want %v",
-			searchHeadCluster, overrides, got, want)
+	var want corev1.ResourceList
+	if isSpark {
+		want = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(src.Resources.SparkCPURequest),
+			corev1.ResourceMemory: resource.MustParse(src.Resources.SparkMemoryRequest),
+		}
+	} else {
+		want = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(src.Resources.SplunkCPURequest),
+			corev1.ResourceMemory: resource.MustParse(src.Resources.SplunkMemoryRequest),
+		}
+	}
+	if !reflect.DeepEqual(dst.Resources.Requests, want) {
+		t.Errorf("%s(isSpark=%t) Spec.Resources.Requests = %v; want %v", method, isSpark, dst.Resources.Requests, want)
 	}
 
-	// don't set SPLUNK_LICENSE_MASTER_URL if LicenseURL is empty
-	cr.Spec.LicenseURL = ""
-	got = GetSplunkClusterConfiguration(&cr, searchHeadCluster, overrides)
-	want = append(want[:2], want[3:]...)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("GetSplunkClusterConfiguration(,%t,%v) = %v; want %v",
-			searchHeadCluster, overrides, got, want)
+	if isSpark {
+		want = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(src.Resources.SparkCPULimit),
+			corev1.ResourceMemory: resource.MustParse(src.Resources.SparkMemoryLimit),
+		}
+	} else {
+		want = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(src.Resources.SplunkCPULimit),
+			corev1.ResourceMemory: resource.MustParse(src.Resources.SplunkMemoryLimit),
+		}
+	}
+	if !reflect.DeepEqual(dst.Resources.Limits, want) {
+		t.Errorf("%s(isSpark=%t) Spec.Resources.Requests = %v; want %v", method, isSpark, dst.Resources.Limits, want)
+	}
+}
+
+func testCommonSplunkSpec(t *testing.T, method string, dst *enterprisev1.CommonSplunkSpec, src *enterprisev1.SplunkEnterpriseSpec, isIndexer bool) {
+	testCommonSpec(t, method, &dst.CommonSpec, src, false)
+	if dst.EtcStorage != src.Resources.SplunkEtcStorage {
+		t.Errorf("%s() Spec.EtcStorage = %s; want %s", method, dst.EtcStorage, src.Resources.SplunkEtcStorage)
+	}
+	if isIndexer {
+		if dst.VarStorage != src.Resources.SplunkIndexerStorage {
+			t.Errorf("%s() Spec.VarStorage = %s; want %s", method, dst.VarStorage, src.Resources.SplunkIndexerStorage)
+		}
+	} else {
+		if dst.VarStorage != src.Resources.SplunkVarStorage {
+			t.Errorf("%s() Spec.VarStorage = %s; want %s", method, dst.VarStorage, src.Resources.SplunkVarStorage)
+		}
+	}
+	if len(dst.Volumes) != len(src.SplunkVolumes) {
+		t.Errorf("%s() len(Spec.Volumes) = %d; want %d", method, len(dst.Volumes), len(src.SplunkVolumes))
+	}
+	for n := range dst.Volumes {
+		if dst.Volumes[n] != src.SplunkVolumes[n] {
+			t.Errorf("%s() Spec.Volumes[%d] = %v; want %v", method, n, dst.Volumes[n], src.SplunkVolumes[n])
+		}
+	}
+	if dst.Defaults != src.Defaults {
+		t.Errorf("%s() Spec.Defaults = %s; want %s", method, dst.Defaults, src.Defaults)
+	}
+	if dst.DefaultsURL != src.DefaultsURL {
+		t.Errorf("%s() Spec.DefaultsURL = %s; want %s", method, dst.DefaultsURL, src.DefaultsURL)
+	}
+	if dst.LicenseURL != src.LicenseURL {
+		t.Errorf("%s() Spec.LicenseURL = %s; want %s", method, dst.LicenseURL, src.LicenseURL)
+	}
+}
+
+func TestGetLicenseMasterResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetLicenseMasterResource(src)
+	if err != nil {
+		t.Errorf("GetLicenseMasterResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetLicenseMasterResource", &got.Spec.CommonSplunkSpec, &src.Spec, false)
+}
+
+func TestGetClusterMasterResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetClusterMasterResource(src)
+	if err != nil {
+		t.Errorf("GetClusterMasterResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetClusterMasterResource", &got.Spec.CommonSplunkSpec, &src.Spec, false)
+}
+
+func TestGetDeployerResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetDeployerResource(src)
+	if err != nil {
+		t.Errorf("GetDeployerResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetDeployerResource", &got.Spec.CommonSplunkSpec, &src.Spec, false)
+}
+
+func TestGetStandaloneResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetStandaloneResource(src)
+	if err != nil {
+		t.Errorf("GetStandaloneResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetStandaloneResource", &got.Spec.CommonSplunkSpec, &src.Spec, false)
+	if got.Spec.Replicas != src.Spec.Topology.Standalones {
+		t.Errorf("GetStandaloneResource() Spec.Replicas = %d; want %d", got.Spec.Replicas, src.Spec.Topology.Standalones)
+	}
+	if got.Spec.EnableDFS != src.Spec.EnableDFS {
+		t.Errorf("GetStandaloneResource() Spec.EnableDFS = %t; want %t", got.Spec.EnableDFS, src.Spec.EnableDFS)
+	}
+	if got.Spec.SparkImage != src.Spec.SparkImage {
+		t.Errorf("GetStandaloneResource() Spec.SparkImage = %s; want %s", got.Spec.SparkImage, src.Spec.SparkImage)
+	}
+}
+
+func TestGetSearchHeadResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetSearchHeadResource(src)
+	if err != nil {
+		t.Errorf("GetSearchHeadResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetSearchHeadResource", &got.Spec.CommonSplunkSpec, &src.Spec, false)
+	if got.Spec.Replicas != src.Spec.Topology.SearchHeads {
+		t.Errorf("GetSearchHeadResource() Spec.Replicas = %d; want %d", got.Spec.Replicas, src.Spec.Topology.SearchHeads)
+	}
+	if got.Spec.EnableDFS != src.Spec.EnableDFS {
+		t.Errorf("GetSearchHeadResource() Spec.EnableDFS = %t; want %t", got.Spec.EnableDFS, src.Spec.EnableDFS)
+	}
+	if got.Spec.SparkImage != src.Spec.SparkImage {
+		t.Errorf("GetSearchHeadResource() Spec.SparkImage = %s; want %s", got.Spec.SparkImage, src.Spec.SparkImage)
+	}
+}
+
+func TestGetIndexerResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetIndexerResource(src)
+	if err != nil {
+		t.Errorf("GetIndexerResource() returned %v; want nil", err)
+	}
+	testCommonSplunkSpec(t, "TestGetIndexerResource", &got.Spec.CommonSplunkSpec, &src.Spec, true)
+	if got.Spec.Replicas != src.Spec.Topology.Indexers {
+		t.Errorf("GetIndexerResource() Spec.Replicas = %d; want %d", got.Spec.Replicas, src.Spec.Topology.Indexers)
+	}
+}
+
+func TestGetSparkResource(t *testing.T) {
+	src := getSplunkEnterprise()
+	got, err := GetSparkResource(src)
+	if err != nil {
+		t.Errorf("GetSparkResource() returned %v; want nil", err)
+	}
+	testCommonSpec(t, "TestGetSparkResource", &got.Spec.CommonSpec, &src.Spec, true)
+	if got.Spec.Replicas != src.Spec.Topology.SearchHeads {
+		t.Errorf("GetSparkResource() Spec.Replicas = %d; want %d", got.Spec.Replicas, src.Spec.Topology.SearchHeads)
 	}
 }
 
@@ -188,55 +247,174 @@ func configTester(t *testing.T, method string, f func() (interface{}, error), wa
 	}
 }
 
-func TestGetSplunkStatefulSet(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+func TestGetIndexerStatefulSet(t *testing.T) {
+	cr := enterprisev1.Indexer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
-	var envVariables []corev1.EnvVar
 
-	test := func(instanceType InstanceType, replicas int, want string) {
+	test := func(want string) {
 		f := func() (interface{}, error) {
-			return GetSplunkStatefulSet(&cr, instanceType, replicas, envVariables)
+			if err := ValidateIndexerSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateIndexerSpec() returned error: %v", err)
+			}
+			return GetIndexerStatefulSet(&cr)
 		}
-		configTester(t, fmt.Sprintf("GetSplunkStatefulSet(\"%s\",%d)", instanceType, replicas), f, want)
+		configTester(t, "GetIndexerStatefulSet()", f, want)
 	}
 
-	test(SplunkStandalone, 1, `{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5}}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}}}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"50Gi"}}},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-indexer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"s2s","containerPort":9997,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_indexer"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack1-cluster-master-service"},{"name":"SPLUNK_INDEXER_URL","value":"splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-indexer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-indexer-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+}
 
-	test(SplunkIndexer, 3, `{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-indexer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":3,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"s2s","containerPort":9997,"protocol":"TCP"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5}}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-indexer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}}}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-indexer-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+func TestGetSearchHeadStatefulSet(t *testing.T) {
+	cr := enterprisev1.SearchHead{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	test := func(want string) {
+		f := func() (interface{}, error) {
+			if err := ValidateSearchHeadSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateSearchHeadSpec() returned error: %v", err)
+			}
+			return GetSearchHeadStatefulSet(&cr)
+		}
+		configTester(t, "GetSearchHeadStatefulSet()", f, want)
+	}
+
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-search-head","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_search_head"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_DEPLOYER_URL","value":"splunk-stack1-deployer-service"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-search-head"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-search-head-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	cr.Spec.EnableDFS = true
-	cr.Spec.Defaults = "test_defaults"
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-search-head","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}},{"name":"mnt-splunk-jdk","emptyDir":{}},{"name":"mnt-splunk-spark","emptyDir":{}}],"initContainers":[{"name":"init","image":"splunk/spark","command":["bash","-c","cp -r /opt/jdk /mnt \u0026\u0026 cp -r /opt/spark /mnt"],"resources":{"limits":{"cpu":"1","memory":"512Mi"},"requests":{"cpu":"250m","memory":"128Mi"}},"volumeMounts":[{"name":"mnt-splunk-jdk","mountPath":"/mnt/jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/spark"}],"imagePullPolicy":"IfNotPresent"}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_search_head"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_DEPLOYER_URL","value":"splunk-stack1-deployer-service"},{"name":"SPLUNK_ENABLE_DFS","value":"true"},{"name":"SPARK_MASTER_HOST","value":"splunk-stack1-spark-master-service"},{"name":"SPARK_MASTER_WEBUI_PORT","value":"8009"},{"name":"SPARK_HOME","value":"/mnt/splunk-spark"},{"name":"JAVA_HOME","value":"/mnt/splunk-jdk"},{"name":"SPLUNK_DFW_NUM_SLOTS_ENABLED","value":"false"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-jdk","mountPath":"/mnt/splunk-jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/splunk-spark"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-search-head"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-search-head-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+}
+
+func TestGetStandaloneStatefulSet(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	test := func(want string) {
+		f := func() (interface{}, error) {
+			if err := ValidateStandaloneSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateStandaloneSpec() returned error: %v", err)
+			}
+			return GetStandaloneStatefulSet(&cr)
+		}
+		configTester(t, "GetStandaloneStatefulSet()", f, want)
+	}
+
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+
+	cr.Spec.EnableDFS = true
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}},{"name":"mnt-splunk-jdk","emptyDir":{}},{"name":"mnt-splunk-spark","emptyDir":{}}],"initContainers":[{"name":"init","image":"splunk/spark","command":["bash","-c","cp -r /opt/jdk /mnt \u0026\u0026 cp -r /opt/spark /mnt"],"resources":{"limits":{"cpu":"1","memory":"512Mi"},"requests":{"cpu":"250m","memory":"128Mi"}},"volumeMounts":[{"name":"mnt-splunk-jdk","mountPath":"/mnt/jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/spark"}],"imagePullPolicy":"IfNotPresent"}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_ENABLE_DFS","value":"true"},{"name":"SPARK_MASTER_HOST","value":"splunk-stack1-spark-master-service"},{"name":"SPARK_MASTER_WEBUI_PORT","value":"8009"},{"name":"SPARK_HOME","value":"/mnt/splunk-spark"},{"name":"JAVA_HOME","value":"/mnt/splunk-jdk"},{"name":"SPLUNK_DFW_NUM_SLOTS_ENABLED","value":"false"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-jdk","mountPath":"/mnt/splunk-jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/splunk-spark"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+
 	cr.Spec.StorageClassName = "gp2"
-	cr.Spec.SplunkVolumes = []corev1.Volume{{Name: "test-volume"}}
-	test(SplunkSearchHead, 3, `{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-search-head","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":3,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"test-volume"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-defaults"}},{"name":"mnt-splunk-jdk","emptyDir":{}},{"name":"mnt-splunk-spark","emptyDir":{}}],"initContainers":[{"name":"init","image":"splunk/spark","command":["bash","-c","cp -r /opt/jdk /mnt \u0026\u0026 cp -r /opt/spark /mnt"],"resources":{"limits":{"cpu":"1","memory":"512Mi"},"requests":{"cpu":"250m","memory":"128Mi"}},"volumeMounts":[{"name":"mnt-splunk-jdk","mountPath":"/mnt/jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/spark"}]}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"test-volume","mountPath":"/mnt/test-volume"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"},{"name":"mnt-splunk-jdk","mountPath":"/mnt/splunk-jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/splunk-spark"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5}}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-search-head"]}]},"topologyKey":"kubernetes.io/hostname"}}]}}}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"50Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-search-head-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+	cr.Spec.SchedulerName = "custom-scheduler"
+	cr.Spec.Defaults = "defaults-string"
+	cr.Spec.DefaultsURL = "/mnt/defaults/defaults.yml"
+	cr.Spec.Volumes = []corev1.Volume{
+		{Name: "defaults"},
+	}
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-defaults"}},{"name":"mnt-splunk-jdk","emptyDir":{}},{"name":"mnt-splunk-spark","emptyDir":{}}],"initContainers":[{"name":"init","image":"splunk/spark","command":["bash","-c","cp -r /opt/jdk /mnt \u0026\u0026 cp -r /opt/spark /mnt"],"resources":{"limits":{"cpu":"1","memory":"512Mi"},"requests":{"cpu":"250m","memory":"128Mi"}},"volumeMounts":[{"name":"mnt-splunk-jdk","mountPath":"/mnt/jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/spark"}],"imagePullPolicy":"IfNotPresent"}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"hec","containerPort":8088,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"},{"name":"dfsmaster","containerPort":9000,"protocol":"TCP"},{"name":"dfccontrol","containerPort":17000,"protocol":"TCP"},{"name":"datarecieve","containerPort":19000,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml,/mnt/defaults/defaults.yml,/mnt/splunk-defaults/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_ENABLE_DFS","value":"true"},{"name":"SPARK_MASTER_HOST","value":"splunk-stack1-spark-master-service"},{"name":"SPARK_MASTER_WEBUI_PORT","value":"8009"},{"name":"SPARK_HOME","value":"/mnt/splunk-spark"},{"name":"JAVA_HOME","value":"/mnt/splunk-jdk"},{"name":"SPLUNK_DFW_NUM_SLOTS_ENABLED","value":"false"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"},{"name":"mnt-splunk-jdk","mountPath":"/mnt/splunk-jdk"},{"name":"mnt-splunk-spark","mountPath":"/mnt/splunk-spark"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+}
+
+func TestGetLicenseMasterStatefulSet(t *testing.T) {
+	cr := enterprisev1.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	test := func(want string) {
+		f := func() (interface{}, error) {
+			if err := ValidateLicenseMasterSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateLicenseMasterSpec() returned error: %v", err)
+			}
+			return GetLicenseMasterStatefulSet(&cr)
+		}
+		configTester(t, "GetLicenseMasterStatefulSet()", f, want)
+	}
+
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+
+	cr.Spec.LicenseURL = "/mnt/splunk.lic"
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+}
+
+func TestGetClusterMasterStatefulSet(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	test := func(want string) {
+		f := func() (interface{}, error) {
+			if err := ValidateClusterMasterSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateClusterMasterSpec() returned error: %v", err)
+			}
+			return GetClusterMasterStatefulSet(&cr)
+		}
+		configTester(t, "GetClusterMasterStatefulSet()", f, want)
+	}
+
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"cluster-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+
+	cr.Spec.LicenseURL = "/mnt/splunk.lic"
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"cluster-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_LICENSE_MASTER_URL","value":"splunk-stack1-license-master-service"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"cluster-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
+}
+
+func TestGetDeployerStatefulSet(t *testing.T) {
+	cr := enterprisev1.Deployer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	test := func(want string) {
+		f := func() (interface{}, error) {
+			if err := ValidateDeployerSpec(&cr.Spec); err != nil {
+				t.Errorf("ValidateDeployerSpec() returned error: %v", err)
+			}
+			return GetDeployerStatefulSet(&cr)
+		}
+		configTester(t, "GetDeployerStatefulSet()", f, want)
+	}
+
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"splunk","for":"stack1","type":"deployer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"deployer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997,7777,9000,17000,17500,19000","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-secrets"}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"deployer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"1Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"deployer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{}},"status":{"replicas":0}}`)
 }
 
 func TestGetSplunkService(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
-	instanceType := SplunkIndexer
-	isHeadless := false
 
-	test := func(want string) {
+	test := func(instanceType InstanceType, isHeadless bool, want string) {
 		f := func() (interface{}, error) {
 			return GetSplunkService(&cr, instanceType, isHeadless), nil
 		}
 		configTester(t, "GetSplunkService()", f, want)
 	}
 
-	test(`{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer-service","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer-service"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":0},{"name":"hec","protocol":"TCP","port":8088,"targetPort":0},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":0},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":0}],"selector":{"app":"splunk","for":"stack1","type":"indexer"}},"status":{"loadBalancer":{}}}`)
+	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-indexer-service","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"indexer-service"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":0},{"name":"hec","protocol":"TCP","port":8088,"targetPort":0},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":0},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":0}],"selector":{"app":"splunk","for":"stack1","type":"indexer"}},"status":{"loadBalancer":{}}}`)
+	test(SplunkSearchHead, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-headless","namespace":"test","creationTimestamp":null,"labels":{"app":"splunk","app.kubernetes.io/instance":"splunk-stack1-search-head-service","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"splunk-stack1","app.kubernetes.io/part-of":"splunk","for":"stack1","type":"search-head-service"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":0},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":0},{"name":"dfsmaster","protocol":"TCP","port":9000,"targetPort":0},{"name":"dfccontrol","protocol":"TCP","port":17000,"targetPort":0},{"name":"datarecieve","protocol":"TCP","port":19000,"targetPort":0}],"selector":{"app":"splunk","for":"stack1","type":"search-head"},"clusterIP":"None","publishNotReadyAddresses":true},"status":{"loadBalancer":{}}}`)
 }
 
-func TestValidateSplunkCustomResource(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+func TestValidateSplunkEnterpriseSpec(t *testing.T) {
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -244,38 +422,38 @@ func TestValidateSplunkCustomResource(t *testing.T) {
 	}
 
 	test := func(want error) {
-		got := ValidateSplunkCustomResource(&cr)
+		got := ValidateSplunkEnterpriseSpec(&cr.Spec)
 		if got == nil {
 			if want != nil {
-				t.Errorf("ValidateSplunkCustomResource(%v) = nil; want %v", cr, want)
+				t.Errorf("ValidateSplunkEnterpriseSpec(%v) = nil; want %v", cr, want)
 			}
 		} else {
 			if want == nil {
-				t.Errorf("ValidateSplunkCustomResource(%v) = %v; want nil", cr, got)
+				t.Errorf("ValidateSplunkEnterpriseSpec(%v) = %v; want nil", cr, got)
 			}
 		}
 	}
 
 	test(nil)
 
-	cr.Spec = v1alpha2.SplunkEnterpriseSpec{
-		Topology: v1alpha2.SplunkTopologySpec{
+	cr.Spec = enterprisev1.SplunkEnterpriseSpec{
+		Topology: enterprisev1.SplunkTopologySpec{
 			Indexers:    0,
 			SearchHeads: 3,
 		},
 	}
 	test(errors.New("You must specify how many indexers the cluster should have"))
 
-	cr.Spec = v1alpha2.SplunkEnterpriseSpec{
-		Topology: v1alpha2.SplunkTopologySpec{
+	cr.Spec = enterprisev1.SplunkEnterpriseSpec{
+		Topology: enterprisev1.SplunkTopologySpec{
 			Indexers:    3,
 			SearchHeads: 0,
 		},
 	}
 	test(errors.New("ou must specify how many search heads the cluster should have"))
 
-	cr.Spec = v1alpha2.SplunkEnterpriseSpec{
-		Topology: v1alpha2.SplunkTopologySpec{
+	cr.Spec = enterprisev1.SplunkEnterpriseSpec{
+		Topology: enterprisev1.SplunkTopologySpec{
 			Indexers:    3,
 			SearchHeads: 3,
 		},
@@ -284,19 +462,19 @@ func TestValidateSplunkCustomResource(t *testing.T) {
 }
 
 func TestGetSplunkDefaults(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: v1alpha2.SplunkEnterpriseSpec{
+		Spec: enterprisev1.SplunkEnterpriseSpec{
 			Defaults: "defaults_string",
 		},
 	}
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			return GetSplunkDefaults(&cr), nil
+			return GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), cr.Spec.Defaults), nil
 		}
 		configTester(t, "GetSplunkDefaults()", f, want)
 	}
@@ -305,7 +483,7 @@ func TestGetSplunkDefaults(t *testing.T) {
 }
 
 func TestGetSplunkSecrets(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",

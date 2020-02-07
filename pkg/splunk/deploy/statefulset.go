@@ -18,23 +18,8 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
-
-// ApplySplunkStatefulSet creates or updates a Kubernetes StatefulSet for a given type of Splunk Enterprise instance (indexers or search heads).
-func ApplySplunkStatefulSet(cr *v1alpha2.SplunkEnterprise, client ControllerClient, instanceType enterprise.InstanceType, replicas int, envVariables []corev1.EnvVar) error {
-
-	statefulSet, err := enterprise.GetSplunkStatefulSet(cr, instanceType, replicas, envVariables)
-	if err != nil {
-		return err
-	}
-
-	return ApplyStatefulSet(client, statefulSet)
-}
 
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
 func ApplyStatefulSet(client ControllerClient, statefulSet *appsv1.StatefulSet) error {

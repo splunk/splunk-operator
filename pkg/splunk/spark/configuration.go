@@ -19,10 +19,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -99,44 +100,31 @@ func getSparkWorkerServicePorts() []corev1.ServicePort {
 	return l
 }
 
-// getSparkRequirements returns the Kubernetes ResourceRequirements to use for Spark instances.
-func getSparkRequirements(cr *v1alpha2.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCPURequest, "0.1")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCPURequest", err)
+// ValidateSparkSpec checks validity and makes default updates to a SparkSpec, and returns error if something is wrong.
+func ValidateSparkSpec(spec *enterprisev1.SparkSpec) error {
+	spec.CommonSpec.Image = GetSparkImage(spec.CommonSpec.Image)
+	if spec.Replicas == 0 {
+		spec.Replicas = 1
 	}
-
-	memoryRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkMemoryRequest, "512Mi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryRequest", err)
-	}
-
-	cpuLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCPULimit, "4")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCPULimit", err)
-	}
-
-	memoryLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkMemoryLimit, "8Gi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryLimit", err)
-	}
-
-	return corev1.ResourceRequirements{
+	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuRequest,
-			corev1.ResourceMemory: memoryRequest,
+			corev1.ResourceCPU:    resource.MustParse("0.1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuLimit,
-			corev1.ResourceMemory: memoryLimit,
-		}}, nil
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
 }
 
-// GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a SplunkEnterprise resource.
-func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType, replicas int) (*appsv1.Deployment, error) {
+// GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a Spark resource.
+func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*appsv1.Deployment, error) {
 	// prepare type specific variables (note that port order is important for tests)
 	var ports []corev1.ContainerPort
 	var envVariables []corev1.EnvVar
+	var replicas int32
 	switch instanceType {
 	case SparkMaster:
 		ports = resources.SortContainerPorts(getSparkMasterContainerPorts())
@@ -146,6 +134,7 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 				Value: "splunk_spark_master",
 			},
 		}
+		replicas = 1
 	case SparkWorker:
 		ports = resources.SortContainerPorts(getSparkWorkerContainerPorts())
 		envVariables = []corev1.EnvVar{
@@ -160,12 +149,12 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 				Value: "7777",
 			},
 		}
+		replicas = int32(cr.Spec.Replicas)
 	}
 
 	// prepare other values
-	replicas32 := int32(replicas)
 	annotations := resources.GetIstioAnnotations(ports)
-	affinity := resources.AppendPodAntiAffinity(cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
+	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
 	// create deployment configuration
 	deployment := &appsv1.Deployment{
@@ -175,13 +164,13 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetSparkDeploymentName(instanceType, cr.GetIdentifier()),
-			Namespace: cr.Namespace,
+			Namespace: cr.GetNamespace(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true),
 			},
-			Replicas: &replicas32,
+			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false),
@@ -193,7 +182,7 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 					Hostname:      GetSparkServiceName(instanceType, cr.GetIdentifier(), false),
 					Containers: []corev1.Container{
 						{
-							Image:           GetSparkImage(cr),
+							Image:           cr.Spec.Image,
 							ImagePullPolicy: corev1.PullPolicy(cr.Spec.ImagePullPolicy),
 							Name:            "spark",
 							Ports:           ports,
@@ -205,7 +194,7 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 		},
 	}
 
-	// make SplunkEnterprise object the owner
+	// make Spark object the owner
 	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	// update with common spark pod config
@@ -217,8 +206,8 @@ func GetSparkDeployment(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType
 	return deployment, nil
 }
 
-// GetSparkService returns a Kubernetes Service object for Spark instances configured for a SplunkEnterprise resource.
-func GetSparkService(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType, isHeadless bool) *corev1.Service {
+// GetSparkService returns a Kubernetes Service object for Spark instances configured for a Spark resource.
+func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadless bool) *corev1.Service {
 	// prepare ports (note that port order is important for tests)
 	var ports []corev1.ServicePort
 	switch instanceType {
@@ -240,7 +229,7 @@ func GetSparkService(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType, i
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
-			Namespace: cr.Namespace,
+			Namespace: cr.GetNamespace(),
 			Labels:    serviceTypeLabels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -258,8 +247,8 @@ func GetSparkService(cr *v1alpha2.SplunkEnterprise, instanceType InstanceType, i
 	return service
 }
 
-// updateSparkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the SplunkEnterprise resource.
-func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *v1alpha2.SplunkEnterprise, instanceType InstanceType) error {
+// updateSparkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Spark resource.
+func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr *enterprisev1.Spark, instanceType InstanceType) error {
 
 	// update security context
 	runAsUser := int64(41812)
@@ -267,12 +256,6 @@ func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, c
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
 		RunAsUser: &runAsUser,
 		FSGroup:   &fsGroup,
-	}
-
-	// prepare resource requirements
-	requirements, err := getSparkRequirements(cr)
-	if err != nil {
-		return err
 	}
 
 	// master listens for HTTP requests on a different interface from worker
@@ -311,7 +294,7 @@ func updateSparkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, c
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].Resources = requirements
+		podTemplateSpec.Spec.Containers[idx].Resources = cr.Spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 	}

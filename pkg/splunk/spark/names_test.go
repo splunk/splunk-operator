@@ -17,8 +17,6 @@ package spark
 import (
 	"os"
 	"testing"
-
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestGetSparkStatefulsetName(t *testing.T) {
@@ -51,10 +49,10 @@ func TestGetSparkServiceName(t *testing.T) {
 }
 
 func TestGetSparkImage(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{}
+	var specImage string
 
 	test := func(want string) {
-		got := GetSparkImage(&cr)
+		got := GetSparkImage(specImage)
 		if got != want {
 			t.Errorf("GetSparkImage() = %s; want %s", got, want)
 		}
@@ -65,6 +63,6 @@ func TestGetSparkImage(t *testing.T) {
 	os.Setenv("SPARK_IMAGE", "splunk-test/spark")
 	test("splunk-test/spark")
 
-	cr.Spec.SparkImage = "splunk/spark-test"
+	specImage = "splunk/spark-test"
 	test("splunk/spark-test")
 }

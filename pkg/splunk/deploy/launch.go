@@ -15,24 +15,107 @@
 package deploy
 
 import (
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
-// LaunchDeployment creates all Kubernetes resources necessary to represent the
+// ApplySplunkEnterprise creates all Kubernetes resources necessary to represent the
 // configuration state represented by the SplunkEnterprise CRD.
-func LaunchDeployment(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+func ApplySplunkEnterprise(cr *enterprisev1.SplunkEnterprise, client ControllerClient) error {
 
-	// launch a spark cluster if EnableDFS == true
+	// check if deletion has been requested
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		_, err := CheckSplunkDeletion(cr, client)
+		return err
+	}
+
+	// validate and updates defaults for CR
+	err := enterprise.ValidateSplunkEnterpriseSpec(&cr.Spec)
+	if err != nil {
+		return err
+	}
+
+	// create a spark cluster if EnableDFS == true
 	if cr.Spec.EnableDFS {
-		// validation assertion: cr.Spec.Topology.SparkWorkers > 0
-		if err := LaunchSparkCluster(cr, client); err != nil {
+		sparkCR, err := enterprise.GetSparkResource(cr)
+		if err != nil {
+			return err
+		}
+		if err = ApplySparkCluster(sparkCR, client); err != nil {
 			return err
 		}
 	}
 
+	// create standalone instances when > 0
+	if cr.Spec.Topology.Standalones > 0 {
+		standaloneCR, err := enterprise.GetStandaloneResource(cr)
+		if err != nil {
+			return err
+		}
+		if err = ApplyStandalones(standaloneCR, client); err != nil {
+			return err
+		}
+	}
+
+	// create a cluster when at least 1 search head and 1 indexer
+	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
+		// create or update license master if we have a licenseURL
+		if cr.Spec.LicenseURL != "" {
+			licenseMasterCR, err := enterprise.GetLicenseMasterResource(cr)
+			if err != nil {
+				return err
+			}
+			if err = ApplyLicenseMaster(licenseMasterCR, client); err != nil {
+				return err
+			}
+		}
+
+		// create or update cluster amster
+		clusterMasterCR, err := enterprise.GetClusterMasterResource(cr)
+		if err != nil {
+			return err
+		}
+		if err = ApplyClusterMaster(clusterMasterCR, client); err != nil {
+			return err
+		}
+
+		// create or update deployer if we have > 1 search head
+		if cr.Spec.Topology.SearchHeads > 1 {
+			deployerCR, err := enterprise.GetDeployerResource(cr)
+			if err != nil {
+				return err
+			}
+			if err = ApplyDeployer(deployerCR, client); err != nil {
+				return err
+			}
+		}
+
+		// create or update indexers
+		indexerCR, err := enterprise.GetIndexerResource(cr)
+		if err != nil {
+			return nil
+		}
+		if err = ApplyIndexers(indexerCR, client); err != nil {
+			return nil
+		}
+
+		// create or update search heads
+		searchHeadCR, err := enterprise.GetSearchHeadResource(cr)
+		if err != nil {
+			return nil
+		}
+		if err = ApplySearchHeads(searchHeadCR, client); err != nil {
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// ApplySplunkConfig create or updates Kubernetes Secrets. ConfigMaps and other general settings for Splunk Enterprise instances.
+func ApplySplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec) error {
 	// create splunk secrets
 	secrets := enterprise.GetSplunkSecrets(cr)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
@@ -41,24 +124,10 @@ func LaunchDeployment(cr *v1alpha2.SplunkEnterprise, client ControllerClient) er
 	}
 
 	// create splunk defaults (for inline config)
-	if cr.Spec.Defaults != "" {
-		defaults := enterprise.GetSplunkDefaults(cr)
-		defaults.SetOwnerReferences(append(defaults.GetOwnerReferences(), resources.AsOwner(cr)))
-		if err := ApplyConfigMap(client, defaults); err != nil {
-			return err
-		}
-	}
-
-	// launch standalone instances when > 0
-	if cr.Spec.Topology.Standalones > 0 {
-		if err := LaunchStandalones(cr, client); err != nil {
-			return err
-		}
-	}
-
-	// launch a cluster when at least 1 search head and 1 indexer
-	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
-		if err := LaunchCluster(cr, client); err != nil {
+	if spec.Defaults != "" {
+		defaultsMap := enterprise.GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), spec.Defaults)
+		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), resources.AsOwner(cr)))
+		if err := ApplyConfigMap(client, defaultsMap); err != nil {
 			return err
 		}
 	}
@@ -66,237 +135,219 @@ func LaunchDeployment(cr *v1alpha2.SplunkEnterprise, client ControllerClient) er
 	return nil
 }
 
-// LaunchStandalones creates a Kubernetes deployment for N standalone instances of Splunk Enterprise.
-func LaunchStandalones(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplyStandalones creates a Kubernetes deployment for N standalone instances of Splunk Enterprise.
+func ApplyStandalones(cr *enterprisev1.Standalone, client ControllerClient) error {
 
-	overrides := map[string]string{"SPLUNK_ROLE": "splunk_standalone"}
-	if cr.Spec.LicenseURL != "" {
-		overrides["SPLUNK_LICENSE_URI"] = cr.Spec.LicenseURL
-	}
-	if cr.Spec.EnableDFS {
-		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
-	}
-
-	err := ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkStandalone,
-		cr.Spec.Topology.Standalones,
-		enterprise.GetSplunkConfiguration(overrides, cr.Spec.Defaults, cr.Spec.DefaultsURL),
-	)
+	// validate and updates defaults for CR
+	err := enterprise.ValidateStandaloneSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset
+	statefulSet, err := enterprise.GetStandaloneStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchCluster creates all Kubernetes resources necessary to represent a complete Splunk Enterprise cluster.
-func LaunchCluster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplyLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
+func ApplyLicenseMaster(cr *enterprisev1.LicenseMaster, client ControllerClient) error {
 
-	if cr.Spec.LicenseURL != "" {
-		if err := LaunchLicenseMaster(cr, client); err != nil {
-			return err
-		}
-	}
-
-	err := LaunchClusterMaster(cr, client)
+	// validate and updates defaults for CR
+	err := enterprise.ValidateLicenseMasterSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	if cr.Spec.Topology.SearchHeads > 1 {
-		err = LaunchDeployer(cr, client)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = LaunchIndexers(cr, client)
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
 	if err != nil {
-		return nil
+		return err
 	}
 
-	err = LaunchSearchHeads(cr, client)
+	// create or update a service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkLicenseMaster, false))
 	if err != nil {
-		return nil
+		return err
 	}
 
-	return nil
+	// create or update statefulset
+	statefulSet, err := enterprise.GetLicenseMasterStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchLicenseMaster create a Kubernetes Deployment and service for the Splunk Enterprise license master.
-func LaunchLicenseMaster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplyClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
+func ApplyClusterMaster(cr *enterprisev1.ClusterMaster, client ControllerClient) error {
 
-	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkLicenseMaster, false))
+	// validate and updates defaults for CR
+	err := enterprise.ValidateClusterMasterSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	err = ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkLicenseMaster,
-		1,
-		enterprise.GetSplunkClusterConfiguration(
-			cr,
-			cr.Spec.Topology.SearchHeads > 1,
-			map[string]string{
-				"SPLUNK_ROLE":        "splunk_license_master",
-				"SPLUNK_LICENSE_URI": cr.Spec.LicenseURL,
-			},
-		),
-	)
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	// create or update a service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkClusterMaster, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset
+	statefulSet, err := enterprise.GetClusterMasterStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchClusterMaster create a Kubernetes Deployment and service for the Splunk Enterprise cluster master (used to manage an indexer cluster).
-func LaunchClusterMaster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplyDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
+func ApplyDeployer(cr *enterprisev1.Deployer, client ControllerClient) error {
 
-	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkClusterMaster, false))
+	// validate and updates defaults for CR
+	err := enterprise.ValidateDeployerSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	err = ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkClusterMaster,
-		1,
-		enterprise.GetSplunkClusterConfiguration(
-			cr,
-			cr.Spec.Topology.SearchHeads > 1,
-			map[string]string{
-				"SPLUNK_ROLE": "splunk_cluster_master",
-			},
-		),
-	)
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
 	if err != nil {
 		return err
 	}
 
-	return err
+	// create or update a service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkDeployer, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset
+	statefulSet, err := enterprise.GetDeployerStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchDeployer create a Kubernetes Deployment and service for the Splunk Enterprise deployer (used to push apps and config to search heads).
-func LaunchDeployer(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplyIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
+func ApplyIndexers(cr *enterprisev1.Indexer, client ControllerClient) error {
 
-	err := ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkDeployer, false))
+	// validate and updates defaults for CR
+	err := enterprise.ValidateIndexerSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	err = ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkDeployer,
-		1,
-		enterprise.GetSplunkClusterConfiguration(
-			cr,
-			cr.Spec.Topology.SearchHeads > 1,
-			map[string]string{
-				"SPLUNK_ROLE": "splunk_deployer",
-			},
-		),
-	)
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
 	if err != nil {
 		return err
 	}
 
-	return err
-}
-
-// LaunchIndexers create a Kubernetes StatefulSet and services for a Splunk Enterprise indexer cluster.
-func LaunchIndexers(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
-
-	err := ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkIndexer,
-		cr.Spec.Topology.Indexers,
-		enterprise.GetSplunkClusterConfiguration(
-			cr,
-			cr.Spec.Topology.SearchHeads > 1,
-			map[string]string{
-				"SPLUNK_ROLE": "splunk_indexer",
-			},
-		),
-	)
-	if err != nil {
-		return err
-	}
-
+	// create or update both a regular and headless service
 	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, true))
 	if err != nil {
 		return err
 	}
-
 	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, false))
 	if err != nil {
 		return err
 	}
 
-	return err
+	// create or update statefulset
+	statefulSet, err := enterprise.GetIndexerStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchSearchHeads create a Kubernetes StatefulSet and services for a Splunk Enterprise search head cluster.
-func LaunchSearchHeads(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
-	overrides := map[string]string{"SPLUNK_ROLE": "splunk_search_head"}
-	if cr.Spec.EnableDFS {
-		overrides = enterprise.AppendSplunkDfsOverrides(overrides, cr.GetIdentifier(), cr.Spec.Topology.SearchHeads)
-	}
+// ApplySearchHeads create a Kubernetes StatefulSet and services for a Splunk Enterprise search head cluster.
+func ApplySearchHeads(cr *enterprisev1.SearchHead, client ControllerClient) error {
 
-	err := ApplySplunkStatefulSet(
-		cr,
-		client,
-		enterprise.SplunkSearchHead,
-		cr.Spec.Topology.SearchHeads,
-		enterprise.GetSplunkClusterConfiguration(
-			cr,
-			cr.Spec.Topology.SearchHeads > 1,
-			overrides,
-		),
-	)
+	// validate and updates defaults for CR
+	err := enterprise.ValidateSearchHeadSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
+	// create or update general config resources
+	err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
+	if err != nil {
+		return err
+	}
+
+	// create or update both a regular and headless service
 	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkSearchHead, true))
 	if err != nil {
 		return err
 	}
-
 	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkSearchHead, false))
 	if err != nil {
 		return err
 	}
 
-	return err
+	// create or update statefulset
+	statefulSet, err := enterprise.GetSearchHeadStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	return ApplyStatefulSet(client, statefulSet)
 }
 
-// LaunchSparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
-func LaunchSparkCluster(cr *v1alpha2.SplunkEnterprise, client ControllerClient) error {
+// ApplySparkCluster create Kubernetes Deployment (master), StatefulSet (workers) and services Spark cluster.
+func ApplySparkCluster(cr *enterprisev1.Spark, client ControllerClient) error {
 
-	err := ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false))
+	// validate and updates defaults for CR
+	err := spark.ValidateSparkSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
 
-	err = ApplySparkDeployment(cr, client, spark.SparkMaster, 1)
+	// create or update a service for spark master
+	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false))
 	if err != nil {
 		return err
 	}
 
-	err = ApplySparkDeployment(cr, client, spark.SparkWorker, cr.Spec.Topology.SparkWorkers)
-	if err != nil {
-		return err
-	}
-
+	// create or update a headless service for spark workers
 	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkWorker, true))
+	if err != nil {
+		return err
+	}
+
+	// create or update deployment for spark master
+	deployment, err := spark.GetSparkDeployment(cr, spark.SparkMaster)
+	if err != nil {
+		return err
+	}
+	err = ApplyDeployment(client, deployment)
+	if err != nil {
+		return err
+	}
+
+	// create or update deployment for spark worker
+	deployment, err = spark.GetSparkDeployment(cr, spark.SparkWorker)
+	if err != nil {
+		return err
+	}
+	err = ApplyDeployment(client, deployment)
 	if err != nil {
 		return err
 	}
