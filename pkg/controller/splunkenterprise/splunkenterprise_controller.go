@@ -72,6 +72,27 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to secondary custom resources and requeue the owner SplunkEnterprise
+	err = c.Watch(&source.Kind{Type: &enterprisev1.ClusterMaster{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{Type: &enterprisev1.LicenseMaster{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{Type: &enterprisev1.Deployer{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
 	err = c.Watch(&source.Kind{Type: &enterprisev1.Indexer{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &enterprisev1.SplunkEnterprise{},
@@ -131,11 +152,10 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 
-	//instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
-	//instance.TypeMeta.Kind = "SplunkEnterprise"
-	reqLogger.Info("Found instance", "APIVersion", instance.TypeMeta.APIVersion, "Kind", instance.TypeMeta.Kind)
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
+	instance.TypeMeta.Kind = "SplunkEnterprise"
 
-	err = deploy.ApplySplunkEnterprise(instance, r.client)
+	err = deploy.ReconcileSplunkEnterprise(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "SplunkEnterprise reconciliation failed")
 		return reconcile.Result{}, err

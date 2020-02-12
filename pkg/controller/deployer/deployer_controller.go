@@ -64,10 +64,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to secondary resource StatefulSets and requeue the owner Indexer
+	// Watch for changes to secondary resource StatefulSets and requeue the owner Deployer
 	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &enterprisev1.Indexer{},
+		OwnerType:    &enterprisev1.Deployer{},
 	})
 	if err != nil {
 		return err
@@ -112,9 +112,10 @@ func (r *ReconcileDeployer) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Found instance", "APIVersion", instance.TypeMeta.APIVersion, "Kind", instance.TypeMeta.Kind)
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
+	instance.TypeMeta.Kind = "Deployer"
 
-	err = deploy.ApplyDeployer(instance, r.client)
+	err = deploy.ReconcileDeployer(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

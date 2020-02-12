@@ -15,7 +15,6 @@
 package deploy
 
 import (
-	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,8 +22,11 @@ import (
 )
 
 func TestApplyDeployment(t *testing.T) {
+	funcCalls := []mockFuncCall{{metaName: "*v1.Deployment-test-splunk-stack1-spark-worker"}}
+	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	var replicas int32 = 1
-	deployment := appsv1.Deployment{
+	current := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-spark-worker",
 			Namespace: "test",
@@ -33,59 +35,10 @@ func TestApplyDeployment(t *testing.T) {
 			Replicas: &replicas,
 		},
 	}
-
-	// test create new
-	c := newMockClient()
-	c.errors["Get"] = fmt.Errorf("NotFound")
-	err := ApplyDeployment(c, &deployment)
-	if err != nil {
-		t.Errorf("ApplyDeployment() returned %v; want nil", err)
+	revised := current.DeepCopy()
+	*revised.Spec.Replicas = 3
+	reconcile := func(c *mockClient, cr interface{}) error {
+		return ApplyDeployment(c, cr.(*appsv1.Deployment))
 	}
-	c.checkCalls(t, true, "TestApplyDeployment", map[string][]mockFuncCall{
-		"Get": {
-			{metaName: "splunk-stack1-spark-worker"},
-		},
-		"Create": {
-			{metaName: "splunk-stack1-spark-worker"},
-		},
-	})
-
-	// run again; should be no changes
-	c = newMockClient()
-	c.errors["Get"] = nil
-	c.getObj = &deployment
-	err = ApplyDeployment(c, &deployment)
-	if err != nil {
-		t.Errorf("ApplyDeployment() re-run returned %v; want nil", err)
-	}
-	c.checkCalls(t, true, "TestApplyDeployment", map[string][]mockFuncCall{
-		"Get": {
-			{metaName: "splunk-stack1-spark-worker"},
-		},
-	})
-
-	// test update existing
-	c = newMockClient()
-	var newReplicas int32 = 3
-	c.getObj = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-spark-worker",
-			Namespace: "test",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &newReplicas,
-		},
-	}
-	err = ApplyDeployment(c, &deployment)
-	if err != nil {
-		t.Errorf("ApplyDeployment() returned %v; want nil", err)
-	}
-	c.checkCalls(t, true, "TestApplyDeployment", map[string][]mockFuncCall{
-		"Get": {
-			{metaName: "splunk-stack1-spark-worker"},
-		},
-		"Update": {
-			{metaName: "splunk-stack1-spark-worker"},
-		},
-	})
+	reconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile)
 }

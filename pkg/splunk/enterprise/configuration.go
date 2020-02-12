@@ -188,11 +188,15 @@ func copyCommonSplunkSpec(dst *enterprisev1.CommonSplunkSpec, cr *enterprisev1.S
 func GetLicenseMasterResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.LicenseMaster, error) {
 	result := enterprisev1.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkLicenseMaster)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -200,11 +204,15 @@ func GetLicenseMasterResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.
 func GetClusterMasterResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.ClusterMaster, error) {
 	result := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkClusterMaster)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -212,11 +220,15 @@ func GetClusterMasterResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.
 func GetDeployerResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Deployer, error) {
 	result := enterprisev1.Deployer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkDeployer)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -224,14 +236,18 @@ func GetDeployerResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Deplo
 func GetStandaloneResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Standalone, error) {
 	result := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	result.Spec.Replicas = cr.Spec.Topology.Standalones
 	result.Spec.EnableDFS = cr.Spec.EnableDFS
 	result.Spec.SparkImage = cr.Spec.SparkImage
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkStandalone)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -239,14 +255,22 @@ func GetStandaloneResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Sta
 func GetSearchHeadResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.SearchHead, error) {
 	result := enterprisev1.SearchHead{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	result.Spec.Replicas = cr.Spec.Topology.SearchHeads
 	result.Spec.EnableDFS = cr.Spec.EnableDFS
 	result.Spec.SparkImage = cr.Spec.SparkImage
+	result.Spec.IndexerRef = corev1.ObjectReference{
+		Name:      cr.GetName(),
+		Namespace: cr.GetNamespace(),
+	}
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkSearchHead)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -254,12 +278,16 @@ func GetSearchHeadResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Sea
 func GetIndexerResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Indexer, error) {
 	result := enterprisev1.Indexer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	result.Spec.Replicas = cr.Spec.Topology.Indexers
 	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkIndexer)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -267,12 +295,16 @@ func GetIndexerResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Indexe
 func GetSparkResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Spark, error) {
 	result := enterprisev1.Spark{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
+			Name:        cr.GetName(),
+			Namespace:   cr.GetNamespace(),
+			Labels:      cr.GetObjectMeta().GetLabels(),
+			Annotations: cr.GetObjectMeta().GetAnnotations(),
+			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
 		},
 	}
 	result.Spec.Replicas = cr.Spec.Topology.SparkWorkers
 	err := copyCommonSpec(&result.Spec.CommonSpec, cr, true)
+	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
 	return &result, err
 }
 
@@ -309,6 +341,26 @@ func GetSearchHeadStatefulSet(cr *enterprisev1.SearchHead) (*appsv1.StatefulSet,
 			Name:  "SPLUNK_DEPLOYER_URL",
 			Value: GetSplunkServiceName(SplunkDeployer, cr.GetIdentifier(), false),
 		},
+	}
+
+	// append URL for cluster master, if configured
+	if cr.Spec.IndexerRef.Name != "" {
+		namespace := cr.Spec.IndexerRef.Namespace
+		if namespace == "" {
+			namespace = cr.GetNamespace()
+		}
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Value: resources.GetServiceFQDN(namespace, GetSplunkServiceName(SplunkClusterMaster, cr.Spec.IndexerRef.Name, false)),
+		})
+	}
+
+	// append URL for indexer, if configured
+	if cr.Spec.IndexerURL != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_INDEXER_URL",
+			Value: cr.Spec.IndexerURL,
+		})
 	}
 
 	// get generic statefulset for Splunk Enterprise objects
@@ -483,6 +535,11 @@ func ValidateSplunkEnterpriseSpec(spec *enterprisev1.SplunkEnterpriseSpec) error
 	// make sure SchedulerName is not empty
 	if spec.SchedulerName == "" {
 		spec.SchedulerName = "default-scheduler"
+	}
+
+	// work-around openapi validation error by ensuring it is not nill
+	if spec.SplunkVolumes == nil {
+		spec.SplunkVolumes = []corev1.Volume{}
 	}
 
 	// update spark image
@@ -849,15 +906,24 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		{Name: "SPLUNK_ROLE", Value: instanceType.ToRole()},
 	}
 	if spec.LicenseURL != "" {
-		if instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster {
-			env = append(env, corev1.EnvVar{
-				Name:  "SPLUNK_LICENSE_URI",
-				Value: spec.LicenseURL,
-			})
-		} else {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_LICENSE_URI",
+			Value: spec.LicenseURL,
+		})
+	}
+	if instanceType != SplunkLicenseMaster {
+		licenseMasterURL := spec.LicenseMasterURL
+		if licenseMasterURL == "" && spec.LicenseMasterRef.Name != "" {
+			namespace := spec.LicenseMasterRef.Namespace
+			if namespace == "" {
+				namespace = cr.GetNamespace()
+			}
+			licenseMasterURL = resources.GetServiceFQDN(namespace, GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false))
+		}
+		if licenseMasterURL != "" {
 			env = append(env, corev1.EnvVar{
 				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetIdentifier(), false),
+				Value: licenseMasterURL,
 			})
 		}
 	}

@@ -17,28 +17,24 @@ package deploy
 import (
 	"testing"
 
-	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestApplyStatefulSet(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1.StatefulSet-test-splunk-stack1-indexer"}}
+func TestApplyService(t *testing.T) {
+	funcCalls := []mockFuncCall{{metaName: "*v1.Service-test-svc"}}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	var replicas int32 = 1
-	current := appsv1.StatefulSet{
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls}
+	current := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-indexer",
+			Name:      "svc",
 			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
 		},
 	}
 	revised := current.DeepCopy()
-	*revised.Spec.Replicas = 3
+	revised.Spec.ClusterIP = "8.8.8.8"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ApplyStatefulSet(c, cr.(*appsv1.StatefulSet))
+		return ApplyService(c, cr.(*corev1.Service))
 	}
-	reconcileTester(t, "TestApplyStatefulSet", &current, revised, createCalls, updateCalls, reconcile)
+	reconcileTester(t, "TestApplyService", &current, revised, createCalls, updateCalls, reconcile)
 }

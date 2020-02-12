@@ -64,17 +64,16 @@ func TestCheckSplunkDeletion(t *testing.T) {
 		},
 	}
 	c.listObj = &pvclist
-
 	deleted, err := CheckSplunkDeletion(&cr, c)
 	if deleted != true || err != nil {
 		t.Errorf("CheckSplunkDeletion() returned %t, %v; want true, nil", deleted, err)
 	}
-	c.checkCalls(t, true, "TestCheckSplunkDeletion", map[string][]mockFuncCall{
+	c.checkCalls(t, "TestCheckSplunkDeletion", map[string][]mockFuncCall{
 		"Update": {
-			{metaName: "stack1"},
+			{metaName: "*v1alpha2.SplunkEnterprise-test-stack1"},
 		},
 		"Delete": {
-			{metaName: "splunk-pvc-stack1-var"},
+			{metaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 		},
 		"List": {
 			{listOpts: listOpts},

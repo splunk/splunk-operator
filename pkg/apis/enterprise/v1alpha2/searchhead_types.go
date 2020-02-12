@@ -15,6 +15,7 @@
 package v1alpha2
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,6 +39,12 @@ type SearchHeadSpec struct {
 
 	// Image to use for Spark pod containers (overrides SPARK_IMAGE environment variables)
 	SparkImage string `json:"sparkImage"`
+
+	// IndexerURL refers to a Splunk Enterprise indexer managed outside of the Kubernetes cluster
+	IndexerURL string `json:"indexerUrl"`
+
+	// IndexerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	IndexerRef corev1.ObjectReference `json:"indexerRef"`
 }
 
 // SearchHeadStatus defines the observed state of a Splunk Enterprise standalone search head or cluster of search heads

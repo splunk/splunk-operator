@@ -27,11 +27,8 @@ func ApplyStatefulSet(client ControllerClient, statefulSet *appsv1.StatefulSet) 
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
+	namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: statefulSet.GetName()}
 	var current appsv1.StatefulSet
-	namespacedName := types.NamespacedName{
-		Namespace: statefulSet.Namespace,
-		Name:      statefulSet.Name,
-	}
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
@@ -60,7 +57,7 @@ func MergeStatefulSetUpdates(current *appsv1.StatefulSet, revised *appsv1.Statef
 	result := false
 
 	// check for change in Replicas count
-	if *current.Spec.Replicas != *revised.Spec.Replicas {
+	if current.Spec.Replicas != nil && revised.Spec.Replicas != nil && *current.Spec.Replicas != *revised.Spec.Replicas {
 		scopedLog.Info("StatefulSet Replicas differ",
 			"current", *current.Spec.Replicas,
 			"revised", *revised.Spec.Replicas)

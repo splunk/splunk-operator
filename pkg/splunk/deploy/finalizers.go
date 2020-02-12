@@ -31,24 +31,22 @@ const (
 
 // CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
 // If so, it will process and remove any remaining finalizers.
-func CheckSplunkDeletion(cr *enterprisev1.SplunkEnterprise, c ControllerClient) (bool, error) {
-	scopedLog := log.WithName("CheckSplunkDeletion").WithValues(
-		"SplunkEnterprise", cr.GetIdentifier(),
-		"namespace", cr.GetNamespace())
+func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
 	// just log warning if deletion time is in the future
-	if !cr.ObjectMeta.DeletionTimestamp.Before(&currentTime) {
+	if !cr.GetObjectMeta().GetDeletionTimestamp().Before(&currentTime) {
 		scopedLog.Info("DeletionTimestamp is in the future",
 			"Now", currentTime,
-			"DeletionTimestamp", cr.ObjectMeta.DeletionTimestamp)
+			"DeletionTimestamp", cr.GetObjectMeta().GetDeletionTimestamp())
 		//return false, nil
 	}
 
 	scopedLog.Info("Deletion requested")
 
 	// process each finalizer
-	for _, finalizer := range cr.ObjectMeta.Finalizers {
+	for _, finalizer := range cr.GetObjectMeta().GetFinalizers() {
 		switch finalizer {
 		case splunkFinalizerDeletePVC:
 			if err := DeleteSplunkPvc(cr, c); err != nil {
@@ -68,7 +66,7 @@ func CheckSplunkDeletion(cr *enterprisev1.SplunkEnterprise, c ControllerClient) 
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
-func DeleteSplunkPvc(cr *enterprisev1.SplunkEnterprise, c ControllerClient) error {
+func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 	scopedLog := log.WithName("DeleteSplunkPvc").WithValues(
 		"SplunkEnterprise", cr.GetIdentifier(),
 		"namespace", cr.GetNamespace())
@@ -98,8 +96,8 @@ func DeleteSplunkPvc(cr *enterprisev1.SplunkEnterprise, c ControllerClient) erro
 	return nil
 }
 
-// RemoveSplunkFinalizer removes a finalizer from a SplunkEnterprise resource.
-func RemoveSplunkFinalizer(cr *enterprisev1.SplunkEnterprise, c ControllerClient, finalizer string) error {
+// RemoveSplunkFinalizer removes a finalizer from a custom resource.
+func RemoveSplunkFinalizer(cr enterprisev1.MetaObject, c ControllerClient, finalizer string) error {
 	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues(
 		"SplunkEnterprise", cr.GetIdentifier(),
 		"namespace", cr.GetNamespace())
@@ -109,13 +107,13 @@ func RemoveSplunkFinalizer(cr *enterprisev1.SplunkEnterprise, c ControllerClient
 	var newFinalizers []string
 
 	// handles multiple occurrences (performance is not significant)
-	for _, f := range cr.ObjectMeta.Finalizers {
+	for _, f := range cr.GetObjectMeta().GetFinalizers() {
 		if f != finalizer {
 			newFinalizers = append(newFinalizers, f)
 		}
 	}
 
 	// update object
-	cr.ObjectMeta.Finalizers = newFinalizers
+	cr.GetObjectMeta().SetFinalizers(newFinalizers)
 	return c.Update(context.Background(), cr)
 }

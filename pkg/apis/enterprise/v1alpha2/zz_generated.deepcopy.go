@@ -132,6 +132,7 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	out.LicenseMasterRef = in.LicenseMasterRef
 	return
 }
 
@@ -492,6 +493,7 @@ func (in *SearchHeadList) DeepCopyObject() runtime.Object {
 func (in *SearchHeadSpec) DeepCopyInto(out *SearchHeadSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	out.IndexerRef = in.IndexerRef
 	return
 }
 

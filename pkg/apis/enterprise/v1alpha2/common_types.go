@@ -17,6 +17,8 @@ package v1alpha2
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // default all fields to being optional
@@ -70,6 +72,12 @@ type CommonSplunkSpec struct {
 
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
+
+	// LicenseMasterURL refers to a Splunk Enterprise license master located outside of the Kubernetes cluster
+	LicenseMasterURL string `json:"licenseMasterUrl"`
+
+	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
+	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 }
 
 // MetaObject is used to represent common interfaces of custom resources
@@ -78,4 +86,6 @@ type MetaObject interface {
 	GetNamespace() string
 	GetTypeMeta() metav1.TypeMeta
 	GetObjectMeta() metav1.Object
+	GetObjectKind() schema.ObjectKind
+	DeepCopyObject() runtime.Object
 }

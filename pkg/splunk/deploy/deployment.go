@@ -27,11 +27,8 @@ func ApplyDeployment(client ControllerClient, deployment *appsv1.Deployment) err
 		"name", deployment.GetObjectMeta().GetName(),
 		"namespace", deployment.GetObjectMeta().GetNamespace())
 
+	namespacedName := types.NamespacedName{Namespace: deployment.GetNamespace(), Name: deployment.GetName()}
 	var current appsv1.Deployment
-	namespacedName := types.NamespacedName{
-		Namespace: deployment.Namespace,
-		Name:      deployment.Name,
-	}
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
@@ -60,7 +57,7 @@ func MergeDeploymentUpdates(current *appsv1.Deployment, revised *appsv1.Deployme
 	result := false
 
 	// check for change in Replicas count
-	if *current.Spec.Replicas != *revised.Spec.Replicas {
+	if current.Spec.Replicas != nil && revised.Spec.Replicas != nil && *current.Spec.Replicas != *revised.Spec.Replicas {
 		scopedLog.Info("Deployment Replicas differ",
 			"current", *current.Spec.Replicas,
 			"revised", *revised.Spec.Replicas)

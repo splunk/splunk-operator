@@ -112,9 +112,10 @@ func (r *ReconcileIndexer) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Found instance", "APIVersion", instance.TypeMeta.APIVersion, "Kind", instance.TypeMeta.Kind)
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
+	instance.TypeMeta.Kind = "Indexer"
 
-	err = deploy.ApplyIndexers(instance, r.client)
+	err = deploy.ReconcileIndexer(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

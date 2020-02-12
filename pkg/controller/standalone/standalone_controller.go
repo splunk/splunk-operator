@@ -64,10 +64,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to secondary resource StatefulSets and requeue the owner Indexer
+	// Watch for changes to secondary resource StatefulSets and requeue the owner Standalone
 	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &enterprisev1.Indexer{},
+		OwnerType:    &enterprisev1.Standalone{},
 	})
 	if err != nil {
 		return err
@@ -112,9 +112,10 @@ func (r *ReconcileStandalone) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Found instance", "APIVersion", instance.TypeMeta.APIVersion, "Kind", instance.TypeMeta.Kind)
+	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
+	instance.TypeMeta.Kind = "Standalone"
 
-	err = deploy.ApplyStandalones(instance, r.client)
+	err = deploy.ReconcileStandalone(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
