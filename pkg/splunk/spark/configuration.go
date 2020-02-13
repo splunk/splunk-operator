@@ -153,7 +153,14 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 	}
 
 	// prepare other values
+	labels := getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false)
+	for k, v := range cr.GetObjectMeta().GetLabels() {
+		labels[k] = v
+	}
 	annotations := resources.GetIstioAnnotations(ports)
+	for k, v := range cr.GetObjectMeta().GetAnnotations() {
+		annotations[k] = v
+	}
 	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
 	// create deployment configuration
@@ -173,7 +180,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false),
+					Labels:      labels,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -208,38 +215,49 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 
 // GetSparkService returns a Kubernetes Service object for Spark instances configured for a Spark resource.
 func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadless bool) *corev1.Service {
+
+	// use template if not headless
+	var service *corev1.Service
+	if isHeadless {
+		service = &corev1.Service{}
+		service.Spec.ClusterIP = corev1.ClusterIPNone
+	} else {
+		service = cr.Spec.ServiceTemplate.DeepCopy()
+	}
+	service.TypeMeta = metav1.TypeMeta{
+		Kind:       "Service",
+		APIVersion: "v1",
+	}
+	service.ObjectMeta.Name = GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
+	service.ObjectMeta.Namespace = cr.GetNamespace()
+	service.Spec.Selector = getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
+
 	// prepare ports (note that port order is important for tests)
-	var ports []corev1.ServicePort
 	switch instanceType {
 	case SparkMaster:
-		ports = resources.SortServicePorts(getSparkMasterServicePorts())
+		service.Spec.Ports = resources.SortServicePorts(getSparkMasterServicePorts())
 	case SparkWorker:
-		ports = resources.SortServicePorts(getSparkWorkerServicePorts())
+		service.Spec.Ports = resources.SortServicePorts(getSparkWorkerServicePorts())
 	}
 
-	// prepare other values
-	serviceName := GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
-	serviceTypeLabels := getSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false)
-	selectLabels := getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
-
-	service := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceName,
-			Namespace: cr.GetNamespace(),
-			Labels:    serviceTypeLabels,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: selectLabels,
-			Ports:    ports,
-		},
+	// append standard labels
+	if service.ObjectMeta.Labels == nil {
+		service.ObjectMeta.Labels = make(map[string]string)
+	}
+	for k, v := range getSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false) {
+		service.ObjectMeta.Labels[k] = v
+	}
+	// append labels from parent
+	for k, v := range cr.GetObjectMeta().GetLabels() {
+		service.ObjectMeta.Labels[k] = v
 	}
 
-	if isHeadless {
-		service.Spec.ClusterIP = corev1.ClusterIPNone
+	// append annotations from parent
+	if service.ObjectMeta.Annotations == nil {
+		service.ObjectMeta.Annotations = make(map[string]string)
+	}
+	for k, v := range cr.GetObjectMeta().GetAnnotations() {
+		service.ObjectMeta.Annotations[k] = v
 	}
 
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))

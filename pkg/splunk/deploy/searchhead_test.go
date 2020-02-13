@@ -27,10 +27,12 @@ func TestReconcileSearchHead(t *testing.T) {
 		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{metaName: "*v1.Service-test-splunk-stack1-search-head-service"},
+		{metaName: "*v1.Service-test-splunk-stack1-deployer-service"},
+		{metaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[3]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
 	current := enterprisev1.SearchHead{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

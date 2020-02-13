@@ -60,20 +60,6 @@ func ReconcileSplunkEnterprise(client ControllerClient, cr *enterprisev1.SplunkE
 			}
 		}
 
-		// create or update cluster amster
-		err = applyClusterMaster(client, cr)
-		if err != nil {
-			return err
-		}
-
-		// create or update deployer if we have > 1 search head
-		if cr.Spec.Topology.SearchHeads > 1 {
-			err = applyDeployer(client, cr)
-			if err != nil {
-				return err
-			}
-		}
-
 		// create or update indexers
 		err = applyIndexer(client, cr)
 		if err != nil {

@@ -42,10 +42,6 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
 		*dst.(*appsv1.StatefulSet) = *src.(*appsv1.StatefulSet)
-	case *enterprisev1.ClusterMaster:
-		*dst.(*enterprisev1.ClusterMaster) = *src.(*enterprisev1.ClusterMaster)
-	case *enterprisev1.Deployer:
-		*dst.(*enterprisev1.Deployer) = *src.(*enterprisev1.Deployer)
 	case *enterprisev1.Indexer:
 		*dst.(*enterprisev1.Indexer) = *src.(*enterprisev1.Indexer)
 	case *enterprisev1.LicenseMaster:

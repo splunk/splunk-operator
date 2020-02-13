@@ -46,7 +46,7 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 	}
 
 	// create or update a service
-	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkLicenseMaster, false))
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkLicenseMaster, false))
 	if err != nil {
 		return err
 	}

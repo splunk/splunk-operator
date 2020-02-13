@@ -49,6 +49,9 @@ type CommonSpec struct {
 
 	// resource requirements for the pod containers
 	Resources corev1.ResourceRequirements `json:"resources"`
+
+	// ServiceTemplate is a template used to create Kubernetes services
+	ServiceTemplate corev1.Service `json:"serviceTemplate"`
 }
 
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
@@ -78,6 +81,12 @@ type CommonSplunkSpec struct {
 
 	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
+
+	// ClusterMasterURL refers to a Splunk Enterprise cluster master managed outside of the Kubernetes cluster
+	ClusterMasterURL string `json:"clusterMasterUrl"`
+
+	// IndexerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	IndexerRef corev1.ObjectReference `json:"indexerRef"`
 }
 
 // MetaObject is used to represent common interfaces of custom resources

@@ -72,21 +72,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to secondary custom resources and requeue the owner SplunkEnterprise
-	err = c.Watch(&source.Kind{Type: &enterprisev1.ClusterMaster{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &enterprisev1.SplunkEnterprise{},
-	})
-	if err != nil {
-		return err
-	}
 	err = c.Watch(&source.Kind{Type: &enterprisev1.LicenseMaster{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &enterprisev1.SplunkEnterprise{},
-	})
-	if err != nil {
-		return err
-	}
-	err = c.Watch(&source.Kind{Type: &enterprisev1.Deployer{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &enterprisev1.SplunkEnterprise{},
 	})

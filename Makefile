@@ -46,10 +46,6 @@ generate:
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_clustermasters_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_deployers_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_searchheads_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_indexers_crd.yaml >> deploy/crds/combined.yaml

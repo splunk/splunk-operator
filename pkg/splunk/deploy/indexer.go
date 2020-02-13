@@ -46,18 +46,36 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 		return err
 	}
 
-	// create or update both a regular and headless service
-	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, true))
-	if err != nil {
-		return err
-	}
-	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkIndexer, false))
+	// create or update a headless service for indexer cluster
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkIndexer, true))
 	if err != nil {
 		return err
 	}
 
-	// create or update statefulset
-	statefulSet, err := enterprise.GetIndexerStatefulSet(cr)
+	// create or update a regular service for indexer cluster (ingestion)
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkIndexer, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update a regular service for the cluster master
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkClusterMaster, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset for the cluster master
+	statefulSet, err := enterprise.GetClusterMasterStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	err = ApplyStatefulSet(client, statefulSet)
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset for the indexers
+	statefulSet, err = enterprise.GetIndexerStatefulSet(cr)
 	if err != nil {
 		return err
 	}

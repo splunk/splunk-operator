@@ -46,18 +46,36 @@ func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) e
 		return err
 	}
 
-	// create or update both a regular and headless service
-	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkSearchHead, true))
-	if err != nil {
-		return err
-	}
-	err = ApplyService(client, enterprise.GetSplunkService(cr, enterprise.SplunkSearchHead, false))
+	// create or update a headless search head cluster service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkSearchHead, true))
 	if err != nil {
 		return err
 	}
 
-	// create or update statefulset
-	statefulSet, err := enterprise.GetSearchHeadStatefulSet(cr)
+	// create or update a regular search head cluster service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkSearchHead, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update a deployer service
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkDeployer, false))
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset for the deployer
+	statefulSet, err := enterprise.GetDeployerStatefulSet(cr)
+	if err != nil {
+		return err
+	}
+	err = ApplyStatefulSet(client, statefulSet)
+	if err != nil {
+		return err
+	}
+
+	// create or update statefulset for the search heads
+	statefulSet, err = enterprise.GetSearchHeadStatefulSet(cr)
 	if err != nil {
 		return err
 	}

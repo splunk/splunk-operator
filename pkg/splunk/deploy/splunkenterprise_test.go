@@ -38,15 +38,11 @@ func TestReconcileSplunkEnterprise(t *testing.T) {
 		"Get": []mockFuncCall{
 			{metaName: "*v1alpha2.Spark-test-stack1"},
 			{metaName: "*v1alpha2.LicenseMaster-test-stack1"},
-			{metaName: "*v1alpha2.ClusterMaster-test-stack1"},
-			{metaName: "*v1alpha2.Deployer-test-stack1"},
 			{metaName: "*v1alpha2.Indexer-test-stack1"},
 			{metaName: "*v1alpha2.SearchHead-test-stack1"},
 		},
 		"Create": []mockFuncCall{
 			{metaName: "*v1alpha2.LicenseMaster-test-stack1"},
-			{metaName: "*v1alpha2.ClusterMaster-test-stack1"},
-			{metaName: "*v1alpha2.Deployer-test-stack1"},
 			{metaName: "*v1alpha2.Indexer-test-stack1"},
 			{metaName: "*v1alpha2.SearchHead-test-stack1"},
 		},
