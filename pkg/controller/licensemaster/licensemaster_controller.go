@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
-	"github.com/splunk/splunk-operator/pkg/splunk/deploy"
+	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 )
 
 var log = logf.Log.WithName("controller_licensemaster")
@@ -115,7 +115,7 @@ func (r *ReconcileLicenseMaster) Reconcile(request reconcile.Request) (reconcile
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "LicenseMaster"
 
-	err = deploy.ReconcileLicenseMaster(r.client, instance)
+	err = splunkreconcile.ReconcileLicenseMaster(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

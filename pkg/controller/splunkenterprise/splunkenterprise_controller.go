@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
-	"github.com/splunk/splunk-operator/pkg/splunk/deploy"
+	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 )
 
 var log = logf.Log.WithName("controller_splunkenterprise")
@@ -141,7 +141,7 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "SplunkEnterprise"
 
-	err = deploy.ReconcileSplunkEnterprise(r.client, instance)
+	err = splunkreconcile.ReconcileSplunkEnterprise(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "SplunkEnterprise reconciliation failed")
 		return reconcile.Result{}, err
