@@ -15,6 +15,7 @@
 package v1alpha2
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,8 +34,9 @@ type SearchHeadSpec struct {
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int `json:"replicas"`
 
-	// If this is true, DFS will be installed and enabled on all searchHeads and a spark cluster will be created.
-	EnableDFS bool `json:"enableDFS"`
+	// SparkRef refers to a Spark cluster managed by the operator within Kubernetes
+	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
+	SparkRef corev1.ObjectReference `json:"sparkRef"`
 
 	// Image to use for Spark pod containers (overrides SPARK_IMAGE environment variables)
 	SparkImage string `json:"sparkImage"`
@@ -54,7 +56,7 @@ type SearchHeadStatus struct {
 
 // SearchHead is the Schema for a Splunk Enterprise standalone search head or cluster of search heads
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=searchheads,scope=Namespaced
+// +kubebuilder:resource:path=searchheads,scope=Namespaced,shortName=search;sh
 // +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of search head cluster"
 // +kubebuilder:printcolumn:name="Instances",type="string",JSONPath=".spec.status.instances",description="Number of search heads"
 type SearchHead struct {

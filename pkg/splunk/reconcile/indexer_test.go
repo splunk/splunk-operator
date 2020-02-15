@@ -24,7 +24,7 @@ import (
 
 func TestReconcileIndexer(t *testing.T) {
 	funcCalls := []mockFuncCall{
-		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
+		{metaName: "*v1.Secret-test-splunk-stack1-indexer-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{metaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{metaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
@@ -33,6 +33,7 @@ func TestReconcileIndexer(t *testing.T) {
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
+
 	current := enterprisev1.Indexer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

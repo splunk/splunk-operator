@@ -38,6 +38,8 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
 	case *corev1.PersistentVolumeClaimList:
 		*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
+	case *corev1.Service:
+		*dst.(*corev1.Service) = *src.(*corev1.Service)
 	case *appsv1.Deployment:
 		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:

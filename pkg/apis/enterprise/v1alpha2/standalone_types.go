@@ -15,6 +15,7 @@
 package v1alpha2
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,8 +34,9 @@ type StandaloneSpec struct {
 	// Number of standalone pods
 	Replicas int `json:"replicas"`
 
-	// If this is true, DFS will be installed and enabled on all instances and a spark cluster will be created.
-	EnableDFS bool `json:"enableDFS"`
+	// SparkRef refers to a Spark cluster managed by the operator within Kubernetes
+	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
+	SparkRef corev1.ObjectReference `json:"sparkRef"`
 
 	// Image to use for Spark pod containers (overrides SPARK_IMAGE environment variables)
 	SparkImage string `json:"sparkImage"`

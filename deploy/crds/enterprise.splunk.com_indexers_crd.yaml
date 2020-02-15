@@ -21,6 +21,8 @@ spec:
     kind: Indexer
     listKind: IndexerList
     plural: indexers
+    shortNames:
+    - idx
     singular: indexer
   scope: Namespaced
   subresources:

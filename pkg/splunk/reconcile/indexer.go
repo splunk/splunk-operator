@@ -41,7 +41,7 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 	}
 
 	// create or update general config resources
-	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
+	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
 	if err != nil {
 		return err
 	}

@@ -57,18 +57,18 @@ func TestGetSplunkServiceName(t *testing.T) {
 }
 
 func TestGetSplunkSecretsName(t *testing.T) {
-	got := GetSplunkSecretsName("pw")
-	want := "splunk-pw-secrets"
+	got := GetSplunkSecretsName("pw", SplunkIndexer)
+	want := "splunk-pw-indexer-secrets"
 	if got != want {
-		t.Errorf("GetSplunkSecretsName(\"%s\") = %s; want %s", "pw", got, want)
+		t.Errorf("GetSplunkSecretsName(\"%s\",\"%s\") = %s; want %s", "pw", SplunkIndexer, got, want)
 	}
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {
-	got := GetSplunkDefaultsName("t1")
-	want := "splunk-t1-defaults"
+	got := GetSplunkDefaultsName("t1", SplunkSearchHead)
+	want := "splunk-t1-search-head-defaults"
 	if got != want {
-		t.Errorf("GetSplunkDefaultsName(\"%s\") = %s; want %s", "t1", got, want)
+		t.Errorf("GetSplunkDefaultsName(\"%s\",\"%s\") = %s; want %s", "t1", SplunkSearchHead, got, want)
 	}
 }
 

@@ -307,6 +307,7 @@ func (in *SearchHeadList) DeepCopyObject() runtime.Object {
 func (in *SearchHeadSpec) DeepCopyInto(out *SearchHeadSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	out.SparkRef = in.SparkRef
 	return
 }
 
@@ -630,6 +631,7 @@ func (in *StandaloneList) DeepCopyObject() runtime.Object {
 func (in *StandaloneSpec) DeepCopyInto(out *StandaloneSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	out.SparkRef = in.SparkRef
 	return
 }
 

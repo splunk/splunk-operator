@@ -40,7 +40,7 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 	}
 
 	// create or update general config resources
-	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
+	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkLicenseMaster)
 	if err != nil {
 		return err
 	}

@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"context"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,9 +27,30 @@ import (
 )
 
 // ReconcileSplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
-func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec) error {
+func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) error {
+	scopedLog := log.WithName("ReconcileSplunkConfig").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+
+	// if reference to indexer cluster, extract and re-use idxc.secret
+	var idxcSecret []byte
+	indexerNamespace := spec.IndexerRef.Namespace
+	if indexerNamespace == "" {
+		indexerNamespace = cr.GetNamespace()
+	}
+	if spec.IndexerRef.Name != "" {
+		namespacedName := types.NamespacedName{
+			Namespace: indexerNamespace,
+			Name:      enterprise.GetSplunkSecretsName(spec.IndexerRef.Name, enterprise.SplunkIndexer),
+		}
+		var indexerSecret corev1.Secret
+		err := client.Get(context.TODO(), namespacedName, &indexerSecret)
+		if err == nil {
+			scopedLog.Info("Re-using idxc_secret from referenced Indexer")
+			idxcSecret = indexerSecret.Data["idxc_secret"]
+		}
+	}
+
 	// create splunk secrets
-	secrets := enterprise.GetSplunkSecrets(cr)
+	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecret)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
 	if err := ApplySecret(client, secrets); err != nil {
 		return err
@@ -36,7 +58,7 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 
 	// create splunk defaults (for inline config)
 	if spec.Defaults != "" {
-		defaultsMap := enterprise.GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), spec.Defaults)
+		defaultsMap := enterprise.GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), resources.AsOwner(cr)))
 		if err := ApplyConfigMap(client, defaultsMap); err != nil {
 			return err
@@ -57,8 +79,13 @@ func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error 
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
-		// found existing ConfigMap: do nothing
-		scopedLog.Info("Found existing ConfigMap")
+		if !reflect.DeepEqual(configMap.Data, current.Data) {
+			scopedLog.Info("Updating existing ConfigMap")
+			current.Data = configMap.Data
+			err = UpdateResource(client, &current)
+		} else {
+			scopedLog.Info("No changes for ConfigMap")
+		}
 	} else {
 		err = CreateResource(client, configMap)
 	}

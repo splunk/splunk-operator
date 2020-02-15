@@ -34,11 +34,28 @@ func ReconcileSplunkEnterprise(client ControllerClient, cr *enterprisev1.SplunkE
 		return err
 	}
 
-	// create a spark cluster if EnableDFS == true
-	if cr.Spec.EnableDFS {
-		err = applySpark(client, cr)
+	// create a cluster when at least 1 search head and 1 indexer
+	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
+		// create or update indexers
+		// you need to do this first so that the idxc.secret is available for other
+		// components to re-use; otherwise, they will not be able to forward their events
+		err = applyIndexer(client, cr)
 		if err != nil {
 			return err
+		}
+
+		// create or update search heads
+		err = applySearchHead(client, cr)
+		if err != nil {
+			return err
+		}
+
+		// create or update license master if we have a licenseURL
+		if cr.Spec.LicenseURL != "" {
+			err = applyLicenseMaster(client, cr)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -50,24 +67,9 @@ func ReconcileSplunkEnterprise(client ControllerClient, cr *enterprisev1.SplunkE
 		}
 	}
 
-	// create a cluster when at least 1 search head and 1 indexer
-	if cr.Spec.Topology.Indexers > 0 && cr.Spec.Topology.SearchHeads > 0 {
-		// create or update license master if we have a licenseURL
-		if cr.Spec.LicenseURL != "" {
-			err = applyLicenseMaster(client, cr)
-			if err != nil {
-				return err
-			}
-		}
-
-		// create or update indexers
-		err = applyIndexer(client, cr)
-		if err != nil {
-			return err
-		}
-
-		// create or update search heads
-		err = applySearchHead(client, cr)
+	// create a spark cluster if EnableDFS == true
+	if cr.Spec.EnableDFS {
+		err = applySpark(client, cr)
 		if err != nil {
 			return err
 		}

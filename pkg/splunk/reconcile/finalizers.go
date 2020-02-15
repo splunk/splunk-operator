@@ -29,10 +29,10 @@ const (
 	splunkFinalizerDeletePVC = "enterprise.splunk.com/delete-pvc"
 )
 
-// CheckSplunkDeletion checks to see if deletion was requested for the SplunkEnterprise resource.
+// CheckSplunkDeletion checks to see if deletion was requested for the custom resource.
 // If so, it will process and remove any remaining finalizers.
 func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
 	// just log warning if deletion time is in the future
@@ -56,7 +56,7 @@ func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, 
 				return false, err
 			}
 		default:
-			return false, fmt.Errorf("Finalizer in SplunkEnterprise %s/%s not recognized: %s", cr.GetNamespace(), cr.GetIdentifier(), finalizer)
+			return false, fmt.Errorf("Finalizer in %s %s/%s not recognized: %s", cr.GetTypeMeta().Kind, cr.GetNamespace(), cr.GetIdentifier(), finalizer)
 		}
 	}
 
@@ -65,16 +65,29 @@ func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, 
 	return true, nil
 }
 
-// DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a SplunkEnterprise resource.
+// DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
 func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
-	scopedLog := log.WithName("DeleteSplunkPvc").WithValues(
-		"SplunkEnterprise", cr.GetIdentifier(),
-		"namespace", cr.GetNamespace())
+	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+
+	var kind string
+	switch cr.GetTypeMeta().Kind {
+	case "Standalone":
+		kind = "standalone"
+	case "LicenseMaster":
+		kind = "license-master"
+	case "SearchHead":
+		kind = "search-head"
+	case "Indexer":
+		kind = "indexer"
+	default:
+		return nil
+	}
 
 	// get list of PVCs for this cluster
 	labels := map[string]string{
-		"app": "splunk",
-		"for": cr.GetIdentifier(),
+		"app":  "splunk",
+		"for":  cr.GetIdentifier(),
+		"kind": kind,
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
@@ -98,9 +111,7 @@ func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 
 // RemoveSplunkFinalizer removes a finalizer from a custom resource.
 func RemoveSplunkFinalizer(cr enterprisev1.MetaObject, c ControllerClient, finalizer string) error {
-	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues(
-		"SplunkEnterprise", cr.GetIdentifier(),
-		"namespace", cr.GetNamespace())
+	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	scopedLog.Info("Removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed

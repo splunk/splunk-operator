@@ -24,7 +24,7 @@ import (
 
 func TestReconcileStandalone(t *testing.T) {
 	funcCalls := []mockFuncCall{
-		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
+		{metaName: "*v1.Secret-test-splunk-stack1-standalone-secrets"},
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}

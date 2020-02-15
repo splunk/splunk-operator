@@ -40,7 +40,7 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) e
 	}
 
 	// create or update general config resources
-	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec)
+	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkStandalone)
 	if err != nil {
 		return err
 	}

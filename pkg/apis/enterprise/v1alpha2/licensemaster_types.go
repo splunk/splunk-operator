@@ -42,7 +42,7 @@ type LicenseMasterStatus struct {
 
 // LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=licensemasters,scope=Namespaced
+// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
 // +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of license master"
 type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`

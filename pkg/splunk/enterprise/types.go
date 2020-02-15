@@ -61,3 +61,23 @@ func (instanceType InstanceType) ToRole() string {
 	}
 	return role
 }
+
+// ToKind returns master InstanceType for CRD that manages a given InstanceType
+func (instanceType InstanceType) ToKind() string {
+	var kind string
+	switch instanceType {
+	case SplunkStandalone:
+		kind = "standalone"
+	case SplunkClusterMaster:
+		kind = "indexer"
+	case SplunkIndexer:
+		kind = "indexer"
+	case SplunkSearchHead:
+		kind = "search-head"
+	case SplunkDeployer:
+		kind = "search-head"
+	case SplunkLicenseMaster:
+		kind = "license-master"
+	}
+	return kind
+}

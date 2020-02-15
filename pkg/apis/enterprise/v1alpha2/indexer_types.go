@@ -52,7 +52,7 @@ type IndexerStatus struct {
 
 // Indexer is the Schema for a Splunk Enterprise standalone indexer or cluster of indexers
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=indexers,scope=Namespaced
+// +kubebuilder:resource:path=indexers,scope=Namespaced,shortName=idx
 // +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of indexer cluster"
 // +kubebuilder:printcolumn:name="CM",type="string",JSONPath=".spec.status.clusterMasterPhase",description="Status of cluster master"
 // +kubebuilder:printcolumn:name="Instances",type="string",JSONPath=".spec.status.instances",description="Number of indexers"

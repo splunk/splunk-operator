@@ -18,18 +18,19 @@ import (
 	"testing"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestReconcileSplunkConfig(t *testing.T) {
 	funcCalls := []mockFuncCall{
-		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
-		{metaName: "*v1.ConfigMap-test-splunk-stack1-defaults"},
+		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
+		{metaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls}
-	current := enterprisev1.Indexer{
+	current := enterprisev1.SearchHead{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -39,9 +40,17 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		idx := cr.(*enterprisev1.Indexer)
+		idx := cr.(*enterprisev1.SearchHead)
 		spec := idx.Spec.CommonSplunkSpec
-		return ReconcileSplunkConfig(c, idx, spec)
+		return ReconcileSplunkConfig(c, idx, spec, enterprise.SplunkSearchHead)
+	}
+	reconcileTester(t, "TestReconcileSplunkConfig", &current, revised, createCalls, updateCalls, reconcile)
+
+	revised.Spec.IndexerRef.Name = "stack2"
+	updateCalls["Get"] = []mockFuncCall{
+		{metaName: "*v1.Secret-test-splunk-stack2-indexer-secrets"},
+		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
+		{metaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
 	reconcileTester(t, "TestReconcileSplunkConfig", &current, revised, createCalls, updateCalls, reconcile)
 }
@@ -49,7 +58,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 func TestApplyConfigMap(t *testing.T) {
 	funcCalls := []mockFuncCall{{metaName: "*v1.ConfigMap-test-defaults"}}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",

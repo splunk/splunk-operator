@@ -63,7 +63,7 @@ This repository consists of the following code used to build the splunk-operator
 * `cmd/manager/main.go`: Provides the main() function, where everything begins
 * `pkg/apis/`: Source code for the operator's custom resource definition types
 * `pkg/controllers/`: Source code for CRD controllers that watch for changes
-* `pkg/splunk/reconile/`: Source code the controllers use to interact with Kubernetes APIs
+* `pkg/splunk/reconcile/`: Source code the controllers use to interact with Kubernetes APIs
 * `pkg/splunk/enterprise/`: Source code for managing Splunk Enterprise deployments
 * `pkg/splunk/spark/`: Source code for managing Spark cluster deployments
 * `pkg/splunk/resources/`: Generic utility code used by other splunk modules

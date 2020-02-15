@@ -13,6 +13,8 @@ spec:
     kind: LicenseMaster
     listKind: LicenseMasterList
     plural: licensemasters
+    shortNames:
+    - lm
     singular: licensemaster
   scope: Namespaced
   subresources:

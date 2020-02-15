@@ -24,7 +24,7 @@ import (
 
 func TestReconcileSearchHead(t *testing.T) {
 	funcCalls := []mockFuncCall{
-		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
+		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{metaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 		{metaName: "*v1.Service-test-splunk-stack1-deployer-service"},

@@ -24,7 +24,7 @@ import (
 
 func TestReconcileLicenseMaster(t *testing.T) {
 	funcCalls := []mockFuncCall{
-		{metaName: "*v1.Secret-test-splunk-stack1-secrets"},
+		{metaName: "*v1.Secret-test-splunk-stack1-license-master-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-license-master-service"},
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}
