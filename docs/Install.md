@@ -107,6 +107,20 @@ to the appropriate locations.
 ```
 
 
+## Cluster Domain
+
+By default, the Splunk Operator will use a Kubernetes cluster domain of
+`cluster.local` to calculate fully qualified domain names (FQDN) for each
+instance in your deployments. If you have configured a custom domain for
+your Kubernetes cluster, you can override this by adding a `CLUSTER_DOMAIN`
+environment variable to the operator's deployment spec:
+
+```yaml
+- name: CLUSTER_DOMAIN
+  value: "mydomain.com"
+```
+
+
 ## Installing Splunk Operator
 
 You can install and start the operator by running
@@ -129,5 +143,10 @@ Splunk Operator, run:
 
 ```
 kubectl delete splunkenterprises --all
+kubectl delete standalones --all
+kubectl delete licensemasters --all
+kubectl delete searchheads --all
+kubectl delete indexers --all
+kubectl delete spark --all
 kubectl delete -f splunk-operator.yaml
 ```

@@ -20,12 +20,12 @@ import (
 	"reflect"
 	"testing"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,13 +38,41 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
 	case *corev1.PersistentVolumeClaimList:
 		*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
+	case *corev1.Service:
+		*dst.(*corev1.Service) = *src.(*corev1.Service)
 	case *appsv1.Deployment:
 		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
 		*dst.(*appsv1.StatefulSet) = *src.(*appsv1.StatefulSet)
+	case *enterprisev1.Indexer:
+		*dst.(*enterprisev1.Indexer) = *src.(*enterprisev1.Indexer)
+	case *enterprisev1.LicenseMaster:
+		*dst.(*enterprisev1.LicenseMaster) = *src.(*enterprisev1.LicenseMaster)
+	case *enterprisev1.SearchHead:
+		*dst.(*enterprisev1.SearchHead) = *src.(*enterprisev1.SearchHead)
+	case *enterprisev1.Spark:
+		*dst.(*enterprisev1.Spark) = *src.(*enterprisev1.Spark)
+	case *enterprisev1.Standalone:
+		*dst.(*enterprisev1.Standalone) = *src.(*enterprisev1.Standalone)
 	default:
 		dst = src
 	}
+}
+
+// getStateKeyFromObject returns a lookup key for the mockClient's state map
+func getStateKey(obj runtime.Object) string {
+	key := client.ObjectKey{
+		Name:      obj.(ResourceObject).GetObjectMeta().GetName(),
+		Namespace: obj.(ResourceObject).GetObjectMeta().GetNamespace(),
+	}
+	return getStateKeyWithKey(key, obj)
+}
+
+// getStateKey returns a lookup key for the mockClient's state map
+func getStateKeyWithKey(key client.ObjectKey, obj runtime.Object) string {
+	kind := reflect.TypeOf(obj).String()
+	//_, kind := obj.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+	return fmt.Sprintf("%s-%s-%s", kind, key.Namespace, key.Name)
 }
 
 // mockFuncCall is used to record a function call to mockClient methods
@@ -85,17 +113,14 @@ func (c mockStatusWriter) Patch(ctx context.Context, obj runtime.Object, patch c
 
 // mockClient is used to mock methods for the Kubernetes controller-runtime client
 type mockClient struct {
-	// getObj is used to assign obj parameter for Get()
-	getObj runtime.Object
-
-	// listObj is used to assign obj parameter for List()
-	listObj runtime.Object
-
 	// status is a StatusWriter mock client returned by Status()
 	status mockStatusWriter
 
-	// errors keeps track of what is returned by function calls, where key = method name
-	errors map[string]error
+	// listObj is used to assign obj parameter for List() calls
+	listObj runtime.Object
+
+	// state is used to maintain a simple state of objects in the cluster, where key = <type>-<namespace>-<name>
+	state map[string]interface{}
 
 	// calls is a record of all mockClient function calls
 	calls map[string][]mockFuncCall
@@ -106,11 +131,14 @@ func (c mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 	c.calls["Get"] = append(c.calls["Get"], mockFuncCall{
 		ctx: ctx,
 		key: key,
+		obj: obj,
 	})
-	if c.errors["Get"] == nil && c.getObj != nil {
-		copyResource(obj, c.getObj)
+	getObj := c.state[getStateKeyWithKey(key, obj)]
+	if getObj != nil {
+		copyResource(obj, getObj.(runtime.Object))
+		return nil
 	}
-	return c.errors["Get"]
+	return fmt.Errorf("NotFound")
 }
 
 // List returns mock client's err field
@@ -120,10 +148,12 @@ func (c mockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 		listOpts: opts,
 		obj:      obj,
 	})
-	if c.errors["List"] == nil && c.listObj != nil {
-		copyResource(obj, c.listObj)
+	listObj := c.listObj
+	if listObj != nil {
+		copyResource(obj, listObj.(runtime.Object))
+		return nil
 	}
-	return c.errors["List"]
+	return fmt.Errorf("NotFound")
 }
 
 // Create returns mock client's err field
@@ -132,7 +162,8 @@ func (c mockClient) Create(ctx context.Context, obj runtime.Object, opts ...clie
 		ctx: ctx,
 		obj: obj,
 	})
-	return c.errors["Create"]
+	c.state[getStateKey(obj)] = obj
+	return nil
 }
 
 // Delete returns mock client's err field
@@ -141,7 +172,8 @@ func (c mockClient) Delete(ctx context.Context, obj runtime.Object, opts ...clie
 		ctx: ctx,
 		obj: obj,
 	})
-	return c.errors["Delete"]
+	c.state[getStateKey(obj)] = nil
+	return nil
 }
 
 // Update returns mock client's err field
@@ -150,7 +182,8 @@ func (c mockClient) Update(ctx context.Context, obj runtime.Object, opts ...clie
 		ctx: ctx,
 		obj: obj,
 	})
-	return c.errors["Update"]
+	c.state[getStateKey(obj)] = obj
+	return nil
 }
 
 // Patch returns mock client's err field
@@ -159,7 +192,7 @@ func (c mockClient) Patch(ctx context.Context, obj runtime.Object, patch client.
 		ctx: ctx,
 		obj: obj,
 	})
-	return c.errors["Patch"]
+	return nil
 }
 
 // DeleteAllOf returns mock client's err field
@@ -168,7 +201,7 @@ func (c mockClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ..
 		ctx: ctx,
 		obj: obj,
 	})
-	return c.errors["DeleteAllOf"]
+	return nil
 }
 
 // Status returns the mock client's StatusWriter
@@ -176,29 +209,23 @@ func (c mockClient) Status() client.StatusWriter {
 	return c.status
 }
 
-// newMockClient is used to create and initialize a new mock client
-func newMockClient() *mockClient {
-	c := &mockClient{
-		calls: make(map[string][]mockFuncCall),
-		errors: map[string]error{
-			"Get":         nil,
-			"List":        nil,
-			"Create":      nil,
-			"Delete":      nil,
-			"Update":      nil,
-			"Patch":       nil,
-			"DeleteAllOf": nil,
-		},
-	}
-	return c
+// resetCalls resets the function call tracker
+func (c *mockClient) resetCalls() {
+	c.calls = make(map[string][]mockFuncCall)
 }
 
 // checkCalls verifies that the wanted function calls were performed
-func (c *mockClient) checkCalls(t *testing.T, metaOnly bool, testname string, wantCalls map[string][]mockFuncCall) {
+func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[string][]mockFuncCall) {
+	notEmptyWantCalls := 0
+
 	for methodName, wantFuncCalls := range wantCalls {
 		gotFuncCalls, ok := c.calls[methodName]
-		if !ok {
-			t.Fatalf("%s: MockClient %s() calls = 0; want %d", testname, methodName, len(wantFuncCalls))
+
+		if len(wantFuncCalls) > 0 {
+			if !ok {
+				t.Fatalf("%s: MockClient %s() calls = 0; want %d", testname, methodName, len(wantFuncCalls))
+			}
+			notEmptyWantCalls++
 		}
 
 		if len(gotFuncCalls) != len(wantFuncCalls) {
@@ -206,34 +233,86 @@ func (c *mockClient) checkCalls(t *testing.T, metaOnly bool, testname string, wa
 		}
 
 		for n := range wantFuncCalls {
-			if metaOnly {
-				switch methodName {
-				case "Get":
-					if gotFuncCalls[n].key.Name != wantFuncCalls[n].metaName {
-						t.Errorf("%s: MockClient %s() call #%d = %s; want %s", testname, methodName, n, gotFuncCalls[n].key.Name, wantFuncCalls[n].metaName)
-					}
-				case "List":
-					if !reflect.DeepEqual(gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts) {
-						t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts)
-					}
-				default:
-					if gotFuncCalls[n].obj.(ResourceObject).GetObjectMeta().GetName() != wantFuncCalls[n].metaName {
-						t.Errorf("%s: MockClient %s() call #%d = %s; want %s", testname, methodName, n,
-							gotFuncCalls[n].obj.(ResourceObject).GetObjectMeta().GetName(),
-							wantFuncCalls[n].metaName)
-					}
+			if methodName == "List" {
+				if !reflect.DeepEqual(gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts) {
+					t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n].listOpts, wantFuncCalls[n].listOpts)
 				}
 			} else {
-				if !reflect.DeepEqual(gotFuncCalls[n], wantFuncCalls[n]) {
-					t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n], wantFuncCalls[n])
+				if wantFuncCalls[n].metaName != "" {
+					var got string
+					if methodName == "Get" {
+						got = getStateKeyWithKey(gotFuncCalls[n].key, gotFuncCalls[n].obj)
+					} else {
+						got = getStateKey(gotFuncCalls[n].obj)
+					}
+					if got != wantFuncCalls[n].metaName {
+						t.Errorf("%s: MockClient %s() call #%d = %s; want %s", testname, methodName, n, got, wantFuncCalls[n].metaName)
+					}
+				} else {
+					if !reflect.DeepEqual(gotFuncCalls[n], wantFuncCalls[n]) {
+						t.Errorf("%s: MockClient %s() call #%d = %v; want %v", testname, methodName, n, gotFuncCalls[n], wantFuncCalls[n])
+					}
 				}
 			}
 		}
 	}
 
-	if len(wantCalls) != len(c.calls) {
+	if notEmptyWantCalls != len(c.calls) {
 		t.Errorf("%s: MockClient functions called = %d; want %d", testname, len(c.calls), len(wantCalls))
 	}
+}
+
+// newMockClient is used to create and initialize a new mock client
+func newMockClient() *mockClient {
+	c := &mockClient{
+		state: make(map[string]interface{}),
+		calls: make(map[string][]mockFuncCall),
+	}
+	return c
+}
+
+func reconcileTester(t *testing.T, method string,
+	current, revised interface{},
+	createCalls, updateCalls map[string][]mockFuncCall,
+	reconcile func(*mockClient, interface{}) error,
+	initObjects ...runtime.Object) {
+
+	// initialize client
+	c := newMockClient()
+	for _, obj := range initObjects {
+		c.state[getStateKey(obj)] = obj
+	}
+
+	// test create new
+	err := reconcile(c, current)
+	if err != nil {
+		t.Errorf("%s() returned %v; want nil", method, err)
+	}
+	c.checkCalls(t, method, createCalls)
+
+	// test no updates required for current
+	c.resetCalls()
+	err = reconcile(c, current)
+	if err != nil {
+		t.Errorf("%s() returned %v; want nil", method, err)
+	}
+	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": createCalls["Get"]})
+
+	// test updates required
+	c.resetCalls()
+	err = reconcile(c, revised)
+	if err != nil {
+		t.Errorf("%s() returned %v; want nil", method, err)
+	}
+	c.checkCalls(t, method, updateCalls)
+
+	// test no updates required for revised
+	c.resetCalls()
+	err = reconcile(c, revised)
+	if err != nil {
+		t.Errorf("%s() returned %v; want nil", method, err)
+	}
+	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": updateCalls["Get"]})
 }
 
 func TestCreateResource(t *testing.T) {
@@ -250,17 +329,11 @@ func TestCreateResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("CreateResource() returned %v; want nil", err)
 	}
-	c.checkCalls(t, false, "TestCreateResource", map[string][]mockFuncCall{
+	c.checkCalls(t, "TestCreateResource", map[string][]mockFuncCall{
 		"Create": {
 			{ctx: context.TODO(), obj: &secret},
 		},
 	})
-
-	c.errors["Create"] = fmt.Errorf("Unknown")
-	err = CreateResource(c, &secret)
-	if err != c.errors["Create"] {
-		t.Errorf("CreateResource() returned %v; want %v", err, c.errors["Create"])
-	}
 }
 
 func TestUpdateResource(t *testing.T) {
@@ -277,97 +350,11 @@ func TestUpdateResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("UpdateResource() returned %v; want nil", err)
 	}
-	c.checkCalls(t, false, "TestUpdateResource", map[string][]mockFuncCall{
+	c.checkCalls(t, "TestUpdateResource", map[string][]mockFuncCall{
 		"Update": {
 			{ctx: context.TODO(), obj: &secret},
 		},
 	})
-
-	c.errors["Update"] = fmt.Errorf("Unknown")
-	err = UpdateResource(c, &secret)
-	if err != c.errors["Update"] {
-		t.Errorf("UpdateResource() returned %v; want %v", err, c.errors["Update"])
-	}
-}
-
-func applyTester(t *testing.T, testname string, method string, obj ResourceObject, f func(c *mockClient) error) {
-	getKey := types.NamespacedName{
-		Name:      obj.GetObjectMeta().GetName(),
-		Namespace: obj.GetObjectMeta().GetNamespace(),
-	}
-	getArgs := mockFuncCall{ctx: context.TODO(), key: getKey}
-	createArgs := mockFuncCall{ctx: context.TODO(), obj: obj}
-
-	c := newMockClient()
-	err := f(c)
-	if err != nil {
-		t.Errorf("%s returned %v; want nil", method, err)
-	}
-	// by default, client.Get() returns nil which indicates it found an existing object
-	// in this case, Apply*() does nothing else because updates are not supported
-	c.checkCalls(t, false, testname, map[string][]mockFuncCall{
-		"Get": {getArgs},
-	})
-
-	c = newMockClient()
-	c.errors["Get"] = fmt.Errorf("NotFound")
-	err = f(c)
-	if err != nil {
-		t.Errorf("%s returned %v; want nil", method, err)
-	}
-	// when client.Get() returns an error, Apply*() assumes it was not found
-	// and should call client.Create()
-	c.checkCalls(t, false, testname, map[string][]mockFuncCall{
-		"Get":    {getArgs},
-		"Create": {createArgs},
-	})
-
-	c = newMockClient()
-	c.errors["Get"] = fmt.Errorf("NotFound")
-	c.errors["Create"] = fmt.Errorf("Unknown")
-	err = f(c)
-	// client.Get() and client.Create() should be called, but Apply*() should
-	// return an error since client.Create() returns an error
-	if err == nil {
-		t.Errorf("%s returned nil; want %v", method, c.errors["Create"])
-	}
-	c.checkCalls(t, false, testname, map[string][]mockFuncCall{
-		"Get":    {getArgs},
-		"Create": {createArgs},
-	})
-}
-
-func TestApplyConfigMap(t *testing.T) {
-	obj := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "defaults",
-			Namespace: "test",
-		},
-	}
-	f := func(c *mockClient) error { return ApplyConfigMap(c, &obj) }
-	applyTester(t, "ApplyConfigMap()", "TestApplyConfigMap", &obj, f)
-}
-
-func TestApplySecret(t *testing.T) {
-	obj := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hec_key",
-			Namespace: "test",
-		},
-	}
-	f := func(c *mockClient) error { return ApplySecret(c, &obj) }
-	applyTester(t, "ApplySecret()", "TestApplySecret", &obj, f)
-}
-
-func TestApplyService(t *testing.T) {
-	obj := corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "svc",
-			Namespace: "test",
-		},
-	}
-	f := func(c *mockClient) error { return ApplyService(c, &obj) }
-	applyTester(t, "ApplyService()", "TestApplyService", &obj, f)
 }
 
 func TestMergePodUpdates(t *testing.T) {

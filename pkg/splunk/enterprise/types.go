@@ -41,3 +41,43 @@ const (
 func (instanceType InstanceType) ToString() string {
 	return string(instanceType)
 }
+
+// ToRole returns ansible/container role for a given InstanceType
+func (instanceType InstanceType) ToRole() string {
+	var role string
+	switch instanceType {
+	case SplunkStandalone:
+		role = "splunk_standalone"
+	case SplunkClusterMaster:
+		role = "splunk_cluster_master"
+	case SplunkSearchHead:
+		role = "splunk_search_head"
+	case SplunkIndexer:
+		role = "splunk_indexer"
+	case SplunkDeployer:
+		role = "splunk_deployer"
+	case SplunkLicenseMaster:
+		role = "splunk_license_master"
+	}
+	return role
+}
+
+// ToKind returns master InstanceType for CRD that manages a given InstanceType
+func (instanceType InstanceType) ToKind() string {
+	var kind string
+	switch instanceType {
+	case SplunkStandalone:
+		kind = "standalone"
+	case SplunkClusterMaster:
+		kind = "indexer"
+	case SplunkIndexer:
+		kind = "indexer"
+	case SplunkSearchHead:
+		kind = "search-head"
+	case SplunkDeployer:
+		kind = "search-head"
+	case SplunkLicenseMaster:
+		kind = "license-master"
+	}
+	return kind
+}

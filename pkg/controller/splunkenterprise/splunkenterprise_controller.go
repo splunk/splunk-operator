@@ -27,9 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	enterprisev1alpha2 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
-	"github.com/splunk/splunk-operator/pkg/splunk/deploy"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 )
 
 var log = logf.Log.WithName("controller_splunkenterprise")
@@ -67,20 +66,40 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource SplunkEnterprise
-	err = c.Watch(&source.Kind{Type: &enterprisev1alpha2.SplunkEnterprise{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &enterprisev1.SplunkEnterprise{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner SplunkEnterprise
-	//err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-	//	IsController: true,
-	//	OwnerType:    &enterprisev1alpha2.SplunkEnterprise{},
-	//})
-	//if err != nil {
-	//	return err
-	//}
+	// Watch for changes to secondary custom resources and requeue the owner SplunkEnterprise
+	err = c.Watch(&source.Kind{Type: &enterprisev1.LicenseMaster{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{Type: &enterprisev1.Indexer{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{Type: &enterprisev1.SearchHead{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{Type: &enterprisev1.Spark{}}, &handler.EnqueueRequestForOwner{
+		IsController: true,
+		OwnerType:    &enterprisev1.SplunkEnterprise{},
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -106,7 +125,7 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 	reqLogger.Info("Reconciling SplunkEnterprise")
 
 	// Fetch the SplunkEnterprise instance
-	instance := &enterprisev1alpha2.SplunkEnterprise{}
+	instance := &enterprisev1.SplunkEnterprise{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -122,23 +141,7 @@ func (r *ReconcileSplunkEnterprise) Reconcile(request reconcile.Request) (reconc
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "SplunkEnterprise"
 
-	// check if deletion has been requested
-	if instance.ObjectMeta.DeletionTimestamp != nil {
-		_, err := deploy.CheckSplunkDeletion(instance, r.client)
-		if err != nil {
-			reqLogger.Error(err, "Unable to delete SplunkEnterprise")
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-
-	err = enterprise.ValidateSplunkCustomResource(instance)
-	if err != nil {
-		reqLogger.Error(err, "SplunkEnterprise validation failed")
-		return reconcile.Result{}, err
-	}
-
-	err = deploy.LaunchDeployment(instance, r.client)
+	err = splunkreconcile.ReconcileSplunkEnterprise(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "SplunkEnterprise reconciliation failed")
 		return reconcile.Result{}, err

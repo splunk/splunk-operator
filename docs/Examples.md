@@ -3,181 +3,256 @@
 This document includes various examples for configuring Splunk Enterprise
 deployments.
 
-* [Creating a ConfigMap for Your License](#creating-a-configmap-for-your-license)
 * [Creating a Clustered Deployment](#creating-a-clustered-deployment)
 * [Creating a Cluster with Data Fabric Search (DFS)](#creating-a-cluster-with-data-fabric-search-(dfs))
 * [Using Default Settings](#using-default-settings)
 * [Installing Splunk Apps](#installing-splunk-apps)
 * [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
+* [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
 
-
-## Creating a ConfigMap for Your License
-
-Many of the examples in this document require that you have a valid Splunk
-Enterprise license.
-
-You can create a ConfigMap named `splunk-licenses` that includes a license
-file named `enterprise.lic` by running:
-
-```
-kubectl create configmap splunk-licenses --from-file=enterprise.lic
-```
-
-You can make this license available to your deployments by using the
-`splunkVolumes` and `licenseUrl` parameters in your `SplunkEnterprise` spec:
-
-```yaml
-spec:
-  splunkVolumes:
-  - name: licenses
-    configMap:
-      name: splunk-licenses
-  licenseUrl: /mnt/licenses/enterprise.lic
-```
-
-`splunkVolumes` will mount the ConfigMap in all of your Splunk Enterprise 
-containers under the `/mnt/licenses` directory, and `licenseUrl` will
-configure your deployment to use the `enterprise.lic` file within it.
-
-Note that `licenseUrl` may specify a local path or URL such as
-"https://myco.com/enterprise.lic", and the `splunkVolumes` parameter can
-be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
+Please refer to the [Custom Resource Guide](CustomResources.md) for more
+information about the custom resources that you can use with the Splunk
+Operator.
 
 
 ## Creating a Clustered Deployment
 
-You can create a new cluster with 3 indexers and 3 search heads by running:
+The two basic building blocks of Splunk Enterprise are search heads and
+indexers. A `Standalone` resource can be used to create a single instance
+that can perform either, or both, of these roles.
+
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
+metadata:
+  name: single
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+```
+
+
+### Indexer Clusters
+
+When growing, customers will typically want to first expand by upgrading
+to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
+The Splunk Operator makes creation of an indexer cluster as easy as creating an `Indexer` resource:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha1
-kind: SplunkEnterprise
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Indexer
 metadata:
-  name: cluster
+  name: example
   finalizers:
   - enterprise.splunk.com/delete-pvc
-spec:
-  splunkVolumes:
-  - name: licenses
-    configMap:
-      name: splunk-licenses
-  licenseUrl: /mnt/licenses/enterprise.lic
-  resources:
-    splunkVarStorage: 10Gi
-    splunkIndexerStorage: 50Gi
-  topology:
-    indexers: 3
-    searchHeads: 3
 EOF
 ```
 
-*Note that this example also demonstrates overriding the default storage
-resource allocations.*
-
-Within a few minutes, you should have a fully configured cluster up and
-ready to use:
+This will automatically configure a cluster master with a single indexer
+peer.
 
 ```
 $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
-splunk-cluster-cluster-master-0    1/1     Running   0          51s
-splunk-cluster-deployer-0          1/1     Running   0          51s
-splunk-cluster-indexer-0           1/1     Running   0          51s
-splunk-cluster-indexer-1           1/1     Running   0          51s
-splunk-cluster-indexer-2           1/1     Running   0          51s
-splunk-cluster-license-master-0    1/1     Running   0          51s
-splunk-cluster-search-head-0       1/1     Running   0          50s
-splunk-cluster-search-head-1       1/1     Running   0          50s
-splunk-cluster-search-head-2       1/1     Running   0          50s
-splunk-operator-67596d99f4-vwm7r   1/1     Running   0          81m
+splunk-example-cluster-master-0    0/1     Running   0          29s
+splunk-example-indexer-0           0/1     Running   0          29s
+splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
 ```
 
-To login you can forward port 8000 to one of the search heads, or use a load
-balancing service that is automatically created for your deployment:
+If you want more indexers, just patch it to include a `replicas` parameter:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Indexer
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 3
+EOF
+```
 
 ```
-kubectl port-forward service/splunk-cluster-search-head-service 8000
+$ kubectl get pods
+NAME                               READY   STATUS    RESTARTS   AGE
+splunk-example-cluster-master-0    1/1     Running   0          14m
+splunk-example-indexer-0           1/1     Running   0          14m
+splunk-example-indexer-1           1/1     Running   0          70s
+splunk-example-indexer-2           1/1     Running   0          70s
+splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
+```
+
+You can now easily scale your indexer cluster by just patching `replicas`.
+
+```
+$ kubectl patch indexer example --type=json -p '[{"op": "replace", "path": "/spec/replicas", "value": 5}]'
+indexer.enterprise.splunk.com/example patched
+```
+
+For efficiency, note that you can use the following short names with `kubectl`:
+
+* `indexer`: `idx`
+* `searchhead`: `search` or `sh`
+* `licensemaster`: `lm`
+
+To create a standalone search head that uses your indexer cluster, all you
+have to do is add an `indexerRef` parameter:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
+metadata:
+  name: single
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  indexerRef:
+    name: example
+EOF
+```
+
+### Search Head Clusters
+
+To scale search performance and provide high availability, customers will
+often want to deploy a [search head cluster](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC).
+Similar to a `Standalone` search head, you can create a search head cluster
+that uses your indexer cluster by just adding a new `SearchHead` resource
+with an `indexerRef` parameter:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: SearchHead
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  indexerRef:
+    name: example
+EOF
+```
+
+This will automatically create a deployer with 3 search heads clustered
+together (search head clusters require a minimum of 3 members):
+
+```
+$ kubectl get pods
+NAME                               READY   STATUS    RESTARTS   AGE
+splunk-example-cluster-master-0    1/1     Running   0          53m
+splunk-example-deployer-0          0/1     Running   0          29s
+splunk-example-indexer-0           1/1     Running   0          53m
+splunk-example-indexer-1           1/1     Running   0          40m
+splunk-example-indexer-2           1/1     Running   0          40m
+splunk-example-indexer-3           1/1     Running   0          37m
+splunk-example-indexer-4           1/1     Running   0          37m
+splunk-example-search-head-0       0/1     Running   0          29s
+splunk-example-search-head-1       0/1     Running   0          29s
+splunk-example-search-head-2       0/1     Running   0          29s
+splunk-operator-7c5599546c-pmbc2   1/1     Running   0          12m
+splunk-single-standalone-0         1/1     Running   0          11m
+```
+
+Similar to indexer clusters, you can easily scale search head clusters
+by just patching the `replicas` parameter.
+
+
+### Cluster Services
+
+Note that the creation of `SearchHead` and `Indexer` resources also creates
+corresponding Kubernetes services:
+
+```
+$ kubectl get svc
+NAME                                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
+splunk-example-cluster-master-service   ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
+splunk-example-deployer-service         ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
+splunk-example-indexer-headless         ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
+splunk-example-indexer-service          ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
+splunk-example-search-head-headless     ClusterIP   None             <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
+splunk-example-search-head-service      ClusterIP   10.100.37.53     <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
+splunk-operator-metrics                 ClusterIP   10.100.181.146   <none>        8383/TCP,8686/TCP                                11d
+```
+
+To login to your new Splunk Enterprise cluster, you can forward port 8000
+to one of the search head pods, or use a load balancing service that is
+automatically created for your deployment:
+
+```
+kubectl port-forward service/splunk-example-search-head-service 8000
 ```
 
 Similar to other examples, the default admin password can be obtained
 from the secrets it generated for your deployment:
 
 ```
-kubectl get secret splunk-cluster-secrets -o jsonpath='{.data.password}' | base64 --decode
+kubectl get secret splunk-example-search-head-secrets -o jsonpath='{.data.password}' | base64 --decode
 ```
 
-To delete your cluster, run
-
-```
-kubectl delete splunkenterprise/cluster
-```
+Please see [Configuring Ingress](Ingress.md) for guidance on making your
+Splunk clusters accessible outside of Kubernetes.
 
 
-## Creating a Cluster with Data Fabric Search (DFS)
+### Creating a Cluster with Data Fabric Search (DFS)
 
-Building on the previous example, adding support for Data Fabric Search to your
-cluster is as easy as adding an `enableDFS` parameter:
+Data Fabric Search (DFS) can easily be enabled on any `Standalone` or
+`SearchHead` insteance. To use DFS, you must first create a Spark cluster
+using the `Spark` resource:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha1
-kind: SplunkEnterprise
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Spark
 metadata:
-  name: dfscluster
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
+  name: example
 spec:
-  enableDFS: true
-  splunkVolumes:
-  - name: licenses
-    configMap:
-      name: splunk-licenses
-  licenseUrl: /mnt/licenses/dfs.lic
-  topology:
-    indexers: 3
-    searchHeads: 3
-    sparkWorkers: 3
+  replicas: 3
 EOF
 ```
 
-Within a few minutes, you should have a fully configured cluster up and
-ready to use:
+Within seconds, this will provision a Spark master and 3 workers to use
+with DFS. Similar to indexer clusters and search head clusters, you can
+easily scale search head clusters by just patching the `replicas` parameter.
 
-```
-$ kubectl get pods
-NAME                                              READY   STATUS    RESTARTS   AGE
-splunk-dfscluster-cluster-master-0                1/1     Running   0          31s
-splunk-dfscluster-deployer-0                      1/1     Running   0          31s
-splunk-dfscluster-indexer-0                       1/1     Running   0          30s
-splunk-dfscluster-indexer-1                       1/1     Running   0          30s
-splunk-dfscluster-indexer-2                       1/1     Running   0          30s
-splunk-dfscluster-license-master-0                1/1     Running   0          31s
-splunk-dfscluster-search-head-0                   1/1     Running   0          29s
-splunk-dfscluster-search-head-1                   1/1     Running   0          29s
-splunk-dfscluster-search-head-2                   1/1     Running   0          29s
-splunk-dfscluster-spark-master-856bcb8dcb-4szms   1/1     Running   0          31s
-splunk-dfscluster-spark-worker-0                  1/1     Running   0          31s
-splunk-dfscluster-spark-worker-1                  1/1     Running   0          31s
-splunk-dfscluster-spark-worker-2                  1/1     Running   0          31s
-splunk-operator-7bcdd5bb54-v8vtb                  1/1     Running   0          16d
-```
+Once you have a Spark cluster created, you can enable DFS by just adding the
+`sparkRef` parameter to any `Standalone` or `SearchHead` instances. For
+example, to create an additional single instance search head with DFS enabled:
 
-To login, you can forward port 8000 to one of the search heads, or use a load balancing service that is automatically created for your deployment:
-
-```
-kubectl port-forward service/splunk-dfscluster-search-head-service 8000
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
+metadata:
+  name: dfsexample
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  sparkRef:
+    name: example
+EOF
 ```
 
-Similar to the previous example, the default admin password can be obtained from the secrets it generated for your deployment:
+
+### Cleaning Up
+
+As these examples demonstrate, the Splunk Operator for Kubernetes makes it
+easy to create and manage clustered deployments of Splunk Enterprise. Given
+the reduced complexity, the comparable resource requirements from
+leveraging containers, and the ability to easily start small and scale as
+necessary, we recommend that you use clustered `Indexer` and `SearchHead`
+resources in favor of `Standalone`, unless you have a specific reason not to.
+
+To remove the resources created from this example, run
 
 ```
-kubectl get secret splunk-dfscluster-secrets -o jsonpath='{.data.password}' | base64 --decode
-```
-
-To delete your cluster, run
-
-```
-kubectl delete splunkenterprise/dfscluster
+kubectl delete standalone dfsexample
+kubectl delete standalone single
+kubectl delete spark example
+kubectl delete sh example
+kubectl delete idx example
 ```
 
 
@@ -195,23 +270,25 @@ Suppose we create a ConfigMap named `splunk-defaults` that includes a
 kubectl create configmap splunk-defaults --from-file=default.yml
 ```
 
-Similar to [license files](#creating-a-configmap-for-your-license), you
-can use the `splunkVolumes` and `defaultsUrl` parameters in the
-`SplunkEnterprise` spec to have the Splunk Operator initialize
+You can use the `volumes` and `defaultsUrl` parameters in the
+configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha1"
-kind: "SplunkEnterprise"
+apiVersion: "enterprise.splunk.com/v1alpha2"
+kind: "Standalone"
 metadata:
   name: "example"
 spec:
-  splunkVolumes:
+  volumes:
     - name: defaults
       configMap:
         name: splunk-defaults
   defaultsUrl: /mnt/defaults/default.yml
 ```
+
+`volumes` will mount the ConfigMap in all of your pods under the
+`/mnt/licenses` directory.
 
 `defaultsUrl` may specify one or more local paths or URLs, each separated
 by a comma. For example, you can use a `generic.yml` with common
@@ -227,12 +304,12 @@ Suppose you want to just override the admin password for your deployment
 inline overrides using the `defaults` parameter:
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha1"
-kind: "SplunkEnterprise"
+apiVersion: "enterprise.splunk.com/v1alpha2"
+kind: "Standalone"
 metadata:
   name: "example"
 spec:
-  splunkVolumes:
+  volumes:
     - name: defaults
       configMap:
         name: splunk-defaults
@@ -257,8 +334,8 @@ may either be a comma-separated list of apps or a YAML list, with each app
 referenced using a filesystem path or URL.
 
 When using filesystem paths, the apps should be mounted using the
-`splunkVolumes` parameter. This may be used to reference either Kubernetes
-ConfigMaps or multi-read Volumes.
+`volumes` parameter. This may be used to reference either Kubernetes
+ConfigMaps, Secrets or multi-read Volumes.
 
 For example, let's say you want to store two of your apps (`app1.tgz` and
 `app2.tgz`) in a ConfigMap named `splunk-apps`:
@@ -271,12 +348,12 @@ You can have the Splunk Operator install these automatically using something
 like the following:
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha1"
-kind: "SplunkEnterprise"
+apiVersion: "enterprise.splunk.com/v1alpha2"
+kind: "Standalone"
 metadata:
   name: "example"
 spec:
-  splunkVolumes:
+  volumes:
     - name: apps
       configMap:
         name: splunk-apps
@@ -355,3 +432,53 @@ tar cvzf myapp.tgz myapp
 You now have your custom knowledge objects configuration packaged into an app
 that can be automatically deployed to your Splunk Enterprise clusters by
 following instructions from the [previous example](#installing-splunk-apps).
+
+
+## Creating a LicenseMaster Using a ConfigMap
+
+We recommend that you create a `LicenseMaster` instance to share a license
+with all the components in your Splunk Enterprise deployment.
+
+First, you can create a ConfigMap named `splunk-licenses` that includes
+a license file named `enterprise.lic` by running:
+
+```
+kubectl create configmap splunk-licenses --from-file=enterprise.lic
+```
+
+You can create a `LicenseMaster` that references this license by
+using the `volumes` and `licenseUrl` configuration parameters:
+ 
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: LicenseMaster
+metadata:
+  name: example
+spec:
+  volumes:
+    - name: licenses
+      configMap:
+        name: splunk-licenses
+  licenseUrl: /mnt/licenses/enterprise.lic
+```
+
+`volumes` will mount the ConfigMap in your `LicenseMaster` pod under the
+`/mnt/licenses` directory, and `licenseUrl` will configure Splunk to use
+the `enterprise.lic` file within it.
+
+Note that `licenseUrl` may specify a local path or URL such as
+"https://myco.com/enterprise.lic", and the `volumes` parameter can
+be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
+
+Finally, configure all of your other Splunk Enterprise components to use
+the `LicenseMaster` by adding `licenseMasterRef` to their spec:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Indexer
+metadata:
+  name: example
+spec:
+  licenseMasterRef:
+    name: example
+```

@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -75,75 +74,6 @@ func UpdateResource(client ControllerClient, obj ResourceObject) error {
 	scopedLog.Info("Updated resource")
 
 	return nil
-}
-
-// ApplyConfigMap creates or updates a Kubernetes ConfigMap
-func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error {
-	scopedLog := log.WithName("ApplyConfigMap").WithValues(
-		"name", configMap.GetObjectMeta().GetName(),
-		"namespace", configMap.GetObjectMeta().GetNamespace())
-
-	var oldConfigMap corev1.ConfigMap
-	namespacedName := types.NamespacedName{
-		Namespace: configMap.Namespace,
-		Name:      configMap.Name,
-	}
-
-	err := client.Get(context.TODO(), namespacedName, &oldConfigMap)
-	if err == nil {
-		// found existing ConfigMap: do nothing
-		scopedLog.Info("Found existing ConfigMap")
-	} else {
-		err = CreateResource(client, configMap)
-	}
-
-	return err
-}
-
-// ApplySecret creates or updates a Kubernetes Secret
-func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
-	scopedLog := log.WithName("ApplySecret").WithValues(
-		"name", secret.GetObjectMeta().GetName(),
-		"namespace", secret.GetObjectMeta().GetNamespace())
-
-	var oldSecret corev1.Secret
-	namespacedName := types.NamespacedName{
-		Namespace: secret.Namespace,
-		Name:      secret.Name,
-	}
-
-	err := client.Get(context.TODO(), namespacedName, &oldSecret)
-	if err == nil {
-		// found existing Secret: do nothing
-		scopedLog.Info("Found existing Secret")
-	} else {
-		err = CreateResource(client, secret)
-	}
-
-	return err
-}
-
-// ApplyService creates or updates a Kubernetes Service
-func ApplyService(client ControllerClient, service *corev1.Service) error {
-	scopedLog := log.WithName("ApplyService").WithValues(
-		"name", service.GetObjectMeta().GetName(),
-		"namespace", service.GetObjectMeta().GetNamespace())
-
-	var oldService corev1.Service
-	namespacedName := types.NamespacedName{
-		Namespace: service.Namespace,
-		Name:      service.Name,
-	}
-
-	err := client.Get(context.TODO(), namespacedName, &oldService)
-	if err == nil {
-		// found existing Service: do nothing
-		scopedLog.Info("Found existing Service")
-	} else {
-		err = CreateResource(client, service)
-	}
-
-	return err
 }
 
 // MergePodUpdates looks for material differences between a Pod's current

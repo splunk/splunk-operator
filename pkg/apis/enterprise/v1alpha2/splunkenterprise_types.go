@@ -15,7 +15,7 @@
 package v1alpha2
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -94,7 +94,7 @@ type SplunkEnterpriseSpec struct {
 	SplunkImage string `json:"splunkImage"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all Splunk containers as as /mnt/<name>
-	SplunkVolumes []v1.Volume `json:"splunkVolumes"`
+	SplunkVolumes []corev1.Volume `json:"splunkVolumes"`
 
 	// Inline map of default.yml overrides used to initialize the environment
 	Defaults string `json:"defaults"`
@@ -116,11 +116,7 @@ type SplunkEnterpriseSpec struct {
 	SchedulerName string `json:"schedulerName"`
 
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes
-	// Unfortunately, this flag is only supported by k8s v1.14 or later and there seems to be
-	// no other way to allow this to be null when using kubebuilder and "operator-sdk generate crds"
-	// TODO: for this reason, we forced to strip the "validation" section from our CRDS
-	// +nullable
-	Affinity *v1.Affinity `json:"affinity"`
+	Affinity corev1.Affinity `json:"affinity"`
 
 	// resource requirements for a SplunkEnterprise deployment
 	Resources SplunkResourcesSpec `json:"resources"`
@@ -186,12 +182,17 @@ type SplunkEnterprise struct {
 
 // GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetIdentifier() string {
-	return cr.GetObjectMeta().GetName()
+	return cr.ObjectMeta.Name
 }
 
 // GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
 func (cr *SplunkEnterprise) GetNamespace() string {
-	return cr.GetObjectMeta().GetNamespace()
+	return cr.ObjectMeta.Namespace
+}
+
+// GetTypeMeta is a convenience function to return a TypeMeta object
+func (cr *SplunkEnterprise) GetTypeMeta() metav1.TypeMeta {
+	return cr.TypeMeta
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

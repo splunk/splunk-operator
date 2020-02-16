@@ -19,7 +19,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -37,10 +36,10 @@ const (
 	serviceTemplateStr = "splunk-%s-%s-%s"
 
 	// identifier
-	secretsTemplateStr = "splunk-%s-secrets"
+	secretsTemplateStr = "splunk-%s-%s-secrets"
 
 	// identifier
-	defaultsTemplateStr = "splunk-%s-defaults"
+	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
@@ -81,13 +80,13 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 }
 
 // GetSplunkSecretsName uses a template to name a Kubernetes Secret for a SplunkEnterprise resource.
-func GetSplunkSecretsName(identifier string) string {
-	return fmt.Sprintf(secretsTemplateStr, identifier)
+func GetSplunkSecretsName(identifier string, instanceType InstanceType) string {
+	return fmt.Sprintf(secretsTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
-func GetSplunkDefaultsName(identifier string) string {
-	return fmt.Sprintf(defaultsTemplateStr, identifier)
+func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
+	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.
@@ -116,11 +115,11 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 }
 
 // GetSplunkImage returns the docker image to use for Splunk instances.
-func GetSplunkImage(cr *v1alpha2.SplunkEnterprise) string {
+func GetSplunkImage(specImage string) string {
 	var name string
 
-	if cr.Spec.SplunkImage != "" {
-		name = cr.Spec.SplunkImage
+	if specImage != "" {
+		name = specImage
 	} else {
 		name = os.Getenv("SPLUNK_IMAGE")
 		if name == "" {

@@ -15,6 +15,7 @@
 package deploy
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,13 +23,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestCheckSplunkDeletion(t *testing.T) {
 	now := time.Now().Add(time.Second * 100)
-	currentTime := metav1.Time{now}
-	cr := v1alpha2.SplunkEnterprise{
+	currentTime := metav1.NewTime(now)
+	cr := enterprisev1.Indexer{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Indexer",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "stack1",
 			Namespace:         "test",
@@ -37,17 +41,11 @@ func TestCheckSplunkDeletion(t *testing.T) {
 				"enterprise.splunk.com/delete-pvc",
 			},
 		},
-		Spec: v1alpha2.SplunkEnterpriseSpec{
-			Topology: v1alpha2.SplunkTopologySpec{
-				Standalones: 1,
-			},
-		},
 	}
 
 	c := newMockClient()
 	labels := map[string]string{
-		"app": "splunk",
-		"for": cr.GetIdentifier(),
+		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetIdentifier(), "indexer"),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
@@ -64,17 +62,16 @@ func TestCheckSplunkDeletion(t *testing.T) {
 		},
 	}
 	c.listObj = &pvclist
-
 	deleted, err := CheckSplunkDeletion(&cr, c)
 	if deleted != true || err != nil {
 		t.Errorf("CheckSplunkDeletion() returned %t, %v; want true, nil", deleted, err)
 	}
-	c.checkCalls(t, true, "TestCheckSplunkDeletion", map[string][]mockFuncCall{
+	c.checkCalls(t, "TestCheckSplunkDeletion", map[string][]mockFuncCall{
 		"Update": {
-			{metaName: "stack1"},
+			{metaName: "*v1alpha2.Indexer-test-stack1"},
 		},
 		"Delete": {
-			{metaName: "splunk-pvc-stack1-var"},
+			{metaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 		},
 		"List": {
 			{listOpts: listOpts},

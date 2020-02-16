@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func init() {
@@ -36,14 +36,14 @@ func init() {
 }
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
-func AsOwner(cr *v1alpha2.SplunkEnterprise) metav1.OwnerReference {
+func AsOwner(cr enterprisev1.MetaObject) metav1.OwnerReference {
 	trueVar := true
 
 	return metav1.OwnerReference{
-		APIVersion: cr.TypeMeta.APIVersion,
-		Kind:       cr.TypeMeta.Kind,
-		Name:       cr.Name,
-		UID:        cr.UID,
+		APIVersion: cr.GetTypeMeta().APIVersion,
+		Kind:       cr.GetTypeMeta().Kind,
+		Name:       cr.GetObjectMeta().GetName(),
+		UID:        cr.GetObjectMeta().GetUID(),
 		Controller: &trueVar,
 	}
 }
@@ -266,24 +266,15 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 }
 
 // GetLabels returns a map of labels to use for managed components.
-func GetLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
-	result := map[string]string{
-		"app":  "splunk",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
-	if isSelector {
-		return result
-	}
-
+func GetLabels(component, name, identifier string) map[string]string {
 	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-	result["app.kubernetes.io/name"] = fmt.Sprintf("splunk-%s", identifier)
-	result["app.kubernetes.io/part-of"] = "splunk"
-	result["app.kubernetes.io/managed-by"] = "splunk-operator"
-	result["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)
-
-	return result
+	return map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  component,
+		"app.kubernetes.io/name":       name,
+		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", identifier, component),
+		"app.kubernetes.io/instance":   fmt.Sprintf("splunk-%s-%s", identifier, name),
+	}
 }
 
 // AppendPodAntiAffinity appends a Kubernetes Affinity object to include anti-affinity for pods of the same type, and returns the result.
@@ -298,19 +289,22 @@ func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLab
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
 	}
 
+	// prepare match expressions to match select labels
+	matchExpressions := []metav1.LabelSelectorRequirement{
+		{
+			Key:      "app.kubernetes.io/instance",
+			Operator: metav1.LabelSelectorOpIn,
+			Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
+		},
+	}
+
 	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
 		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 		corev1.WeightedPodAffinityTerm{
 			Weight: 100,
 			PodAffinityTerm: corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app.kubernetes.io/instance",
-							Operator: metav1.LabelSelectorOpIn,
-							Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
-						},
-					},
+					MatchExpressions: matchExpressions,
 				},
 				TopologyKey: "kubernetes.io/hostname",
 			},
@@ -318,4 +312,72 @@ func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLab
 	)
 
 	return affinity
+}
+
+// ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
+func ValidateImagePullPolicy(imagePullPolicy *string) error {
+	// ImagePullPolicy
+	if *imagePullPolicy == "" {
+		*imagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	}
+	switch *imagePullPolicy {
+	case "":
+		*imagePullPolicy = "IfNotPresent"
+		break
+	case "Always":
+		break
+	case "IfNotPresent":
+		break
+	default:
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+	}
+	return nil
+}
+
+// ValidateResources checks resource requests and limits and sets defaults if not provided
+func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+	// check for nil maps
+	if resources.Requests == nil {
+		resources.Requests = make(corev1.ResourceList)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(corev1.ResourceList)
+	}
+
+	// if not given, use default cpu requests
+	_, ok := resources.Requests[corev1.ResourceCPU]
+	if !ok {
+		resources.Requests[corev1.ResourceCPU] = defaults.Requests[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory requests
+	_, ok = resources.Requests[corev1.ResourceMemory]
+	if !ok {
+		resources.Requests[corev1.ResourceMemory] = defaults.Requests[corev1.ResourceMemory]
+	}
+
+	// if not given, use default cpu limits
+	_, ok = resources.Limits[corev1.ResourceCPU]
+	if !ok {
+		resources.Limits[corev1.ResourceCPU] = defaults.Limits[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory limits
+	_, ok = resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		resources.Limits[corev1.ResourceMemory] = defaults.Limits[corev1.ResourceMemory]
+	}
+}
+
+// ValidateCommonSpec checks validity and makes default updates to a CommonSpec, and returns error if something is wrong.
+func ValidateCommonSpec(spec *enterprisev1.CommonSpec, defaultResources corev1.ResourceRequirements) error {
+	// make sure SchedulerName is not empty
+	if spec.SchedulerName == "" {
+		spec.SchedulerName = "default-scheduler"
+	}
+
+	// if not provided, set default resource requests and limits
+	ValidateResources(&spec.Resources, defaultResources)
+
+	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
 }

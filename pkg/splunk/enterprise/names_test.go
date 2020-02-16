@@ -17,8 +17,6 @@ package enterprise
 import (
 	"os"
 	"testing"
-
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
@@ -59,18 +57,18 @@ func TestGetSplunkServiceName(t *testing.T) {
 }
 
 func TestGetSplunkSecretsName(t *testing.T) {
-	got := GetSplunkSecretsName("pw")
-	want := "splunk-pw-secrets"
+	got := GetSplunkSecretsName("pw", SplunkIndexer)
+	want := "splunk-pw-indexer-secrets"
 	if got != want {
-		t.Errorf("GetSplunkSecretsName(\"%s\") = %s; want %s", "pw", got, want)
+		t.Errorf("GetSplunkSecretsName(\"%s\",\"%s\") = %s; want %s", "pw", SplunkIndexer, got, want)
 	}
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {
-	got := GetSplunkDefaultsName("t1")
-	want := "splunk-t1-defaults"
+	got := GetSplunkDefaultsName("t1", SplunkSearchHead)
+	want := "splunk-t1-search-head-defaults"
 	if got != want {
-		t.Errorf("GetSplunkDefaultsName(\"%s\") = %s; want %s", "t1", got, want)
+		t.Errorf("GetSplunkDefaultsName(\"%s\",\"%s\") = %s; want %s", "t1", SplunkSearchHead, got, want)
 	}
 }
 
@@ -90,10 +88,10 @@ func TestGetSplunkStatefulsetUrls(t *testing.T) {
 }
 
 func TestGetSplunkImage(t *testing.T) {
-	cr := v1alpha2.SplunkEnterprise{}
+	var specImage string
 
 	test := func(want string) {
-		got := GetSplunkImage(&cr)
+		got := GetSplunkImage(specImage)
 		if got != want {
 			t.Errorf("GetSplunkImage() = %s; want %s", got, want)
 		}
@@ -104,6 +102,6 @@ func TestGetSplunkImage(t *testing.T) {
 	os.Setenv("SPLUNK_IMAGE", "splunk-test/splunk")
 	test("splunk-test/splunk")
 
-	cr.Spec.SplunkImage = "splunk/splunk-test"
+	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
 }

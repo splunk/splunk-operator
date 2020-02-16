@@ -14,10 +14,12 @@ also need to specify the location of these images by using either an environment
 variable passed to the operator or adding additional parameters to your 
 `SplunkEnterprise` deployment.
 
-Use the `SPLUNK_IMAGE` environment variable or the `splunkImage` parameter to change the location of the Splunk Enterprise image.
-Use the `SPARK_IMAGE` environment variable or the `sparkImage` parameter to change the location of the Spark image.
-Please see the [Advanced Installation Instructions](Install.md) or
-[SplunkEnterprise Parameters](SplunkEnterprise.md) for more details.
+Use the `SPLUNK_IMAGE` environment variable or the `image` custom resource
+parameter to change the location of the Splunk Enterprise image. Use the
+`SPARK_IMAGE` environment variable or the `sparkImage` parameter to change
+the location of the Spark image. Please see the
+[Advanced Installation Instructions](Install.md) or
+[Custom Resource Guide](CustomResources.md) for more details.
 
 
 ## Using a Private Registry

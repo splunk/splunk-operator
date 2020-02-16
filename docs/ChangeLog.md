@@ -1,5 +1,7 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 0.1.0 Alpha (2020-??-??)
+
 ## 0.0.6 Alpha (2019-12-12)
 
 * The operator now injects a podAntiAffinity rule to try to ensure

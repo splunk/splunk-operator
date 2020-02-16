@@ -26,12 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 // newSplunkEnterprise returns a new SplunkEnterprise object
-func newSplunkEnterprise() *v1alpha2.SplunkEnterprise {
-	cr := v1alpha2.SplunkEnterprise{
+func newSplunkEnterprise() *enterprisev1.SplunkEnterprise {
+	cr := enterprisev1.SplunkEnterprise{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -416,27 +416,19 @@ func TestGetIstioAnnotations(t *testing.T) {
 }
 
 func TestGetLabels(t *testing.T) {
-	test := func(identifier string, typeLabel string, isSelector bool, want map[string]string) {
-		got := GetLabels(identifier, typeLabel, isSelector)
+	test := func(component, name, identifier string, want map[string]string) {
+		got := GetLabels(component, name, identifier)
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetLabels(\"%s\",\"%s\",%t) = %v; want %v", identifier, typeLabel, isSelector, got, want)
+			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, identifier, got, want)
 		}
 	}
 
-	test("t1", "indexer", true, map[string]string{
-		"app":  "splunk",
-		"for":  "t1",
-		"type": "indexer",
-	})
-
-	test("t2", "search-head", false, map[string]string{
-		"app":                          "splunk",
-		"for":                          "t2",
-		"type":                         "search-head",
-		"app.kubernetes.io/instance":   "splunk-t2-search-head",
+	test("indexer", "cluster-master", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/name":       "splunk-t2",
-		"app.kubernetes.io/part-of":    "splunk",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
 	})
 }
 
@@ -501,4 +493,49 @@ func TestAppendPodAffinity(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestValidateCommonSpec(t *testing.T) {
+	spec := enterprisev1.CommonSpec{}
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("0.1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	test := func(pullPolicy, scheduler string) {
+		err := ValidateCommonSpec(&spec, defaultResources)
+		if err != nil {
+			t.Errorf("ValidateCommonSpec() returned %v; want nil", err)
+		}
+		if spec.ImagePullPolicy != pullPolicy {
+			t.Errorf("ValidateCommonSpec() ImagePullPolicy = %s; want %s", spec.ImagePullPolicy, pullPolicy)
+		}
+		if spec.SchedulerName != scheduler {
+			t.Errorf("ValidateCommonSpec() SchedulerName = %s; want %s", spec.SchedulerName, scheduler)
+		}
+		if !reflect.DeepEqual(spec.Resources, defaultResources) {
+			t.Errorf("ValidateCommonSpec() Resources = %v; want %v", spec.Resources, defaultResources)
+		}
+	}
+
+	test("IfNotPresent", "default-scheduler")
+
+	spec.ImagePullPolicy = "Always"
+	spec.SchedulerName = "blah"
+	test("Always", "blah")
+
+	spec.ImagePullPolicy = "IfNotPresent"
+	test("IfNotPresent", "blah")
+
+	spec.ImagePullPolicy = "Invalid"
+	err := ValidateCommonSpec(&spec, defaultResources)
+	if err == nil {
+		t.Error("ValidateCommonSpec() returned nil; want ERROR")
+	}
 }
