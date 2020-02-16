@@ -887,9 +887,6 @@ spec:
                       type: object
                   type: object
               type: object
-            storageClassName:
-              description: Name of StorageClass to use for persistent volume claims
-              type: string
           type: object
         status:
           description: SparkStatus defines the observed state of a Spark cluster

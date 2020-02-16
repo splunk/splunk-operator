@@ -105,11 +105,10 @@ Other make targets include (more info below):
 
 ## Running the Splunk Operator
 
-Ensure that you have the `SplunkEnterprise` Custom Resource Definition installed
-in your cluster:
+Ensure that you have the Custom Resource Definitions installed in your cluster:
 
 ```
-kubectl apply -f deploy/crds/enterprise_v1alpha1_splunkenterprise_crd.yaml
+kubectl apply -f deploy/crds/
 ```
 
 Use this to run the operator as a local foreground process on your machine:

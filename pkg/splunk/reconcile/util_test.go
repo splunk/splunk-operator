@@ -274,10 +274,16 @@ func newMockClient() *mockClient {
 func reconcileTester(t *testing.T, method string,
 	current, revised interface{},
 	createCalls, updateCalls map[string][]mockFuncCall,
-	reconcile func(*mockClient, interface{}) error) {
+	reconcile func(*mockClient, interface{}) error,
+	initObjects ...runtime.Object) {
+
+	// initialize client
+	c := newMockClient()
+	for _, obj := range initObjects {
+		c.state[getStateKey(obj)] = obj
+	}
 
 	// test create new
-	c := newMockClient()
 	err := reconcile(c, current)
 	if err != nil {
 		t.Errorf("%s() returned %v; want nil", method, err)

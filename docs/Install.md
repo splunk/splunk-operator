@@ -143,5 +143,10 @@ Splunk Operator, run:
 
 ```
 kubectl delete splunkenterprises --all
+kubectl delete standalones --all
+kubectl delete licensemasters --all
+kubectl delete searchheads --all
+kubectl delete indexers --all
+kubectl delete spark --all
 kubectl delete -f splunk-operator.yaml
 ```

@@ -84,4 +84,3 @@ push_targets
 splunk-enterprise.lic
 splunk-operator-*.yaml
 splunk-operator-*.tar.gz
-deploy/crds/combined.yaml

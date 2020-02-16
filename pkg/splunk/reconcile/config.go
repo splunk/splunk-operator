@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -28,31 +29,38 @@ import (
 
 // ReconcileSplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
 func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) error {
-	scopedLog := log.WithName("ReconcileSplunkConfig").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	var err error
 
 	// if reference to indexer cluster, extract and re-use idxc.secret
+	// IndexerRef is not relevant for Indexer, and Indexer will use value from LicenseMaster to prevent cyclical dependency
 	var idxcSecret []byte
-	indexerNamespace := spec.IndexerRef.Namespace
-	if indexerNamespace == "" {
-		indexerNamespace = cr.GetNamespace()
-	}
-	if spec.IndexerRef.Name != "" {
-		namespacedName := types.NamespacedName{
-			Namespace: indexerNamespace,
-			Name:      enterprise.GetSplunkSecretsName(spec.IndexerRef.Name, enterprise.SplunkIndexer),
+	if instanceType.ToKind() != "indexer" && instanceType.ToKind() != "license-master" && spec.IndexerRef.Name != "" {
+		idxcSecret, err = GetSplunkSecret(client, cr, spec.IndexerRef, enterprise.SplunkIndexer, "idxc_secret")
+		if err != nil {
+			return err
 		}
-		var indexerSecret corev1.Secret
-		err := client.Get(context.TODO(), namespacedName, &indexerSecret)
-		if err == nil {
-			scopedLog.Info("Re-using idxc_secret from referenced Indexer")
-			idxcSecret = indexerSecret.Data["idxc_secret"]
+	}
+
+	// if reference to license master, extract and re-use pass4SymmKey
+	var pass4SymmKey []byte
+	if instanceType.ToKind() != "license-master" && spec.LicenseMasterRef.Name != "" {
+		pass4SymmKey, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "pass4SymmKey")
+		if err != nil {
+			return err
+		}
+		if instanceType.ToKind() == "indexer" {
+			// get pass4SymmKey from LicenseMaster to avoid cyclical dependency
+			idxcSecret, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "idxc_secret")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	// create splunk secrets
-	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecret)
+	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecret, pass4SymmKey)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
-	if err := ApplySecret(client, secrets); err != nil {
+	if err = ApplySecret(client, secrets); err != nil {
 		return err
 	}
 
@@ -60,7 +68,7 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 	if spec.Defaults != "" {
 		defaultsMap := enterprise.GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), resources.AsOwner(cr)))
-		if err := ApplyConfigMap(client, defaultsMap); err != nil {
+		if err = ApplyConfigMap(client, defaultsMap); err != nil {
 			return err
 		}
 	}
@@ -111,4 +119,33 @@ func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
 	}
 
 	return err
+}
+
+// GetSplunkSecret is used to retrieve a secret from another custom resource.
+func GetSplunkSecret(client ControllerClient, cr enterprisev1.MetaObject, ref corev1.ObjectReference, instanceType enterprise.InstanceType, secretName string) ([]byte, error) {
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = cr.GetNamespace()
+	}
+	namespacedName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      enterprise.GetSplunkSecretsName(ref.Name, instanceType),
+	}
+
+	scopedLog := log.WithName("GetSplunkSecret").WithValues(
+		"kind", cr.GetTypeMeta().Kind, "name", namespacedName.Name, "namespace", namespacedName.Namespace, "secretName", secretName)
+
+	var secret corev1.Secret
+	err := client.Get(context.TODO(), namespacedName, &secret)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get secret: %v", err)
+	}
+
+	result := secret.Data[secretName]
+	if len(result) == 0 {
+		return nil, fmt.Errorf("Secret is empty")
+	}
+
+	scopedLog.Info("Re-using secret")
+	return result, nil
 }

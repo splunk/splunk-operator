@@ -618,10 +618,6 @@ spec:
                       type: array
                   type: object
               type: object
-            clusterMasterUrl:
-              description: ClusterMasterURL refers to a Splunk Enterprise cluster
-                master managed outside of the Kubernetes cluster
-              type: string
             defaults:
               description: Inline map of default.yml overrides used to initialize
                 the environment
@@ -719,10 +715,6 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
-            licenseMasterUrl:
-              description: LicenseMasterURL refers to a Splunk Enterprise license
-                master located outside of the Kubernetes cluster
-              type: string
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string

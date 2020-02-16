@@ -15,8 +15,6 @@
 package spark
 
 import (
-	"fmt"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -27,11 +25,9 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// getSparkAppLabels returns a map of labels to use for Spark components.
-func getSparkAppLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
-	labels := resources.GetLabels(identifier, typeLabel, isSelector)
-	labels["app"] = "spark"
-	return labels
+// getSparkLabels returns a map of labels to use for Spark components.
+func getSparkLabels(identifier string, instanceType InstanceType) map[string]string {
+	return resources.GetLabels("spark", instanceType.ToString(), identifier)
 }
 
 // getSparkMasterPorts returns a map of ports to use for Spark master instances.
@@ -152,15 +148,24 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 		replicas = int32(cr.Spec.Replicas)
 	}
 
-	// prepare other values
-	labels := getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), false)
+	// append same labels as selector
+	selectLabels := getSparkLabels(cr.GetIdentifier(), instanceType)
+	labels := make(map[string]string)
+	for k, v := range selectLabels {
+		labels[k] = v
+	}
+	// append labels from parent
 	for k, v := range cr.GetObjectMeta().GetLabels() {
 		labels[k] = v
 	}
+
+	// append annotations from parent
 	annotations := resources.GetIstioAnnotations(ports)
 	for k, v := range cr.GetObjectMeta().GetAnnotations() {
 		annotations[k] = v
 	}
+
+	// append affinity from spec
 	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
 	// create deployment configuration
@@ -175,7 +180,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true),
+				MatchLabels: selectLabels,
 			},
 			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{
@@ -230,7 +235,7 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 	}
 	service.ObjectMeta.Name = GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
-	service.Spec.Selector = getSparkAppLabels(cr.GetIdentifier(), instanceType.ToString(), true)
+	service.Spec.Selector = getSparkLabels(cr.GetIdentifier(), instanceType)
 
 	// prepare ports (note that port order is important for tests)
 	switch instanceType {
@@ -240,11 +245,11 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 		service.Spec.Ports = resources.SortServicePorts(getSparkWorkerServicePorts())
 	}
 
-	// append standard labels
+	// append same labels as selector
 	if service.ObjectMeta.Labels == nil {
 		service.ObjectMeta.Labels = make(map[string]string)
 	}
-	for k, v := range getSparkAppLabels(cr.GetIdentifier(), fmt.Sprintf("%s-%s", instanceType, "service"), false) {
+	for k, v := range service.Spec.Selector {
 		service.ObjectMeta.Labels[k] = v
 	}
 	// append labels from parent

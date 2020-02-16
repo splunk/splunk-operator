@@ -416,27 +416,19 @@ func TestGetIstioAnnotations(t *testing.T) {
 }
 
 func TestGetLabels(t *testing.T) {
-	test := func(identifier string, typeLabel string, isSelector bool, want map[string]string) {
-		got := GetLabels(identifier, typeLabel, isSelector)
+	test := func(component, name, identifier string, want map[string]string) {
+		got := GetLabels(component, name, identifier)
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetLabels(\"%s\",\"%s\",%t) = %v; want %v", identifier, typeLabel, isSelector, got, want)
+			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, identifier, got, want)
 		}
 	}
 
-	test("t1", "indexer", true, map[string]string{
-		"app":  "splunk",
-		"for":  "t1",
-		"type": "indexer",
-	})
-
-	test("t2", "search-head", false, map[string]string{
-		"app":                          "splunk",
-		"for":                          "t2",
-		"type":                         "search-head",
-		"app.kubernetes.io/instance":   "splunk-t2-search-head",
+	test("indexer", "cluster-master", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/name":       "splunk-t2",
-		"app.kubernetes.io/part-of":    "splunk",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
 	})
 }
 

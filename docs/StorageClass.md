@@ -1,4 +1,4 @@
-# Setting Up a Storage Class for Splunk
+# Setting Up a Persistent Storage for Splunk
 
 The Splunk Operator for Kubernetes uses
 [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
@@ -7,8 +7,12 @@ deployments. For each pod, the following two volumes will be mounted:
 
 | Path            | Purpose                                                        |
 | --------------- | -------------------------------------------------------------- |
-| /opt/splunk/etc | This is used to store all configuration and any installed apps |
-| /opt/splunk/var | This is used to store all indexed events, logs, and other data |
+| `/opt/splunk/etc` | This is used to store all configuration and any installed apps |
+| `/opt/splunk/var` | This is used to store all indexed events, logs, and other data |
+
+By default, 1GiB volumes will be created for `/opt/splunk/etc` and 200GiB
+volumes will be created for `/opt/splunk/var`. You can customize this for
+each resource by using the `etcStorage` and `varStorage` parameters.
 
 The `kubectl` command can be used to see which Storage Classes are available in
 your Kubernetes cluster:
@@ -23,14 +27,16 @@ You can use the `storageClassName` parameter to specify the Storage Class you
 would like to use:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha1
-kind: SplunkEnterprise
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
 metadata:
   name: example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
   storageClassName: "gp2"
+  etcStorage: "25Gi"
+  varStorage: "100Gi"
 ```
 
 If no `storageClassName` is provided, the default Storage Class for your

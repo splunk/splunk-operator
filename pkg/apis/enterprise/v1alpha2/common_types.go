@@ -38,9 +38,6 @@ type CommonSpec struct {
 	// +kubebuilder:validation:Enum=Always;IfNotPresent
 	ImagePullPolicy string `json:"imagePullPolicy"`
 
-	// Name of StorageClass to use for persistent volume claims
-	StorageClassName string `json:"storageClassName"`
-
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
 	SchedulerName string `json:"schedulerName"`
 
@@ -57,6 +54,9 @@ type CommonSpec struct {
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	CommonSpec `json:",inline"`
+
+	// Name of StorageClass to use for persistent volume claims
+	StorageClassName string `json:"storageClassName"`
 
 	// Storage capacity to request for /opt/splunk/etc persistent volume claims (default=”1Gi”)
 	EtcStorage string `json:"etcStorage"`
@@ -76,14 +76,8 @@ type CommonSplunkSpec struct {
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
 
-	// LicenseMasterURL refers to a Splunk Enterprise license master located outside of the Kubernetes cluster
-	LicenseMasterURL string `json:"licenseMasterUrl"`
-
 	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
-
-	// ClusterMasterURL refers to a Splunk Enterprise cluster master managed outside of the Kubernetes cluster
-	ClusterMasterURL string `json:"clusterMasterUrl"`
 
 	// IndexerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	IndexerRef corev1.ObjectReference `json:"indexerRef"`

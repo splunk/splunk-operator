@@ -266,24 +266,15 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 }
 
 // GetLabels returns a map of labels to use for managed components.
-func GetLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
-	result := map[string]string{
-		"app":  "splunk",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
-	if isSelector {
-		return result
-	}
-
+func GetLabels(component, name, identifier string) map[string]string {
 	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-	result["app.kubernetes.io/name"] = fmt.Sprintf("splunk-%s", identifier)
-	result["app.kubernetes.io/part-of"] = "splunk"
-	result["app.kubernetes.io/managed-by"] = "splunk-operator"
-	result["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)
-
-	return result
+	return map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  component,
+		"app.kubernetes.io/name":       name,
+		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", identifier, component),
+		"app.kubernetes.io/instance":   fmt.Sprintf("splunk-%s-%s", identifier, name),
+	}
 }
 
 // AppendPodAntiAffinity appends a Kubernetes Affinity object to include anti-affinity for pods of the same type, and returns the result.
@@ -298,19 +289,22 @@ func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLab
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
 	}
 
+	// prepare match expressions to match select labels
+	matchExpressions := []metav1.LabelSelectorRequirement{
+		{
+			Key:      "app.kubernetes.io/instance",
+			Operator: metav1.LabelSelectorOpIn,
+			Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
+		},
+	}
+
 	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
 		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 		corev1.WeightedPodAffinityTerm{
 			Weight: 100,
 			PodAffinityTerm: corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app.kubernetes.io/instance",
-							Operator: metav1.LabelSelectorOpIn,
-							Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
-						},
-					},
+					MatchExpressions: matchExpressions,
 				},
 				TopologyKey: "kubernetes.io/hostname",
 			},

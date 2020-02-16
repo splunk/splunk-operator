@@ -15,6 +15,7 @@
 package deploy
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,9 +45,7 @@ func TestCheckSplunkDeletion(t *testing.T) {
 
 	c := newMockClient()
 	labels := map[string]string{
-		"app":  "splunk",
-		"for":  cr.GetIdentifier(),
-		"kind": "indexer",
+		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetIdentifier(), "indexer"),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),

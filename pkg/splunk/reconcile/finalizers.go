@@ -69,25 +69,24 @@ func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, 
 func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
-	var kind string
+	var component string
 	switch cr.GetTypeMeta().Kind {
 	case "Standalone":
-		kind = "standalone"
+		component = "standalone"
 	case "LicenseMaster":
-		kind = "license-master"
+		component = "license-master"
 	case "SearchHead":
-		kind = "search-head"
+		component = "search-head"
 	case "Indexer":
-		kind = "indexer"
+		component = "indexer"
 	default:
+		scopedLog.Info("Skipping PVC removal")
 		return nil
 	}
 
 	// get list of PVCs for this cluster
 	labels := map[string]string{
-		"app":  "splunk",
-		"for":  cr.GetIdentifier(),
-		"kind": kind,
+		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetIdentifier(), component),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
@@ -96,6 +95,11 @@ func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 	pvclist := corev1.PersistentVolumeClaimList{}
 	if err := c.List(context.Background(), &pvclist, listOpts...); err != nil {
 		return err
+	}
+
+	if len(pvclist.Items) == 0 {
+		scopedLog.Info("No PVC found")
+		return nil
 	}
 
 	// delete each PVC
