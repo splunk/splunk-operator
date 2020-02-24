@@ -9,6 +9,8 @@ deployments.
 * [Installing Splunk Apps](#installing-splunk-apps)
 * [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
 * [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
+* [Using an External License Master](#using-an-external-license-master)
+* [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
 
 Please refer to the [Custom Resource Guide](CustomResources.md) for more
 information about the custom resources that you can use with the Splunk
@@ -275,10 +277,10 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha2"
-kind: "Standalone"
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
 metadata:
-  name: "example"
+  name: example
 spec:
   volumes:
     - name: defaults
@@ -304,10 +306,10 @@ Suppose you want to just override the admin password for your deployment
 inline overrides using the `defaults` parameter:
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha2"
-kind: "Standalone"
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
 metadata:
-  name: "example"
+  name: example
 spec:
   volumes:
     - name: defaults
@@ -348,10 +350,10 @@ You can have the Splunk Operator install these automatically using something
 like the following:
 
 ```yaml
-apiVersion: "enterprise.splunk.com/v1alpha2"
-kind: "Standalone"
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
 metadata:
-  name: "example"
+  name: example
 spec:
   volumes:
     - name: apps
@@ -481,4 +483,130 @@ metadata:
 spec:
   licenseMasterRef:
     name: example
+```
+
+
+## Using an External License Master
+
+*Note that this requires using the Splunk Enterprise container version 8.0.3 or later*
+
+The Splunk Operator for Kubernetes allows you to use an external license
+master with any of the custom resources it manages. To do this, you will
+use the `splunk.license_master_url` and `splunk.pass4SymmKey` default.yml
+configuration parameters. Set `splunk.license_master_url` to the hostname
+or IP address of your license master.
+
+To authenticate with an external license master, `splunk.pass4SymmKey` must
+match the unencrypted value of `pass4SymmKey` in the `[general]` section of
+your license master's `server.conf` file. 
+
+```
+cat $SPLUNK_HOME/etc/system/local/server.conf
+...
+[general]
+pass4SymmKey = $7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U=
+...
+```
+
+You can decrypt the `pass4SymmKey` by running the following command with
+`--value` set to the value from of your `server.conf` file:
+
+```
+$SPLUNK_HOME/bin/splunk show-decrypted --value '$7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U='
+```
+
+Assuming your unencrypted `pass4SymmKey` is `P@ssw0rd` and that the
+hostname for your license master is `license-master.splunk.mydomain.com`,
+you may create a `default.yml` file with the following contents:
+
+```yaml
+splunk:
+  license_master_url: license-master.splunk.mydomain.com
+  pass4SymmKey: P@ssw0rd
+```
+
+Next, save this file as a secret called `splunk-license-master`:
+
+```
+kubectl create secret generic splunk-license-master --from-file=default.yml
+```
+
+You can then use the `defaultsUrl` parameter to configure any Splunk
+Enterprise custom resource to use your external license master:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
+metadata:
+  name: example
+spec:
+  volumes:
+    - name: license-master
+      secret:
+        secretName: splunk-license-master
+  defaultsUrl: /mnt/license-master/default.yml
+```
+
+
+## Using an External Indexer Cluster
+
+*Note that this requires using the Splunk Enterprise container version 8.0.3 or later*
+
+The Splunk Operator for Kubernetes allows you to use an external cluster of
+indexers with its `Standalone`, `SearchHead` and `LicenseMaster` resources.
+To do this, you will use the `splunk.cluster_master_url` and
+`splunk.idxc.pass4SymmKey` default.yml configuration parameters. Set
+`splunk.cluster_master_url` to the hostname or IP address of your indexers'
+cluster master.
+
+To authenticate with an external cluster master, `splunk.idxc.pass4SymmKey`
+must match the unencrypted value of `pass4SymmKey` in the `[clustering]`
+section of your cluster master's `server.conf` file. 
+
+```
+cat $SPLUNK_HOME/etc/system/local/server.conf
+...
+[clustering]
+pass4SymmKey = $7$4VeDOKt/0Tx48gmSf7tRHNU6/VEUgUJ0P0NHvSAzv2xj0kyL5vXhEJphouOJ5h5SIPRlwnVd1KQ=
+...
+```
+
+You can decrypt the `pass4SymmKey` by running the following command with
+`--value` set to the value from of your `server.conf` file:
+
+```
+$SPLUNK_HOME/bin/splunk show-decrypted --value '$7$4VeDOKt/0Tx48gmSf7tRHNU6/VEUgUJ0P0NHvSAzv2xj0kyL5vXhEJphouOJ5h5SIPRlwnVd1KQ='
+```
+
+Assuming your unencrypted `pass4SymmKey` is `P@ssw0rd` and that the
+hostname for your cluster master is `cluster-master.splunk.mydomain.com`,
+you may create a `default.yml` file with the following contents:
+
+```yaml
+splunk:
+  cluster_master_url: cluster-master.splunk.mydomain.com
+  idxc:
+    pass4SymmKey: P@ssw0rd
+```
+
+Next, save this file as a secret called `splunk-cluster-master`:
+
+```
+kubectl create secret generic splunk-cluster-master --from-file=default.yml
+```
+
+You can then use the `defaultsUrl` parameter to configure any Splunk
+Enterprise custom resource to use your external indexer cluster:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: SearchHead
+metadata:
+  name: example
+spec:
+  volumes:
+    - name: cluster-master
+      secret:
+        secretName: splunk-cluster-master
+  defaultsUrl: /mnt/cluster-master/default.yml
 ```

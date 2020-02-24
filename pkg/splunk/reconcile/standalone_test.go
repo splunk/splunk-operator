@@ -25,10 +25,11 @@ import (
 func TestReconcileStandalone(t *testing.T) {
 	funcCalls := []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack1-standalone-secrets"},
+		{metaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[1]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2]}}
 	current := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

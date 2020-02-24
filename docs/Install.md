@@ -142,7 +142,6 @@ To remove all Splunk deployments and completely uninstall the
 Splunk Operator, run:
 
 ```
-kubectl delete splunkenterprises --all
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheads --all

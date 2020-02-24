@@ -65,24 +65,74 @@ func TestAsOwner(t *testing.T) {
 	}
 }
 
+func TestAppendParentMeta(t *testing.T) {
+	parent := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"a": "b",
+			},
+			Annotations: map[string]string{
+				"one": "two",
+				"kubectl.kubernetes.io/last-applied-configuration": "foobar",
+			},
+		},
+	}
+	child := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"c": "d",
+			},
+			Annotations: map[string]string{
+				"three": "four",
+			},
+		},
+	}
+
+	AppendParentMeta(child.GetObjectMeta(), parent.GetObjectMeta())
+
+	// check Labels
+	want := map[string]string{
+		"a": "b",
+		"c": "d",
+	}
+	if !reflect.DeepEqual(child.GetLabels(), want) {
+		t.Errorf("AppendParentMeta() child Labels=%v; want %v", child.GetLabels(), want)
+	}
+
+	// check Annotations
+	want = map[string]string{
+		"one":   "two",
+		"three": "four",
+	}
+	if !reflect.DeepEqual(child.GetAnnotations(), want) {
+		t.Errorf("AppendParentMeta() child Annotations=%v; want %v", child.GetAnnotations(), want)
+	}
+}
+
 func TestParseResourceQuantity(t *testing.T) {
-	resourceQuantityTester := func(t *testing.T, str string, want int64) {
-		q, err := ParseResourceQuantity(str, "")
+	resourceQuantityTester := func(t *testing.T, str string, defaultStr string, want int64) {
+		q, err := ParseResourceQuantity(str, defaultStr)
 		if err != nil {
-			t.Errorf("ParseResourceQuantity(\"%s\") error: %v", str, err)
+			t.Errorf("ParseResourceQuantity(\"%s\",\"%s\") error: %v", str, defaultStr, err)
 		}
 
 		got, success := q.AsInt64()
 		if !success {
-			t.Errorf("ParseResourceQuantity(\"%s\") returned false", str)
+			t.Errorf("ParseResourceQuantity(\"%s\",\"%s\") returned false", str, defaultStr)
 		}
 		if got != want {
-			t.Errorf("ParseResourceQuantity(\"%s\") = %d; want %d", str, got, want)
+			t.Errorf("ParseResourceQuantity(\"%s\",\"%s\") = %d; want %d", str, defaultStr, got, want)
 		}
 	}
 
-	resourceQuantityTester(t, "1Gi", 1073741824)
-	resourceQuantityTester(t, "4", 4)
+	resourceQuantityTester(t, "1Gi", "", 1073741824)
+	resourceQuantityTester(t, "4", "", 4)
+	resourceQuantityTester(t, "", "1Gi", 1073741824)
+
+	_, err := ParseResourceQuantity("13rf1", "")
+	if err == nil {
+		t.Errorf("ParseResourceQuantity(\"13rf1\",\"\") returned nil; want error")
+	}
 }
 
 func TestGetServiceFQDN(t *testing.T) {

@@ -172,9 +172,9 @@ In addition to [Common Spec Parameters for All Resources](#common-spec-parameter
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `Standalone` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Description                                      |
-| ---------- | ------- | ------------------------------------------------ |
-| replicas   | integer | The number of spark workers pods (defaults to 1) |
+| Key        | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| replicas   | integer | The number of standalone replicas (defaults to 1) |
 | sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `SPARK_IMAGE` environment variables) |
 | sparkRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `Spark` instance (via `name` and optionally `namespace`). When defined, Data Fabric Search (DFS) will be enabled and configured to use it. |
 

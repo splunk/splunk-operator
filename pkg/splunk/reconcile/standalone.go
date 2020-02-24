@@ -45,6 +45,12 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) e
 		return err
 	}
 
+	// create or update a headless service (this is required by DFS for Spark->standalone comms, possibly other things)
+	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkStandalone, true))
+	if err != nil {
+		return err
+	}
+
 	// create or update statefulset
 	statefulSet, err := enterprise.GetStandaloneStatefulSet(cr)
 	if err != nil {

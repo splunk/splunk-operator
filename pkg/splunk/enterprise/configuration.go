@@ -378,25 +378,21 @@ func GetSplunkService(cr enterprisev1.MetaObject, spec enterprisev1.CommonSpec, 
 	service.Spec.Selector = getSplunkLabels(cr.GetIdentifier(), instanceType)
 	service.Spec.Ports = resources.SortServicePorts(getSplunkServicePorts(instanceType)) // note that port order is important for tests
 
-	// append same labels as selector
+	// ensure labels and annotations are not nil
 	if service.ObjectMeta.Labels == nil {
 		service.ObjectMeta.Labels = make(map[string]string)
 	}
-	for k, v := range service.Spec.Selector {
-		service.ObjectMeta.Labels[k] = v
-	}
-	// append labels from parent
-	for k, v := range cr.GetObjectMeta().GetLabels() {
-		service.ObjectMeta.Labels[k] = v
-	}
-
-	// append annotations from parent
 	if service.ObjectMeta.Annotations == nil {
 		service.ObjectMeta.Annotations = make(map[string]string)
 	}
-	for k, v := range cr.GetObjectMeta().GetAnnotations() {
-		service.ObjectMeta.Annotations[k] = v
+
+	// append same labels as selector
+	for k, v := range service.Spec.Selector {
+		service.ObjectMeta.Labels[k] = v
 	}
+
+	// append labels and annotations from parent
+	resources.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
 	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
 		// required for SHC bootstrap process; use services with heads when readiness is desired
@@ -717,23 +713,14 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 	// prepare misc values
 	replicas32 := int32(replicas)
 	ports := resources.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
+	annotations := resources.GetIstioAnnotations(ports)
 	selectLabels := getSplunkLabels(cr.GetIdentifier(), instanceType)
 	affinity := resources.AppendPodAntiAffinity(&spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
-	// append same labels as selector
+	// start with same labels as selector; note that this object gets modified by resources.AppendParentMeta()
 	labels := make(map[string]string)
 	for k, v := range selectLabels {
 		labels[k] = v
-	}
-	// append labels from parent
-	for k, v := range cr.GetObjectMeta().GetLabels() {
-		labels[k] = v
-	}
-
-	// append annotations from parent
-	annotations := resources.GetIstioAnnotations(ports)
-	for k, v := range cr.GetObjectMeta().GetAnnotations() {
-		annotations[k] = v
 	}
 
 	// prepare volume claims
@@ -784,6 +771,9 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 			VolumeClaimTemplates: volumeClaims,
 		},
 	}
+
+	// append labels and annotations from parent
+	resources.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// update statefulset's pod template with common splunk pod config
 	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv)
@@ -876,20 +866,13 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		splunkDefaults = fmt.Sprintf("%s,%s", splunkDefaults, "/mnt/splunk-defaults/default.yml")
 	}
 
-	// use search head role for standalone that refers to a cluster master
-	// this is required by ansible playbooks to setup peering
-	splunkRole := instanceType.ToRole()
-	if instanceType == SplunkStandalone && spec.IndexerRef.Name != "" {
-		splunkRole = "splunk_search_head"
-	}
-
 	// prepare container env variables
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
 		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: splunkRole},
+		{Name: "SPLUNK_ROLE", Value: instanceType.ToRole()},
 	}
 
 	// update variables for licensing, if configured
