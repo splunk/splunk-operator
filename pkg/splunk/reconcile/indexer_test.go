@@ -47,21 +47,3 @@ func TestReconcileIndexer(t *testing.T) {
 	}
 	reconcileTester(t, "TestReconcileIndexer", &current, revised, createCalls, updateCalls, reconcile)
 }
-
-func TestApplyIndexer(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1alpha2.Indexer-test-stack1"}}
-	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	current := enterprisev1.SplunkEnterprise{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-	revised := current.DeepCopy()
-	revised.Spec.SplunkImage = "splunk/test"
-	reconcile := func(c *mockClient, cr interface{}) error {
-		return applyIndexer(c, cr.(*enterprisev1.SplunkEnterprise))
-	}
-	reconcileTester(t, "TestApplyIndexer", &current, revised, createCalls, updateCalls, reconcile)
-}

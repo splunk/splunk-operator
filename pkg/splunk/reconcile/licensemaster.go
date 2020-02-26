@@ -15,11 +15,6 @@
 package deploy
 
 import (
-	"context"
-	"reflect"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
@@ -57,31 +52,4 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 		return err
 	}
 	return ApplyStatefulSet(client, statefulSet)
-}
-
-// applyLicenseMaster creates or updates a Splunk Enterprise LicenseMaster custom resource definition (CRD).
-func applyLicenseMaster(client ControllerClient, cr *enterprisev1.SplunkEnterprise) error {
-	scopedLog := log.WithName("applyLicenseMaster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
-
-	revised, err := enterprise.GetLicenseMasterResource(cr)
-	if err != nil {
-		return err
-	}
-	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetIdentifier()}
-	var current enterprisev1.LicenseMaster
-
-	err = client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing LicenseMaster
-		if !reflect.DeepEqual(revised.Spec, current.Spec) {
-			current.Spec = revised.Spec
-			err = UpdateResource(client, &current)
-		} else {
-			scopedLog.Info("No changes for LicenseMaster")
-		}
-	} else {
-		err = CreateResource(client, revised)
-	}
-
-	return err
 }

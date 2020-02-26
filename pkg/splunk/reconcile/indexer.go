@@ -15,12 +15,6 @@
 package deploy
 
 import (
-	"context"
-	"reflect"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
@@ -80,34 +74,4 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 		return err
 	}
 	return ApplyStatefulSet(client, statefulSet)
-}
-
-// applyIndexer creates or updates a Splunk Enterprise Indexer custom resource definition (CRD).
-func applyIndexer(client ControllerClient, cr *enterprisev1.SplunkEnterprise) error {
-	scopedLog := log.WithName("applyIndexer").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
-
-	revised, err := enterprise.GetIndexerResource(cr)
-	if err != nil {
-		return err
-	}
-	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetIdentifier()}
-	if cr.Spec.LicenseURL != "" {
-		revised.Spec.LicenseMasterRef = corev1.ObjectReference{Namespace: revised.GetNamespace(), Name: revised.GetIdentifier()}
-	}
-	var current enterprisev1.Indexer
-
-	err = client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing Indexer
-		if !reflect.DeepEqual(revised.Spec, current.Spec) {
-			current.Spec = revised.Spec
-			err = UpdateResource(client, &current)
-		} else {
-			scopedLog.Info("No changes for Indexer")
-		}
-	} else {
-		err = CreateResource(client, revised)
-	}
-
-	return err
 }

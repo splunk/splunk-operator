@@ -15,11 +15,6 @@
 package deploy
 
 import (
-	"context"
-	"reflect"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
@@ -57,31 +52,4 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) e
 		return err
 	}
 	return ApplyStatefulSet(client, statefulSet)
-}
-
-// applyStandalone creates or updates a Splunk Enterprise Standalone custom resource definition (CRD).
-func applyStandalone(client ControllerClient, cr *enterprisev1.SplunkEnterprise) error {
-	scopedLog := log.WithName("applyStandalone").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
-
-	revised, err := enterprise.GetStandaloneResource(cr)
-	if err != nil {
-		return err
-	}
-	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetIdentifier()}
-	var current enterprisev1.Standalone
-
-	err = client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing Standalone
-		if !reflect.DeepEqual(revised.Spec, current.Spec) {
-			current.Spec = revised.Spec
-			err = UpdateResource(client, &current)
-		} else {
-			scopedLog.Info("No changes for Standalone")
-		}
-	} else {
-		err = CreateResource(client, revised)
-	}
-
-	return err
 }

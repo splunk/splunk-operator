@@ -29,20 +29,14 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-// newSplunkEnterprise returns a new SplunkEnterprise object
-func newSplunkEnterprise() *enterprisev1.SplunkEnterprise {
-	cr := enterprisev1.SplunkEnterprise{
+func TestAsOwner(t *testing.T) {
+	cr := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
-	return &cr
-}
-
-func TestAsOwner(t *testing.T) {
-	cr := newSplunkEnterprise()
-	got := AsOwner(cr)
+	got := AsOwner(&cr)
 
 	if got.APIVersion != cr.TypeMeta.APIVersion {
 		t.Errorf("AsOwner().APIVersion = %s; want %s", got.APIVersion, cr.TypeMeta.APIVersion)

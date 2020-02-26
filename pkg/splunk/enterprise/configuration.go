@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -90,213 +89,6 @@ func getSplunkVolumeClaims(cr enterprisev1.MetaObject, spec *enterprisev1.Common
 	return volumeClaims, nil
 }
 
-// getSplunkRequirements returns the Kubernetes ResourceRequirements to use for Splunk instances.
-func getSplunkRequirements(cr *enterprisev1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPURequest, "0.1")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPURequest", err)
-	}
-
-	memoryRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryRequest, "512Mi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryRequest", err)
-	}
-
-	cpuLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkCPULimit, "4")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkCPULimit", err)
-	}
-
-	memoryLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SplunkMemoryLimit, "8Gi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SplunkMemoryLimit", err)
-	}
-
-	return corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuRequest,
-			corev1.ResourceMemory: memoryRequest,
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuLimit,
-			corev1.ResourceMemory: memoryLimit,
-		}}, nil
-}
-
-// getSparkRequirements returns the Kubernetes ResourceRequirements to use for Spark instances.
-func getSparkRequirements(cr *enterprisev1.SplunkEnterprise) (corev1.ResourceRequirements, error) {
-	cpuRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCPURequest, "0.1")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCPURequest", err)
-	}
-
-	memoryRequest, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkMemoryRequest, "512Mi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryRequest", err)
-	}
-
-	cpuLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkCPULimit, "4")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkCPULimit", err)
-	}
-
-	memoryLimit, err := resources.ParseResourceQuantity(cr.Spec.Resources.SparkMemoryLimit, "8Gi")
-	if err != nil {
-		return corev1.ResourceRequirements{}, fmt.Errorf("%s: %s", "SparkMemoryLimit", err)
-	}
-
-	return corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuRequest,
-			corev1.ResourceMemory: memoryRequest,
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    cpuLimit,
-			corev1.ResourceMemory: memoryLimit,
-		}}, nil
-}
-
-// copyCommonSpec copies common parameters from a SplunkEnterpriseSpec
-func copyCommonSpec(dst *enterprisev1.CommonSpec, cr *enterprisev1.SplunkEnterprise, isSpark bool) error {
-	dst.Image = cr.Spec.SplunkImage
-	dst.ImagePullPolicy = cr.Spec.ImagePullPolicy
-	dst.SchedulerName = cr.Spec.SchedulerName
-	dst.Affinity = *cr.Spec.Affinity.DeepCopy()
-
-	var err error
-	if isSpark {
-		dst.Resources, err = getSparkRequirements(cr)
-	} else {
-		dst.Resources, err = getSplunkRequirements(cr)
-	}
-	return err
-}
-
-// copyCommonSplunkSpec copies common Splunk Enterprise parameters from a SplunkEnterpriseSpec
-func copyCommonSplunkSpec(dst *enterprisev1.CommonSplunkSpec, cr *enterprisev1.SplunkEnterprise, instanceType InstanceType) error {
-	dst.StorageClassName = cr.Spec.StorageClassName
-	dst.EtcStorage = cr.Spec.Resources.SplunkEtcStorage
-	if instanceType == SplunkIndexer {
-		dst.VarStorage = cr.Spec.Resources.SplunkIndexerStorage
-	} else {
-		dst.VarStorage = cr.Spec.Resources.SplunkVarStorage
-	}
-	dst.Volumes = make([]corev1.Volume, len(cr.Spec.SplunkVolumes))
-	copy(dst.Volumes, cr.Spec.SplunkVolumes)
-	dst.Defaults = cr.Spec.Defaults
-	dst.DefaultsURL = cr.Spec.DefaultsURL
-	dst.LicenseURL = cr.Spec.LicenseURL
-	if dst.LicenseURL != "" {
-		dst.LicenseMasterRef = corev1.ObjectReference{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
-		}
-	}
-	dst.IndexerRef = corev1.ObjectReference{
-		Name:      cr.GetName(),
-		Namespace: cr.GetNamespace(),
-	}
-	return copyCommonSpec(&dst.CommonSpec, cr, false)
-}
-
-// GetLicenseMasterResource returns corresponding LicenseMaster type managed by a SplunkEnterprise
-func GetLicenseMasterResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.LicenseMaster, error) {
-	result := enterprisev1.LicenseMaster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.GetName(),
-			Namespace:   cr.GetNamespace(),
-			Labels:      cr.GetObjectMeta().GetLabels(),
-			Annotations: cr.GetObjectMeta().GetAnnotations(),
-			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
-		},
-	}
-	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkLicenseMaster)
-	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
-	return &result, err
-}
-
-// GetStandaloneResource returns corresponding Standalone type managed by a SplunkEnterprise
-func GetStandaloneResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Standalone, error) {
-	result := enterprisev1.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.GetName(),
-			Namespace:   cr.GetNamespace(),
-			Labels:      cr.GetObjectMeta().GetLabels(),
-			Annotations: cr.GetObjectMeta().GetAnnotations(),
-			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
-		},
-	}
-	result.Spec.Replicas = cr.Spec.Topology.Standalones
-	result.Spec.SparkImage = cr.Spec.SparkImage
-	if cr.Spec.EnableDFS {
-		result.Spec.SparkRef = corev1.ObjectReference{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
-		}
-	}
-	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkStandalone)
-	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
-	return &result, err
-}
-
-// GetSearchHeadResource returns corresponding SearchHead type managed by a SplunkEnterprise
-func GetSearchHeadResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.SearchHead, error) {
-	result := enterprisev1.SearchHead{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.GetName(),
-			Namespace:   cr.GetNamespace(),
-			Labels:      cr.GetObjectMeta().GetLabels(),
-			Annotations: cr.GetObjectMeta().GetAnnotations(),
-			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
-		},
-	}
-	result.Spec.Replicas = cr.Spec.Topology.SearchHeads
-	result.Spec.SparkImage = cr.Spec.SparkImage
-	if cr.Spec.EnableDFS {
-		result.Spec.SparkRef = corev1.ObjectReference{
-			Name:      cr.GetName(),
-			Namespace: cr.GetNamespace(),
-		}
-	}
-	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkSearchHead)
-	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
-	return &result, err
-}
-
-// GetIndexerResource returns corresponding Indexer type managed by a SplunkEnterprise
-func GetIndexerResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Indexer, error) {
-	result := enterprisev1.Indexer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.GetName(),
-			Namespace:   cr.GetNamespace(),
-			Labels:      cr.GetObjectMeta().GetLabels(),
-			Annotations: cr.GetObjectMeta().GetAnnotations(),
-			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
-		},
-	}
-	result.Spec.Replicas = cr.Spec.Topology.Indexers
-	err := copyCommonSplunkSpec(&result.Spec.CommonSplunkSpec, cr, SplunkIndexer)
-	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
-	return &result, err
-}
-
-// GetSparkResource returns corresponding Spark type managed by a SplunkEnterprise
-func GetSparkResource(cr *enterprisev1.SplunkEnterprise) (*enterprisev1.Spark, error) {
-	result := enterprisev1.Spark{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.GetName(),
-			Namespace:   cr.GetNamespace(),
-			Labels:      cr.GetObjectMeta().GetLabels(),
-			Annotations: cr.GetObjectMeta().GetAnnotations(),
-			Finalizers:  cr.GetObjectMeta().GetFinalizers(),
-		},
-	}
-	result.Spec.Replicas = cr.Spec.Topology.SparkWorkers
-	err := copyCommonSpec(&result.Spec.CommonSpec, cr, true)
-	result.SetOwnerReferences(append(result.GetOwnerReferences(), resources.AsOwner(cr)))
-	return &result, err
-}
-
 // GetStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
 func GetStandaloneStatefulSet(cr *enterprisev1.Standalone) (*appsv1.StatefulSet, error) {
 
@@ -358,7 +150,7 @@ func GetLicenseMasterStatefulSet(cr *enterprisev1.LicenseMaster) (*appsv1.Statef
 	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
 }
 
-// GetSplunkService returns a Kubernetes Service object for Splunk instances configured for a SplunkEnterprise resource.
+// GetSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
 func GetSplunkService(cr enterprisev1.MetaObject, spec enterprisev1.CommonSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	// use template if not headless
@@ -456,45 +248,7 @@ func ValidateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
 
-// ValidateSplunkEnterpriseSpec checks validity and makes default updates to a SplunkEnterpriseSpec, and returns error if something is wrong.
-func ValidateSplunkEnterpriseSpec(spec *enterprisev1.SplunkEnterpriseSpec) error {
-	// cluster sanity checks
-	if spec.Topology.SearchHeads > 0 && spec.Topology.Indexers <= 0 {
-		return errors.New("You must specify how many indexers the cluster should have")
-	}
-	if spec.Topology.SearchHeads <= 0 && spec.Topology.Indexers > 0 {
-		return errors.New("You must specify how many search heads the cluster should have")
-	}
-
-	// default to using a single standalone instance
-	if spec.Topology.SearchHeads <= 0 && spec.Topology.Indexers <= 0 {
-		if spec.Topology.Standalones <= 0 {
-			spec.Topology.Standalones = 1
-		}
-	}
-
-	// default to a single spark worker
-	if spec.EnableDFS && spec.Topology.SparkWorkers <= 0 {
-		spec.Topology.SparkWorkers = 1
-	}
-
-	// make sure SchedulerName is not empty
-	if spec.SchedulerName == "" {
-		spec.SchedulerName = "default-scheduler"
-	}
-
-	// work-around openapi validation error by ensuring it is not nill
-	if spec.SplunkVolumes == nil {
-		spec.SplunkVolumes = []corev1.Volume{}
-	}
-
-	// update spark image
-	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
-
-	return resources.ValidateImagePullPolicy(&spec.ImagePullPolicy)
-}
-
-// GetSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a SplunkEnterprise resource.
+// GetSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
 func GetSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -507,7 +261,7 @@ func GetSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 	}
 }
 
-// GetSplunkSecrets returns a Kubernetes Secret containing randomly generated default secrets to use for a SplunkEnterprise resource.
+// GetSplunkSecrets returns a Kubernetes Secret containing randomly generated default secrets to use for a Splunk Enterprise resource.
 func GetSplunkSecrets(cr enterprisev1.MetaObject, instanceType InstanceType, idxcSecret []byte, pass4SymmKey []byte) *corev1.Secret {
 	// idxc_secret is option, and may be used to override random generation
 	if len(idxcSecret) == 0 {
@@ -707,7 +461,7 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev
 	}
 }
 
-// getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a SplunkEnterprise resource.
+// getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
@@ -778,13 +532,13 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 	// update statefulset's pod template with common splunk pod config
 	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv)
 
-	// make SplunkEnterprise object the owner
+	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), resources.AsOwner(cr)))
 
 	return statefulSet, nil
 }
 
-// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the SplunkEnterprise resource.
+// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar) {
 
 	// Add custom volumes to splunk containers

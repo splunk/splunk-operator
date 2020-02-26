@@ -46,21 +46,3 @@ func TestReconcileSearchHead(t *testing.T) {
 	}
 	reconcileTester(t, "TestReconcileSearchHead", &current, revised, createCalls, updateCalls, reconcile)
 }
-
-func TestApplySearchHead(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1alpha2.SearchHead-test-stack1"}}
-	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	current := enterprisev1.SplunkEnterprise{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-	revised := current.DeepCopy()
-	revised.Spec.SplunkImage = "splunk/test"
-	reconcile := func(c *mockClient, cr interface{}) error {
-		return applySearchHead(c, cr.(*enterprisev1.SplunkEnterprise))
-	}
-	reconcileTester(t, "TestApplySearchHead", &current, revised, createCalls, updateCalls, reconcile)
-}
