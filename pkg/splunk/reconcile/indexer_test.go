@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -35,6 +36,9 @@ func TestReconcileIndexer(t *testing.T) {
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
 
 	current := enterprisev1.Indexer{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Indexer",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -46,4 +50,14 @@ func TestReconcileIndexer(t *testing.T) {
 		return ReconcileIndexer(c, cr.(*enterprisev1.Indexer))
 	}
 	reconcileTester(t, "TestReconcileIndexer", &current, revised, createCalls, updateCalls, reconcile)
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+		err := ReconcileIndexer(c, cr.(*enterprisev1.Indexer))
+		return true, err
+	}
+	splunkDeletionTester(t, revised, deleteFunc)
 }

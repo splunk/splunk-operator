@@ -26,26 +26,21 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-func TestCheckSplunkDeletion(t *testing.T) {
-	now := time.Now().Add(time.Second * 100)
-	currentTime := metav1.NewTime(now)
-	cr := enterprisev1.Indexer{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Indexer",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "stack1",
-			Namespace:         "test",
-			DeletionTimestamp: &currentTime,
-			Finalizers: []string{
-				"enterprise.splunk.com/delete-pvc",
-			},
-		},
+func splunkDeletionTester(t *testing.T, cr enterprisev1.MetaObject, delete func(enterprisev1.MetaObject, ControllerClient) (bool, error)) {
+	var component string
+	switch cr.GetTypeMeta().Kind {
+	case "Standalone":
+		component = "standalone"
+	case "LicenseMaster":
+		component = "license-master"
+	case "SearchHead":
+		component = "search-head"
+	case "Indexer":
+		component = "indexer"
 	}
 
-	c := newMockClient()
 	labels := map[string]string{
-		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetIdentifier(), "indexer"),
+		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetIdentifier(), component),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
@@ -61,27 +56,55 @@ func TestCheckSplunkDeletion(t *testing.T) {
 			},
 		},
 	}
-	c.listObj = &pvclist
-	deleted, err := CheckSplunkDeletion(&cr, c)
-	if deleted != true || err != nil {
-		t.Errorf("CheckSplunkDeletion() returned %t, %v; want true, nil", deleted, err)
+
+	mockCalls := make(map[string][]mockFuncCall)
+	wantDeleted := false
+	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+		wantDeleted = true
+		mockCalls["Update"] = []mockFuncCall{
+			{metaName: fmt.Sprintf("*v1alpha2.%s-%s-%s", cr.GetTypeMeta().Kind, cr.GetNamespace(), cr.GetIdentifier())},
+		}
+		if component != "" {
+			mockCalls["Delete"] = []mockFuncCall{
+				{metaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+			}
+			mockCalls["List"] = []mockFuncCall{
+				{listOpts: listOpts},
+			}
+		}
 	}
-	c.checkCalls(t, "TestCheckSplunkDeletion", map[string][]mockFuncCall{
-		"Update": {
-			{metaName: "*v1alpha2.Indexer-test-stack1"},
+
+	c := newMockClient()
+	c.listObj = &pvclist
+	deleted, err := delete(cr, c)
+	if deleted != wantDeleted || err != nil {
+		t.Errorf("CheckSplunkDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
+	}
+	c.checkCalls(t, "TestCheckSplunkDeletion", mockCalls)
+}
+
+func TestCheckSplunkDeletion(t *testing.T) {
+	cr := enterprisev1.Indexer{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Indexer",
 		},
-		"Delete": {
-			{metaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
 		},
-		"List": {
-			{listOpts: listOpts},
-		},
-	})
+	}
+	splunkDeletionTester(t, &cr, CheckSplunkDeletion)
+
+	now := time.Now().Add(time.Second * 100)
+	currentTime := metav1.NewTime(now)
+	cr.ObjectMeta.DeletionTimestamp = &currentTime
+	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	splunkDeletionTester(t, &cr, CheckSplunkDeletion)
 
 	// try with unrecognized finalizer
-	c = newMockClient()
+	c := newMockClient()
 	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
-	deleted, err = CheckSplunkDeletion(&cr, c)
+	deleted, err := CheckSplunkDeletion(&cr, c)
 	if deleted != false || err == nil {
 		t.Errorf("CheckSplunkDeletion() returned %t, %v; want false, (error)", deleted, err)
 	}

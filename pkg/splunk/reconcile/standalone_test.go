@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -31,6 +32,9 @@ func TestReconcileStandalone(t *testing.T) {
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2]}}
 	current := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -42,4 +46,14 @@ func TestReconcileStandalone(t *testing.T) {
 		return ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
 	}
 	reconcileTester(t, "TestReconcileStandalone", &current, revised, createCalls, updateCalls, reconcile)
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+		err := ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
+		return true, err
+	}
+	splunkDeletionTester(t, revised, deleteFunc)
 }
