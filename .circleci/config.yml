@@ -6,14 +6,14 @@ workflows:
     jobs:
       - build-image
       - unit-tests
-      - sdk-tests:
+      - vulnerability-scan:
           requires:
             - build-image
       - push-latest:
           requires:
             - build-image
             - unit-tests
-            - sdk-tests
+            - vulnerability-scan
           filters:
             branches:
               only:
@@ -22,7 +22,7 @@ workflows:
           requires:
             - build-image
             - unit-tests
-            - sdk-tests
+            - vulnerability-scan
           filters:
             branches:
               only:
@@ -31,7 +31,7 @@ workflows:
           requires:
             - build-image
             - unit-tests
-            - sdk-tests
+            - vulnerability-scan
           filters:
             tags:
               only: /^\d+\.\d+\.\d+/
@@ -51,6 +51,12 @@ executors:
       IMAGE_FILENAME: splunk-operator
     docker:
       - image: circleci/buildpack-deps:buster
+  classic-machine:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    machine:
+      image: circleci/classic:latest
 commands:
   save_image:
     description: "Save image"
@@ -123,19 +129,26 @@ jobs:
       - store_artifacts:
           name: Save coverage.out as artifact
           path: coverage.out
-  sdk-tests:
-    executor: golang-builder
+  vulnerability-scan:
+    executor: classic-machine
     steps:
       - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
       - attach_workspace:
           name: Restore workspace
           at: /tmp
       - load_image
-      - run: 
-          name: Placeholder for e2e tests
-          command: docker inspect ${IMAGE_NAME}:${CIRCLE_SHA1}
+      - run:
+          name: Setup clair scanner
+          command: make setup_clair_scanner
+      - run:
+          name: Scan container image
+          command: make run_clair_scan
+      - run:
+          name: Stop clair scanner
+          command: make stop_clair_scanner
+      - store_artifacts:
+          name: Save scan results as artifacts
+          path: clair-scanner-logs
   push-latest:
     executor: docker-publisher
     steps:
