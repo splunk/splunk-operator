@@ -84,3 +84,5 @@ push_targets
 splunk-enterprise.lic
 splunk-operator-*.yaml
 splunk-operator-*.tar.gz
+clair-scanner
+clair-scanner-logs
