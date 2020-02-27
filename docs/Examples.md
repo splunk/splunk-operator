@@ -281,6 +281,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: Standalone
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: defaults
@@ -310,6 +312,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: Standalone
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: defaults
@@ -354,6 +358,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: Standalone
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: apps
@@ -456,6 +462,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: LicenseMaster
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: licenses
@@ -480,6 +488,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: Indexer
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   licenseMasterRef:
     name: example
@@ -539,6 +549,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: Standalone
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: license-master
@@ -603,6 +615,8 @@ apiVersion: enterprise.splunk.com/v1alpha2
 kind: SearchHead
 metadata:
   name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
     - name: cluster-master

@@ -2,6 +2,36 @@
 
 ## 0.1.0 Alpha (2020-??-??)
 
+* This release depends upon changes made concurrently in the Splunk
+  Enterprise container images. You must use the latest splunk/splunk:edge
+  nightly image with it, or alternatively any release version 8.0.3 or later.
+
+* The API has been updated to v1alpha2, and involves the replacement of
+  the SplunkEnterprise custom resource with 5 new custom resources:
+  Spark, LicenseMaster, Standalone, SearchHead and Indexer. Please read the
+  revised [Custom Resources](CustomResources.md) and [Examples](Examples.md)
+  documentation for details on all the changes. This is a major update and is
+  not backwards-compatible. You will have to completely remove any older
+  versions, and any resources managed by the operator, before upgrading to
+  this release.
+
+* A new serviceTemplate spec parameter has been added for all Splunk Enterprise
+  custom resources. This may be used to define a template the operator uses for
+  the creation of (non headless) services.
+
+* Splunk Enterprise clusters may now be created without having to provide a
+  license file via the licenseURL parameter. When no license is provided,
+  a default trial license will now be used.
+
+* Annotations and labels from the managed custom resources are now appended
+  to any corresponding Pod and Service objects that the operator creates.
+
+* A unique pass4SymmKey secret will now be randomly generated, to resolve
+  cluster master warnings about using the default value.
+
+* Integrated with CircleCI and Coverall for CICD and code coverage, and
+  added a bunch of unit tests to bring coverage up to 93%.
+
 ## 0.0.6 Alpha (2019-12-12)
 
 * The operator now injects a podAntiAffinity rule to try to ensure
