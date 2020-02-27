@@ -15,13 +15,7 @@
 package deploy
 
 import (
-	"context"
-	"reflect"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
@@ -73,31 +67,4 @@ func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
 	}
 
 	return nil
-}
-
-// applySpark creates or updates a Splunk Enterprise Spark custom resource definition (CRD).
-func applySpark(client ControllerClient, cr *enterprisev1.SplunkEnterprise) error {
-	scopedLog := log.WithName("applySpark").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
-
-	revised, err := enterprise.GetSparkResource(cr)
-	if err != nil {
-		return err
-	}
-	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetIdentifier()}
-	var current enterprisev1.Spark
-
-	err = client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing Spark
-		if !reflect.DeepEqual(current.Spec, revised.Spec) {
-			current.Spec = revised.Spec
-			err = UpdateResource(client, &current)
-		} else {
-			scopedLog.Info("No changes for Spark")
-		}
-	} else {
-		err = CreateResource(client, revised)
-	}
-
-	return err
 }

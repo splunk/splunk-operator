@@ -13,7 +13,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Known Issues for the Splunk Operator](#known-issues-for-the-splunk-operator)
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
-* [Creating SplunkEnterprise Deployments](#creating-splunkenterprise-deployments)
+* [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
 
 COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source product
 developed by Splunkers with contributions from the community of partners and
@@ -124,7 +124,6 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 To remove all Splunk deployments and completely remove the
 Splunk Operator, run:
 ```
-kubectl delete splunkenterprises --all
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheads --all

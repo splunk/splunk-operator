@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -25,11 +26,15 @@ import (
 func TestReconcileStandalone(t *testing.T) {
 	funcCalls := []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack1-standalone-secrets"},
+		{metaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[1]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2]}}
 	current := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -41,22 +46,14 @@ func TestReconcileStandalone(t *testing.T) {
 		return ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
 	}
 	reconcileTester(t, "TestReconcileStandalone", &current, revised, createCalls, updateCalls, reconcile)
-}
 
-func TestApplyStandalone(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1alpha2.Standalone-test-stack1"}}
-	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	current := enterprisev1.SplunkEnterprise{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+		err := ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
+		return true, err
 	}
-	revised := current.DeepCopy()
-	revised.Spec.SplunkImage = "splunk/test"
-	reconcile := func(c *mockClient, cr interface{}) error {
-		return applyStandalone(c, cr.(*enterprisev1.SplunkEnterprise))
-	}
-	reconcileTester(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile)
+	splunkDeletionTester(t, revised, deleteFunc)
 }

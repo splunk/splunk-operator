@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,6 +35,9 @@ func TestReconcileSearchHead(t *testing.T) {
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
 	current := enterprisev1.SearchHead{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHead",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -45,22 +49,14 @@ func TestReconcileSearchHead(t *testing.T) {
 		return ReconcileSearchHead(c, cr.(*enterprisev1.SearchHead))
 	}
 	reconcileTester(t, "TestReconcileSearchHead", &current, revised, createCalls, updateCalls, reconcile)
-}
 
-func TestApplySearchHead(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1alpha2.SearchHead-test-stack1"}}
-	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	current := enterprisev1.SplunkEnterprise{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+		err := ReconcileSearchHead(c, cr.(*enterprisev1.SearchHead))
+		return true, err
 	}
-	revised := current.DeepCopy()
-	revised.Spec.SplunkImage = "splunk/test"
-	reconcile := func(c *mockClient, cr interface{}) error {
-		return applySearchHead(c, cr.(*enterprisev1.SplunkEnterprise))
-	}
-	reconcileTester(t, "TestApplySearchHead", &current, revised, createCalls, updateCalls, reconcile)
+	splunkDeletionTester(t, revised, deleteFunc)
 }

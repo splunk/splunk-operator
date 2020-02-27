@@ -37,11 +37,8 @@ generate:
 	@cp deploy/rbac.yaml deploy/role.yaml
 	@operator-sdk generate crds
 	@rm -f deploy/role.yaml deploy/crds/*_cr.yaml
-	@echo "  - name: v1alpha1\n    served: true\n    storage: false" >> deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml
 	@echo Rebuilding deploy/crds/combined.yaml
 	@echo "---" > deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_splunkenterprises_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_standalones_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> deploy/crds/combined.yaml

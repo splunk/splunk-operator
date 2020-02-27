@@ -33,7 +33,7 @@ point to configuring ingress in your particular environment.
 
 Before deploying an example, you will need to replace “example.com” with
 whatever domain name you would like to use, and “example” in the service
-names with the name of your `SplunkEnterprise` object. You will also need
+names with the name of your custom resource object. You will also need
 to point your DNS for all the desired hostnames to the IP addresses of 
 your ingress load balancer.
 

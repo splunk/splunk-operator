@@ -148,25 +148,14 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 		replicas = int32(cr.Spec.Replicas)
 	}
 
-	// append same labels as selector
+	// prepare labels, annotations and affinity
+	annotations := resources.GetIstioAnnotations(ports)
+	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 	selectLabels := getSparkLabels(cr.GetIdentifier(), instanceType)
 	labels := make(map[string]string)
 	for k, v := range selectLabels {
 		labels[k] = v
 	}
-	// append labels from parent
-	for k, v := range cr.GetObjectMeta().GetLabels() {
-		labels[k] = v
-	}
-
-	// append annotations from parent
-	annotations := resources.GetIstioAnnotations(ports)
-	for k, v := range cr.GetObjectMeta().GetAnnotations() {
-		annotations[k] = v
-	}
-
-	// append affinity from spec
-	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
 
 	// create deployment configuration
 	deployment := &appsv1.Deployment{
@@ -205,6 +194,9 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 			},
 		},
 	}
+
+	// append labels and annotations from parent
+	resources.AppendParentMeta(deployment.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// make Spark object the owner
 	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
@@ -245,25 +237,21 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 		service.Spec.Ports = resources.SortServicePorts(getSparkWorkerServicePorts())
 	}
 
-	// append same labels as selector
+	// ensure labels and annotations are not nil
 	if service.ObjectMeta.Labels == nil {
 		service.ObjectMeta.Labels = make(map[string]string)
 	}
-	for k, v := range service.Spec.Selector {
-		service.ObjectMeta.Labels[k] = v
-	}
-	// append labels from parent
-	for k, v := range cr.GetObjectMeta().GetLabels() {
-		service.ObjectMeta.Labels[k] = v
-	}
-
-	// append annotations from parent
 	if service.ObjectMeta.Annotations == nil {
 		service.ObjectMeta.Annotations = make(map[string]string)
 	}
-	for k, v := range cr.GetObjectMeta().GetAnnotations() {
-		service.ObjectMeta.Annotations[k] = v
+
+	// append same labels as selector
+	for k, v := range service.Spec.Selector {
+		service.ObjectMeta.Labels[k] = v
 	}
+
+	// append labels and annotations from parent
+	resources.AppendParentMeta(service.GetObjectMeta(), cr.GetObjectMeta())
 
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))
 

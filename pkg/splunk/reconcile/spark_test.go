@@ -16,6 +16,7 @@ package deploy
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -32,6 +33,9 @@ func TestReconcileSpark(t *testing.T) {
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2], funcCalls[3]}}
 	current := enterprisev1.Spark{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Spark",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -43,22 +47,14 @@ func TestReconcileSpark(t *testing.T) {
 		return ReconcileSpark(c, cr.(*enterprisev1.Spark))
 	}
 	reconcileTester(t, "TestReconcileSpark", &current, revised, createCalls, updateCalls, reconcile)
-}
 
-func TestApplySpark(t *testing.T) {
-	funcCalls := []mockFuncCall{{metaName: "*v1alpha2.Spark-test-stack1"}}
-	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	current := enterprisev1.SplunkEnterprise{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
+		err := ReconcileSpark(c, cr.(*enterprisev1.Spark))
+		return true, err
 	}
-	revised := current.DeepCopy()
-	revised.Spec.SplunkImage = "splunk/test"
-	reconcile := func(c *mockClient, cr interface{}) error {
-		return applySpark(c, cr.(*enterprisev1.SplunkEnterprise))
-	}
-	reconcileTester(t, "TestApplySpark", &current, revised, createCalls, updateCalls, reconcile)
+	splunkDeletionTester(t, revised, deleteFunc)
 }

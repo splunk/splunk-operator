@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +46,22 @@ func AsOwner(cr enterprisev1.MetaObject) metav1.OwnerReference {
 		Name:       cr.GetObjectMeta().GetName(),
 		UID:        cr.GetObjectMeta().GetUID(),
 		Controller: &trueVar,
+	}
+}
+
+// AppendParentMeta appends parent's metadata to a child
+func AppendParentMeta(child, parent metav1.Object) {
+	// append labels from parent
+	for k, v := range parent.GetLabels() {
+		child.GetLabels()[k] = v
+	}
+
+	// append annotations from parent
+	for k, v := range parent.GetAnnotations() {
+		// ignore Annotations set by kubectl
+		if !strings.HasPrefix(k, "kubectl.kubernetes.io/") {
+			child.GetAnnotations()[k] = v
+		}
 	}
 }
 

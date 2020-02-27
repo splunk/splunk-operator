@@ -35,6 +35,12 @@ func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, 
 	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
+	// sanity check: return early if missing GetDeletionTimestamp
+	if cr.GetObjectMeta().GetDeletionTimestamp() == nil {
+		scopedLog.Info("DeletionTimestamp is nil")
+		return false, nil
+	}
+
 	// just log warning if deletion time is in the future
 	if !cr.GetObjectMeta().GetDeletionTimestamp().Before(&currentTime) {
 		scopedLog.Info("DeletionTimestamp is in the future",

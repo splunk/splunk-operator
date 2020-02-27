@@ -20,13 +20,13 @@ deploy and use the latest release, please see the
 [Getting Started Documentation](docs/README.md).
 
 
-## Prerequisites 
+## Prerequisites
 
 You must have [Docker Engine](https://docs.docker.com/install/) installed to
 build the Splunk Operator.
 
-This project now uses [Go modules](https://blog.golang.org/using-go-modules),
-which requires [golang](https://golang.org/doc/install) 1.13 or later.
+This project uses [Go modules](https://blog.golang.org/using-go-modules),
+and requires [golang](https://golang.org/doc/install) 1.13 or later.
 You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
@@ -45,6 +45,15 @@ command line tool:
 
 ```
 export PATH=${PATH}:${GOPATH}/bin
+```
+
+It is also recommended that you install the following golang tools,
+which are used by various `make` targets:
+
+```
+go get -u golang.org/x/lint/golint
+go get -u golang.org/x/tools/cmd/cover
+go get -u github.com/mattn/goveralls
 ```
 
 
@@ -108,7 +117,7 @@ Other make targets include (more info below):
 Ensure that you have the Custom Resource Definitions installed in your cluster:
 
 ```
-kubectl apply -f deploy/crds/
+kubectl apply -f deploy/crds/combined.yaml
 ```
 
 Use this to run the operator as a local foreground process on your machine:
