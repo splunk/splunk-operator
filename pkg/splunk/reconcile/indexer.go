@@ -15,6 +15,9 @@
 package deploy
 
 import (
+	"context"
+	"fmt"
+
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
@@ -28,9 +31,22 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 		return err
 	}
 
+	// updates status after function completes
+	cr.Status.Phase = enterprisev1.PhaseError
+	cr.Status.Replicas = cr.Spec.Replicas
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetIdentifier())
+	defer func() {
+		client.Status().Update(context.TODO(), cr)
+	}()
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		_, err := CheckSplunkDeletion(cr, client)
+		terminating, err := CheckSplunkDeletion(cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = enterprisev1.PhaseTerminating
+			cr.Status.ClusterMasterPhase = enterprisev1.PhaseTerminating
+			client.Status().Update(context.TODO(), cr)
+		}
 		return err
 	}
 
@@ -63,8 +79,12 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 	if err != nil {
 		return err
 	}
-	err = ApplyStatefulSet(client, statefulSet)
+	cr.Status.ClusterMasterPhase, err = ApplyStatefulSet(client, statefulSet)
+	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
+		cr.Status.ClusterMasterPhase, err = ReconcileStatefulSetPods(client, statefulSet, statefulSet.Status.ReadyReplicas, 1, nil)
+	}
 	if err != nil {
+		cr.Status.ClusterMasterPhase = enterprisev1.PhaseError
 		return err
 	}
 
@@ -73,5 +93,15 @@ func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
 	if err != nil {
 		return err
 	}
-	return ApplyStatefulSet(client, statefulSet)
+	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
+	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
+	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
+		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, cr.Status.ReadyReplicas, cr.Spec.Replicas, nil)
+	}
+	if err != nil {
+		cr.Status.Phase = enterprisev1.PhaseError
+		return err
+	}
+
+	return nil
 }

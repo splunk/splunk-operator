@@ -15,6 +15,8 @@
 package deploy
 
 import (
+	"context"
+
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
@@ -28,9 +30,19 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 		return err
 	}
 
+	// updates status after function completes
+	cr.Status.Phase = enterprisev1.PhaseError
+	defer func() {
+		client.Status().Update(context.TODO(), cr)
+	}()
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		_, err := CheckSplunkDeletion(cr, client)
+		terminating, err := CheckSplunkDeletion(cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = enterprisev1.PhaseTerminating
+			client.Status().Update(context.TODO(), cr)
+		}
 		return err
 	}
 
@@ -51,5 +63,14 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 	if err != nil {
 		return err
 	}
-	return ApplyStatefulSet(client, statefulSet)
+	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
+	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
+		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, statefulSet.Status.ReadyReplicas, 1, nil)
+	}
+	if err != nil {
+		cr.Status.Phase = enterprisev1.PhaseError
+		return err
+	}
+
+	return nil
 }

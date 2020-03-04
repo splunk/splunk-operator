@@ -16,59 +16,68 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
-func ApplyDeployment(client ControllerClient, deployment *appsv1.Deployment) error {
+func ApplyDeployment(c ControllerClient, revised *appsv1.Deployment) (enterprisev1.ResourcePhase, error) {
 	scopedLog := log.WithName("ApplyDeployment").WithValues(
-		"name", deployment.GetObjectMeta().GetName(),
-		"namespace", deployment.GetObjectMeta().GetNamespace())
+		"name", revised.GetObjectMeta().GetName(),
+		"namespace", revised.GetObjectMeta().GetNamespace())
 
-	namespacedName := types.NamespacedName{Namespace: deployment.GetNamespace(), Name: deployment.GetName()}
+	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current appsv1.Deployment
 
-	err := client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing Deployment
-		if MergeDeploymentUpdates(&current, deployment) {
-			// only update if there are material differences, as determined by comparison function
-			err = UpdateResource(client, &current)
-		} else {
-			scopedLog.Info("No changes for Deployment")
-		}
-	} else {
-		err = CreateResource(client, deployment)
+	err := c.Get(context.TODO(), namespacedName, &current)
+	if err != nil {
+		return enterprisev1.PhasePending, CreateResource(c, revised)
 	}
 
-	return err
-}
-
-// MergeDeploymentUpdates looks for material differences between a
-// Deployment's current config and a revised config. It merges material
-// changes from revised to current. This enables us to minimize updates.
-// It returns true if there are material differences between them, or false otherwise.
-func MergeDeploymentUpdates(current *appsv1.Deployment, revised *appsv1.Deployment) bool {
-	scopedLog := log.WithName("MergeDeploymentUpdates").WithValues(
-		"name", current.GetObjectMeta().GetName(),
-		"namespace", current.GetObjectMeta().GetNamespace())
-	result := false
-
-	// check for change in Replicas count
-	if current.Spec.Replicas != nil && revised.Spec.Replicas != nil && *current.Spec.Replicas != *revised.Spec.Replicas {
-		scopedLog.Info("Deployment Replicas differ",
-			"current", *current.Spec.Replicas,
-			"revised", *revised.Spec.Replicas)
-		current.Spec.Replicas = revised.Spec.Replicas
-		result = true
-	}
+	// found an existing Deployment
 
 	// check for changes in Pod template
-	if MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName()) {
-		result = true
+	hasUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+	desiredReplicas := *revised.Spec.Replicas
+	*revised = current // caller expects that object passed represents latest state
+
+	// check for scaling
+	if revised.Spec.Replicas != nil {
+		if *revised.Spec.Replicas < desiredReplicas {
+			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
+			*revised.Spec.Replicas = desiredReplicas
+			return enterprisev1.PhaseScalingUp, UpdateResource(c, revised)
+		} else if *revised.Spec.Replicas > desiredReplicas {
+			scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
+			*revised.Spec.Replicas = desiredReplicas
+			return enterprisev1.PhaseScalingDown, UpdateResource(c, revised)
+		}
 	}
 
-	return result
+	// only update if there are material differences, as determined by comparison function
+	if hasUpdates {
+		return enterprisev1.PhaseUpdating, UpdateResource(c, revised)
+	}
+
+	// check if updates are in progress
+	if revised.Status.UpdatedReplicas < revised.Status.Replicas {
+		scopedLog.Info("Waiting for updates to complete")
+		return enterprisev1.PhaseUpdating, nil
+	}
+
+	// check if replicas are not yet ready
+	if revised.Status.ReadyReplicas < desiredReplicas {
+		scopedLog.Info("Waiting for pods to become ready")
+		if revised.Status.ReadyReplicas > 0 {
+			return enterprisev1.PhaseScalingUp, nil
+		}
+		return enterprisev1.PhasePending, nil
+	}
+
+	// all is good!
+	scopedLog.Info("All pods are ready")
+	return enterprisev1.PhaseReady, nil
 }

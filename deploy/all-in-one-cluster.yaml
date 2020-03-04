@@ -5,14 +5,22 @@ metadata:
   name: standalones.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of standalone instances
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of standalone instances
-    name: Instances
     type: string
+  - JSONPath: .status.replicas
+    description: Number of desired standalone instances
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready standalone instances
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of standalone resource
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Standalone
@@ -21,6 +29,10 @@ spec:
     singular: standalone
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -717,6 +729,7 @@ spec:
               type: string
             replicas:
               description: Number of standalone pods
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -2211,17 +2224,27 @@ spec:
           description: StandaloneStatus defines the observed state of a Splunk Enterprise
             standalone instances.
           properties:
-            instances:
-              description: current number of standalone instances
-              type: integer
             phase:
               description: current phase of the standalone instances
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready standalone instances
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired standalone instances
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object
@@ -2237,10 +2260,14 @@ metadata:
   name: licensemasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of license master
     name: Phase
-    type: integer
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of license master
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: LicenseMaster
@@ -4399,9 +4426,13 @@ spec:
             phase:
               description: current phase of the license master
               enum:
-              - pending
-              - ready
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
           type: object
       type: object
@@ -4417,14 +4448,26 @@ metadata:
   name: searchheads.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of search head cluster
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of search heads
-    name: Instances
     type: string
+  - JSONPath: .status.deployerPhase
+    description: Status of the deployer
+    name: Deployer
+    type: string
+  - JSONPath: .status.replicas
+    description: Number of desired search head replicas
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready search head replicas
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of search head cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: SearchHead
@@ -4436,6 +4479,10 @@ spec:
     singular: searchhead
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -5134,6 +5181,7 @@ spec:
             replicas:
               description: Number of search head pods; a search head cluster will
                 be created if > 1
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -6628,17 +6676,38 @@ spec:
           description: SearchHeadStatus defines the observed state of a Splunk Enterprise
             standalone search head or cluster of search heads
           properties:
-            instances:
-              description: current number of search head instances
-              type: integer
+            deployerPhase:
+              description: current phase of the deployer
+              enum:
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
             phase:
               description: current phase of the search head cluster
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready search head replicas
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired search head replicas
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object
@@ -6654,18 +6723,26 @@ metadata:
   name: indexers.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of indexer cluster
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.clusterMasterPhase
+    type: string
+  - JSONPath: .status.clusterMasterPhase
     description: Status of cluster master
-    name: CM
+    name: Master
     type: string
-  - JSONPath: .spec.status.instances
-    description: Number of indexers
-    name: Instances
-    type: string
+  - JSONPath: .status.replicas
+    description: Number of desired indexer peers
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready indexer peers
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of indexer cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Indexer
@@ -6676,6 +6753,10 @@ spec:
     singular: indexer
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -7374,6 +7455,7 @@ spec:
             replicas:
               description: Number of search head pods; a search head cluster will
                 be created if > 1
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -8829,23 +8911,35 @@ spec:
             clusterMasterPhase:
               description: current phase of the cluster master
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
-            instances:
-              description: current number of indexer instances
-              type: integer
             phase:
               description: current phase of the indexer cluster
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready indexer peers
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired indexer peers
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object
@@ -8861,14 +8955,26 @@ metadata:
   name: sparks.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
-    description: Status of Spark cluster
+  - JSONPath: .status.phase
+    description: Status of Spark workers
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of Spark workers
-    name: Instances
     type: string
+  - JSONPath: .status.masterPhase
+    description: Status of Spark master
+    name: Master
+    type: string
+  - JSONPath: .status.replicas
+    description: Number of desired Spark workers
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready Spark workers
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of Spark cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Spark
@@ -8877,6 +8983,10 @@ spec:
     singular: spark
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -9483,6 +9593,7 @@ spec:
               type: string
             replicas:
               description: Number of spark worker pods
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -9748,17 +9859,38 @@ spec:
         status:
           description: SparkStatus defines the observed state of a Spark cluster
           properties:
-            instances:
-              description: current number of spark worker instances
-              type: integer
-            phase:
-              description: current phase of the spark cluster
+            masterPhase:
+              description: current phase of the spark master
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            phase:
+              description: current phase of the spark workers
+              enum:
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready spark workers
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired spark workers
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object
@@ -9904,6 +10036,6 @@ spec:
             - name: OPERATOR_NAME
               value: "splunk-operator"
             - name: SPLUNK_IMAGE
-              value: "splunk/splunk:8.0"
+              value: "splunk/splunk:edge"
             - name: SPARK_IMAGE
               value: "splunk/spark"

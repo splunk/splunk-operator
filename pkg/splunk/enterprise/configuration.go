@@ -462,10 +462,9 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
-	replicas32 := int32(replicas)
 	ports := resources.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := resources.GetIstioAnnotations(ports)
 	selectLabels := getSplunkLabels(cr.GetIdentifier(), instanceType)
@@ -501,8 +500,11 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 				MatchLabels: selectLabels,
 			},
 			ServiceName:         GetSplunkServiceName(instanceType, cr.GetIdentifier(), true),
-			Replicas:            &replicas32,
-			PodManagementPolicy: "Parallel",
+			Replicas:            &replicas,
+			PodManagementPolicy: appsv1.ParallelPodManagement,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -677,7 +679,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 }
 
 // getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.EnvVar {
+func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_SEARCH_HEAD_URL",
@@ -690,7 +692,7 @@ func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.En
 }
 
 // getIndexerExtraEnv returns extra environment variables used by search head clusters
-func getIndexerExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.EnvVar {
+func getIndexerExtraEnv(cr enterprisev1.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_INDEXER_URL",

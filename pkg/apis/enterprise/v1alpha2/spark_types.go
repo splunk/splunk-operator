@@ -31,26 +31,38 @@ type SparkSpec struct {
 	CommonSpec `json:",inline"`
 
 	// Number of spark worker pods
-	Replicas int `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 }
 
 // SparkStatus defines the observed state of a Spark cluster
 type SparkStatus struct {
-	// current phase of the spark cluster
-	// +kubebuilder:validation:Enum=pending;ready;scaleup;scaledown;updating
-	Phase string `json:"phase"`
+	// current phase of the spark workers
+	Phase ResourcePhase `json:"phase"`
 
-	// current number of spark worker instances
-	Instances int `json:"instances"`
+	// current phase of the spark master
+	MasterPhase ResourcePhase `json:"masterPhase"`
+
+	// number of desired spark workers
+	Replicas int32 `json:"replicas"`
+
+	// current number of ready spark workers
+	ReadyReplicas int32 `json:"readyReplicas"`
+
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Spark is the Schema for a Spark cluster
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=sparks,scope=Namespaced
-// +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of Spark cluster"
-// +kubebuilder:printcolumn:name="Instances",type="string",JSONPath=".spec.status.instances",description="Number of Spark workers"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of Spark workers"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.masterPhase",description="Status of Spark master"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired Spark workers"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready Spark workers"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of Spark cluster"
 type Spark struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

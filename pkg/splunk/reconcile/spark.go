@@ -15,6 +15,9 @@
 package deploy
 
 import (
+	"context"
+	"fmt"
+
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
@@ -28,9 +31,21 @@ func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
 		return err
 	}
 
+	// updates status after function completes
+	cr.Status.Phase = enterprisev1.PhaseError
+	cr.Status.Replicas = cr.Spec.Replicas
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-spark-worker", cr.GetIdentifier())
+	defer func() {
+		client.Status().Update(context.TODO(), cr)
+	}()
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		_, err := CheckSplunkDeletion(cr, client)
+		terminating, err := CheckSplunkDeletion(cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = enterprisev1.PhaseTerminating
+			client.Status().Update(context.TODO(), cr)
+		}
 		return err
 	}
 
@@ -51,8 +66,9 @@ func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
 	if err != nil {
 		return err
 	}
-	err = ApplyDeployment(client, deployment)
+	cr.Status.MasterPhase, err = ApplyDeployment(client, deployment)
 	if err != nil {
+		cr.Status.MasterPhase = enterprisev1.PhaseError
 		return err
 	}
 
@@ -61,8 +77,10 @@ func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
 	if err != nil {
 		return err
 	}
-	err = ApplyDeployment(client, deployment)
+	cr.Status.Phase, err = ApplyDeployment(client, deployment)
+	cr.Status.ReadyReplicas = deployment.Status.ReadyReplicas
 	if err != nil {
+		cr.Status.Phase = enterprisev1.PhaseError
 		return err
 	}
 

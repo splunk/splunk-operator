@@ -4,10 +4,14 @@ metadata:
   name: licensemasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of license master
     name: Phase
-    type: integer
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of license master
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: LicenseMaster
@@ -2166,9 +2170,13 @@ spec:
             phase:
               description: current phase of the license master
               enum:
-              - pending
-              - ready
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
           type: object
       type: object

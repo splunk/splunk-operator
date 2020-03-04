@@ -62,7 +62,7 @@ func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) stri
 }
 
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
-func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int) string {
+func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int32) string {
 	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
 }
 
@@ -90,16 +90,16 @@ func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string 
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.
-func GetSplunkStatefulsetUrls(namespace string, instanceType InstanceType, identifier string, replicas int, hostnameOnly bool) string {
+func GetSplunkStatefulsetUrls(namespace string, instanceType InstanceType, identifier string, replicas int32, hostnameOnly bool) string {
 	urls := make([]string, replicas)
-	for i := 0; i < replicas; i++ {
+	for i := int32(0); i < replicas; i++ {
 		urls[i] = GetSplunkStatefulsetURL(namespace, instanceType, identifier, i, hostnameOnly)
 	}
 	return strings.Join(urls, ",")
 }
 
 // GetSplunkStatefulsetURL returns a fully qualified domain name for a specific pod within a Kubernetes StatefulSet Splunk instances.
-func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identifier string, index int, hostnameOnly bool) string {
+func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identifier string, index int32, hostnameOnly bool) string {
 	podName := GetSplunkStatefulsetPodName(instanceType, identifier, index)
 
 	if hostnameOnly {

@@ -31,31 +31,38 @@ type IndexerSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
-	Replicas int `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 }
 
 // IndexerStatus defines the observed state of a Splunk Enterprise standalone indexer or cluster of indexers
 type IndexerStatus struct {
 	// current phase of the indexer cluster
-	// +kubebuilder:validation:Enum=pending;ready;scaleup;scaledown;updating
-	Phase string `json:"phase"`
+	Phase ResourcePhase `json:"phase"`
 
 	// current phase of the cluster master
-	// +kubebuilder:validation:Enum=pending;ready;scaleup;scaledown;updating
-	ClusterMasterPhase string `json:"clusterMasterPhase"`
+	ClusterMasterPhase ResourcePhase `json:"clusterMasterPhase"`
 
-	// current number of indexer instances
-	Instances int `json:"instances"`
+	// number of desired indexer peers
+	Replicas int32 `json:"replicas"`
+
+	// current number of ready indexer peers
+	ReadyReplicas int32 `json:"readyReplicas"`
+
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Indexer is the Schema for a Splunk Enterprise standalone indexer or cluster of indexers
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=indexers,scope=Namespaced,shortName=idx
-// +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of indexer cluster"
-// +kubebuilder:printcolumn:name="CM",type="string",JSONPath=".spec.status.clusterMasterPhase",description="Status of cluster master"
-// +kubebuilder:printcolumn:name="Instances",type="string",JSONPath=".spec.status.instances",description="Number of indexers"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of indexer cluster"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired indexer peers"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"
 type Indexer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

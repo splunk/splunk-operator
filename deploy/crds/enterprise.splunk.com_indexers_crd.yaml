@@ -4,18 +4,26 @@ metadata:
   name: indexers.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of indexer cluster
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.clusterMasterPhase
+    type: string
+  - JSONPath: .status.clusterMasterPhase
     description: Status of cluster master
-    name: CM
+    name: Master
     type: string
-  - JSONPath: .spec.status.instances
-    description: Number of indexers
-    name: Instances
-    type: string
+  - JSONPath: .status.replicas
+    description: Number of desired indexer peers
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready indexer peers
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of indexer cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Indexer
@@ -26,6 +34,10 @@ spec:
     singular: indexer
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -724,6 +736,7 @@ spec:
             replicas:
               description: Number of search head pods; a search head cluster will
                 be created if > 1
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -2179,23 +2192,35 @@ spec:
             clusterMasterPhase:
               description: current phase of the cluster master
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
-            instances:
-              description: current number of indexer instances
-              type: integer
             phase:
               description: current phase of the indexer cluster
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready indexer peers
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired indexer peers
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object

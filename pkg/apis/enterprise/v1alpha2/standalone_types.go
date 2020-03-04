@@ -32,7 +32,7 @@ type StandaloneSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of standalone pods
-	Replicas int `json:"replicas"`
+	Replicas int32 `json:"replicas"`
 
 	// SparkRef refers to a Spark cluster managed by the operator within Kubernetes
 	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
@@ -45,20 +45,28 @@ type StandaloneSpec struct {
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
 type StandaloneStatus struct {
 	// current phase of the standalone instances
-	// +kubebuilder:validation:Enum=pending;ready;scaleup;scaledown;updating
-	Phase string `json:"phase"`
+	Phase ResourcePhase `json:"phase"`
 
-	// current number of standalone instances
-	Instances int `json:"instances"`
+	// number of desired standalone instances
+	Replicas int32 `json:"replicas"`
+
+	// current number of ready standalone instances
+	ReadyReplicas int32 `json:"readyReplicas"`
+
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Standalone is the Schema for a Splunk Enterprise standalone instances.
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=standalones,scope=Namespaced
-// +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of standalone instances"
-// +kubebuilder:printcolumn:name="Instances",type="string",JSONPath=".spec.status.instances",description="Number of standalone instances"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of standalone instances"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired standalone instances"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready standalone instances"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of standalone resource"
 type Standalone struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -21,6 +21,33 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// ResourcePhase is used to represent the current phase of a custom resource
+// +kubebuilder:validation:Enum=Pending;Ready;Updating;ScalingUp;ScalingDown;Terminating;Error
+type ResourcePhase string
+
+const (
+	// PhasePending means a custom resource has just been created and is not yet ready
+	PhasePending ResourcePhase = "Pending"
+
+	// PhaseReady means a custom resource is ready and up to date
+	PhaseReady ResourcePhase = "Ready"
+
+	// PhaseUpdating means a custom resource is in the process of updating to a new desired state (spec)
+	PhaseUpdating ResourcePhase = "Updating"
+
+	// PhaseScalingUp means a customer resource is in the process of scaling up
+	PhaseScalingUp ResourcePhase = "ScalingUp"
+
+	// PhaseScalingDown means a customer resource is in the process of scaling down
+	PhaseScalingDown ResourcePhase = "ScalingDown"
+
+	// PhaseTerminating means a customer resource is in the process of being removed
+	PhaseTerminating ResourcePhase = "Terminating"
+
+	// PhaseError means an error occured with custom resource management
+	PhaseError ResourcePhase = "Error"
+)
+
 // default all fields to being optional
 // +kubebuilder:validation:Optional
 

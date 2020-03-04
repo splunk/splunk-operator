@@ -284,35 +284,30 @@ func reconcileTester(t *testing.T, method string,
 	}
 
 	// test create new
+	methodPlus := fmt.Sprintf("%s(create)", method)
 	err := reconcile(c, current)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, createCalls)
+	c.checkCalls(t, methodPlus, createCalls)
 
 	// test no updates required for current
+	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
 	c.resetCalls()
 	err = reconcile(c, current)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": createCalls["Get"]})
+	c.checkCalls(t, methodPlus, map[string][]mockFuncCall{"Get": createCalls["Get"]})
 
 	// test updates required
+	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
 	c.resetCalls()
 	err = reconcile(c, revised)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, updateCalls)
-
-	// test no updates required for revised
-	c.resetCalls()
-	err = reconcile(c, revised)
-	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
-	}
-	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": updateCalls["Get"]})
+	c.checkCalls(t, methodPlus, updateCalls)
 }
 
 func TestCreateResource(t *testing.T) {

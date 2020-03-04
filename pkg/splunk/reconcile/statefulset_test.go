@@ -36,9 +36,10 @@ func TestApplyStatefulSet(t *testing.T) {
 		},
 	}
 	revised := current.DeepCopy()
-	*revised.Spec.Replicas = 3
+	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ApplyStatefulSet(c, cr.(*appsv1.StatefulSet))
+		_, err := ApplyStatefulSet(c, cr.(*appsv1.StatefulSet))
+		return err
 	}
 	reconcileTester(t, "TestApplyStatefulSet", &current, revised, createCalls, updateCalls, reconcile)
 }

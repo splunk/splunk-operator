@@ -34,8 +34,7 @@ type LicenseMasterSpec struct {
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
 type LicenseMasterStatus struct {
 	// current phase of the license master
-	// +kubebuilder:validation:Enum=pending;ready;updating
-	Phase string `json:"phase"`
+	Phase ResourcePhase `json:"phase"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -43,7 +42,8 @@ type LicenseMasterStatus struct {
 // LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
-// +kubebuilder:printcolumn:name="Phase",type="integer",JSONPath=".spec.status.phase",description="Status of license master"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
 type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
