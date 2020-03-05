@@ -24,6 +24,7 @@ import (
 
 // ReconcileSearchHead reconciles the state for a Splunk Enterprise search head cluster.
 func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) error {
+	scopedLog := log.WithName("ReconcileSearchHead").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateSearchHeadSpec(&cr.Spec)
@@ -50,7 +51,7 @@ func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) e
 	}
 
 	// create or update general config resources
-	err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
+	secrets, err := ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
 	if err != nil {
 		return err
 	}
@@ -94,6 +95,12 @@ func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) e
 	}
 	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
+	if cr.Status.ReadyReplicas > 0 {
+		err = enterprise.UpdateSearchHeadStatus(cr, secrets)
+		if err != nil {
+			scopedLog.Error(err, "Failed to update status")
+		}
+	}
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
 		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, cr.Status.ReadyReplicas, cr.Spec.Replicas, nil)
 	}

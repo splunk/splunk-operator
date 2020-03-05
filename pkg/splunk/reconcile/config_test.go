@@ -44,7 +44,8 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
 		obj := cr.(*enterprisev1.SearchHead)
-		return ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
+		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
+		return err
 	}
 	reconcileTester(t, "TestReconcileSplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile)
 
@@ -91,7 +92,8 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *mockClient, cr interface{}) error {
 		obj := cr.(*enterprisev1.Indexer)
-		return ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
+		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
+		return err
 	}
 	funcCalls = []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack2-license-master-secrets"},
@@ -134,7 +136,8 @@ func TestApplySecret(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Data = map[string][]byte{"a": []byte{'1', '2'}}
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ApplySecret(c, cr.(*corev1.Secret))
+		_, err := ApplySecret(c, cr.(*corev1.Secret))
+		return err
 	}
 	reconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile)
 }

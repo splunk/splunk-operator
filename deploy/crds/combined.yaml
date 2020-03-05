@@ -6676,6 +6676,13 @@ spec:
           description: SearchHeadStatus defines the observed state of a Splunk Enterprise
             standalone search head or cluster of search heads
           properties:
+            captain:
+              description: name or label of the search head captain
+              type: string
+            captainReady:
+              description: true if the search head cluster's captain is ready to service
+                requests
+              type: boolean
             deployerPhase:
               description: current phase of the deployer
               enum:
@@ -6687,6 +6694,37 @@ spec:
               - Terminating
               - Error
               type: string
+            initialized:
+              description: true if the search head cluster has finished initialization
+              type: boolean
+            maintenanceMode:
+              description: true if the search head cluster is in maintenance mode
+              type: boolean
+            members:
+              description: status of each search head cluster member
+              items:
+                description: SearchHeadMemberStatus is used to track the status of
+                  each search head cluster member
+                properties:
+                  activeSearches:
+                    description: total number of active historical + realtime searches
+                    type: integer
+                  name:
+                    description: Name of the search head cluster member
+                    type: string
+                  registered:
+                    description: true if this member is registered with the search
+                      head captain
+                    type: boolean
+                  status:
+                    description: Status of the search head cluster member
+                    type: string
+                type: object
+              type: array
+            minPeersJoined:
+              description: true if the minimum number of search head cluster members
+                have joined
+              type: boolean
             phase:
               description: current phase of the search head cluster
               enum:

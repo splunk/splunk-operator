@@ -42,6 +42,21 @@ type SearchHeadSpec struct {
 	SparkImage string `json:"sparkImage"`
 }
 
+// SearchHeadMemberStatus is used to track the status of each search head cluster member
+type SearchHeadMemberStatus struct {
+	// Name of the search head cluster member
+	Name string `json:"name"`
+
+	// Status of the search head cluster member
+	Status string `json:"status"`
+
+	// true if this member is registered with the search head captain
+	Registered bool `json:"registered"`
+
+	// total number of active historical + realtime searches
+	ActiveSearches int `json:"activeSearches"`
+}
+
 // SearchHeadStatus defines the observed state of a Splunk Enterprise standalone search head or cluster of search heads
 type SearchHeadStatus struct {
 	// current phase of the search head cluster
@@ -58,6 +73,24 @@ type SearchHeadStatus struct {
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
+
+	// name or label of the search head captain
+	Captain string `json:"captain"`
+
+	// true if the search head cluster's captain is ready to service requests
+	CaptainReady bool `json:"captainReady"`
+
+	// true if the search head cluster has finished initialization
+	Initialized bool `json:"initialized"`
+
+	// true if the minimum number of search head cluster members have joined
+	MinPeersJoined bool `json:"minPeersJoined"`
+
+	// true if the search head cluster is in maintenance mode
+	MaintenanceMode bool `json:"maintenanceMode"`
+
+	// status of each search head cluster member
+	Members []SearchHeadMemberStatus `json:"members"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

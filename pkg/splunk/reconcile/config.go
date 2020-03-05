@@ -28,7 +28,7 @@ import (
 )
 
 // ReconcileSplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
-func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) error {
+func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) (*corev1.Secret, error) {
 	var err error
 
 	// if reference to indexer cluster, extract and re-use idxc.secret
@@ -37,7 +37,7 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 	if instanceType.ToKind() != "indexer" && instanceType.ToKind() != "license-master" && spec.IndexerRef.Name != "" {
 		idxcSecret, err = GetSplunkSecret(client, cr, spec.IndexerRef, enterprise.SplunkIndexer, "idxc_secret")
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -46,22 +46,22 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 	if instanceType.ToKind() != "license-master" && spec.LicenseMasterRef.Name != "" {
 		pass4SymmKey, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "pass4SymmKey")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if instanceType.ToKind() == "indexer" {
 			// get pass4SymmKey from LicenseMaster to avoid cyclical dependency
 			idxcSecret, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "idxc_secret")
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
-	// create splunk secrets
+	// create or retrieve splunk secrets
 	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecret, pass4SymmKey)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
-	if err = ApplySecret(client, secrets); err != nil {
-		return err
+	if secrets, err = ApplySecret(client, secrets); err != nil {
+		return nil, err
 	}
 
 	// create splunk defaults (for inline config)
@@ -69,11 +69,11 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 		defaultsMap := enterprise.GetSplunkDefaults(cr.GetIdentifier(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), resources.AsOwner(cr)))
 		if err = ApplyConfigMap(client, defaultsMap); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return secrets, nil
 }
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
@@ -101,14 +101,15 @@ func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error 
 	return err
 }
 
-// ApplySecret creates or updates a Kubernetes Secret
-func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
+// ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
+func ApplySecret(client ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
 	scopedLog := log.WithName("ApplySecret").WithValues(
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
 	var current corev1.Secret
+	result := &current
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
@@ -116,9 +117,10 @@ func ApplySecret(client ControllerClient, secret *corev1.Secret) error {
 		scopedLog.Info("Found existing Secret")
 	} else {
 		err = CreateResource(client, secret)
+		result = secret
 	}
 
-	return err
+	return result, err
 }
 
 // GetSplunkSecret is used to retrieve a secret from another custom resource.

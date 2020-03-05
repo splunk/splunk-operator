@@ -248,6 +248,67 @@ func ValidateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
 
+// UpdateSearchHeadStatus uses the REST API to update the status for a SearcHead custom resource
+func UpdateSearchHeadStatus(cr *enterprisev1.SearchHead, secrets *corev1.Secret) error {
+	username := "admin"
+	password := string(secrets.Data["password"])
+
+	// populate members status using REST API to get search head cluster member info
+	cr.Status.Members = []enterprisev1.SearchHeadMemberStatus{}
+	for n := int32(0); n < cr.Spec.Replicas; n++ {
+		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetIdentifier(), n)
+		fqdnName := resources.GetServiceFQDN(cr.GetNamespace(),
+			fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, cr.GetIdentifier(), true)))
+		c := NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), username, password)
+		memberStatus := enterprisev1.SearchHeadMemberStatus{Name: memberName}
+		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
+		if err == nil {
+			memberStatus.Status = memberInfo.Status
+			memberStatus.Registered = memberInfo.Registered
+			memberStatus.ActiveSearches = memberInfo.ActiveHistoricalSearchCount + memberInfo.ActiveRealtimeSearchCount
+		}
+		cr.Status.Members = append(cr.Status.Members, memberStatus)
+	}
+
+	// get search head cluster info from captain
+	fqdnName := resources.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkSearchHead, cr.GetIdentifier(), false))
+	c := NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), username, password)
+	captainInfo, err := c.GetSearchHeadCaptainInfo()
+	if err != nil {
+		return err
+	}
+	cr.Status.Captain = captainInfo.Label
+	cr.Status.CaptainReady = captainInfo.ServiceReadyFlag
+	cr.Status.Initialized = captainInfo.InitializedFlag
+	cr.Status.MinPeersJoined = captainInfo.MinPeersJoinedFlag
+	cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+
+	return nil
+}
+
+// DecommissionSearchHead detains and then removes a search head from the cluster
+func DecommissionSearchHead(cr *enterprisev1.SearchHead, secrets *corev1.Secret, n int32) (bool, error) {
+	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetIdentifier(), n)
+	fqdnName := resources.GetServiceFQDN(cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, cr.GetIdentifier(), true)))
+	c := NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(secrets.Data["password"]))
+
+	switch cr.Status.Members[n].Status {
+	case "Up":
+		// Detain search head
+		return false, c.SetSearchHeadDetention(true)
+
+	case "ManualDetention":
+		// Wait until active searches have drained
+		if cr.Status.Members[n].ActiveSearches != 0 {
+			return false, c.RemoveSearchHeadMember()
+		}
+	}
+
+	// completed
+	return true, nil
+}
+
 // GetSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
 func GetSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
