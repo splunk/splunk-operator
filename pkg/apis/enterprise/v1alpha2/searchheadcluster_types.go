@@ -27,8 +27,8 @@ import (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// SearchHeadSpec defines the desired state of a Splunk Enterprise standalone search head or cluster of search heads
-type SearchHeadSpec struct {
+// SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
+type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
@@ -38,12 +38,12 @@ type SearchHeadSpec struct {
 	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
 	SparkRef corev1.ObjectReference `json:"sparkRef"`
 
-	// Image to use for Spark pod containers (overrides SPARK_IMAGE environment variables)
+	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
 	SparkImage string `json:"sparkImage"`
 }
 
-// SearchHeadMemberStatus is used to track the status of each search head cluster member
-type SearchHeadMemberStatus struct {
+// SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
+type SearchHeadClusterMemberStatus struct {
 	// Name of the search head cluster member
 	Name string `json:"name"`
 
@@ -57,18 +57,18 @@ type SearchHeadMemberStatus struct {
 	ActiveSearches int `json:"activeSearches"`
 }
 
-// SearchHeadStatus defines the observed state of a Splunk Enterprise standalone search head or cluster of search heads
-type SearchHeadStatus struct {
+// SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster
+type SearchHeadClusterStatus struct {
 	// current phase of the search head cluster
 	Phase ResourcePhase `json:"phase"`
 
 	// current phase of the deployer
 	DeployerPhase ResourcePhase `json:"deployerPhase"`
 
-	// number of desired search head replicas
+	// desired number of search head cluster members
 	Replicas int32 `json:"replicas"`
 
-	// current number of ready search head replicas
+	// current number of ready search head cluster members
 	ReadyReplicas int32 `json:"readyReplicas"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
@@ -90,52 +90,52 @@ type SearchHeadStatus struct {
 	MaintenanceMode bool `json:"maintenanceMode"`
 
 	// status of each search head cluster member
-	Members []SearchHeadMemberStatus `json:"members"`
+	Members []SearchHeadClusterMemberStatus `json:"members"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SearchHead is the Schema for a Splunk Enterprise standalone search head or cluster of search heads
+// SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=searchheads,scope=Namespaced,shortName=search;sh
+// +kubebuilder:resource:path=searchheadclusters,scope=Namespaced,shortName=shc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of search head cluster"
 // +kubebuilder:printcolumn:name="Deployer",type="string",JSONPath=".status.deployerPhase",description="Status of the deployer"
-// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired search head replicas"
-// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head replicas"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of search head cluster members"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
-type SearchHead struct {
+type SearchHeadCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SearchHeadSpec   `json:"spec,omitempty"`
-	Status SearchHeadStatus `json:"status,omitempty"`
+	Spec   SearchHeadClusterSpec   `json:"spec,omitempty"`
+	Status SearchHeadClusterStatus `json:"status,omitempty"`
 }
 
 // GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
-func (cr *SearchHead) GetIdentifier() string {
+func (cr *SearchHeadCluster) GetIdentifier() string {
 	return cr.ObjectMeta.Name
 }
 
 // GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
-func (cr *SearchHead) GetNamespace() string {
+func (cr *SearchHeadCluster) GetNamespace() string {
 	return cr.ObjectMeta.Namespace
 }
 
 // GetTypeMeta is a convenience function to return a TypeMeta object
-func (cr *SearchHead) GetTypeMeta() metav1.TypeMeta {
+func (cr *SearchHeadCluster) GetTypeMeta() metav1.TypeMeta {
 	return cr.TypeMeta
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SearchHeadList contains a list of SearcHead
-type SearchHeadList struct {
+// SearchHeadClusterList contains a list of SearcHead
+type SearchHeadClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []SearchHead `json:"items"`
+	Items           []SearchHeadCluster `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&SearchHead{}, &SearchHeadList{})
+	SchemeBuilder.Register(&SearchHeadCluster{}, &SearchHeadClusterList{})
 }

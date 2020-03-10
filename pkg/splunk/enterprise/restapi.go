@@ -274,8 +274,8 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	return c.Do(request, 200, nil)
 }
 
-// RemoveSearchHeadMember removes a search head cluster member
-func (c *SplunkClient) RemoveSearchHeadMember() error {
+// RemoveSearchHeadClusterMember removes a search head cluster member
+func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/remove_server", c.managementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {

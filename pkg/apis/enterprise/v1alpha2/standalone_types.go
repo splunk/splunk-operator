@@ -38,7 +38,7 @@ type StandaloneSpec struct {
 	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
 	SparkRef corev1.ObjectReference `json:"sparkRef"`
 
-	// Image to use for Spark pod containers (overrides SPARK_IMAGE environment variables)
+	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
 	SparkImage string `json:"sparkImage"`
 }
 

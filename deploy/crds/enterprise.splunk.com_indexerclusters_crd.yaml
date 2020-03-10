@@ -1,7 +1,7 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: indexers.enterprise.splunk.com
+  name: indexerclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
@@ -13,7 +13,7 @@ spec:
     name: Master
     type: string
   - JSONPath: .status.replicas
-    description: Number of desired indexer peers
+    description: Desired number of indexer peers
     name: Desired
     type: integer
   - JSONPath: .status.readyReplicas
@@ -26,12 +26,13 @@ spec:
     type: date
   group: enterprise.splunk.com
   names:
-    kind: Indexer
-    listKind: IndexerList
-    plural: indexers
+    kind: IndexerCluster
+    listKind: IndexerClusterList
+    plural: indexerclusters
     shortNames:
-    - idx
-    singular: indexer
+    - idc
+    - idxc
+    singular: indexercluster
   scope: Namespaced
   subresources:
     scale:
@@ -41,8 +42,7 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: Indexer is the Schema for a Splunk Enterprise standalone indexer
-        or cluster of indexers
+      description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -57,8 +57,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: IndexerSpec defines the desired state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterSpec defines the desired state of a Splunk Enterprise
+            indexer cluster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -646,7 +646,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -656,9 +656,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -2186,8 +2186,8 @@ spec:
               type: array
           type: object
         status:
-          description: IndexerStatus defines the observed state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterStatus defines the observed state of a Splunk
+            Enterprise indexer cluster
           properties:
             clusterMasterPhase:
               description: current phase of the cluster master
@@ -2216,7 +2216,7 @@ spec:
               format: int32
               type: integer
             replicas:
-              description: number of desired indexer peers
+              description: desired number of indexer peers
               format: int32
               type: integer
             selector:

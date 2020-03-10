@@ -22,12 +22,12 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// ReconcileSearchHead reconciles the state for a Splunk Enterprise search head cluster.
-func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) error {
-	scopedLog := log.WithName("ReconcileSearchHead").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+// ReconcileSearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
+func ReconcileSearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHeadCluster) error {
+	scopedLog := log.WithName("ReconcileSearchHeadCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
-	err := enterprise.ValidateSearchHeadSpec(&cr.Spec)
+	err := enterprise.ValidateSearchHeadClusterSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func ReconcileSearchHead(client ControllerClient, cr *enterprisev1.SearchHead) e
 	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if cr.Status.ReadyReplicas > 0 {
-		err = enterprise.UpdateSearchHeadStatus(cr, secrets)
+		err = enterprise.UpdateSearchHeadClusterStatus(cr, secrets)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update status")
 		}

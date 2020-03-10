@@ -81,9 +81,9 @@ func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 		component = "standalone"
 	case "LicenseMaster":
 		component = "license-master"
-	case "SearchHead":
+	case "SearchHeadCluster":
 		component = "search-head"
-	case "Indexer":
+	case "IndexerCluster":
 		component = "indexer"
 	default:
 		scopedLog.Info("Skipping PVC removal")

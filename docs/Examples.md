@@ -37,12 +37,12 @@ metadata:
 
 When growing, customers will typically want to first expand by upgrading
 to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of an indexer cluster as easy as creating an `Indexer` resource:
+The Splunk Operator makes creation of an indexer cluster as easy as creating an `IndexerCluster` resource:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: Indexer
+kind: IndexerCluster
 metadata:
   name: example
   finalizers:
@@ -61,12 +61,12 @@ splunk-example-indexer-0           0/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
 ```
 
-If you want more indexers, just patch it to include a `replicas` parameter:
+If you want more indexers, just update it to include a `replicas` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: Indexer
+kind: IndexerCluster
 metadata:
   name: example
   finalizers:
@@ -89,18 +89,26 @@ splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
 You can now easily scale your indexer cluster by just patching `replicas`.
 
 ```
-$ kubectl patch indexer example --type=json -p '[{"op": "replace", "path": "/spec/replicas", "value": 5}]'
-indexer.enterprise.splunk.com/example patched
+$ kubectl patch indexercluster example --type=json -p '[{"op": "replace", "path": "/spec/replicas", "value": 5}]'
+indexercluster.enterprise.splunk.com/example patched
 ```
 
 For efficiency, note that you can use the following short names with `kubectl`:
 
-* `indexer`: `idx`
-* `searchhead`: `search` or `sh`
+* `indexercluster`: `idc` or `idxc`
+* `searchheadcluster`: `shc`
 * `licensemaster`: `lm`
 
+Even better, all the custom resources with a `replicas` field also support
+using the `kubectl scale` command:
+
+```
+$ kubectl scale idc example --replicas=5
+indexercluster.enterprise.splunk.com/example scaled
+```
+
 To create a standalone search head that uses your indexer cluster, all you
-have to do is add an `indexerRef` parameter:
+have to do is add an `indexerClusterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -111,7 +119,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  indexerRef:
+  indexerClusterRef:
     name: example
 EOF
 ```
@@ -121,19 +129,19 @@ EOF
 To scale search performance and provide high availability, customers will
 often want to deploy a [search head cluster](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC).
 Similar to a `Standalone` search head, you can create a search head cluster
-that uses your indexer cluster by just adding a new `SearchHead` resource
-with an `indexerRef` parameter:
+that uses your indexer cluster by just adding a new `SearchHeadCluster` resource
+with an `indexerClusterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: SearchHead
+kind: SearchHeadCluster
 metadata:
   name: example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  indexerRef:
+  indexerClusterRef:
     name: example
 EOF
 ```
@@ -164,8 +172,8 @@ by just patching the `replicas` parameter.
 
 ### Cluster Services
 
-Note that the creation of `SearchHead` and `Indexer` resources also creates
-corresponding Kubernetes services:
+Note that the creation of `SearchHeadCluster` and `IndexerCluster`
+resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
@@ -201,8 +209,8 @@ Splunk clusters accessible outside of Kubernetes.
 ### Creating a Cluster with Data Fabric Search (DFS)
 
 Data Fabric Search (DFS) can easily be enabled on any `Standalone` or
-`SearchHead` insteance. To use DFS, you must first create a Spark cluster
-using the `Spark` resource:
+`SearchHeadCluster` insteance. To use DFS, you must first create a Spark
+cluster using the `Spark` resource:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -220,7 +228,7 @@ with DFS. Similar to indexer clusters and search head clusters, you can
 easily scale search head clusters by just patching the `replicas` parameter.
 
 Once you have a Spark cluster created, you can enable DFS by just adding the
-`sparkRef` parameter to any `Standalone` or `SearchHead` instances. For
+`sparkRef` parameter to any `Standalone` or `SearchHeadCluster` instances. For
 example, to create an additional single instance search head with DFS enabled:
 
 ```yaml
@@ -244,7 +252,7 @@ As these examples demonstrate, the Splunk Operator for Kubernetes makes it
 easy to create and manage clustered deployments of Splunk Enterprise. Given
 the reduced complexity, the comparable resource requirements from
 leveraging containers, and the ability to easily start small and scale as
-necessary, we recommend that you use clustered `Indexer` and `SearchHead`
+necessary, we recommend that you use the `IndexerCluster` and `SearchHeadCluster`
 resources in favor of `Standalone`, unless you have a specific reason not to.
 
 To remove the resources created from this example, run
@@ -253,8 +261,8 @@ To remove the resources created from this example, run
 kubectl delete standalone dfsexample
 kubectl delete standalone single
 kubectl delete spark example
-kubectl delete sh example
-kubectl delete idx example
+kubectl delete shc example
+kubectl delete idc example
 ```
 
 
@@ -485,7 +493,7 @@ the `LicenseMaster` by adding `licenseMasterRef` to their spec:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: Indexer
+kind: IndexerCluster
 metadata:
   name: example
   finalizers:
@@ -565,8 +573,8 @@ spec:
 *Note that this requires using the Splunk Enterprise container version 8.0.3 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external cluster of
-indexers with its `Standalone`, `SearchHead` and `LicenseMaster` resources.
-To do this, you will use the `splunk.cluster_master_url` and
+indexers with its `Standalone`, `SearchHeadCluster` and `LicenseMaster`
+resources. To do this, you will use the `splunk.cluster_master_url` and
 `splunk.idxc.pass4SymmKey` default.yml configuration parameters. Set
 `splunk.cluster_master_url` to the hostname or IP address of your indexers'
 cluster master.
@@ -612,7 +620,7 @@ Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: SearchHead
+kind: SearchHeadCluster
 metadata:
   name: example
   finalizers:

@@ -58,7 +58,7 @@ const (
 
 // CommonSpec defines the desired state of parameters that are common across all CRD types
 type CommonSpec struct {
-	// Image to use for Splunk pod containers (overrides SPLUNK_IMAGE environment variables)
+	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
 	Image string `json:"image"`
 
 	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
@@ -106,8 +106,8 @@ type CommonSplunkSpec struct {
 	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 
-	// IndexerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
-	IndexerRef corev1.ObjectReference `json:"indexerRef"`
+	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
 }
 
 // MetaObject is used to represent common interfaces of custom resources

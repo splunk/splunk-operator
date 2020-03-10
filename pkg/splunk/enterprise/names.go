@@ -121,7 +121,7 @@ func GetSplunkImage(specImage string) string {
 	if specImage != "" {
 		name = specImage
 	} else {
-		name = os.Getenv("SPLUNK_IMAGE")
+		name = os.Getenv("RELATED_IMAGE_SPLUNK_ENTERPRISE")
 		if name == "" {
 			name = defaultSplunkImage
 		}

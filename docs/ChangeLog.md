@@ -8,12 +8,12 @@
 
 * The API has been updated to v1alpha2, and involves the replacement of
   the SplunkEnterprise custom resource with 5 new custom resources:
-  Spark, LicenseMaster, Standalone, SearchHead and Indexer. Please read the
-  revised [Custom Resources](CustomResources.md) and [Examples](Examples.md)
-  documentation for details on all the changes. This is a major update and is
-  not backwards-compatible. You will have to completely remove any older
-  versions, and any resources managed by the operator, before upgrading to
-  this release.
+  Spark, LicenseMaster, Standalone, SearchHeadCluster and IndexerCluster.
+  Please read the revised [Custom Resources](CustomResources.md) and
+  [Examples](Examples.md) documentation for details on all the changes. This
+  is a major update and is not backwards-compatible. You will have to
+  completely remove any older versions, and any resources managed by the
+  operator, before upgrading to this release.
 
 * A new serviceTemplate spec parameter has been added for all Splunk Enterprise
   custom resources. This may be used to define a template the operator uses for

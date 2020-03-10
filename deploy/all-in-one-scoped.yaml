@@ -640,7 +640,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -650,9 +650,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -992,7 +992,7 @@ spec:
                   type: object
               type: object
             sparkImage:
-              description: Image to use for Spark pod containers (overrides SPARK_IMAGE
+              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
                 environment variables)
               type: string
             sparkRef:
@@ -2885,7 +2885,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -2895,9 +2895,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -4445,7 +4445,7 @@ spec:
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: searchheads.enterprise.splunk.com
+  name: searchheadclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
@@ -4457,11 +4457,11 @@ spec:
     name: Deployer
     type: string
   - JSONPath: .status.replicas
-    description: Number of desired search head replicas
+    description: Desired number of search head cluster members
     name: Desired
     type: integer
   - JSONPath: .status.readyReplicas
-    description: Current number of ready search head replicas
+    description: Current number of ready search head cluster members
     name: Ready
     type: integer
   - JSONPath: .metadata.creationTimestamp
@@ -4470,13 +4470,12 @@ spec:
     type: date
   group: enterprise.splunk.com
   names:
-    kind: SearchHead
-    listKind: SearchHeadList
-    plural: searchheads
+    kind: SearchHeadCluster
+    listKind: SearchHeadClusterList
+    plural: searchheadclusters
     shortNames:
-    - search
-    - sh
-    singular: searchhead
+    - shc
+    singular: searchheadcluster
   scope: Namespaced
   subresources:
     scale:
@@ -4486,8 +4485,8 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: SearchHead is the Schema for a Splunk Enterprise standalone search
-        head or cluster of search heads
+      description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -4502,8 +4501,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: SearchHeadSpec defines the desired state of a Splunk Enterprise
-            standalone search head or cluster of search heads
+          description: SearchHeadClusterSpec defines the desired state of a Splunk
+            Enterprise search head cluster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -5091,7 +5090,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -5101,9 +5100,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -5444,7 +5443,7 @@ spec:
                   type: object
               type: object
             sparkImage:
-              description: Image to use for Spark pod containers (overrides SPARK_IMAGE
+              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
                 environment variables)
               type: string
             sparkRef:
@@ -6673,8 +6672,8 @@ spec:
               type: array
           type: object
         status:
-          description: SearchHeadStatus defines the observed state of a Splunk Enterprise
-            standalone search head or cluster of search heads
+          description: SearchHeadClusterStatus defines the observed state of a Splunk
+            Enterprise search head cluster
           properties:
             captain:
               description: name or label of the search head captain
@@ -6703,8 +6702,8 @@ spec:
             members:
               description: status of each search head cluster member
               items:
-                description: SearchHeadMemberStatus is used to track the status of
-                  each search head cluster member
+                description: SearchHeadClusterMemberStatus is used to track the status
+                  of each search head cluster member
                 properties:
                   activeSearches:
                     description: total number of active historical + realtime searches
@@ -6737,11 +6736,11 @@ spec:
               - Error
               type: string
             readyReplicas:
-              description: current number of ready search head replicas
+              description: current number of ready search head cluster members
               format: int32
               type: integer
             replicas:
-              description: number of desired search head replicas
+              description: desired number of search head cluster members
               format: int32
               type: integer
             selector:
@@ -6758,7 +6757,7 @@ spec:
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: indexers.enterprise.splunk.com
+  name: indexerclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
@@ -6770,7 +6769,7 @@ spec:
     name: Master
     type: string
   - JSONPath: .status.replicas
-    description: Number of desired indexer peers
+    description: Desired number of indexer peers
     name: Desired
     type: integer
   - JSONPath: .status.readyReplicas
@@ -6783,12 +6782,13 @@ spec:
     type: date
   group: enterprise.splunk.com
   names:
-    kind: Indexer
-    listKind: IndexerList
-    plural: indexers
+    kind: IndexerCluster
+    listKind: IndexerClusterList
+    plural: indexerclusters
     shortNames:
-    - idx
-    singular: indexer
+    - idc
+    - idxc
+    singular: indexercluster
   scope: Namespaced
   subresources:
     scale:
@@ -6798,8 +6798,7 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: Indexer is the Schema for a Splunk Enterprise standalone indexer
-        or cluster of indexers
+      description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -6814,8 +6813,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: IndexerSpec defines the desired state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterSpec defines the desired state of a Splunk Enterprise
+            indexer cluster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -7403,7 +7402,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -7413,9 +7412,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -8943,8 +8942,8 @@ spec:
               type: array
           type: object
         status:
-          description: IndexerStatus defines the observed state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterStatus defines the observed state of a Splunk
+            Enterprise indexer cluster
           properties:
             clusterMasterPhase:
               description: current phase of the cluster master
@@ -8973,7 +8972,7 @@ spec:
               format: int32
               type: integer
             replicas:
-              description: number of desired indexer peers
+              description: desired number of indexer peers
               format: int32
               type: integer
             selector:
@@ -9619,7 +9618,7 @@ spec:
                   type: object
               type: object
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -10053,7 +10052,7 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "splunk-operator"
-            - name: SPLUNK_IMAGE
+            - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
               value: "splunk/splunk:edge"
-            - name: SPARK_IMAGE
+            - name: RELATED_IMAGE_SPLUNK_SPARK
               value: "splunk/spark"

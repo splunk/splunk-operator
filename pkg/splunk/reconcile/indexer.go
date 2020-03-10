@@ -22,11 +22,11 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// ReconcileIndexer reconciles the state of a Splunk Enterprise indexer cluster.
-func ReconcileIndexer(client ControllerClient, cr *enterprisev1.Indexer) error {
+// ReconcileIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
+func ReconcileIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluster) error {
 
 	// validate and updates defaults for CR
-	err := enterprise.ValidateIndexerSpec(&cr.Spec)
+	err := enterprise.ValidateIndexerClusterSpec(&cr.Spec)
 	if err != nil {
 		return err
 	}

@@ -10,8 +10,8 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 * [Spark Resource Spec Parameters](#spark-resource-spec-parameters)
 * [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
 * [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
-* [SearchHead Resource Spec Parameters](#searchhead-resource-spec-parameters)
-* [Indexer Resource Spec Parameters](#indexer-resource-spec-parameters)
+* [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
+* [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -70,7 +70,7 @@ configuration parameters:
 
 | Key                   | Type       | Description                                                                                                |
 | --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| image                 | string     | Container image to use for pod instances (overrides `SPLUNK_IMAGE` or `SPARK_IMAGE` environment variables) |
+| image                 | string     | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` or `RELATED_IMAGE_SPLUNK_SPARK` environment variables) |
 | imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
@@ -95,25 +95,25 @@ spec:
         name: splunk-licenses
   licenseMasterRef:
     name: example
-  indexerRef:
+  indexerClusterRef:
     name: example
 ```
 
 The following additional configuration parameters may be used for all Splunk
-Enterprise resources, including: `Standalone`, `LicenseMaster`, `SearchHead`,
-and `Indexer`:
+Enterprise resources, including: `Standalone`, `LicenseMaster`,
+`SearchHeadCluster`, and `IndexerCluster`:
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
 | storageClassName   | string  | Name of [StorageClass](StorageClass.md) to use for persistent volume claims   |
-| etcStorage         | string  | Storage capacity to request for Splunk etc volume claims (default="1Gi")      |
-| varStorage         | string  | Storage capacity to request for Splunk var volume claims (default="200Gi")    |
+| etcStorage         | string  | Storage capacity to request for Splunk etc volume claims (default="10Gi")      |
+| varStorage         | string  | Storage capacity to request for Splunk var volume claims (default="100Gi")    |
 | volumes            | [[]Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>` |
 | defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
-| indexerRef         | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `Indexer` instance (via `name` and optionally `namespace`) to use for indexing |
+| indexerClusterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `IndexerCluster` instance (via `name` and optionally `namespace`) to use for indexing |
 
 
 ## Spark Resource Spec Parameters
@@ -175,15 +175,15 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of standalone replicas (defaults to 1) |
-| sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `SPARK_IMAGE` environment variables) |
+| sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `RELATED_IMAGE_SPLUNK_SPARK` environment variables) |
 | sparkRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `Spark` instance (via `name` and optionally `namespace`). When defined, Data Fabric Search (DFS) will be enabled and configured to use it. |
 
 
-## SearchHead Resource Spec Parameters
+## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: SearchHead
+kind: SearchHeadCluster
 metadata:
   name: example
 spec:
@@ -195,20 +195,20 @@ spec:
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
-the `SearchHead` resource provides the following `Spec` configuration parameters:
+the `SearchHeadCluster` resource provides the following `Spec` configuration parameters:
 
 | Key        | Type    | Description                                                                     |
 | ---------- | ------- | ------------------------------------------------------------------------------- |
 | replicas   | integer | The number of search heads cluster members (minimum of 3, which is the default) |
-| sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `SPARK_IMAGE` environment variables) |
+| sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `RELATED_IMAGE_SPLUNK_SPARK` environment variables) |
 | sparkRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `Spark` instance (via `name` and optionally `namespace`). When defined, Data Fabric Search (DFS) will be enabled and configured to use it. |
 
 
-## Indexer Resource Spec Parameters
+## IndexerCluster Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1alpha2
-kind: Indexer
+kind: IndexerCluster
 metadata:
   name: example
 spec:
@@ -217,7 +217,7 @@ spec:
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
-the `Indexer` resource provides the following `Spec` configuration parameters:
+the `IndexerCluster` resource provides the following `Spec` configuration parameters:
 
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |

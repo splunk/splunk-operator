@@ -30,7 +30,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls}
-	searchHeadCR := enterprisev1.SearchHead{
+	searchHeadCR := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
 		},
@@ -43,7 +43,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	searchHeadRevised := searchHeadCR.DeepCopy()
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		obj := cr.(*enterprisev1.SearchHead)
+		obj := cr.(*enterprisev1.SearchHeadCluster)
 		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
 		return err
 	}
@@ -59,7 +59,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 			"idxc_secret": []byte{'a', 'b'},
 		},
 	}
-	searchHeadRevised.Spec.IndexerRef.Name = "stack2"
+	searchHeadRevised.Spec.IndexerClusterRef.Name = "stack2"
 	updateCalls["Get"] = []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack2-indexer-secrets"},
 		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
@@ -68,9 +68,9 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	reconcileTester(t, "TestReconcileSplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, &secret)
 
 	// test indexer with license master
-	indexerCR := enterprisev1.Indexer{
+	indexerCR := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "Indexer",
+			Kind: "IndexerCluster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -91,7 +91,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	indexerRevised.Spec.Image = "splunk/test"
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *mockClient, cr interface{}) error {
-		obj := cr.(*enterprisev1.Indexer)
+		obj := cr.(*enterprisev1.IndexerCluster)
 		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
 		return err
 	}

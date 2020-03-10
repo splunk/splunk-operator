@@ -34,8 +34,8 @@ func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, 
 	// if reference to indexer cluster, extract and re-use idxc.secret
 	// IndexerRef is not relevant for Indexer, and Indexer will use value from LicenseMaster to prevent cyclical dependency
 	var idxcSecret []byte
-	if instanceType.ToKind() != "indexer" && instanceType.ToKind() != "license-master" && spec.IndexerRef.Name != "" {
-		idxcSecret, err = GetSplunkSecret(client, cr, spec.IndexerRef, enterprise.SplunkIndexer, "idxc_secret")
+	if instanceType.ToKind() != "indexer" && instanceType.ToKind() != "license-master" && spec.IndexerClusterRef.Name != "" {
+		idxcSecret, err = GetSplunkSecret(client, cr, spec.IndexerClusterRef, enterprise.SplunkIndexer, "idxc_secret")
 		if err != nil {
 			return nil, err
 		}

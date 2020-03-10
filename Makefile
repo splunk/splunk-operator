@@ -77,9 +77,9 @@ generate:
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_searchheads_crd.yaml >> deploy/crds/combined.yaml
+	@cat deploy/crds/enterprise.splunk.com_searchheadclusters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_indexers_crd.yaml >> deploy/crds/combined.yaml
+	@cat deploy/crds/enterprise.splunk.com_indexerclusters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_sparks_crd.yaml >> deploy/crds/combined.yaml
 	@echo Rebuilding deploy/all-in-one-scoped.yaml

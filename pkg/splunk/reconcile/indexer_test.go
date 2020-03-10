@@ -23,7 +23,7 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-func TestReconcileIndexer(t *testing.T) {
+func TestReconcileIndexerCluster(t *testing.T) {
 	funcCalls := []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack1-indexer-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
@@ -35,9 +35,9 @@ func TestReconcileIndexer(t *testing.T) {
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
 
-	current := enterprisev1.Indexer{
+	current := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "Indexer",
+			Kind: "IndexerCluster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -47,16 +47,16 @@ func TestReconcileIndexer(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ReconcileIndexer(c, cr.(*enterprisev1.Indexer))
+		return ReconcileIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
 	}
-	reconcileTester(t, "TestReconcileIndexer", &current, revised, createCalls, updateCalls, reconcile)
+	reconcileTester(t, "TestReconcileIndexerCluster", &current, revised, createCalls, updateCalls, reconcile)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-		err := ReconcileIndexer(c, cr.(*enterprisev1.Indexer))
+		err := ReconcileIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
