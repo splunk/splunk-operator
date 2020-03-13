@@ -41,9 +41,6 @@ covered by support, and we strongly discourage using it in production.*
 
 We are working to resolve the following in future releases:
 
-* Scale down of indexer cluster peers does not remove them in a clean manner
-by ensuring that the cluster is always valid and complete. This can lead to
-data loss.  
 * The Deployment Monitoring Console is not currently configured properly
 for new deployments
 

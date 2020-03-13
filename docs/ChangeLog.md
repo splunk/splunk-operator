@@ -15,6 +15,12 @@
   completely remove any older versions, and any resources managed by the
   operator, before upgrading to this release.
 
+* Scaling, upgrades and other updates are now more actively managed for the
+  SearchHeadCluster and IndexerCluster resources. This helps protect against
+  data loss and maximizes availability while changes are being made. You can
+  now also use the "kubectl scale" command, and Horizontal Pod Autoscalers
+  with all resources, except LicenseMaster which always uses a single Pod.
+
 * A new serviceTemplate spec parameter has been added for all Splunk Enterprise
   custom resources. This may be used to define a template the operator uses for
   the creation of (non headless) services.

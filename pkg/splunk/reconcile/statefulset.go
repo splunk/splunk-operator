@@ -26,6 +26,36 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
+// StatefulSetPodManager is used to manage the pods within a StatefulSet
+type StatefulSetPodManager interface {
+	// Decommision pod and return true if complete
+	Decommission(n int32) (bool, error)
+
+	// Quarantine pod and return true if complete
+	Quarantine(n int32) (bool, error)
+
+	// ReleaseQuarantine will release a quarantine and return true, if active; it returns false if none active
+	ReleaseQuarantine(n int32) (bool, error)
+}
+
+// DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
+type DefaultStatefulSetPodManager struct{}
+
+// Decommission for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *DefaultStatefulSetPodManager) Decommission(n int32) (bool, error) {
+	return true, nil
+}
+
+// Quarantine for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *DefaultStatefulSetPodManager) Quarantine(n int32) (bool, error) {
+	return true, nil
+}
+
+// ReleaseQuarantine for DefaultStatefulSetPodManager does nothing and returns false
+func (mgr *DefaultStatefulSetPodManager) ReleaseQuarantine(n int32) (bool, error) {
+	return false, nil
+}
+
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
 func ApplyStatefulSet(c ControllerClient, revised *appsv1.StatefulSet) (enterprisev1.ResourcePhase, error) {
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
@@ -57,63 +87,64 @@ func ApplyStatefulSet(c ControllerClient, revised *appsv1.StatefulSet) (enterpri
 }
 
 // ReconcileStatefulSetPods manages scaling and config updates for StatefulSets
-func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, readyReplicas, desiredReplicas int32,
-	removeReadyPod func(ControllerClient, *appsv1.StatefulSet) (enterprisev1.ResourcePhase, error)) (enterprisev1.ResourcePhase, error) {
+func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, mgr StatefulSetPodManager, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
 
 	scopedLog := log.WithName("ReconcileStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
-	// inline function used to handle scale down
-	scaleDown := func(replicas int32) error {
-		scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", replicas))
-		*statefulSet.Spec.Replicas = replicas
-		return UpdateResource(c, statefulSet)
-	}
-
-	// check for scaling down
-	if readyReplicas > desiredReplicas {
-		if removeReadyPod != nil {
-			return removeReadyPod(c, statefulSet)
-		}
-		return enterprisev1.PhaseScalingDown, scaleDown(readyReplicas - 1)
-	}
-
-	// check if replicas are not yet ready
-	if readyReplicas < desiredReplicas {
-		if *statefulSet.Spec.Replicas < desiredReplicas {
-			// scale up StatefulSet to match desiredReplicas
-			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
-			*statefulSet.Spec.Replicas = desiredReplicas
-			return enterprisev1.PhaseScalingUp, UpdateResource(c, statefulSet)
-		}
-
-		if statefulSet.Status.UpdatedReplicas < statefulSet.Status.Replicas {
-			scopedLog.Info("Waiting for updates to complete")
-			return enterprisev1.PhaseUpdating, nil
-		}
-
+	// wait for all replicas ready
+	replicas := statefulSet.Status.Replicas
+	readyReplicas := statefulSet.Status.ReadyReplicas
+	if readyReplicas < replicas {
 		scopedLog.Info("Waiting for pods to become ready")
 		if readyReplicas > 0 {
 			return enterprisev1.PhaseScalingUp, nil
 		}
 		return enterprisev1.PhasePending, nil
+	} else if readyReplicas > replicas {
+		scopedLog.Info("Waiting for scale down to complete")
+		return enterprisev1.PhaseScalingDown, nil
 	}
 
+	// readyReplicas == replicas
+
+	// check for scaling up
+	if readyReplicas < desiredReplicas {
+		// scale up StatefulSet to match desiredReplicas
+		scopedLog.Info("Scaling replicas up", "replicas", desiredReplicas)
+		*statefulSet.Spec.Replicas = desiredReplicas
+		return enterprisev1.PhaseScalingUp, UpdateResource(c, statefulSet)
+	}
+
+	// check for scaling down
+	if readyReplicas > desiredReplicas {
+		// decommission pod to prepare for removal
+		n := readyReplicas - 1
+		complete, err := mgr.Decommission(n)
+		if err != nil {
+			podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
+			scopedLog.Error(err, "Unable to decommission Pod", "podName", podName)
+			return enterprisev1.PhaseError, err
+		}
+		if !complete {
+			// wait until pod quarantine has completed before deleting it
+			return enterprisev1.PhaseScalingDown, nil
+		}
+
+		// scale down statefulset to terminate pod
+		scopedLog.Info("Scaling replicas down", "replicas", n)
+		*statefulSet.Spec.Replicas = n
+		return enterprisev1.PhaseScalingDown, UpdateResource(c, statefulSet)
+	}
+
+	// ready and no StatefulSet scaling is required
 	// readyReplicas == desiredReplicas
 
-	// check if we have extra pods in statefulset
-	if *statefulSet.Spec.Replicas != desiredReplicas {
-		// scale down StatefulSet to match readyReplicas
-		return enterprisev1.PhaseScalingDown, scaleDown(readyReplicas)
-	}
-
-	// ready and no StatefulSet scaling required
-
 	// check existing pods for desired updates
-	for n := *statefulSet.Spec.Replicas; n > 0; n-- {
+	for n := readyReplicas - 1; n >= 0; n-- {
 		// get Pod
-		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n-1)
+		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
 		var pod corev1.Pod
 		err := c.Get(context.TODO(), namespacedName, &pod)
@@ -124,6 +155,18 @@ func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSe
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
 		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
+			// pod needs to be updated; first, quarantine it to prepare for restart
+			complete, err := mgr.Quarantine(n)
+			if err != nil {
+				scopedLog.Error(err, "Unable to quarantine Pod", "podName", podName)
+				return enterprisev1.PhaseError, err
+			}
+			if !complete {
+				// wait until pod quarantine has completed before deleting it
+				return enterprisev1.PhaseUpdating, nil
+			}
+
+			// deleting pod will cause StatefulSet controller to create a new one with latest template
 			scopedLog.Info("Recycling Pod for updates", "podName", podName,
 				"statefulSetRevision", statefulSet.Status.CurrentRevision,
 				"podRevision", pod.GetLabels()["controller-revision-hash"])
@@ -133,7 +176,19 @@ func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSe
 				scopedLog.Error(err, "Unable to delete Pod", "podName", podName)
 				return enterprisev1.PhaseError, err
 			}
+
 			// only delete one at a time
+			return enterprisev1.PhaseUpdating, nil
+		}
+
+		// check if pod was previously quarantined; if so, it's ok to release it
+		released, err := mgr.ReleaseQuarantine(n)
+		if err != nil {
+			scopedLog.Error(err, "Unable to release Pod from quarantine", "podName", podName)
+			return enterprisev1.PhaseError, err
+		}
+		if released {
+			// if pod was released, return and wait until next reconcile to let things settle down
 			return enterprisev1.PhaseUpdating, nil
 		}
 	}

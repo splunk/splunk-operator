@@ -115,9 +115,14 @@ func (r *ReconcileSearchHeadCluster) Reconcile(request reconcile.Request) (recon
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "SearchHeadCluster"
 
-	err = splunkreconcile.ReconcileSearchHeadCluster(r.client, instance)
+	result, err := splunkreconcile.ReconcileSearchHeadCluster(r.client, instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		reqLogger.Error(err, "SearchHeadCluster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		return result, nil
+	}
+	if result.Requeue {
+		reqLogger.Info("SearchHeadCluster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		return result, nil
 	}
 
 	reqLogger.Info("SearchHeadCluster reconciliation complete")

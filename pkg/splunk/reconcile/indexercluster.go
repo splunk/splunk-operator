@@ -17,18 +17,27 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // ReconcileIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
-func ReconcileIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluster) error {
+func ReconcileIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluster) (reconcile.Result, error) {
+
+	// unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateIndexerClusterSpec(&cr.Spec)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// updates status after function completes
@@ -45,63 +54,66 @@ func ReconcileIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCl
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterprisev1.PhaseTerminating
 			cr.Status.ClusterMasterPhase = enterprisev1.PhaseTerminating
-			client.Status().Update(context.TODO(), cr)
+		} else {
+			result.Requeue = false
 		}
-		return err
+		return result, err
 	}
 
 	// create or update general config resources
 	_, err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update a headless service for indexer cluster
 	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkIndexer, true))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
 	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkIndexer, false))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update a regular service for the cluster master
 	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkClusterMaster, false))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update statefulset for the cluster master
 	statefulSet, err := enterprise.GetClusterMasterStatefulSet(cr)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cr.Status.ClusterMasterPhase, err = ApplyStatefulSet(client, statefulSet)
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
-		cr.Status.ClusterMasterPhase, err = ReconcileStatefulSetPods(client, statefulSet, statefulSet.Status.ReadyReplicas, 1, nil)
+		mgr := DefaultStatefulSetPodManager{}
+		cr.Status.ClusterMasterPhase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, 1)
 	}
 	if err != nil {
 		cr.Status.ClusterMasterPhase = enterprisev1.PhaseError
-		return err
+		return result, err
 	}
 
 	// create or update statefulset for the indexers
 	statefulSet, err = enterprise.GetIndexerStatefulSet(cr)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
-		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, cr.Status.ReadyReplicas, cr.Spec.Replicas, nil)
+		mgr := DefaultStatefulSetPodManager{}
+		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
 	}
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError
-		return err
+	} else if cr.Status.Phase == enterprisev1.PhaseReady {
+		result.Requeue = false
 	}
-
-	return nil
+	return result, err
 }

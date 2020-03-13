@@ -3,6 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.13
 
 require (
+	github.com/go-logr/logr v0.1.0
 	github.com/operator-framework/operator-sdk v0.15.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898 // indirect

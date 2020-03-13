@@ -17,18 +17,27 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // ReconcileSpark reconciles the Deployments and Services for a Spark cluster.
-func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
+func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) (reconcile.Result, error) {
+
+	// unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
 
 	// validate and updates defaults for CR
 	err := spark.ValidateSparkSpec(&cr.Spec)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// updates status after function completes
@@ -44,45 +53,46 @@ func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) error {
 		terminating, err := CheckSplunkDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterprisev1.PhaseTerminating
-			client.Status().Update(context.TODO(), cr)
+		} else {
+			result.Requeue = false
 		}
-		return err
+		return result, err
 	}
 
 	// create or update a service for spark master
 	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkMaster, false))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update a headless service for spark workers
 	err = ApplyService(client, spark.GetSparkService(cr, spark.SparkWorker, true))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update deployment for spark master
 	deployment, err := spark.GetSparkDeployment(cr, spark.SparkMaster)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cr.Status.MasterPhase, err = ApplyDeployment(client, deployment)
 	if err != nil {
 		cr.Status.MasterPhase = enterprisev1.PhaseError
-		return err
+		return result, err
 	}
 
 	// create or update deployment for spark worker
 	deployment, err = spark.GetSparkDeployment(cr, spark.SparkWorker)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cr.Status.Phase, err = ApplyDeployment(client, deployment)
 	cr.Status.ReadyReplicas = deployment.Status.ReadyReplicas
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError
-		return err
+	} else if cr.Status.Phase == enterprisev1.PhaseReady {
+		result.Requeue = false
 	}
-
-	return nil
+	return result, err
 }

@@ -17,18 +17,27 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // ReconcileStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) error {
+func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) (reconcile.Result, error) {
+
+	// unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateStandaloneSpec(&cr.Spec)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// updates status after function completes
@@ -44,37 +53,39 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) e
 		terminating, err := CheckSplunkDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterprisev1.PhaseTerminating
-			client.Status().Update(context.TODO(), cr)
+		} else {
+			result.Requeue = false
 		}
-		return err
+		return result, err
 	}
 
 	// create or update general config resources
 	_, err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkStandalone)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update a headless service (this is required by DFS for Spark->standalone comms, possibly other things)
 	err = ApplyService(client, enterprise.GetSplunkService(cr, cr.Spec.CommonSpec, enterprise.SplunkStandalone, true))
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// create or update statefulset
 	statefulSet, err := enterprise.GetStandaloneStatefulSet(cr)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
-		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, cr.Status.ReadyReplicas, cr.Spec.Replicas, nil)
+		mgr := DefaultStatefulSetPodManager{}
+		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
 	}
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError
-		return err
+	} else if cr.Status.Phase == enterprisev1.PhaseReady {
+		result.Requeue = false
 	}
-
-	return nil
+	return result, err
 }

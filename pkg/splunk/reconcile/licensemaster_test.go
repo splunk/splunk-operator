@@ -43,7 +43,8 @@ func TestReconcileLicenseMaster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ReconcileLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
+		_, err := ReconcileLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
+		return err
 	}
 	reconcileTester(t, "TestReconcileLicenseMaster", &current, revised, createCalls, updateCalls, reconcile)
 
@@ -52,7 +53,7 @@ func TestReconcileLicenseMaster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-		err := ReconcileLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
+		_, err := ReconcileLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)

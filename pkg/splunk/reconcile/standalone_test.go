@@ -43,7 +43,8 @@ func TestReconcileStandalone(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		return ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
+		_, err := ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
+		return err
 	}
 	reconcileTester(t, "TestReconcileStandalone", &current, revised, createCalls, updateCalls, reconcile)
 
@@ -52,7 +53,7 @@ func TestReconcileStandalone(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-		err := ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
+		_, err := ReconcileStandalone(c, cr.(*enterprisev1.Standalone))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)

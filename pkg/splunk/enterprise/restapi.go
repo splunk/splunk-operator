@@ -20,7 +20,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
+	"time"
 )
+
+// SplunkHTTPClient defines the interface used by SplunkClient.
+// It is used to mock alternative implementations used for testing.
+type SplunkHTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
 
 // SplunkClient is a simple object used to send HTTP REST API requests
 type SplunkClient struct {
@@ -34,7 +42,7 @@ type SplunkClient struct {
 	password string
 
 	// HTTP client used to process requests
-	client *http.Client
+	client SplunkHTTPClient
 }
 
 // NewSplunkClient returns a new SplunkClient object initialized with a username and password
@@ -43,9 +51,12 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 		managementURI: managementURI,
 		username:      username,
 		password:      password,
-		client: &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
-		}},
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
+			},
+		},
 	}
 }
 
@@ -261,6 +272,7 @@ func (c *SplunkClient) GetSearchHeadClusterMemberInfo() (*SearchHeadClusterMembe
 }
 
 // SetSearchHeadDetention enables or disables detention of a search head cluster member
+// See https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/SHdetention
 func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	mode := "off"
 	if detain {
@@ -275,11 +287,53 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 }
 
 // RemoveSearchHeadClusterMember removes a search head cluster member
+// See https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/Removeaclustermember
 func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
-	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/remove_server", c.managementURI)
+	// sent request to remove from search head cluster consensus
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/remove_server?output_mode=json", c.managementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
 	}
-	return c.Do(request, 200, nil)
+
+	// send HTTP response and check status
+	request.SetBasicAuth(c.username, c.password)
+	response, err := c.client.Do(request)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode == 200 {
+		return nil
+	}
+	if response.StatusCode != 503 {
+		return fmt.Errorf("Response code=%d from %s; want %d", response.StatusCode, request.URL, 200)
+	}
+
+	// unmarshall 503 response
+	apiResponse := struct {
+		Messages []struct {
+			Text string `json:"text"`
+		} `json:"messages"`
+	}{}
+	data, _ := ioutil.ReadAll(response.Body)
+	if len(data) == 0 {
+		return fmt.Errorf("Received 503 response with empty body from %s", request.URL)
+	}
+	err = json.Unmarshal(data, &apiResponse)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal response from %s: %v", request.URL, err)
+	}
+
+	// check if request failed because member was already removed
+	if len(apiResponse.Messages) == 0 {
+		return fmt.Errorf("Received 503 response with empty Messages from %s", request.URL)
+	}
+	msg1 := regexp.MustCompile(`Server .* is not part of configuration, hence cannot be removed`)
+	msg2 := regexp.MustCompile(`This node is not part of any cluster configuration`)
+	if msg1.Match([]byte(apiResponse.Messages[0].Text)) || msg2.Match([]byte(apiResponse.Messages[0].Text)) {
+		// it was already removed -> ignore error
+		return nil
+	}
+
+	return fmt.Errorf("Received unrecognized 503 response from %s", request.URL)
 }
