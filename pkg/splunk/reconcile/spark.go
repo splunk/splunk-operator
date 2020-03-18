@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -25,8 +25,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
-// ReconcileSpark reconciles the Deployments and Services for a Spark cluster.
-func ReconcileSpark(client ControllerClient, cr *enterprisev1.Spark) (reconcile.Result, error) {
+// ApplySpark reconciles the Deployments and Services for a Spark cluster.
+func ApplySpark(client ControllerClient, cr *enterprisev1.Spark) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{

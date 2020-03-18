@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -27,8 +27,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// ReconcileSplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
-func ReconcileSplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) (*corev1.Secret, error) {
+// ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
+func ApplySplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) (*corev1.Secret, error) {
 	var err error
 
 	// if reference to indexer cluster, extract and re-use idxc.secret

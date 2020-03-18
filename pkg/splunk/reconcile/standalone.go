@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -25,8 +25,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// ReconcileStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) (reconcile.Result, error) {
+// ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
+func ApplyStandalone(client ControllerClient, cr *enterprisev1.Standalone) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -60,7 +60,7 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) (
 	}
 
 	// create or update general config resources
-	_, err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkStandalone)
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkStandalone)
 	if err != nil {
 		return result, err
 	}
@@ -80,7 +80,7 @@ func ReconcileStandalone(client ControllerClient, cr *enterprisev1.Standalone) (
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
 		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
+		cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
 	}
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError

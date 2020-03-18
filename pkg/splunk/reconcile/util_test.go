@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -258,7 +258,7 @@ func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[str
 	}
 
 	if notEmptyWantCalls != len(c.calls) {
-		t.Errorf("%s: MockClient functions called = %d; want %d", testname, len(c.calls), len(wantCalls))
+		t.Errorf("%s: MockClient functions called = %d; want %d: calls=%v", testname, len(c.calls), len(wantCalls), c.calls)
 	}
 }
 

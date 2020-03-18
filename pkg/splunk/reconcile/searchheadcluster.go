@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -30,14 +30,14 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// ReconcileSearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
-func ReconcileSearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHeadCluster) (reconcile.Result, error) {
+// ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
+func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHeadCluster) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ReconcileSearchHeadCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateSearchHeadClusterSpec(&cr.Spec)
@@ -66,7 +66,7 @@ func ReconcileSearchHeadCluster(client ControllerClient, cr *enterprisev1.Search
 	}
 
 	// create or update general config resources
-	secrets, err := ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
+	secrets, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
 	if err != nil {
 		return result, err
 	}
@@ -97,7 +97,7 @@ func ReconcileSearchHeadCluster(client ControllerClient, cr *enterprisev1.Search
 	cr.Status.DeployerPhase, err = ApplyStatefulSet(client, statefulSet)
 	if err == nil && cr.Status.DeployerPhase == enterprisev1.PhaseReady {
 		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.DeployerPhase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, 1)
+		cr.Status.DeployerPhase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, 1)
 	}
 	if err != nil {
 		cr.Status.DeployerPhase = enterprisev1.PhaseError
@@ -124,7 +124,7 @@ func ReconcileSearchHeadCluster(client ControllerClient, cr *enterprisev1.Search
 	}
 
 	// manage scaling and updates
-	cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
+	cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError
 		return result, err
@@ -145,10 +145,10 @@ type SearchHeadClusterPodManager struct {
 	secrets *corev1.Secret
 }
 
-// Decommission for SearchHeadClusterPodManager decommissions search head cluster member; it returns true when complete
-func (mgr *SearchHeadClusterPodManager) Decommission(n int32) (bool, error) {
+// PrepareScaleDown for SearchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
+func (mgr *SearchHeadClusterPodManager) PrepareScaleDown(n int32) (bool, error) {
 	// start by quarantining the pod
-	result, err := mgr.Quarantine(n)
+	result, err := mgr.PrepareRecycle(n)
 	if err != nil || !result {
 		return result, err
 	}
@@ -185,8 +185,8 @@ func (mgr *SearchHeadClusterPodManager) Decommission(n int32) (bool, error) {
 	return true, nil
 }
 
-// Quarantine for SearchHeadClusterPodManager quarantines a search head cluster member; it returns true when complete
-func (mgr *SearchHeadClusterPodManager) Quarantine(n int32) (bool, error) {
+// PrepareRecycle for SearchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
+func (mgr *SearchHeadClusterPodManager) PrepareRecycle(n int32) (bool, error) {
 	memberName := enterprise.GetSplunkStatefulsetPodName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
@@ -198,7 +198,7 @@ func (mgr *SearchHeadClusterPodManager) Quarantine(n int32) (bool, error) {
 
 	case "ManualDetention":
 		// Wait until active searches have drained
-		searchesComplete := mgr.cr.Status.Members[n].ActiveSearches == 0
+		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
 		if searchesComplete {
 			mgr.log.Info("Detention complete", "memberName", memberName)
 		} else {
@@ -211,20 +211,20 @@ func (mgr *SearchHeadClusterPodManager) Quarantine(n int32) (bool, error) {
 	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Members[n].Status)
 }
 
-// ReleaseQuarantine for SearchHeadClusterPodManager releases quarantine and returns true, or returns false if not quarantined
-func (mgr *SearchHeadClusterPodManager) ReleaseQuarantine(n int32) (bool, error) {
+// FinishRecycle for SearchHeadClusterPodManager completes recycle event for search head pod; it returns true when complete
+func (mgr *SearchHeadClusterPodManager) FinishRecycle(n int32) (bool, error) {
 	memberName := enterprise.GetSplunkStatefulsetPodName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
 		// not in detention
-		return false, nil
+		return true, nil
 
 	case "ManualDetention":
 		// release from detention
 		mgr.log.Info("Releasing search head cluster member from detention", "memberName", memberName)
 		c := mgr.getClient(n)
-		return true, c.SetSearchHeadDetention(false)
+		return false, c.SetSearchHeadDetention(false)
 	}
 
 	// unhandled status
@@ -246,6 +246,7 @@ func (mgr *SearchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 	if mgr.cr.Status.ReadyReplicas == 0 {
 		return nil
 	}
+	gotCaptainInfo := false
 	mgr.cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
 	for n := int32(0); n < mgr.cr.Status.ReadyReplicas; n++ {
 		c := mgr.getClient(n)
@@ -254,8 +255,22 @@ func (mgr *SearchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
+			memberStatus.Adhoc = memberInfo.Adhoc
 			memberStatus.Registered = memberInfo.Registered
-			memberStatus.ActiveSearches = memberInfo.ActiveHistoricalSearchCount + memberInfo.ActiveRealtimeSearchCount
+			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
+			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
+			if !gotCaptainInfo {
+				// try querying captain api; note that this should work on any node
+				captainInfo, err := c.GetSearchHeadCaptainInfo()
+				if err == nil {
+					mgr.cr.Status.Captain = captainInfo.Label
+					mgr.cr.Status.CaptainReady = captainInfo.ServiceReady
+					mgr.cr.Status.Initialized = captainInfo.Initialized
+					mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
+					mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+					gotCaptainInfo = true
+				}
+			}
 		} else if n < statefulSet.Status.Replicas {
 			// ignore error if pod was just terminated for scale down event (n >= Replicas)
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
@@ -263,19 +278,6 @@ func (mgr *SearchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 		}
 		mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
 	}
-
-	// get search head cluster info from captain
-	fqdnName := resources.GetServiceFQDN(mgr.cr.GetNamespace(), enterprise.GetSplunkServiceName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), false))
-	c := enterprise.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
-	captainInfo, err := c.GetSearchHeadCaptainInfo()
-	if err != nil {
-		return err
-	}
-	mgr.cr.Status.Captain = captainInfo.Label
-	mgr.cr.Status.CaptainReady = captainInfo.ServiceReadyFlag
-	mgr.cr.Status.Initialized = captainInfo.InitializedFlag
-	mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoinedFlag
-	mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 
 	return nil
 }

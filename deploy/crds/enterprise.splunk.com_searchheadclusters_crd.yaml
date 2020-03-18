@@ -2261,18 +2261,25 @@ spec:
                 description: SearchHeadClusterMemberStatus is used to track the status
                   of each search head cluster member
                 properties:
-                  activeSearches:
-                    description: total number of active historical + realtime searches
+                  active_historical_search_count:
+                    description: Number of currently running historical searches.
                     type: integer
+                  active_realtime_search_count:
+                    description: Number of currently running realtime searches.
+                    type: integer
+                  adhoc_searchhead:
+                    description: Flag that indicates if this member can run scheduled
+                      searches.
+                    type: boolean
+                  is_registered:
+                    description: Indicates if this member is registered with the searchhead
+                      cluster captain.
+                    type: boolean
                   name:
                     description: Name of the search head cluster member
                     type: string
-                  registered:
-                    description: true if this member is registered with the search
-                      head captain
-                    type: boolean
                   status:
-                    description: Status of the search head cluster member
+                    description: Indicates the status of the member.
                     type: string
                 type: object
               type: array

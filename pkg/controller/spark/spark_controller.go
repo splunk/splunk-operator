@@ -115,7 +115,7 @@ func (r *ReconcileSpark) Reconcile(request reconcile.Request) (reconcile.Result,
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "Spark"
 
-	result, err := splunkreconcile.ReconcileSpark(r.client, instance)
+	result, err := splunkreconcile.ApplySpark(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "Spark reconciliation requeued", "RequeueAfter", result.RequeueAfter)
 		return result, nil

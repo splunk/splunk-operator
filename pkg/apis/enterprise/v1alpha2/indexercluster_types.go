@@ -34,6 +34,27 @@ type IndexerClusterSpec struct {
 	Replicas int32 `json:"replicas"`
 }
 
+// IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.
+type IndexerClusterMemberStatus struct {
+	// Unique identifier or GUID for the peer
+	ID string `json:"guid"`
+
+	// Name of the indexer cluster peer
+	Name string `json:"name"`
+
+	// Status of the indexer cluster peer
+	Status string `json:"status"`
+
+	// The ID of the configuration bundle currently being used by the master.
+	ActiveBundleID string `json:"active_bundle_id"`
+
+	// Count of the number of buckets on this peer, across all indexes.
+	BucketCount int64 `json:"bucket_count"`
+
+	// Flag indicating if this peer belongs to the current committed generation and is searchable.
+	Searchable bool `json:"is_searchable"`
+}
+
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
 type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
@@ -50,6 +71,21 @@ type IndexerClusterStatus struct {
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
+
+	// Indicates if the cluster is initialized.
+	Initialized bool `json:"initialized_flag"`
+
+	// Indicates if the cluster is ready for indexing.
+	IndexingReady bool `json:"indexing_ready_flag"`
+
+	// Indicates whether the master is ready to begin servicing, based on whether it is initialized.
+	ServiceReady bool `json:"service_ready_flag"`
+
+	// Indicates if the cluster is in maintenance mode.
+	MaintenanceMode bool `json:"maintenance_mode"`
+
+	// status of each indexer cluster peer
+	Peers []IndexerClusterMemberStatus `json:"peers"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

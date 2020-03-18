@@ -115,7 +115,7 @@ func (r *ReconcileIndexerCluster) Reconcile(request reconcile.Request) (reconcil
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "IndexerCluster"
 
-	result, err := splunkreconcile.ReconcileIndexerCluster(r.client, instance)
+	result, err := splunkreconcile.ApplyIndexerCluster(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "IndexerCluster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
 		return result, nil

@@ -47,14 +47,20 @@ type SearchHeadClusterMemberStatus struct {
 	// Name of the search head cluster member
 	Name string `json:"name"`
 
-	// Status of the search head cluster member
+	// Indicates the status of the member.
 	Status string `json:"status"`
 
-	// true if this member is registered with the search head captain
-	Registered bool `json:"registered"`
+	// Flag that indicates if this member can run scheduled searches.
+	Adhoc bool `json:"adhoc_searchhead"`
 
-	// total number of active historical + realtime searches
-	ActiveSearches int `json:"activeSearches"`
+	// Indicates if this member is registered with the searchhead cluster captain.
+	Registered bool `json:"is_registered"`
+
+	// Number of currently running historical searches.
+	ActiveHistoricalSearchCount int `json:"active_historical_search_count"`
+
+	// Number of currently running realtime searches.
+	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -28,32 +28,32 @@ import (
 
 // StatefulSetPodManager is used to manage the pods within a StatefulSet
 type StatefulSetPodManager interface {
-	// Decommision pod and return true if complete
-	Decommission(n int32) (bool, error)
+	// PrepareScaleDown prepares pod to be removed via scale down event; it returns true when ready
+	PrepareScaleDown(n int32) (bool, error)
 
-	// Quarantine pod and return true if complete
-	Quarantine(n int32) (bool, error)
+	// PrepareRecycle prepares pod to be recycled for updates; it returns true when ready
+	PrepareRecycle(n int32) (bool, error)
 
-	// ReleaseQuarantine will release a quarantine and return true, if active; it returns false if none active
-	ReleaseQuarantine(n int32) (bool, error)
+	// FinishRecycle completes recycle event for pod and returns true, or returns false if nothing to do
+	FinishRecycle(n int32) (bool, error)
 }
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
-// Decommission for DefaultStatefulSetPodManager does nothing and returns true
-func (mgr *DefaultStatefulSetPodManager) Decommission(n int32) (bool, error) {
+// PrepareScaleDown for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *DefaultStatefulSetPodManager) PrepareScaleDown(n int32) (bool, error) {
 	return true, nil
 }
 
-// Quarantine for DefaultStatefulSetPodManager does nothing and returns true
-func (mgr *DefaultStatefulSetPodManager) Quarantine(n int32) (bool, error) {
+// PrepareRecycle for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *DefaultStatefulSetPodManager) PrepareRecycle(n int32) (bool, error) {
 	return true, nil
 }
 
-// ReleaseQuarantine for DefaultStatefulSetPodManager does nothing and returns false
-func (mgr *DefaultStatefulSetPodManager) ReleaseQuarantine(n int32) (bool, error) {
-	return false, nil
+// FinishRecycle for DefaultStatefulSetPodManager does nothing and returns false
+func (mgr *DefaultStatefulSetPodManager) FinishRecycle(n int32) (bool, error) {
+	return true, nil
 }
 
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
@@ -78,23 +78,23 @@ func ApplyStatefulSet(c ControllerClient, revised *appsv1.StatefulSet) (enterpri
 	if hasUpdates {
 		// this updates the desired state template, but doesn't actually modify any pods
 		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
-		// note also that this ignores Replicas, which is handled below by ReconcileStatefulSetPods
+		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods
 		return enterprisev1.PhaseUpdating, UpdateResource(c, revised)
 	}
 
-	// scaling and pod updates are handled by ReconcileStatefulSetPods
+	// scaling and pod updates are handled by UpdateStatefulSetPods
 	return enterprisev1.PhaseReady, nil
 }
 
-// ReconcileStatefulSetPods manages scaling and config updates for StatefulSets
-func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, mgr StatefulSetPodManager, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
+// UpdateStatefulSetPods manages scaling and config updates for StatefulSets
+func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, mgr StatefulSetPodManager, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
 
-	scopedLog := log.WithName("ReconcileStatefulSetPods").WithValues(
+	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
 	// wait for all replicas ready
-	replicas := statefulSet.Status.Replicas
+	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
 	if readyReplicas < replicas {
 		scopedLog.Info("Waiting for pods to become ready")
@@ -119,15 +119,15 @@ func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSe
 
 	// check for scaling down
 	if readyReplicas > desiredReplicas {
-		// decommission pod to prepare for removal
+		// prepare pod for removal via scale down
 		n := readyReplicas - 1
-		complete, err := mgr.Decommission(n)
+		ready, err := mgr.PrepareScaleDown(n)
 		if err != nil {
 			podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 			scopedLog.Error(err, "Unable to decommission Pod", "podName", podName)
 			return enterprisev1.PhaseError, err
 		}
-		if !complete {
+		if !ready {
 			// wait until pod quarantine has completed before deleting it
 			return enterprisev1.PhaseScalingDown, nil
 		}
@@ -155,13 +155,13 @@ func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSe
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
 		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
-			// pod needs to be updated; first, quarantine it to prepare for restart
-			complete, err := mgr.Quarantine(n)
+			// pod needs to be updated; first, prepare it to be recycled
+			ready, err := mgr.PrepareRecycle(n)
 			if err != nil {
-				scopedLog.Error(err, "Unable to quarantine Pod", "podName", podName)
+				scopedLog.Error(err, "Unable to prepare Pod for recycling", "podName", podName)
 				return enterprisev1.PhaseError, err
 			}
-			if !complete {
+			if !ready {
 				// wait until pod quarantine has completed before deleting it
 				return enterprisev1.PhaseUpdating, nil
 			}
@@ -181,14 +181,14 @@ func ReconcileStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSe
 			return enterprisev1.PhaseUpdating, nil
 		}
 
-		// check if pod was previously quarantined; if so, it's ok to release it
-		released, err := mgr.ReleaseQuarantine(n)
+		// check if pod was previously prepared for recycling; if so, complete
+		complete, err := mgr.FinishRecycle(n)
 		if err != nil {
-			scopedLog.Error(err, "Unable to release Pod from quarantine", "podName", podName)
+			scopedLog.Error(err, "Unable to complete recycling of pod", "podName", podName)
 			return enterprisev1.PhaseError, err
 		}
-		if released {
-			// if pod was released, return and wait until next reconcile to let things settle down
+		if !complete {
+			// return and wait until next reconcile to let things settle down
 			return enterprisev1.PhaseUpdating, nil
 		}
 	}

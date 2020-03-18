@@ -115,7 +115,7 @@ func (r *ReconcileStandalone) Reconcile(request reconcile.Request) (reconcile.Re
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "Standalone"
 
-	result, err := splunkreconcile.ReconcileStandalone(r.client, instance)
+	result, err := splunkreconcile.ApplyStandalone(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "Standalone reconciliation requeued", "RequeueAfter", result.RequeueAfter)
 		return result, nil

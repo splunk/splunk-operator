@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"testing"
@@ -23,7 +23,7 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
-func TestReconcileSearchHeadCluster(t *testing.T) {
+func TestApplySearchHeadCluster(t *testing.T) {
 	funcCalls := []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{metaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
@@ -46,17 +46,17 @@ func TestReconcileSearchHeadCluster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
-		_, err := ReconcileSearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
 		return err
 	}
-	reconcileTester(t, "TestReconcileSearchHeadCluster", &current, revised, createCalls, updateCalls, reconcile)
+	reconcileTester(t, "TestApplySearchHeadCluster", &current, revised, createCalls, updateCalls, reconcile)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-		_, err := ReconcileSearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)

@@ -231,3 +231,152 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	// test bad response code
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 404, "", want, test)
 }
+
+func TestGetClusterMasterInfo(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	want := []http.Request{*wantRequest}
+	wantInfo := ClusterMasterInfo{
+		Initialized:     true,
+		IndexingReady:   true,
+		ServiceReady:    true,
+		MaintenanceMode: false,
+		RollingRestart:  false,
+		Label:           "splunk-s1-cluster-master-0",
+		ActiveBundle: ClusterBundleInfo{
+			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
+			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
+			Timestamp:  1583870198,
+		},
+		LatestBundle: ClusterBundleInfo{
+			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
+			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
+			Timestamp:  1583870198,
+		},
+		StartTime: 1583948636,
+	}
+	test := func(c SplunkClient) error {
+		gotInfo, err := c.GetClusterMasterInfo()
+		if err != nil {
+			return err
+		}
+		if *gotInfo != wantInfo {
+			t.Errorf("info.Status=%v; want %v", *gotInfo, wantInfo)
+		}
+		return nil
+	}
+	body := `{"links":{},"origin":"https://localhost:8089/services/cluster/master/info","updated":"2020-03-18T01:04:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"master","id":"https://localhost:8089/services/cluster/master/info/master","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/master/info/master","list":"/services/cluster/master/info/master"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"apply_bundle_status":{"invalid_bundle":{"bundle_path":"","bundle_validation_errors_on_master":[],"checksum":"","timestamp":0},"reload_bundle_issued":false,"status":"None"},"backup_and_restore_primaries":false,"controlled_rolling_restart_flag":false,"eai:acl":null,"indexing_ready_flag":true,"initialized_flag":true,"label":"splunk-s1-cluster-master-0","last_check_restart_bundle_result":false,"last_dry_run_bundle":{"bundle_path":"","checksum":"","timestamp":0},"last_validated_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/0af7c0e95f313f7be3b0cb1d878df9a1-1583948640.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","is_valid_bundle":true,"timestamp":1583948640},"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"maintenance_mode":false,"multisite":false,"previous_active_bundle":{"bundle_path":"","checksum":"","timestamp":0},"primaries_backup_status":"No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.","quiet_period_flag":false,"rolling_restart_flag":false,"rolling_restart_or_upgrade":false,"service_ready_flag":true,"start_time":1583948636,"summary_replication":"false"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, want, test)
+
+	// test body with no entries
+	test = func(c SplunkClient) error {
+		_, err := c.GetClusterMasterInfo()
+		if err == nil {
+			t.Errorf("GetClusterMasterInfo returned nil; want error")
+		}
+		return nil
+	}
+	body = `{"links":{},"origin":"https://localhost:8089/services/cluster/master/info","updated":"2020-03-18T01:04:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, want, test)
+
+	// test error code
+	splunkClientTester(t, "TestGetClusterMasterInfo", 500, "", want, test)
+}
+
+func TestGetIndexerClusterPeerInfo(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/slave/info?count=0&output_mode=json", nil)
+	want := []http.Request{*wantRequest}
+	wantMemberStatus := "Up"
+	test := func(c SplunkClient) error {
+		info, err := c.GetIndexerClusterPeerInfo()
+		if err != nil {
+			return err
+		}
+		if info.Status != wantMemberStatus {
+			t.Errorf("info.Status=%s; want %s", info.Status, wantMemberStatus)
+		}
+		return nil
+	}
+	body := `{"links":{},"origin":"https://localhost:8089/services/cluster/slave/info","updated":"2020-03-18T01:28:18+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"slave","id":"https://localhost:8089/services/cluster/slave/info/slave","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/slave/info/slave","list":"/services/cluster/slave/info/slave"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870244},"base_generation_id":26,"eai:acl":null,"is_registered":true,"last_dry_run_bundle":{"bundle_path":"","checksum":"","timestamp":0},"last_heartbeat_attempt":0,"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870244},"maintenance_mode":false,"registered_summary_state":3,"restart_state":"NoRestart","site":"default","status":"Up"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, want, test)
+
+	// test body with no entries
+	test = func(c SplunkClient) error {
+		_, err := c.GetIndexerClusterPeerInfo()
+		if err == nil {
+			t.Errorf("GetIndexerClusterPeerInfo returned nil; want error")
+		}
+		return nil
+	}
+	body = `{"links":{},"origin":"https://localhost:8089/services/cluster/slave/info","updated":"2020-03-18T01:28:18+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, want, test)
+
+	// test error code
+	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 500, "", want, test)
+}
+
+func TestGetClusterMasterPeers(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	want := []http.Request{*wantRequest}
+	var wantPeers = []struct {
+		ID     string
+		Label  string
+		Status string
+	}{
+		{ID: "D39B1729-E2C5-4273-B9B2-534DA7C2F866", Label: "splunk-s1-indexer-0", Status: "Up"},
+	}
+	test := func(c SplunkClient) error {
+		peers, err := c.GetClusterMasterPeers()
+		if err != nil {
+			return err
+		}
+		if len(peers) != len(wantPeers) {
+			t.Errorf("len(peers)=%d; want %d", len(peers), len(wantPeers))
+		}
+		for n := range wantPeers {
+			p, ok := peers[wantPeers[n].Label]
+			if !ok {
+				t.Errorf("wanted peer not found: %s", wantPeers[n].Label)
+			}
+			if p.ID != wantPeers[n].ID {
+				t.Errorf("peer %s want ID=%s: got %s", wantPeers[n].Label, p.ID, wantPeers[n].ID)
+			}
+			if p.Label != wantPeers[n].Label {
+				t.Errorf("peer %s want Label=%s: got %s", wantPeers[n].Label, p.Label, wantPeers[n].Label)
+			}
+			if p.Status != wantPeers[n].Status {
+				t.Errorf("peer %s want Status=%s: got %s", wantPeers[n].Label, p.Status, wantPeers[n].Status)
+			}
+		}
+		return nil
+	}
+	body := `{"links":{"create":"/services/cluster/master/peers/_new"},"origin":"https://localhost:8089/services/cluster/master/peers","updated":"2020-03-18T01:08:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","id":"https://localhost:8089/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","list":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","edit":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle_id":"14310A4AABD23E85BBD4559C4A3B59F8","apply_bundle_status":{"invalid_bundle":{"bundle_validation_errors":[],"invalid_bundle_id":""},"reasons_for_restart":[],"restart_required_for_apply_bundle":false,"status":"None"},"base_generation_id":26,"bucket_count":73,"bucket_count_by_index":{"_audit":24,"_internal":45,"_telemetry":4},"buckets_rf_by_origin_site":{"default":73},"buckets_sf_by_origin_site":{"default":73},"delayed_buckets_to_discard":[],"eai:acl":null,"fixup_set":[],"heartbeat_started":true,"host_port_pair":"10.36.0.6:8089","indexing_disk_space":210707374080,"is_searchable":true,"is_valid_bundle":true,"label":"splunk-s1-indexer-0","last_dry_run_bundle":"","last_heartbeat":1584493732,"last_validated_bundle":"14310A4AABD23E85BBD4559C4A3B59F8","latest_bundle_id":"14310A4AABD23E85BBD4559C4A3B59F8","peer_registered_summaries":true,"pending_builds":[],"pending_job_count":0,"primary_count":73,"primary_count_remote":0,"register_search_address":"10.36.0.6:8089","replication_count":0,"replication_port":9887,"replication_use_ssl":false,"restart_required_for_applying_dry_run_bundle":false,"search_state_counter":{"PendingSearchable":0,"Searchable":73,"SearchablePendingMask":0,"Unsearchable":0},"site":"default","splunk_version":"8.0.2","status":"Up","status_counter":{"Complete":69,"NonStreamingTarget":0,"StreamingSource":4,"StreamingTarget":0},"summary_replication_count":0}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetClusterMasterPeers", 200, body, want, test)
+
+	// test error response
+	test = func(c SplunkClient) error {
+		_, err := c.GetClusterMasterPeers()
+		if err == nil {
+			t.Errorf("GetClusterMasterPeers returned nil; want error")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestGetClusterMasterPeers", 503, "", want, test)
+}
+
+func TestRemoveIndexerClusterPeer(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	want := []http.Request{*wantRequest}
+	test := func(c SplunkClient) error {
+		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
+	}
+	splunkClientTester(t, "TestRemoveIndexerClusterPeer", 200, "", want, test)
+}
+
+func TestDecommissionIndexerClusterPeer(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/slave/control/control/decommission?enforce_counts=1", nil)
+	want := []http.Request{*wantRequest}
+	test := func(c SplunkClient) error {
+		return c.DecommissionIndexerClusterPeer(true)
+	}
+	splunkClientTester(t, "TestDecommissionIndexerClusterPeer", 200, "", want, test)
+}

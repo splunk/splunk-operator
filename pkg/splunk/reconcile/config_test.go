@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"testing"
@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestReconcileSplunkConfig(t *testing.T) {
+func TestApplySplunkConfig(t *testing.T) {
 	funcCalls := []mockFuncCall{
 		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{metaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
@@ -44,10 +44,10 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *mockClient, cr interface{}) error {
 		obj := cr.(*enterprisev1.SearchHeadCluster)
-		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
+		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkSearchHead)
 		return err
 	}
-	reconcileTester(t, "TestReconcileSplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile)
+	reconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile)
 
 	// test search head with indexer reference
 	secret := corev1.Secret{
@@ -65,7 +65,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 		{metaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{metaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
-	reconcileTester(t, "TestReconcileSplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, &secret)
+	reconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, &secret)
 
 	// test indexer with license master
 	indexerCR := enterprisev1.IndexerCluster{
@@ -92,7 +92,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *mockClient, cr interface{}) error {
 		obj := cr.(*enterprisev1.IndexerCluster)
-		_, err := ReconcileSplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
+		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, enterprise.SplunkIndexer)
 		return err
 	}
 	funcCalls = []mockFuncCall{
@@ -102,7 +102,7 @@ func TestReconcileSplunkConfig(t *testing.T) {
 	}
 	createCalls = map[string][]mockFuncCall{"Get": {funcCalls[2]}, "Create": {funcCalls[2]}}
 	updateCalls = map[string][]mockFuncCall{"Get": funcCalls}
-	reconcileTester(t, "TestReconcileSplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, &secret)
+	reconcileTester(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, &secret)
 }
 
 func TestApplyConfigMap(t *testing.T) {

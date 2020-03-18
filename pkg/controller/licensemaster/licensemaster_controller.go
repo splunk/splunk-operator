@@ -115,7 +115,7 @@ func (r *ReconcileLicenseMaster) Reconcile(request reconcile.Request) (reconcile
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
 	instance.TypeMeta.Kind = "LicenseMaster"
 
-	result, err := splunkreconcile.ReconcileLicenseMaster(r.client, instance)
+	result, err := splunkreconcile.ApplyLicenseMaster(r.client, instance)
 	if err != nil {
 		reqLogger.Error(err, "LicenseMaster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
 		return result, nil

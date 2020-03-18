@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -24,8 +24,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// ReconcileLicenseMaster reconciles the state for the Splunk Enterprise license master.
-func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMaster) (reconcile.Result, error) {
+// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license master.
+func ApplyLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -57,7 +57,7 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 	}
 
 	// create or update general config resources
-	_, err = ReconcileSplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkLicenseMaster)
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, enterprise.SplunkLicenseMaster)
 	if err != nil {
 		return result, err
 	}
@@ -76,7 +76,7 @@ func ReconcileLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMas
 	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
 	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
 		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.Phase, err = ReconcileStatefulSetPods(client, statefulSet, &mgr, 1)
+		cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, 1)
 	}
 	if err != nil {
 		cr.Status.Phase = enterprisev1.PhaseError
