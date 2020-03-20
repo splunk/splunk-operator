@@ -10,7 +10,7 @@ deployments. For each pod, the following two volumes will be mounted:
 | `/opt/splunk/etc` | This is used to store all configuration and any installed apps |
 | `/opt/splunk/var` | This is used to store all indexed events, logs, and other data |
 
-By default, 1GiB volumes will be created for `/opt/splunk/etc` and 200GiB
+By default, 10GiB volumes will be created for `/opt/splunk/etc` and 100GiB
 volumes will be created for `/opt/splunk/var`. You can customize this for
 each resource by using the `etcStorage` and `varStorage` parameters.
 

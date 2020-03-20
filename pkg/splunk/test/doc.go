@@ -13,8 +13,6 @@
 // limitations under the License.
 
 /*
-Package reconcile is used to manipulate Kubernetes resources using its REST API.
-Methods within this package are likely to change state and/or mutate data.
-This package has dependencies on the enterprise, spark and resource modules.
+Package test includes common code used for testing other modules.
 */
-package reconcile
+package test

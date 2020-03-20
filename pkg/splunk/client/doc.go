@@ -13,8 +13,7 @@
 // limitations under the License.
 
 /*
-Package reconcile is used to manipulate Kubernetes resources using its REST API.
-Methods within this package are likely to change state and/or mutate data.
-This package has dependencies on the enterprise, spark and resource modules.
+Package client provides a simple client for the Splunk Enterprise REST API.
+This package has no depedencies outside of the standard go library.
 */
-package reconcile
+package client

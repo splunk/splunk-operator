@@ -41,9 +41,6 @@ covered by support, and we strongly discourage using it in production.*
 
 We are working to resolve the following in future releases:
 
-* Scale down of indexer cluster peers does not remove them in a clean manner
-by ensuring that the cluster is always valid and complete. This can lead to
-data loss.  
 * The Deployment Monitoring Console is not currently configured properly
 for new deployments
 
@@ -126,8 +123,8 @@ Splunk Operator, run:
 ```
 kubectl delete standalones --all
 kubectl delete licensemasters --all
-kubectl delete searchheads --all
-kubectl delete indexers --all
+kubectl delete searchheadclusters --all
+kubectl delete indexerclusters --all
 kubectl delete spark --all
 kubectl delete -f http://tiny.cc/splunk-operator-install
 ```

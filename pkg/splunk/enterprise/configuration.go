@@ -37,12 +37,12 @@ func getSplunkVolumeClaims(cr enterprisev1.MetaObject, spec *enterprisev1.Common
 	var etcStorage, varStorage resource.Quantity
 	var err error
 
-	etcStorage, err = resources.ParseResourceQuantity(spec.EtcStorage, "1Gi")
+	etcStorage, err = resources.ParseResourceQuantity(spec.EtcStorage, "10Gi")
 	if err != nil {
 		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "etcStorage", err)
 	}
 
-	varStorage, err = resources.ParseResourceQuantity(spec.VarStorage, "200Gi")
+	varStorage, err = resources.ParseResourceQuantity(spec.VarStorage, "100Gi")
 	if err != nil {
 		return []corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 	}
@@ -107,7 +107,7 @@ func GetStandaloneStatefulSet(cr *enterprisev1.Standalone) (*appsv1.StatefulSet,
 }
 
 // GetSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
-func GetSearchHeadStatefulSet(cr *enterprisev1.SearchHead) (*appsv1.StatefulSet, error) {
+func GetSearchHeadStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
 	// get search head env variables with deployer
 	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
@@ -131,17 +131,17 @@ func GetSearchHeadStatefulSet(cr *enterprisev1.SearchHead) (*appsv1.StatefulSet,
 }
 
 // GetIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
-func GetIndexerStatefulSet(cr *enterprisev1.Indexer) (*appsv1.StatefulSet, error) {
+func GetIndexerStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
 	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(cr, cr.Spec.Replicas))
 }
 
 // GetClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func GetClusterMasterStatefulSet(cr *enterprisev1.Indexer) (*appsv1.StatefulSet, error) {
+func GetClusterMasterStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
 	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, getIndexerExtraEnv(cr, cr.Spec.Replicas))
 }
 
 // GetDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func GetDeployerStatefulSet(cr *enterprisev1.SearchHead) (*appsv1.StatefulSet, error) {
+func GetDeployerStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
 }
 
@@ -217,16 +217,16 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
 }
 
-// ValidateIndexerSpec checks validity and makes default updates to a IndexerSpec, and returns error if something is wrong.
-func ValidateIndexerSpec(spec *enterprisev1.IndexerSpec) error {
+// ValidateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
+func ValidateIndexerClusterSpec(spec *enterprisev1.IndexerClusterSpec) error {
 	if spec.Replicas == 0 {
 		spec.Replicas = 1
 	}
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
 
-// ValidateSearchHeadSpec checks validity and makes default updates to a SearchHeadSpec, and returns error if something is wrong.
-func ValidateSearchHeadSpec(spec *enterprisev1.SearchHeadSpec) error {
+// ValidateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
+func ValidateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) error {
 	if spec.Replicas < 3 {
 		spec.Replicas = 3
 	}
@@ -462,10 +462,9 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
-	replicas32 := int32(replicas)
 	ports := resources.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := resources.GetIstioAnnotations(ports)
 	selectLabels := getSplunkLabels(cr.GetIdentifier(), instanceType)
@@ -501,8 +500,11 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 				MatchLabels: selectLabels,
 			},
 			ServiceName:         GetSplunkServiceName(instanceType, cr.GetIdentifier(), true),
-			Replicas:            &replicas32,
-			PodManagementPolicy: "Parallel",
+			Replicas:            &replicas,
+			PodManagementPolicy: appsv1.ParallelPodManagement,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -651,10 +653,10 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	var clusterMasterURL string
 	if instanceType == SplunkIndexer {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, cr.GetIdentifier(), false)
-	} else if instanceType != SplunkClusterMaster && spec.IndexerRef.Name != "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerRef.Name, false)
-		if spec.IndexerRef.Namespace != "" {
-			clusterMasterURL = resources.GetServiceFQDN(spec.IndexerRef.Namespace, clusterMasterURL)
+	} else if instanceType != SplunkClusterMaster && spec.IndexerClusterRef.Name != "" {
+		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerClusterRef.Name, false)
+		if spec.IndexerClusterRef.Namespace != "" {
+			clusterMasterURL = resources.GetServiceFQDN(spec.IndexerClusterRef.Namespace, clusterMasterURL)
 		}
 	}
 	if clusterMasterURL != "" {
@@ -677,7 +679,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 }
 
 // getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.EnvVar {
+func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_SEARCH_HEAD_URL",
@@ -690,7 +692,7 @@ func getSearchHeadExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.En
 }
 
 // getIndexerExtraEnv returns extra environment variables used by search head clusters
-func getIndexerExtraEnv(cr enterprisev1.MetaObject, replicas int) []corev1.EnvVar {
+func getIndexerExtraEnv(cr enterprisev1.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_INDEXER_URL",

@@ -56,7 +56,7 @@ func GetSparkImage(specImage string) string {
 	if specImage != "" {
 		name = specImage
 	} else {
-		name = os.Getenv("SPARK_IMAGE")
+		name = os.Getenv("RELATED_IMAGE_SPLUNK_SPARK")
 		if name == "" {
 			name = defaultSparkImage
 		}

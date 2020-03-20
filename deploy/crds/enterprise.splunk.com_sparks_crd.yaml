@@ -4,14 +4,26 @@ metadata:
   name: sparks.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
-    description: Status of Spark cluster
+  - JSONPath: .status.phase
+    description: Status of Spark workers
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of Spark workers
-    name: Instances
     type: string
+  - JSONPath: .status.masterPhase
+    description: Status of Spark master
+    name: Master
+    type: string
+  - JSONPath: .status.replicas
+    description: Number of desired Spark workers
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready Spark workers
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of Spark cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Spark
@@ -20,6 +32,10 @@ spec:
     singular: spark
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -614,7 +630,7 @@ spec:
                   type: object
               type: object
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -626,6 +642,7 @@ spec:
               type: string
             replicas:
               description: Number of spark worker pods
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -891,17 +908,38 @@ spec:
         status:
           description: SparkStatus defines the observed state of a Spark cluster
           properties:
-            instances:
-              description: current number of spark worker instances
-              type: integer
-            phase:
-              description: current phase of the spark cluster
+            masterPhase:
+              description: current phase of the spark master
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            phase:
+              description: current phase of the spark workers
+              enum:
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready spark workers
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired spark workers
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object

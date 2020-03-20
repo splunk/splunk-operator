@@ -73,7 +73,7 @@ func TestGetSplunkDefaultsName(t *testing.T) {
 }
 
 func TestGetSplunkStatefulsetUrls(t *testing.T) {
-	test := func(want string, namespace string, instanceType InstanceType, identifier string, replicas int, hostnameOnly bool) {
+	test := func(want string, namespace string, instanceType InstanceType, identifier string, replicas int32, hostnameOnly bool) {
 		got := GetSplunkStatefulsetUrls(namespace, instanceType, identifier, replicas, hostnameOnly)
 		if got != want {
 			t.Errorf("GetSplunkStatefulsetUrls(\"%s\",\"%s\",\"%s\",%d,%t) = %s; want %s",
@@ -99,7 +99,7 @@ func TestGetSplunkImage(t *testing.T) {
 
 	test("splunk/splunk")
 
-	os.Setenv("SPLUNK_IMAGE", "splunk-test/splunk")
+	os.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk-test/splunk")
 	test("splunk-test/splunk")
 
 	specImage = "splunk/splunk-test"

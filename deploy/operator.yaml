@@ -46,7 +46,7 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "splunk-operator"
-            - name: SPLUNK_IMAGE
-              value: "splunk/splunk:8.0"
-            - name: SPARK_IMAGE
+            - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+              value: "splunk/splunk:edge"
+            - name: RELATED_IMAGE_SPLUNK_SPARK
               value: "splunk/spark"

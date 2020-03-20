@@ -1,36 +1,48 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: indexers.enterprise.splunk.com
+  name: indexerclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of indexer cluster
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.clusterMasterPhase
+    type: string
+  - JSONPath: .status.clusterMasterPhase
     description: Status of cluster master
-    name: CM
+    name: Master
     type: string
-  - JSONPath: .spec.status.instances
-    description: Number of indexers
-    name: Instances
-    type: string
+  - JSONPath: .status.replicas
+    description: Desired number of indexer peers
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready indexer peers
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of indexer cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
-    kind: Indexer
-    listKind: IndexerList
-    plural: indexers
+    kind: IndexerCluster
+    listKind: IndexerClusterList
+    plural: indexerclusters
     shortNames:
-    - idx
-    singular: indexer
+    - idc
+    - idxc
+    singular: indexercluster
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: Indexer is the Schema for a Splunk Enterprise standalone indexer
-        or cluster of indexers
+      description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -45,8 +57,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: IndexerSpec defines the desired state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterSpec defines the desired state of a Splunk Enterprise
+            indexer cluster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -634,7 +646,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -644,9 +656,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -724,6 +736,7 @@ spec:
             replicas:
               description: Number of search head pods; a search head cluster will
                 be created if > 1
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -2173,30 +2186,85 @@ spec:
               type: array
           type: object
         status:
-          description: IndexerStatus defines the observed state of a Splunk Enterprise
-            standalone indexer or cluster of indexers
+          description: IndexerClusterStatus defines the observed state of a Splunk
+            Enterprise indexer cluster
           properties:
             clusterMasterPhase:
               description: current phase of the cluster master
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
-            instances:
-              description: current number of indexer instances
-              type: integer
+            indexing_ready_flag:
+              description: Indicates if the cluster is ready for indexing.
+              type: boolean
+            initialized_flag:
+              description: Indicates if the cluster is initialized.
+              type: boolean
+            maintenance_mode:
+              description: Indicates if the cluster is in maintenance mode.
+              type: boolean
+            peers:
+              description: status of each indexer cluster peer
+              items:
+                description: IndexerClusterMemberStatus is used to track the status
+                  of each indexer cluster peer.
+                properties:
+                  active_bundle_id:
+                    description: The ID of the configuration bundle currently being
+                      used by the master.
+                    type: string
+                  bucket_count:
+                    description: Count of the number of buckets on this peer, across
+                      all indexes.
+                    format: int64
+                    type: integer
+                  guid:
+                    description: Unique identifier or GUID for the peer
+                    type: string
+                  is_searchable:
+                    description: Flag indicating if this peer belongs to the current
+                      committed generation and is searchable.
+                    type: boolean
+                  name:
+                    description: Name of the indexer cluster peer
+                    type: string
+                  status:
+                    description: Status of the indexer cluster peer
+                    type: string
+                type: object
+              type: array
             phase:
               description: current phase of the indexer cluster
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
+            readyReplicas:
+              description: current number of ready indexer peers
+              format: int32
+              type: integer
+            replicas:
+              description: desired number of indexer peers
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
+              type: string
+            service_ready_flag:
+              description: Indicates whether the master is ready to begin servicing,
+                based on whether it is initialized.
+              type: boolean
           type: object
       type: object
   version: v1alpha2

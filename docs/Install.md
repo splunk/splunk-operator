@@ -95,14 +95,15 @@ image: splunk/splunk-operator
 ```
 
 If you are using a private registry for the `splunk/splunk:8.0` and
-`splunk/spark` (used by DFS) images, you should modify the `SPLUNK_IMAGE`
-and `SPARK_IMAGE` environment variables in `splunk-operator.yaml` to point
+`splunk/spark` (used by DFS) images, you should modify the
+`RELATED_IMAGE_SPLUNK_ENTERPRISE` and `RELATED_IMAGE_SPLUNK_SPARK`
+environment variables in `splunk-operator.yaml` to point
 to the appropriate locations.
 
 ```yaml
-- name: SPLUNK_IMAGE
+- name: RELATED_IMAGE_SPLUNK_ENTERPRISE
   value: "splunk/splunk:8.0"
-- name: SPARK_IMAGE
+- name: RELATED_IMAGE_SPLUNK_SPARK
   value: "splunk/spark"
 ```
 
@@ -144,8 +145,8 @@ Splunk Operator, run:
 ```
 kubectl delete standalones --all
 kubectl delete licensemasters --all
-kubectl delete searchheads --all
-kubectl delete indexers --all
+kubectl delete searchheadclusters --all
+kubectl delete indexerclusters --all
 kubectl delete spark --all
 kubectl delete -f splunk-operator.yaml
 ```

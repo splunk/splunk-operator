@@ -76,6 +76,8 @@ This repository consists of the following code used to build the splunk-operator
 * `pkg/splunk/enterprise/`: Source code for managing Splunk Enterprise deployments
 * `pkg/splunk/spark/`: Source code for managing Spark cluster deployments
 * `pkg/splunk/resources/`: Generic utility code used by other splunk modules
+* `pkg/splunk/client/`: Simple client for Splunk Enterprise REST API
+* `pkg/splunk/test/`: Common code used for testing other modules
 
 `main()` basically just instantiates the `controllers`, and the `controllers` call
 into the `reconcile` module to perform actions. The `reconcile` module uses the `enterprise`

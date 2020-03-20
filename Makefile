@@ -28,7 +28,7 @@ builder-image:
 
 builder-test:
 	@echo Running unit tests for splunk-operator inside of builder container
-	@docker run -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/opt/app-root/src/splunk-operator -w /opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	@docker run -v /var/run/docker.sock:/var/run/docker.sock -v ${PWD}:/opt/app-root/src/splunk-operator -w /opt/app-root/src/splunk-operator -u root -it splunk/splunk-operator-builder bash -c "go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/reconcile github.com/splunk/splunk-operator/pkg/splunk/client"
 
 image:
 	@echo Building splunk-operator image
@@ -41,7 +41,7 @@ local:
 
 test:
 	@echo Running unit tests for splunk-operator
-	@go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/reconcile
+	@go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/reconcile github.com/splunk/splunk-operator/pkg/splunk/client
 
 stop_clair_scanner:
 	@docker stop clair_db || true
@@ -77,9 +77,9 @@ generate:
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_searchheads_crd.yaml >> deploy/crds/combined.yaml
+	@cat deploy/crds/enterprise.splunk.com_searchheadclusters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_indexers_crd.yaml >> deploy/crds/combined.yaml
+	@cat deploy/crds/enterprise.splunk.com_indexerclusters_crd.yaml >> deploy/crds/combined.yaml
 	@echo "---" >> deploy/crds/combined.yaml
 	@cat deploy/crds/enterprise.splunk.com_sparks_crd.yaml >> deploy/crds/combined.yaml
 	@echo Rebuilding deploy/all-in-one-scoped.yaml

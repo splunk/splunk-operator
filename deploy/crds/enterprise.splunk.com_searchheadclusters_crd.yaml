@@ -1,33 +1,48 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: searchheads.enterprise.splunk.com
+  name: searchheadclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of search head cluster
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of search heads
-    name: Instances
     type: string
+  - JSONPath: .status.deployerPhase
+    description: Status of the deployer
+    name: Deployer
+    type: string
+  - JSONPath: .status.replicas
+    description: Desired number of search head cluster members
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready search head cluster members
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of search head cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
-    kind: SearchHead
-    listKind: SearchHeadList
-    plural: searchheads
+    kind: SearchHeadCluster
+    listKind: SearchHeadClusterList
+    plural: searchheadclusters
     shortNames:
-    - search
-    - sh
-    singular: searchhead
+    - shc
+    singular: searchheadcluster
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: SearchHead is the Schema for a Splunk Enterprise standalone search
-        head or cluster of search heads
+      description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -42,8 +57,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: SearchHeadSpec defines the desired state of a Splunk Enterprise
-            standalone search head or cluster of search heads
+          description: SearchHeadClusterSpec defines the desired state of a Splunk
+            Enterprise search head cluster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -631,7 +646,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -641,9 +656,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -721,6 +736,7 @@ spec:
             replicas:
               description: Number of search head pods; a search head cluster will
                 be created if > 1
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -983,7 +999,7 @@ spec:
                   type: object
               type: object
             sparkImage:
-              description: Image to use for Spark pod containers (overrides SPARK_IMAGE
+              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
                 environment variables)
               type: string
             sparkRef:
@@ -2212,20 +2228,86 @@ spec:
               type: array
           type: object
         status:
-          description: SearchHeadStatus defines the observed state of a Splunk Enterprise
-            standalone search head or cluster of search heads
+          description: SearchHeadClusterStatus defines the observed state of a Splunk
+            Enterprise search head cluster
           properties:
-            instances:
-              description: current number of search head instances
-              type: integer
+            captain:
+              description: name or label of the search head captain
+              type: string
+            captainReady:
+              description: true if the search head cluster's captain is ready to service
+                requests
+              type: boolean
+            deployerPhase:
+              description: current phase of the deployer
+              enum:
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            initialized:
+              description: true if the search head cluster has finished initialization
+              type: boolean
+            maintenanceMode:
+              description: true if the search head cluster is in maintenance mode
+              type: boolean
+            members:
+              description: status of each search head cluster member
+              items:
+                description: SearchHeadClusterMemberStatus is used to track the status
+                  of each search head cluster member
+                properties:
+                  active_historical_search_count:
+                    description: Number of currently running historical searches.
+                    type: integer
+                  active_realtime_search_count:
+                    description: Number of currently running realtime searches.
+                    type: integer
+                  adhoc_searchhead:
+                    description: Flag that indicates if this member can run scheduled
+                      searches.
+                    type: boolean
+                  is_registered:
+                    description: Indicates if this member is registered with the searchhead
+                      cluster captain.
+                    type: boolean
+                  name:
+                    description: Name of the search head cluster member
+                    type: string
+                  status:
+                    description: Indicates the status of the member.
+                    type: string
+                type: object
+              type: array
+            minPeersJoined:
+              description: true if the minimum number of search head cluster members
+                have joined
+              type: boolean
             phase:
               description: current phase of the search head cluster
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready search head cluster members
+              format: int32
+              type: integer
+            replicas:
+              description: desired number of search head cluster members
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object

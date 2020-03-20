@@ -16,10 +16,10 @@ LABEL name="splunk" \
 COPY build/_output/bin/splunk-operator ${OPERATOR}
 
 COPY build/bin /usr/local/bin
-RUN mkdir /licenses \
-    && curl -o /licenses/apache-2.0.txt https://www.apache.org/licenses/LICENSE-2.0.txt \
-    && curl -o /licenses/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf https://www.redhat.com/licenses/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf \
-    && /usr/local/bin/user_setup
+RUN mkdir /licenses && /usr/local/bin/user_setup
+
+COPY build/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf /licenses
+COPY LICENSE /licenses/LICENSE-2.0.txt
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 

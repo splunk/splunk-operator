@@ -14,10 +14,10 @@ also need to specify the location of these images by using either an environment
 variable passed to the operator or adding additional `spec` parameters to your 
 custom resource definition.
 
-Use the `SPLUNK_IMAGE` environment variable or the `image` custom resource
-parameter to change the location of the Splunk Enterprise image. Use the
-`SPARK_IMAGE` environment variable or the `sparkImage` parameter to change
-the location of the Spark image. Please see the
+Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image`
+custom resource parameter to change the location of the Splunk Enterprise
+image. Use the `RELATED_IMAGE_SPLUNK_SPARK` environment variable or the
+`sparkImage` parameter to change the location of the Spark image. Please see the
 [Advanced Installation Instructions](Install.md) or
 [Custom Resource Guide](CustomResources.md) for more details.
 

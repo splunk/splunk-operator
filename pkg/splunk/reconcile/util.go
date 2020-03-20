@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
@@ -23,13 +23,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	//stdlog "log"
+	//"github.com/go-logr/stdr"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
-// logger used by splunk.deploy package
-var log = logf.Log.WithName("splunk.deploy")
+// kubernetes logger used by splunk.reconcile package
+var log = logf.Log.WithName("splunk.reconcile")
+
+// simple stdout logger, used for debugging
+//var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
 
 // The ResourceObject type implements methods of runtime.Object and GetObjectMeta()
 type ResourceObject interface {
@@ -47,6 +53,7 @@ func CreateResource(client ControllerClient, obj ResourceObject) error {
 	scopedLog := log.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
+
 	err := client.Create(context.TODO(), obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -81,87 +88,106 @@ func UpdateResource(client ControllerClient, obj ResourceObject) error {
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec, name string) bool {
-	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
+	result := MergePodSpecUpdates(&current.Spec, &revised.Spec, name)
+	if MergePodMetaUpdates(&current.ObjectMeta, &revised.ObjectMeta, name) {
+		result = true
+	}
+	return result
+}
+
+// MergePodMetaUpdates looks for material differences between a Pod's current
+// meta data and a revised meta data. It merges material changes from revised to
+// current. This enables us to minimize updates. It returns true if there
+// are material differences between them, or false otherwise.
+func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta, name string) bool {
+	scopedLog := log.WithName("MergePodMetaUpdates").WithValues("name", name)
 	result := false
 
-	// check for changes in Affinity
-	if resources.CompareByMarshall(current.Spec.Affinity, revised.Spec.Affinity) {
-		scopedLog.Info("Pod Affinity differs",
-			"current", current.Spec.Affinity,
-			"revised", revised.Spec.Affinity)
-		current.Spec.Affinity = revised.Spec.Affinity
-		result = true
-	}
-
-	// check for changes in SchedulerName
-	if current.Spec.SchedulerName != revised.Spec.SchedulerName {
-		scopedLog.Info("Pod SchedulerName differs",
-			"current", current.Spec.SchedulerName,
-			"revised", revised.Spec.SchedulerName)
-		current.Spec.SchedulerName = revised.Spec.SchedulerName
-		result = true
-	}
-
 	// check Annotations
-	if !reflect.DeepEqual(current.ObjectMeta.Annotations, revised.ObjectMeta.Annotations) {
-		scopedLog.Info("Container Annotations differ",
-			"current", current.ObjectMeta.Annotations,
-			"revised", revised.ObjectMeta.Annotations)
-		current.ObjectMeta.Annotations = revised.ObjectMeta.Annotations
+	if !reflect.DeepEqual(current.Annotations, revised.Annotations) {
+		scopedLog.Info("Container Annotations differ", "current", current.Annotations, "revised", revised.Annotations)
+		current.Annotations = revised.Annotations
 		result = true
 	}
 
 	// check Labels
-	if !reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) {
-		scopedLog.Info("Container Labels differ",
-			"current", current.ObjectMeta.Labels,
-			"revised", revised.ObjectMeta.Labels)
-		current.ObjectMeta.Labels = revised.ObjectMeta.Labels
+	if !reflect.DeepEqual(current.Labels, revised.Labels) {
+		scopedLog.Info("Container Labels differ", "current", current.Labels, "revised", revised.Labels)
+		current.Labels = revised.Labels
+		result = true
+	}
+
+	return result
+}
+
+// MergePodSpecUpdates looks for material differences between a Pod's current
+// desired spec and a revised spec. It merges material changes from revised to
+// current. This enables us to minimize updates. It returns true if there
+// are material differences between them, or false otherwise.
+func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
+	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
+	result := false
+
+	// check for changes in Affinity
+	if resources.CompareByMarshall(current.Affinity, revised.Affinity) {
+		scopedLog.Info("Pod Affinity differs",
+			"current", current.Affinity,
+			"revised", revised.Affinity)
+		current.Affinity = revised.Affinity
+		result = true
+	}
+
+	// check for changes in SchedulerName
+	if current.SchedulerName != revised.SchedulerName {
+		scopedLog.Info("Pod SchedulerName differs",
+			"current", current.SchedulerName,
+			"revised", revised.SchedulerName)
+		current.SchedulerName = revised.SchedulerName
 		result = true
 	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
-	if len(current.Spec.Containers) != len(revised.Spec.Containers) {
+	if len(current.Containers) != len(revised.Containers) {
 		scopedLog.Info("Pod Container counts differ",
-			"current", len(current.Spec.Containers),
-			"revised", len(revised.Spec.Containers))
-		current.Spec.Containers = revised.Spec.Containers
+			"current", len(current.Containers),
+			"revised", len(revised.Containers))
+		current.Containers = revised.Containers
 		result = true
 	} else {
-		for idx := range current.Spec.Containers {
+		for idx := range current.Containers {
 			// check Image
-			if current.Spec.Containers[idx].Image != revised.Spec.Containers[idx].Image {
+			if current.Containers[idx].Image != revised.Containers[idx].Image {
 				scopedLog.Info("Pod Container Images differ",
-					"current", current.Spec.Containers[idx].Image,
-					"revised", revised.Spec.Containers[idx].Image)
-				current.Spec.Containers[idx].Image = revised.Spec.Containers[idx].Image
+					"current", current.Containers[idx].Image,
+					"revised", revised.Containers[idx].Image)
+				current.Containers[idx].Image = revised.Containers[idx].Image
 				result = true
 			}
 
 			// check Ports
-			if resources.CompareContainerPorts(current.Spec.Containers[idx].Ports, revised.Spec.Containers[idx].Ports) {
+			if resources.CompareContainerPorts(current.Containers[idx].Ports, revised.Containers[idx].Ports) {
 				scopedLog.Info("Pod Container Ports differ",
-					"current", current.Spec.Containers[idx].Ports,
-					"revised", revised.Spec.Containers[idx].Ports)
-				current.Spec.Containers[idx].Ports = revised.Spec.Containers[idx].Ports
+					"current", current.Containers[idx].Ports,
+					"revised", revised.Containers[idx].Ports)
+				current.Containers[idx].Ports = revised.Containers[idx].Ports
 				result = true
 			}
 
 			// check VolumeMounts
-			if resources.CompareVolumeMounts(current.Spec.Containers[idx].VolumeMounts, revised.Spec.Containers[idx].VolumeMounts) {
+			if resources.CompareVolumeMounts(current.Containers[idx].VolumeMounts, revised.Containers[idx].VolumeMounts) {
 				scopedLog.Info("Pod Container VolumeMounts differ",
-					"current", current.Spec.Containers[idx].VolumeMounts,
-					"revised", revised.Spec.Containers[idx].VolumeMounts)
-				current.Spec.Containers[idx].VolumeMounts = revised.Spec.Containers[idx].VolumeMounts
+					"current", current.Containers[idx].VolumeMounts,
+					"revised", revised.Containers[idx].VolumeMounts)
+				current.Containers[idx].VolumeMounts = revised.Containers[idx].VolumeMounts
 				result = true
 			}
 
 			// check Resources
-			if resources.CompareByMarshall(&current.Spec.Containers[idx].Resources, &revised.Spec.Containers[idx].Resources) {
+			if resources.CompareByMarshall(&current.Containers[idx].Resources, &revised.Containers[idx].Resources) {
 				scopedLog.Info("Pod Container Resources differ",
-					"current", current.Spec.Containers[idx].Resources,
-					"revised", revised.Spec.Containers[idx].Resources)
-				current.Spec.Containers[idx].Resources = revised.Spec.Containers[idx].Resources
+					"current", current.Containers[idx].Resources,
+					"revised", revised.Containers[idx].Resources)
+				current.Containers[idx].Resources = revised.Containers[idx].Resources
 				result = true
 			}
 		}

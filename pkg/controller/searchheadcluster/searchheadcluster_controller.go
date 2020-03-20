@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package indexer
+package searchheadcluster
 
 import (
 	"context"
@@ -32,14 +32,14 @@ import (
 	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 )
 
-var log = logf.Log.WithName("controller_indexer")
+var log = logf.Log.WithName("controller_searchhead")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
 
-// Add creates a new Indexer Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new SearchHeadCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -47,27 +47,27 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileIndexer{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileSearchHeadCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("indexer-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("searchhead-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to primary resource Indexer
-	err = c.Watch(&source.Kind{Type: &enterprisev1.Indexer{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to primary resource SearchHeadCluster
+	err = c.Watch(&source.Kind{Type: &enterprisev1.SearchHeadCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to secondary resource StatefulSets and requeue the owner Indexer
+	// Watch for changes to secondary resource StatefulSets and requeue the owner SearchHeadCluster
 	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
-		OwnerType:    &enterprisev1.Indexer{},
+		OwnerType:    &enterprisev1.SearchHeadCluster{},
 	})
 	if err != nil {
 		return err
@@ -76,30 +76,30 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// blank assignment to verify that ReconcileIndexer implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileIndexer{}
+// blank assignment to verify that ReconcileSearchHeadCluster implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileSearchHeadCluster{}
 
-// ReconcileIndexer reconciles a Indexer object
-type ReconcileIndexer struct {
+// ReconcileSearchHeadCluster reconciles a SearchHeadCluster object
+type ReconcileSearchHeadCluster struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
 }
 
-// Reconcile reads that state of the cluster for a Indexer object and makes changes based on the state read
-// and what is in the Indexer.Spec
+// Reconcile reads that state of the cluster for a SearchHeadCluster object and makes changes based on the state read
+// and what is in the SearchHeadCluster.Spec
 // TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
 // a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileIndexer) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileSearchHeadCluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Indexer")
+	reqLogger.Info("Reconciling SearchHeadCluster")
 
-	// Fetch the Indexer instance
-	instance := &enterprisev1.Indexer{}
+	// Fetch the SearchHeadCluster instance
+	instance := &enterprisev1.SearchHeadCluster{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -113,13 +113,18 @@ func (r *ReconcileIndexer) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	instance.TypeMeta.APIVersion = "enterprise.splunk.com/v1alpha2"
-	instance.TypeMeta.Kind = "Indexer"
+	instance.TypeMeta.Kind = "SearchHeadCluster"
 
-	err = splunkreconcile.ReconcileIndexer(r.client, instance)
+	result, err := splunkreconcile.ApplySearchHeadCluster(r.client, instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		reqLogger.Error(err, "SearchHeadCluster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		return result, nil
+	}
+	if result.Requeue {
+		reqLogger.Info("SearchHeadCluster reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		return result, nil
 	}
 
-	reqLogger.Info("Indexer reconciliation complete")
+	reqLogger.Info("SearchHeadCluster reconciliation complete")
 	return reconcile.Result{}, nil
 }

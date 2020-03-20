@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -36,20 +37,24 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 		*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
 	case *corev1.Secret:
 		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+	case *corev1.PersistentVolumeClaim:
+		*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
 	case *corev1.PersistentVolumeClaimList:
 		*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
 	case *corev1.Service:
 		*dst.(*corev1.Service) = *src.(*corev1.Service)
+	case *corev1.Pod:
+		*dst.(*corev1.Pod) = *src.(*corev1.Pod)
 	case *appsv1.Deployment:
 		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
 		*dst.(*appsv1.StatefulSet) = *src.(*appsv1.StatefulSet)
-	case *enterprisev1.Indexer:
-		*dst.(*enterprisev1.Indexer) = *src.(*enterprisev1.Indexer)
+	case *enterprisev1.IndexerCluster:
+		*dst.(*enterprisev1.IndexerCluster) = *src.(*enterprisev1.IndexerCluster)
 	case *enterprisev1.LicenseMaster:
 		*dst.(*enterprisev1.LicenseMaster) = *src.(*enterprisev1.LicenseMaster)
-	case *enterprisev1.SearchHead:
-		*dst.(*enterprisev1.SearchHead) = *src.(*enterprisev1.SearchHead)
+	case *enterprisev1.SearchHeadCluster:
+		*dst.(*enterprisev1.SearchHeadCluster) = *src.(*enterprisev1.SearchHeadCluster)
 	case *enterprisev1.Spark:
 		*dst.(*enterprisev1.Spark) = *src.(*enterprisev1.Spark)
 	case *enterprisev1.Standalone:
@@ -124,6 +129,9 @@ type mockClient struct {
 
 	// calls is a record of all mockClient function calls
 	calls map[string][]mockFuncCall
+
+	// error returned when an object is not found
+	notFoundError error
 }
 
 // Get returns mock client's err field
@@ -138,7 +146,7 @@ func (c mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 		copyResource(obj, getObj.(runtime.Object))
 		return nil
 	}
-	return fmt.Errorf("NotFound")
+	return c.notFoundError
 }
 
 // List returns mock client's err field
@@ -153,7 +161,7 @@ func (c mockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 		copyResource(obj, listObj.(runtime.Object))
 		return nil
 	}
-	return fmt.Errorf("NotFound")
+	return c.notFoundError
 }
 
 // Create returns mock client's err field
@@ -214,6 +222,11 @@ func (c *mockClient) resetCalls() {
 	c.calls = make(map[string][]mockFuncCall)
 }
 
+// resetState resets the state of the mockClient
+func (c *mockClient) resetState() {
+	c.state = make(map[string]interface{})
+}
+
 // checkCalls verifies that the wanted function calls were performed
 func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[string][]mockFuncCall) {
 	notEmptyWantCalls := 0
@@ -258,15 +271,16 @@ func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[str
 	}
 
 	if notEmptyWantCalls != len(c.calls) {
-		t.Errorf("%s: MockClient functions called = %d; want %d", testname, len(c.calls), len(wantCalls))
+		t.Errorf("%s: MockClient functions called = %d; want %d: calls=%v", testname, len(c.calls), len(wantCalls), c.calls)
 	}
 }
 
 // newMockClient is used to create and initialize a new mock client
 func newMockClient() *mockClient {
 	c := &mockClient{
-		state: make(map[string]interface{}),
-		calls: make(map[string][]mockFuncCall),
+		state:         make(map[string]interface{}),
+		calls:         make(map[string][]mockFuncCall),
+		notFoundError: errors.New("NotFound"),
 	}
 	return c
 }
@@ -284,35 +298,30 @@ func reconcileTester(t *testing.T, method string,
 	}
 
 	// test create new
+	methodPlus := fmt.Sprintf("%s(create)", method)
 	err := reconcile(c, current)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, createCalls)
+	c.checkCalls(t, methodPlus, createCalls)
 
 	// test no updates required for current
+	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
 	c.resetCalls()
 	err = reconcile(c, current)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": createCalls["Get"]})
+	c.checkCalls(t, methodPlus, map[string][]mockFuncCall{"Get": createCalls["Get"]})
 
 	// test updates required
+	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
 	c.resetCalls()
 	err = reconcile(c, revised)
 	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.checkCalls(t, method, updateCalls)
-
-	// test no updates required for revised
-	c.resetCalls()
-	err = reconcile(c, revised)
-	if err != nil {
-		t.Errorf("%s() returned %v; want nil", method, err)
-	}
-	c.checkCalls(t, method, map[string][]mockFuncCall{"Get": updateCalls["Get"]})
+	c.checkCalls(t, methodPlus, updateCalls)
 }
 
 func TestCreateResource(t *testing.T) {

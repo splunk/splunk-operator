@@ -21,6 +21,33 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// ResourcePhase is used to represent the current phase of a custom resource
+// +kubebuilder:validation:Enum=Pending;Ready;Updating;ScalingUp;ScalingDown;Terminating;Error
+type ResourcePhase string
+
+const (
+	// PhasePending means a custom resource has just been created and is not yet ready
+	PhasePending ResourcePhase = "Pending"
+
+	// PhaseReady means a custom resource is ready and up to date
+	PhaseReady ResourcePhase = "Ready"
+
+	// PhaseUpdating means a custom resource is in the process of updating to a new desired state (spec)
+	PhaseUpdating ResourcePhase = "Updating"
+
+	// PhaseScalingUp means a customer resource is in the process of scaling up
+	PhaseScalingUp ResourcePhase = "ScalingUp"
+
+	// PhaseScalingDown means a customer resource is in the process of scaling down
+	PhaseScalingDown ResourcePhase = "ScalingDown"
+
+	// PhaseTerminating means a customer resource is in the process of being removed
+	PhaseTerminating ResourcePhase = "Terminating"
+
+	// PhaseError means an error occured with custom resource management
+	PhaseError ResourcePhase = "Error"
+)
+
 // default all fields to being optional
 // +kubebuilder:validation:Optional
 
@@ -31,7 +58,7 @@ import (
 
 // CommonSpec defines the desired state of parameters that are common across all CRD types
 type CommonSpec struct {
-	// Image to use for Splunk pod containers (overrides SPLUNK_IMAGE environment variables)
+	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
 	Image string `json:"image"`
 
 	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
@@ -79,8 +106,8 @@ type CommonSplunkSpec struct {
 	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 
-	// IndexerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
-	IndexerRef corev1.ObjectReference `json:"indexerRef"`
+	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
 }
 
 // MetaObject is used to represent common interfaces of custom resources

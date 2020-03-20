@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package deploy
+package reconcile
 
 import (
 	"fmt"
@@ -33,9 +33,9 @@ func splunkDeletionTester(t *testing.T, cr enterprisev1.MetaObject, delete func(
 		component = "standalone"
 	case "LicenseMaster":
 		component = "license-master"
-	case "SearchHead":
+	case "SearchHeadCluster":
 		component = "search-head"
-	case "Indexer":
+	case "IndexerCluster":
 		component = "indexer"
 	}
 
@@ -84,9 +84,9 @@ func splunkDeletionTester(t *testing.T, cr enterprisev1.MetaObject, delete func(
 }
 
 func TestCheckSplunkDeletion(t *testing.T) {
-	cr := enterprisev1.Indexer{
+	cr := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "Indexer",
+			Kind: "IndexerCluster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

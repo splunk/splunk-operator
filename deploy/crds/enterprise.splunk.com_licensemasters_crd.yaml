@@ -4,10 +4,14 @@ metadata:
   name: licensemasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of license master
     name: Phase
-    type: integer
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of license master
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: LicenseMaster
@@ -625,7 +629,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -635,9 +639,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -2166,9 +2170,13 @@ spec:
             phase:
               description: current phase of the license master
               enum:
-              - pending
-              - ready
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
               type: string
           type: object
       type: object

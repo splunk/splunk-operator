@@ -4,14 +4,22 @@ metadata:
   name: standalones.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.status.phase
+  - JSONPath: .status.phase
     description: Status of standalone instances
     name: Phase
-    type: integer
-  - JSONPath: .spec.status.instances
-    description: Number of standalone instances
-    name: Instances
     type: string
+  - JSONPath: .status.replicas
+    description: Number of desired standalone instances
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready standalone instances
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of standalone resource
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
     kind: Standalone
@@ -20,6 +28,10 @@ spec:
     singular: standalone
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
@@ -627,7 +639,7 @@ spec:
                 volume claims (default=”1Gi”)
               type: string
             image:
-              description: Image to use for Splunk pod containers (overrides SPLUNK_IMAGE
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
             imagePullPolicy:
@@ -637,9 +649,9 @@ spec:
               - Always
               - IfNotPresent
               type: string
-            indexerRef:
-              description: IndexerRef refers to a Splunk Enterprise indexer cluster
-                managed by the operator within Kubernetes
+            indexerClusterRef:
+              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+                cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
                   description: API version of the referent.
@@ -716,6 +728,7 @@ spec:
               type: string
             replicas:
               description: Number of standalone pods
+              format: int32
               type: integer
             resources:
               description: resource requirements for the pod containers
@@ -978,7 +991,7 @@ spec:
                   type: object
               type: object
             sparkImage:
-              description: Image to use for Spark pod containers (overrides SPARK_IMAGE
+              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
                 environment variables)
               type: string
             sparkRef:
@@ -2210,17 +2223,27 @@ spec:
           description: StandaloneStatus defines the observed state of a Splunk Enterprise
             standalone instances.
           properties:
-            instances:
-              description: current number of standalone instances
-              type: integer
             phase:
               description: current phase of the standalone instances
               enum:
-              - pending
-              - ready
-              - scaleup
-              - scaledown
-              - updating
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready standalone instances
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired standalone instances
+              format: int32
+              type: integer
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
               type: string
           type: object
       type: object
