@@ -169,6 +169,12 @@ func podManagerTester(t *testing.T, method string, mgr StatefulSetPodManager) {
 				"controller-revision-hash": "v0",
 			},
 		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
 	}
 	updatePodCalls := map[string][]mockFuncCall{"Get": podCalls, "Delete": {podCalls[1]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
@@ -178,6 +184,11 @@ func podManagerTester(t *testing.T, method string, mgr StatefulSetPodManager) {
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
 	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
 	podManagerUpdateTester(t, methodPlus, mgr, 1, enterprisev1.PhaseReady, revised, getPodCalls, nil, current, pod)
+
+	// test pod not ready
+	pod.Status.Phase = corev1.PodPending
+	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not ready")
+	podManagerUpdateTester(t, methodPlus, mgr, 1, enterprisev1.PhaseUpdating, revised, getPodCalls, nil, current, pod)
 }
 
 func TestDefaultStatefulSetPodManager(t *testing.T) {

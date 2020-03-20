@@ -190,6 +190,10 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
 			return enterprisev1.PhaseError, err
 		}
+		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || pod.Status.ContainerStatuses[0].Ready != true {
+			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
+			return enterprisev1.PhaseUpdating, err
+		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
 		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {

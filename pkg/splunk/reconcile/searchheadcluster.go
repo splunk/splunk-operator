@@ -50,8 +50,14 @@ func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHead
 	cr.Status.DeployerPhase = enterprisev1.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetIdentifier())
+	if cr.Status.Members == nil {
+		cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
+	}
 	defer func() {
-		client.Status().Update(context.TODO(), cr)
+		err = client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
 	}()
 
 	// check if deletion has been requested
@@ -189,6 +195,10 @@ func (mgr *SearchHeadClusterPodManager) PrepareRecycle(n int32) (bool, error) {
 			mgr.log.Info("Waiting for active searches to complete", "memberName", memberName)
 		}
 		return searchesComplete, nil
+
+	case "": // this can happen after the member has already been recycled and we're just waiting for state to update
+		mgr.log.Info("Member has empty Status", "memberName", memberName)
+		return false, nil
 	}
 
 	// unhandled status
@@ -226,13 +236,14 @@ func (mgr *SearchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 // updateStatus for SearchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *SearchHeadClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
+	mgr.cr.Status.Captain = ""
+	mgr.cr.Status.CaptainReady = false
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if mgr.cr.Status.ReadyReplicas == 0 {
 		return nil
 	}
 	gotCaptainInfo := false
-	mgr.cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
-	for n := int32(0); n < mgr.cr.Status.ReadyReplicas; n++ {
+	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
 		c := mgr.getClient(n)
 		memberName := enterprise.GetSplunkStatefulsetPodName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), n)
 		memberStatus := enterprisev1.SearchHeadClusterMemberStatus{Name: memberName}
@@ -243,24 +254,35 @@ func (mgr *SearchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 			memberStatus.Registered = memberInfo.Registered
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
-			if !gotCaptainInfo {
-				// try querying captain api; note that this should work on any node
-				captainInfo, err := c.GetSearchHeadCaptainInfo()
-				if err == nil {
-					mgr.cr.Status.Captain = captainInfo.Label
-					mgr.cr.Status.CaptainReady = captainInfo.ServiceReady
-					mgr.cr.Status.Initialized = captainInfo.Initialized
-					mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
-					mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
-					gotCaptainInfo = true
-				}
-			}
-		} else if n < statefulSet.Status.Replicas {
-			// ignore error if pod was just terminated for scale down event (n >= Replicas)
+		} else {
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
-			return err
 		}
-		mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
+
+		if err == nil && !gotCaptainInfo {
+			// try querying captain api; note that this should work on any node
+			captainInfo, err := c.GetSearchHeadCaptainInfo()
+			if err == nil {
+				mgr.cr.Status.Captain = captainInfo.Label
+				mgr.cr.Status.CaptainReady = captainInfo.ServiceReady
+				mgr.cr.Status.Initialized = captainInfo.Initialized
+				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
+				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+				gotCaptainInfo = true
+			} else {
+				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
+			}
+		}
+
+		if n < int32(len(mgr.cr.Status.Members)) {
+			mgr.cr.Status.Members[n] = memberStatus
+		} else {
+			mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
+		}
+	}
+
+	// truncate any extra members that we didn't check (leftover from scale down)
+	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Members)) {
+		mgr.cr.Status.Members = mgr.cr.Status.Members[:statefulSet.Status.Replicas]
 	}
 
 	return nil

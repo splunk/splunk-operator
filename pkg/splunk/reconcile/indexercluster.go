@@ -51,8 +51,14 @@ func ApplyIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluste
 	cr.Status.ClusterMasterPhase = enterprisev1.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetIdentifier())
+	if cr.Status.Peers == nil {
+		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
+	}
 	defer func() {
-		client.Status().Update(context.TODO(), cr)
+		err = client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
 	}()
 
 	// check if deletion has been requested
@@ -227,7 +233,6 @@ func (mgr *IndexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 // updateStatus for IndexerClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *IndexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSet) error {
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	mgr.cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
 
 	if mgr.cr.Status.ClusterMasterPhase != enterprisev1.PhaseReady {
 		mgr.cr.Status.Initialized = false
@@ -266,7 +271,16 @@ func (mgr *IndexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 		} else {
 			mgr.log.Info("Peer is not known by cluster master", "peerName", peerName)
 		}
-		mgr.cr.Status.Peers = append(mgr.cr.Status.Peers, peerStatus)
+		if n < int32(len(mgr.cr.Status.Peers)) {
+			mgr.cr.Status.Peers[n] = peerStatus
+		} else {
+			mgr.cr.Status.Peers = append(mgr.cr.Status.Peers, peerStatus)
+		}
+	}
+
+	// truncate any extra peers that we didn't check (leftover from scale down)
+	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
+		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
 	}
 
 	return nil

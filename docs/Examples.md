@@ -107,6 +107,32 @@ $ kubectl scale idc example --replicas=5
 indexercluster.enterprise.splunk.com/example scaled
 ```
 
+You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+to manage scaling for you. For example:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: idc-example
+spec:
+  scaleTargetRef:
+    apiVersion: enterprise.splunk.com/v1alpha2
+    kind: IndexerCluster
+    name: example
+  minReplicas: 5
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50
+EOF
+```
+
+```
+$ kubectl get hpa
+NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+idc-example   IndexerCluster/example   16%/50%   5         10        5          15m
+```
+
 To create a standalone search head that uses your indexer cluster, all you
 have to do is add an `indexerClusterRef` parameter:
 
