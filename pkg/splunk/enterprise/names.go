@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -37,10 +36,10 @@ const (
 	serviceTemplateStr = "splunk-%s-%s-%s"
 
 	// identifier
-	secretsTemplateStr = "splunk-%s-secrets"
+	secretsTemplateStr = "splunk-%s-%s-secrets"
 
 	// identifier
-	defaultsTemplateStr = "splunk-%s-defaults"
+	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
@@ -63,7 +62,7 @@ func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) stri
 }
 
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
-func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int) string {
+func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int32) string {
 	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
 }
 
@@ -81,26 +80,26 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 }
 
 // GetSplunkSecretsName uses a template to name a Kubernetes Secret for a SplunkEnterprise resource.
-func GetSplunkSecretsName(identifier string) string {
-	return fmt.Sprintf(secretsTemplateStr, identifier)
+func GetSplunkSecretsName(identifier string, instanceType InstanceType) string {
+	return fmt.Sprintf(secretsTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
-func GetSplunkDefaultsName(identifier string) string {
-	return fmt.Sprintf(defaultsTemplateStr, identifier)
+func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
+	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.
-func GetSplunkStatefulsetUrls(namespace string, instanceType InstanceType, identifier string, replicas int, hostnameOnly bool) string {
+func GetSplunkStatefulsetUrls(namespace string, instanceType InstanceType, identifier string, replicas int32, hostnameOnly bool) string {
 	urls := make([]string, replicas)
-	for i := 0; i < replicas; i++ {
+	for i := int32(0); i < replicas; i++ {
 		urls[i] = GetSplunkStatefulsetURL(namespace, instanceType, identifier, i, hostnameOnly)
 	}
 	return strings.Join(urls, ",")
 }
 
 // GetSplunkStatefulsetURL returns a fully qualified domain name for a specific pod within a Kubernetes StatefulSet Splunk instances.
-func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identifier string, index int, hostnameOnly bool) string {
+func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identifier string, index int32, hostnameOnly bool) string {
 	podName := GetSplunkStatefulsetPodName(instanceType, identifier, index)
 
 	if hostnameOnly {
@@ -116,13 +115,13 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 }
 
 // GetSplunkImage returns the docker image to use for Splunk instances.
-func GetSplunkImage(cr *v1alpha1.SplunkEnterprise) string {
+func GetSplunkImage(specImage string) string {
 	var name string
 
-	if cr.Spec.SplunkImage != "" {
-		name = cr.Spec.SplunkImage
+	if specImage != "" {
+		name = specImage
 	} else {
-		name = os.Getenv("SPLUNK_IMAGE")
+		name = os.Getenv("RELATED_IMAGE_SPLUNK_ENTERPRISE")
 		if name == "" {
 			name = defaultSplunkImage
 		}

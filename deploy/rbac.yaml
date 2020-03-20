@@ -12,6 +12,7 @@ rules:
   - persistentvolumeclaims
   - configmaps
   - secrets
+  - pods
   verbs:
   - create
   - delete

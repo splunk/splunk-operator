@@ -1,16 +1,181 @@
-version: 2
-jobs:
-  compile-binary:
-    docker:
-      - image: splunk/splunk-operator-builder:master
-    steps:
-      - checkout
-      - run:
-          name: Build splunk-operator binary
-          command: go build -v -o ./build/_output/bin/splunk-operator ./cmd/manager
+# See https://circleci.com/blog/using-circleci-workflows-to-replicate-docker-hub-automated-builds/
+version: 2.1
 workflows:
   version: 2
-  build:
+  build-and-push:
     jobs:
-      - compile-binary
-
+      - build-image
+      - unit-tests
+      - vulnerability-scan:
+          requires:
+            - build-image
+      - push-latest:
+          requires:
+            - build-image
+            - unit-tests
+            - vulnerability-scan
+          filters:
+            branches:
+              only:
+                - master
+      - push-edge:
+          requires:
+            - build-image
+            - unit-tests
+            - vulnerability-scan
+          filters:
+            branches:
+              only:
+                - develop
+      - push-release:
+          requires:
+            - build-image
+            - unit-tests
+            - vulnerability-scan
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+/
+            branches:
+              ignore: /.*/
+executors:
+  golang-builder:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    working_directory: /opt/app-root/src/splunk-operator
+    docker:
+      - image: splunk/splunk-operator-builder:develop
+  docker-publisher:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    docker:
+      - image: circleci/buildpack-deps:buster
+  classic-machine:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    machine:
+      image: circleci/classic:latest
+commands:
+  save_image:
+    description: "Save image"
+    steps:
+      - run:
+          name: "Save image"
+          command: |
+            mkdir -p /tmp/images
+            docker image save -o /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar ${IMAGE_NAME}:${CIRCLE_SHA1}
+  load_image:
+    description: "Load image"
+    steps:
+      - run:
+          name: "Load image"
+          command: docker load -i /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar
+  push_image:
+    description: "Load, tag and push an image"
+    parameters:
+      tag:
+        type: string
+    steps:
+      - load_image
+      - run: 
+          name: Tag image
+          command: |
+            docker tag ${IMAGE_NAME}:${CIRCLE_SHA1} ${IMAGE_NAME}:<< parameters.tag >>
+      - run:
+          name: Push latest image to DockerHub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push ${IMAGE_NAME}:<< parameters.tag >>
+jobs:
+  build-image:
+    executor: golang-builder
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: 
+          name: Pull base image updates
+          command: docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
+      - run: 
+          name: Build splunk/splunk-operator image
+          command: operator-sdk build --verbose ${IMAGE_NAME}:${CIRCLE_SHA1}
+      - save_image
+      - persist_to_workspace:
+          name: Persist images to workspace
+          root: /tmp
+          paths:
+            - images
+      - store_artifacts:
+          name: Save images as artifacts
+          path: /tmp/images
+  unit-tests:
+    executor: golang-builder
+    steps:
+      - checkout
+      - run: 
+          name: Check source formatting
+          command: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - run: 
+          name: Lint source code
+          command: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - run:
+          name: Run package tests
+          command: make test
+      - run:
+          name: Upload coverage.out
+          command: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken $COVERALLS_TOKEN
+      - store_artifacts:
+          name: Save coverage.out as artifact
+          path: coverage.out
+  vulnerability-scan:
+    executor: classic-machine
+    steps:
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - load_image
+      - run:
+          name: Setup clair scanner
+          command: make setup_clair_scanner
+      - run:
+          name: Scan container image
+          command: make run_clair_scan
+      - run:
+          name: Stop clair scanner
+          command: make stop_clair_scanner
+      - store_artifacts:
+          name: Save scan results as artifacts
+          path: clair-scanner-logs
+  push-latest:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "latest"
+  push-edge:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "edge"
+  push-release:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "${CIRCLE_TAG}"

@@ -95,15 +95,30 @@ image: splunk/splunk-operator
 ```
 
 If you are using a private registry for the `splunk/splunk:8.0` and
-`splunk/spark` (used by DFS) images, you should modify the `SPLUNK_IMAGE`
-and `SPARK_IMAGE` environment variables in `splunk-operator.yaml` to point
+`splunk/spark` (used by DFS) images, you should modify the
+`RELATED_IMAGE_SPLUNK_ENTERPRISE` and `RELATED_IMAGE_SPLUNK_SPARK`
+environment variables in `splunk-operator.yaml` to point
 to the appropriate locations.
 
 ```yaml
-- name: SPLUNK_IMAGE
+- name: RELATED_IMAGE_SPLUNK_ENTERPRISE
   value: "splunk/splunk:8.0"
-- name: SPARK_IMAGE
+- name: RELATED_IMAGE_SPLUNK_SPARK
   value: "splunk/spark"
+```
+
+
+## Cluster Domain
+
+By default, the Splunk Operator will use a Kubernetes cluster domain of
+`cluster.local` to calculate fully qualified domain names (FQDN) for each
+instance in your deployments. If you have configured a custom domain for
+your Kubernetes cluster, you can override this by adding a `CLUSTER_DOMAIN`
+environment variable to the operator's deployment spec:
+
+```yaml
+- name: CLUSTER_DOMAIN
+  value: "mydomain.com"
 ```
 
 
@@ -128,6 +143,10 @@ To remove all Splunk deployments and completely uninstall the
 Splunk Operator, run:
 
 ```
-kubectl delete splunkenterprises --all
+kubectl delete standalones --all
+kubectl delete licensemasters --all
+kubectl delete searchheadclusters --all
+kubectl delete indexerclusters --all
+kubectl delete spark --all
 kubectl delete -f splunk-operator.yaml
 ```

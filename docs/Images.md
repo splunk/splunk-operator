@@ -11,13 +11,15 @@ All of these images are publicly available on [Docker Hub](https://hub.docker.co
 If your cluster does not have access to pull from Docker Hub, you will need to
 manually download and push these images to an accessible registry. You will
 also need to specify the location of these images by using either an environment
-variable passed to the operator or adding additional parameters to your 
-`SplunkEnterprise` deployment.
+variable passed to the operator or adding additional `spec` parameters to your 
+custom resource definition.
 
-Use the `SPLUNK_IMAGE` environment variable or the `splunkImage` parameter to change the location of the Splunk Enterprise image.
-Use the `SPARK_IMAGE` environment variable or the `sparkImage` parameter to change the location of the Spark image.
-Please see the [Advanced Installation Instructions](Install.md) or
-[SplunkEnterprise Parameters](SplunkEnterprise.md) for more details.
+Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image`
+custom resource parameter to change the location of the Splunk Enterprise
+image. Use the `RELATED_IMAGE_SPLUNK_SPARK` environment variable or the
+`sparkImage` parameter to change the location of the Spark image. Please see the
+[Advanced Installation Instructions](Install.md) or
+[Custom Resource Guide](CustomResources.md) for more details.
 
 
 ## Using a Private Registry

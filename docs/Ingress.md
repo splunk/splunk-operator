@@ -23,6 +23,9 @@ service/splunk-cluster-search-head-headless
 service/splunk-cluster-search-head-service
 ```
 
+*Please note that services are currently only created for managed clusters. No
+services will be created for single instance deployments.*
+
 Below we provide some examples for configuring two of the most popular Ingress controllers: the
 [NGINX Ingress Controller](https://www.nginx.com/products/nginx/kubernetes-ingress-controller)
 and [Istio](https://istio.io/). We hope these will serve as a useful starting
@@ -30,7 +33,7 @@ point to configuring ingress in your particular environment.
 
 Before deploying an example, you will need to replace “example.com” with
 whatever domain name you would like to use, and “example” in the service
-names with the name of your `SplunkEnterprise` object. You will also need
+names with the name of your custom resource object. You will also need
 to point your DNS for all the desired hostnames to the IP addresses of 
 your ingress load balancer.
 

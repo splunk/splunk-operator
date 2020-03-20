@@ -13,7 +13,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Known Issues for the Splunk Operator](#known-issues-for-the-splunk-operator)
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
-* [Creating SplunkEnterprise Deployments](#creating-splunkenterprise-deployments)
+* [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
 
 COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source product
 developed by Splunkers with contributions from the community of partners and
@@ -41,11 +41,6 @@ covered by support, and we strongly discourage using it in production.*
 
 We are working to resolve the following in future releases:
 
-* Scaling search heads after a clustered deployment has been created is not
-currently working. New search heads fail to join the cluster. 
-* Scale down of indexer cluster peers does not remove them in a clean manner
-by ensuring that the cluster is always valid and complete. This can lead to
-data loss.  
 * The Deployment Monitoring Console is not currently configured properly
 for new deployments
 
@@ -90,7 +85,7 @@ by reducing the impact of common hardware failures to be similar to a server
 restart. The use of Persistent Volume Claims requires that your cluster is
 configured to support one or more persistent
 [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/).
-Please see [Setting Up a Storage Class for Splunk](StorageClass.md) for more
+Please see [Setting Up a Persistent Storage for Splunk](StorageClass.md) for more
 information.
 
 
@@ -126,21 +121,25 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 To remove all Splunk deployments and completely remove the
 Splunk Operator, run:
 ```
-kubectl delete splunkenterprises --all
+kubectl delete standalones --all
+kubectl delete licensemasters --all
+kubectl delete searchheadclusters --all
+kubectl delete indexerclusters --all
+kubectl delete spark --all
 kubectl delete -f http://tiny.cc/splunk-operator-install
 ```
 
 
-## Creating SplunkEnterprise Deployments
+## Creating Splunk Enterprise Deployments
 
-The `SplunkEnterprise` resource is used to create a single deployment of Splunk
-Enterprise. For example,  run the following command to create a single instance 
+The `Standalone` resource is used to create a single instance deployment
+of Splunk Enterprise. For example,  run the following command to create a
 deployment named “s1”:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha1
-kind: SplunkEnterprise
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: Standalone
 metadata:
   name: s1
   finalizers:
@@ -148,21 +147,26 @@ metadata:
 EOF
 ```
 
+The `enterprise.splunk.com/delete-pvc` finalizer is optional, and may be
+used to tell the Splunk Operator that you would like it to remove all the
+[Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
+associated with the instance when you delete it.
+
 Within a few seconds (or minutes if you are pulling the public Splunk images
 for the first time), you should see a new pod running in your cluster:
 
 ```
 $ kubectl get pods
-NAME                                    READY   STATUS    RESTARTS   AGE
-splunk-operator-75f5d4d85b-8pshn        1/1     Running   0          11m
-splunk-s1-standalone-5d54bcc4bf-bpzx7   1/1     Running   0          16s
+NAME                               READY   STATUS    RESTARTS   AGE
+splunk-operator-7c5599546c-wt4xl   1/1     Running   0          11h
+splunk-s1-standalone-0             0/1     Running   0          45s
 ```
 
 By default, an admin user password will be automatically generated for your 
 deployment. You can get the password by running:
 
 ```
-kubectl get secret splunk-s1-secrets -o jsonpath='{.data.password}' | base64 --decode
+kubectl get secret splunk-s1-standalone-secrets -o jsonpath='{.data.password}' | base64 --decode
 ```
 
 *Note: if your shell prints a `%` at the end, leave that out when you
@@ -172,22 +176,24 @@ To log into your instance, you can forward port 8000 from your local
 machine by running:
 
 ```
-kubectl port-forward splunk-s1-standalone-5d54bcc4bf-bpzx7 8000
+kubectl port-forward splunk-s1-standalone-0 8000
 ```
 
-You should then be able to log into Splunk at http://localhost:8000 using the
-`admin` account with the password that you obtained from `splunk-s1-secrets`.
+You should then be able to log into Splunk Enterprise at http://localhost:8000 using
+the `admin` account with the password that you obtained from `splunk-s1-standalone-secrets`.
 
 To delete your deployment, just run:
 
 ```
-kubectl delete splunkenterprise/s1
+kubectl delete standalone s1
 ```
 
-The `SplunkEnterprise` resource supports many additional configuration parameters.
-Please see [SplunkEnterprise Parameters](SplunkEnterprise.md) for more information.
-For more deployment examples, please see    
+`Standalone` is just one custom resource that the Splunk Operator provides.
+You can find more information about other custom resources and the parameters
+they support in the [Custom Resource Guide](CustomResources.md).
+
+For additional deployment examples, including clustering, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
 
-Please see [Configuring Ingress](Ingress.md) for guidance on making your Splunk
-clusters accessible outside of Kubernetes.
+Please see [Configuring Ingress](Ingress.md) for guidance on making your
+Splunk clusters accessible outside of Kubernetes.

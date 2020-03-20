@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,13 +21,14 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 )
 
 func init() {
@@ -36,15 +37,31 @@ func init() {
 }
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
-func AsOwner(cr *v1alpha1.SplunkEnterprise) metav1.OwnerReference {
+func AsOwner(cr enterprisev1.MetaObject) metav1.OwnerReference {
 	trueVar := true
 
 	return metav1.OwnerReference{
-		APIVersion: cr.TypeMeta.APIVersion,
-		Kind:       cr.TypeMeta.Kind,
-		Name:       cr.Name,
-		UID:        cr.UID,
+		APIVersion: cr.GetTypeMeta().APIVersion,
+		Kind:       cr.GetTypeMeta().Kind,
+		Name:       cr.GetObjectMeta().GetName(),
+		UID:        cr.GetObjectMeta().GetUID(),
 		Controller: &trueVar,
+	}
+}
+
+// AppendParentMeta appends parent's metadata to a child
+func AppendParentMeta(child, parent metav1.Object) {
+	// append labels from parent
+	for k, v := range parent.GetLabels() {
+		child.GetLabels()[k] = v
+	}
+
+	// append annotations from parent
+	for k, v := range parent.GetAnnotations() {
+		// ignore Annotations set by kubectl
+		if !strings.HasPrefix(k, "kubectl.kubernetes.io/") {
+			child.GetAnnotations()[k] = v
+		}
 	}
 }
 
@@ -88,26 +105,57 @@ func GenerateSecret(secretBytes string, n int) []byte {
 	return b
 }
 
-// SortPorts returns a sorted list of Kubernetes ContainerPorts.
-func SortPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
+// SortContainerPorts returns a sorted list of Kubernetes ContainerPorts.
+func SortContainerPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
 	sorted := make([]corev1.ContainerPort, len(ports))
 	copy(sorted, ports)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ContainerPort < sorted[j].ContainerPort })
 	return sorted
 }
 
-// ComparePorts is a generic comparer of two Kubernetes ContainerPorts.
+// CompareContainerPorts is a generic comparer of two Kubernetes ContainerPorts.
 // It returns true if there are material differences between them, or false otherwise.
 // TODO: could use refactoring; lots of boilerplate copy-pasta here
-func ComparePorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
+func CompareContainerPorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
 	// first, check for short-circuit opportunity
 	if len(a) != len(b) {
 		return true
 	}
 
 	// make sorted copies of a and b
-	aSorted := SortPorts(a)
-	bSorted := SortPorts(b)
+	aSorted := SortContainerPorts(a)
+	bSorted := SortContainerPorts(b)
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		if aSorted[n] != bSorted[n] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SortServicePorts returns a sorted list of Kubernetes ServicePorts.
+func SortServicePorts(ports []corev1.ServicePort) []corev1.ServicePort {
+	sorted := make([]corev1.ServicePort, len(ports))
+	copy(sorted, ports)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Port < sorted[j].Port })
+	return sorted
+}
+
+// CompareServicePorts is a generic comparer of two Kubernetes ServicePorts.
+// It returns true if there are material differences between them, or false otherwise.
+// TODO: could use refactoring; lots of boilerplate copy-pasta here
+func CompareServicePorts(a []corev1.ServicePort, b []corev1.ServicePort) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copies of a and b
+	aSorted := SortServicePorts(a)
+	bSorted := SortServicePorts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
@@ -217,7 +265,7 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 
 	// calculate inbound port inclusions
 	includeInboundPortsBuf := bytes.NewBufferString("")
-	sortedPorts := SortPorts(ports)
+	sortedPorts := SortContainerPorts(ports)
 	for idx := range sortedPorts {
 		_, skip := excludeOutboundPortsLookup[sortedPorts[idx].ContainerPort]
 		if !skip {
@@ -235,24 +283,15 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 }
 
 // GetLabels returns a map of labels to use for managed components.
-func GetLabels(identifier string, typeLabel string, isSelector bool) map[string]string {
-	result := map[string]string{
-		"app":  "splunk",
-		"for":  identifier,
-		"type": typeLabel,
-	}
-
-	if isSelector {
-		return result
-	}
-
+func GetLabels(component, name, identifier string) map[string]string {
 	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-	result["app.kubernetes.io/name"] = fmt.Sprintf("splunk-%s", identifier)
-	result["app.kubernetes.io/part-of"] = "splunk"
-	result["app.kubernetes.io/managed-by"] = "splunk-operator"
-	result["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)
-
-	return result
+	return map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  component,
+		"app.kubernetes.io/name":       name,
+		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", identifier, component),
+		"app.kubernetes.io/instance":   fmt.Sprintf("splunk-%s-%s", identifier, name),
+	}
 }
 
 // AppendPodAntiAffinity appends a Kubernetes Affinity object to include anti-affinity for pods of the same type, and returns the result.
@@ -267,19 +306,22 @@ func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLab
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{}
 	}
 
+	// prepare match expressions to match select labels
+	matchExpressions := []metav1.LabelSelectorRequirement{
+		{
+			Key:      "app.kubernetes.io/instance",
+			Operator: metav1.LabelSelectorOpIn,
+			Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
+		},
+	}
+
 	affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
 		affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 		corev1.WeightedPodAffinityTerm{
 			Weight: 100,
 			PodAffinityTerm: corev1.PodAffinityTerm{
 				LabelSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app.kubernetes.io/instance",
-							Operator: metav1.LabelSelectorOpIn,
-							Values:   []string{fmt.Sprintf("splunk-%s-%s", identifier, typeLabel)},
-						},
-					},
+					MatchExpressions: matchExpressions,
 				},
 				TopologyKey: "kubernetes.io/hostname",
 			},
@@ -287,4 +329,72 @@ func AppendPodAntiAffinity(affinity *corev1.Affinity, identifier string, typeLab
 	)
 
 	return affinity
+}
+
+// ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
+func ValidateImagePullPolicy(imagePullPolicy *string) error {
+	// ImagePullPolicy
+	if *imagePullPolicy == "" {
+		*imagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	}
+	switch *imagePullPolicy {
+	case "":
+		*imagePullPolicy = "IfNotPresent"
+		break
+	case "Always":
+		break
+	case "IfNotPresent":
+		break
+	default:
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+	}
+	return nil
+}
+
+// ValidateResources checks resource requests and limits and sets defaults if not provided
+func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+	// check for nil maps
+	if resources.Requests == nil {
+		resources.Requests = make(corev1.ResourceList)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(corev1.ResourceList)
+	}
+
+	// if not given, use default cpu requests
+	_, ok := resources.Requests[corev1.ResourceCPU]
+	if !ok {
+		resources.Requests[corev1.ResourceCPU] = defaults.Requests[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory requests
+	_, ok = resources.Requests[corev1.ResourceMemory]
+	if !ok {
+		resources.Requests[corev1.ResourceMemory] = defaults.Requests[corev1.ResourceMemory]
+	}
+
+	// if not given, use default cpu limits
+	_, ok = resources.Limits[corev1.ResourceCPU]
+	if !ok {
+		resources.Limits[corev1.ResourceCPU] = defaults.Limits[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory limits
+	_, ok = resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		resources.Limits[corev1.ResourceMemory] = defaults.Limits[corev1.ResourceMemory]
+	}
+}
+
+// ValidateCommonSpec checks validity and makes default updates to a CommonSpec, and returns error if something is wrong.
+func ValidateCommonSpec(spec *enterprisev1.CommonSpec, defaultResources corev1.ResourceRequirements) error {
+	// make sure SchedulerName is not empty
+	if spec.SchedulerName == "" {
+		spec.SchedulerName = "default-scheduler"
+	}
+
+	// if not provided, set default resource requests and limits
+	ValidateResources(&spec.Resources, defaultResources)
+
+	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
 }
