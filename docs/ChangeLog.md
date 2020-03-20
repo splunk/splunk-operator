@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 0.1.0 Alpha (2020-??-??)
+## 0.1.0 Alpha (2020-03-20)
 
 * This release depends upon changes made concurrently in the Splunk
   Enterprise container images. You must use the latest splunk/splunk:edge
@@ -19,7 +19,7 @@
   SearchHeadCluster and IndexerCluster resources. This helps protect against
   data loss and maximizes availability while changes are being made. You can
   now also use the "kubectl scale" command, and Horizontal Pod Autoscalers
-  with all resources, except LicenseMaster which always uses a single Pod.
+  with all resources (except LicenseMaster, which always uses a single Pod).
 
 * A new serviceTemplate spec parameter has been added for all Splunk Enterprise
   custom resources. This may be used to define a template the operator uses for
@@ -36,7 +36,7 @@
   cluster master warnings about using the default value.
 
 * Integrated with CircleCI and Coverall for CICD and code coverage, and
-  added a bunch of unit tests to bring coverage up to 93%.
+  added a bunch of unit tests to bring coverage up to over 90%.
 
 ## 0.0.6 Alpha (2019-12-12)
 
