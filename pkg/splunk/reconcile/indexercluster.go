@@ -25,6 +25,7 @@ import (
 
 	"github.com/go-logr/logr"
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
@@ -47,6 +48,7 @@ func ApplyIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluste
 
 	// updates status after function completes
 	cr.Status.Phase = enterprisev1.PhaseError
+	cr.Status.ClusterMasterPhase = enterprisev1.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetIdentifier())
 	defer func() {
@@ -94,41 +96,24 @@ func ApplyIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluste
 	if err != nil {
 		return result, err
 	}
-	cr.Status.ClusterMasterPhase, err = ApplyStatefulSet(client, statefulSet)
-	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
-		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.ClusterMasterPhase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, 1)
-	}
+	clusterMasterManager := DefaultStatefulSetPodManager{}
+	phase, err := clusterMasterManager.Update(client, statefulSet, 1)
 	if err != nil {
-		cr.Status.ClusterMasterPhase = enterprisev1.PhaseError
 		return result, err
 	}
+	cr.Status.ClusterMasterPhase = phase
 
 	// create or update statefulset for the indexers
 	statefulSet, err = enterprise.GetIndexerStatefulSet(cr)
 	if err != nil {
 		return result, err
 	}
-	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
+	mgr := IndexerClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
 	}
-
-	// update CR status with SHC information
-	mgr := IndexerClusterPodManager{client: client, log: scopedLog, cr: cr, secrets: secrets}
-	err = mgr.updateStatus(statefulSet)
-	if err != nil || cr.Status.ReadyReplicas == 0 || !cr.Status.Initialized || !cr.Status.IndexingReady || !cr.Status.ServiceReady {
-		scopedLog.Error(err, "Indexer cluster is not ready")
-		cr.Status.Phase = enterprisev1.PhasePending
-		return result, nil
-	}
-
-	// manage scaling and updates
-	cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
-	if err != nil {
-		cr.Status.Phase = enterprisev1.PhaseError
-		return result, err
-	}
+	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterprisev1.PhaseReady {
@@ -139,10 +124,29 @@ func ApplyIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluste
 
 // IndexerClusterPodManager is used to manage the pods within a search head cluster
 type IndexerClusterPodManager struct {
-	client  ControllerClient
-	log     logr.Logger
-	cr      *enterprisev1.IndexerCluster
-	secrets *corev1.Secret
+	log             logr.Logger
+	cr              *enterprisev1.IndexerCluster
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+// Update for IndexerClusterPodManager handles all updates for a statefulset of indexers
+func (mgr *IndexerClusterPodManager) Update(c ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
+	// update statefulset, if necessary
+	_, err := ApplyStatefulSet(c, statefulSet)
+	if err != nil {
+		return enterprisev1.PhaseError, err
+	}
+
+	// update CR status with SHC information
+	err = mgr.updateStatus(statefulSet)
+	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
+		mgr.log.Error(err, "Indexer cluster is not ready")
+		return enterprisev1.PhasePending, nil
+	}
+
+	// manage scaling and updates
+	return UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
 }
 
 // PrepareScaleDown for IndexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -207,17 +211,17 @@ func (mgr *IndexerClusterPodManager) decommission(n int32, enforceCounts bool) (
 }
 
 // getClient for IndexerClusterPodManager returns a SplunkClient for the member n
-func (mgr *IndexerClusterPodManager) getClient(n int32) *enterprise.SplunkClient {
+func (mgr *IndexerClusterPodManager) getClient(n int32) *splclient.SplunkClient {
 	memberName := enterprise.GetSplunkStatefulsetPodName(enterprise.SplunkIndexer, mgr.cr.GetIdentifier(), n)
 	fqdnName := resources.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, enterprise.GetSplunkServiceName(enterprise.SplunkIndexer, mgr.cr.GetIdentifier(), true)))
-	return enterprise.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // getClusterMasterClient for IndexerClusterPodManager returns a SplunkClient for cluster master
-func (mgr *IndexerClusterPodManager) getClusterMasterClient() *enterprise.SplunkClient {
+func (mgr *IndexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
 	fqdnName := resources.GetServiceFQDN(mgr.cr.GetNamespace(), enterprise.GetSplunkServiceName(enterprise.SplunkClusterMaster, mgr.cr.GetIdentifier(), false))
-	return enterprise.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // updateStatus for IndexerClusterPodManager uses the REST API to update the status for a SearcHead custom resource
@@ -226,13 +230,11 @@ func (mgr *IndexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 	mgr.cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
 
 	if mgr.cr.Status.ClusterMasterPhase != enterprisev1.PhaseReady {
-		mgr.cr.Status.Phase = enterprisev1.PhasePending
 		mgr.cr.Status.Initialized = false
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
 		mgr.cr.Status.MaintenanceMode = false
-		mgr.log.Info("Waiting for cluster master to become ready")
-		return nil
+		return fmt.Errorf("Waiting for cluster master to become ready")
 	}
 
 	// get indexer cluster info from cluster master if it's ready

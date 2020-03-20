@@ -73,15 +73,16 @@ func ApplyLicenseMaster(client ControllerClient, cr *enterprisev1.LicenseMaster)
 	if err != nil {
 		return result, err
 	}
-	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
-	if err == nil && cr.Status.Phase == enterprisev1.PhaseReady {
-		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, 1)
-	}
+	mgr := DefaultStatefulSetPodManager{}
+	phase, err := mgr.Update(client, statefulSet, 1)
 	if err != nil {
-		cr.Status.Phase = enterprisev1.PhaseError
-	} else if cr.Status.Phase == enterprisev1.PhaseReady {
+		return result, err
+	}
+	cr.Status.Phase = phase
+
+	// no need to requeue if everything is ready
+	if cr.Status.Phase == enterprisev1.PhaseReady {
 		result.Requeue = false
 	}
-	return result, err
+	return result, nil
 }

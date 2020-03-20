@@ -28,18 +28,30 @@ import (
 
 // StatefulSetPodManager is used to manage the pods within a StatefulSet
 type StatefulSetPodManager interface {
+	// Update handles all updates for a statefulset and all of its pods
+	Update(ControllerClient, *appsv1.StatefulSet, int32) (enterprisev1.ResourcePhase, error)
+
 	// PrepareScaleDown prepares pod to be removed via scale down event; it returns true when ready
-	PrepareScaleDown(n int32) (bool, error)
+	PrepareScaleDown(int32) (bool, error)
 
 	// PrepareRecycle prepares pod to be recycled for updates; it returns true when ready
-	PrepareRecycle(n int32) (bool, error)
+	PrepareRecycle(int32) (bool, error)
 
 	// FinishRecycle completes recycle event for pod and returns true, or returns false if nothing to do
-	FinishRecycle(n int32) (bool, error)
+	FinishRecycle(int32) (bool, error)
 }
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
+
+// Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
+func (mgr *DefaultStatefulSetPodManager) Update(client ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
+	phase, err := ApplyStatefulSet(client, statefulSet)
+	if err == nil && phase == enterprisev1.PhaseReady {
+		phase, err = UpdateStatefulSetPods(client, statefulSet, mgr, desiredReplicas)
+	}
+	return phase, err
+}
 
 // PrepareScaleDown for DefaultStatefulSetPodManager does nothing and returns true
 func (mgr *DefaultStatefulSetPodManager) PrepareScaleDown(n int32) (bool, error) {
@@ -121,9 +133,9 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 	if readyReplicas > desiredReplicas {
 		// prepare pod for removal via scale down
 		n := readyReplicas - 1
+		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 		ready, err := mgr.PrepareScaleDown(n)
 		if err != nil {
-			podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 			scopedLog.Error(err, "Unable to decommission Pod", "podName", podName)
 			return enterprisev1.PhaseError, err
 		}
@@ -135,7 +147,33 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 		// scale down statefulset to terminate pod
 		scopedLog.Info("Scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
-		return enterprisev1.PhaseScalingDown, UpdateResource(c, statefulSet)
+		err = UpdateResource(c, statefulSet)
+		if err != nil {
+			scopedLog.Error(err, "Scale down update failed for StatefulSet")
+			return enterprisev1.PhaseError, err
+		}
+
+		// delete PVCs used by the pod so that a future scale up will have clean state
+		for _, vol := range []string{"pvc-etc", "pvc-var"} {
+			namespacedName := types.NamespacedName{
+				Namespace: statefulSet.GetNamespace(),
+				Name:      fmt.Sprintf("%s-%s", vol, podName),
+			}
+			var pvc corev1.PersistentVolumeClaim
+			err := c.Get(context.TODO(), namespacedName, &pvc)
+			if err != nil {
+				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
+				return enterprisev1.PhaseError, err
+			}
+			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			err = c.Delete(context.Background(), &pvc)
+			if err != nil {
+				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
+				return enterprisev1.PhaseError, err
+			}
+		}
+
+		return enterprisev1.PhaseScalingDown, nil
 	}
 
 	// ready and no StatefulSet scaling is required
@@ -168,7 +206,7 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 
 			// deleting pod will cause StatefulSet controller to create a new one with latest template
 			scopedLog.Info("Recycling Pod for updates", "podName", podName,
-				"statefulSetRevision", statefulSet.Status.CurrentRevision,
+				"statefulSetRevision", statefulSet.Status.UpdateRevision,
 				"podRevision", pod.GetLabels()["controller-revision-hash"])
 			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
 			err = c.Delete(context.Background(), &pod, preconditions)

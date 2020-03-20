@@ -22,10 +22,10 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
@@ -47,6 +47,7 @@ func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHead
 
 	// updates status after function completes
 	cr.Status.Phase = enterprisev1.PhaseError
+	cr.Status.DeployerPhase = enterprisev1.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetIdentifier())
 	defer func() {
@@ -94,41 +95,24 @@ func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHead
 	if err != nil {
 		return result, err
 	}
-	cr.Status.DeployerPhase, err = ApplyStatefulSet(client, statefulSet)
-	if err == nil && cr.Status.DeployerPhase == enterprisev1.PhaseReady {
-		mgr := DefaultStatefulSetPodManager{}
-		cr.Status.DeployerPhase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, 1)
-	}
+	deployerManager := DefaultStatefulSetPodManager{}
+	phase, err := deployerManager.Update(client, statefulSet, 1)
 	if err != nil {
-		cr.Status.DeployerPhase = enterprisev1.PhaseError
 		return result, err
 	}
+	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
 	statefulSet, err = enterprise.GetSearchHeadStatefulSet(cr)
 	if err != nil {
 		return result, err
 	}
-	cr.Status.Phase, err = ApplyStatefulSet(client, statefulSet)
+	mgr := SearchHeadClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
 	}
-
-	// update CR status with SHC information
-	mgr := SearchHeadClusterPodManager{client: client, log: scopedLog, cr: cr, secrets: secrets}
-	err = mgr.updateStatus(statefulSet)
-	if err != nil || cr.Status.ReadyReplicas == 0 || !cr.Status.Initialized || !cr.Status.CaptainReady {
-		scopedLog.Error(err, "Search head cluster is not ready")
-		cr.Status.Phase = enterprisev1.PhasePending
-		return result, nil
-	}
-
-	// manage scaling and updates
-	cr.Status.Phase, err = UpdateStatefulSetPods(client, statefulSet, &mgr, cr.Spec.Replicas)
-	if err != nil {
-		cr.Status.Phase = enterprisev1.PhaseError
-		return result, err
-	}
+	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterprisev1.PhaseReady {
@@ -139,10 +123,29 @@ func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHead
 
 // SearchHeadClusterPodManager is used to manage the pods within a search head cluster
 type SearchHeadClusterPodManager struct {
-	client  ControllerClient
-	log     logr.Logger
-	cr      *enterprisev1.SearchHeadCluster
-	secrets *corev1.Secret
+	log             logr.Logger
+	cr              *enterprisev1.SearchHeadCluster
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+// Update for SearchHeadClusterPodManager handles all updates for a statefulset of search heads
+func (mgr *SearchHeadClusterPodManager) Update(c ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
+	// update statefulset, if necessary
+	_, err := ApplyStatefulSet(c, statefulSet)
+	if err != nil {
+		return enterprisev1.PhaseError, err
+	}
+
+	// update CR status with SHC information
+	err = mgr.updateStatus(statefulSet)
+	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
+		mgr.log.Error(err, "Search head cluster is not ready")
+		return enterprisev1.PhasePending, nil
+	}
+
+	// manage scaling and updates
+	return UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
 }
 
 // PrepareScaleDown for SearchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
@@ -160,25 +163,6 @@ func (mgr *SearchHeadClusterPodManager) PrepareScaleDown(n int32) (bool, error) 
 	err = c.RemoveSearchHeadClusterMember()
 	if err != nil {
 		return false, err
-	}
-
-	// delete PVCs used by the pod so that a future scale up will have clean state
-	for _, vol := range []string{"pvc-etc", "pvc-var"} {
-		namespacedName := types.NamespacedName{
-			Namespace: mgr.cr.GetNamespace(),
-			Name:      fmt.Sprintf("%s-%s", vol, memberName),
-		}
-		var pvc corev1.PersistentVolumeClaim
-		err := mgr.client.Get(context.TODO(), namespacedName, &pvc)
-		if err != nil {
-			return false, err
-		}
-
-		log.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)
-		err = mgr.client.Delete(context.Background(), &pvc)
-		if err != nil {
-			return false, err
-		}
 	}
 
 	// all done -> ok to scale down the statefulset
@@ -232,11 +216,11 @@ func (mgr *SearchHeadClusterPodManager) FinishRecycle(n int32) (bool, error) {
 }
 
 // getClient for SearchHeadClusterPodManager returns a SplunkClient for the member n
-func (mgr *SearchHeadClusterPodManager) getClient(n int32) *enterprise.SplunkClient {
+func (mgr *SearchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClient {
 	memberName := enterprise.GetSplunkStatefulsetPodName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), n)
 	fqdnName := resources.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, enterprise.GetSplunkServiceName(enterprise.SplunkSearchHead, mgr.cr.GetIdentifier(), true)))
-	return enterprise.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // updateStatus for SearchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource

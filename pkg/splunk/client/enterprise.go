@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package client
 
 import (
 	"crypto/tls"
@@ -33,25 +33,25 @@ type SplunkHTTPClient interface {
 // SplunkClient is a simple object used to send HTTP REST API requests
 type SplunkClient struct {
 	// https endpoint for management interface (e.g. "https://server:8089")
-	managementURI string
+	ManagementURI string
 
 	// username for authentication
-	username string
+	Username string
 
 	// password for authentication
-	password string
+	Password string
 
 	// HTTP client used to process requests
-	client SplunkHTTPClient
+	Client SplunkHTTPClient
 }
 
 // NewSplunkClient returns a new SplunkClient object initialized with a username and password.
 func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 	return &SplunkClient{
-		managementURI: managementURI,
-		username:      username,
-		password:      password,
-		client: &http.Client{
+		ManagementURI: managementURI,
+		Username:      username,
+		Password:      password,
+		Client: &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
@@ -63,8 +63,8 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 // Do processes a Splunk REST API request and unmarshals response into obj, if not nil.
 func (c *SplunkClient) Do(request *http.Request, expectedStatus int, obj interface{}) error {
 	// send HTTP response and check status
-	request.SetBasicAuth(c.username, c.password)
-	response, err := c.client.Do(request)
+	request.SetBasicAuth(c.Username, c.Password)
+	response, err := c.Client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus int, obj interfa
 
 // Get sends a REST API request and unmarshals response into obj, if not nil.
 func (c *SplunkClient) Get(path string, obj interface{}) error {
-	endpoint := fmt.Sprintf("%s%s?count=0&output_mode=json", c.managementURI, path)
+	endpoint := fmt.Sprintf("%s%s?count=0&output_mode=json", c.ManagementURI, path)
 	request, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (c *SplunkClient) GetSearchHeadCaptainInfo() (*SearchHeadCaptainInfo, error
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.managementURI, path)
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -268,7 +268,7 @@ func (c *SplunkClient) GetSearchHeadClusterMemberInfo() (*SearchHeadClusterMembe
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.managementURI, path)
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -281,7 +281,7 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	if detain {
 		mode = "on"
 	}
-	endpoint := fmt.Sprintf("%s/services/shcluster/member/control/control/set_manual_detention?manual_detention=%s", c.managementURI, mode)
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/control/control/set_manual_detention?manual_detention=%s", c.ManagementURI, mode)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -294,15 +294,15 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 // See https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/Removeaclustermember
 func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 	// sent request to remove from search head cluster consensus
-	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/remove_server?output_mode=json", c.managementURI)
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/remove_server?output_mode=json", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
 	}
 
 	// send HTTP response and check status
-	request.SetBasicAuth(c.username, c.password)
-	response, err := c.client.Do(request)
+	request.SetBasicAuth(c.Username, c.Password)
+	response, err := c.Client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.managementURI, path)
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -448,7 +448,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.managementURI, path)
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -585,7 +585,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 // See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	// sent request to remove from search head cluster consensus
-	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.managementURI, id)
+	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.ManagementURI, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -601,7 +601,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s/services/cluster/slave/control/control/decommission?enforce_counts=%d", c.managementURI, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s/services/cluster/slave/control/control/decommission?enforce_counts=%d", c.ManagementURI, enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err

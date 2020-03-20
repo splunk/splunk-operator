@@ -16,6 +16,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -36,10 +37,14 @@ func copyResource(dst runtime.Object, src runtime.Object) {
 		*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
 	case *corev1.Secret:
 		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+	case *corev1.PersistentVolumeClaim:
+		*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
 	case *corev1.PersistentVolumeClaimList:
 		*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
 	case *corev1.Service:
 		*dst.(*corev1.Service) = *src.(*corev1.Service)
+	case *corev1.Pod:
+		*dst.(*corev1.Pod) = *src.(*corev1.Pod)
 	case *appsv1.Deployment:
 		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
@@ -124,6 +129,9 @@ type mockClient struct {
 
 	// calls is a record of all mockClient function calls
 	calls map[string][]mockFuncCall
+
+	// error returned when an object is not found
+	notFoundError error
 }
 
 // Get returns mock client's err field
@@ -138,7 +146,7 @@ func (c mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 		copyResource(obj, getObj.(runtime.Object))
 		return nil
 	}
-	return fmt.Errorf("NotFound")
+	return c.notFoundError
 }
 
 // List returns mock client's err field
@@ -153,7 +161,7 @@ func (c mockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 		copyResource(obj, listObj.(runtime.Object))
 		return nil
 	}
-	return fmt.Errorf("NotFound")
+	return c.notFoundError
 }
 
 // Create returns mock client's err field
@@ -214,6 +222,11 @@ func (c *mockClient) resetCalls() {
 	c.calls = make(map[string][]mockFuncCall)
 }
 
+// resetState resets the state of the mockClient
+func (c *mockClient) resetState() {
+	c.state = make(map[string]interface{})
+}
+
 // checkCalls verifies that the wanted function calls were performed
 func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[string][]mockFuncCall) {
 	notEmptyWantCalls := 0
@@ -265,8 +278,9 @@ func (c *mockClient) checkCalls(t *testing.T, testname string, wantCalls map[str
 // newMockClient is used to create and initialize a new mock client
 func newMockClient() *mockClient {
 	c := &mockClient{
-		state: make(map[string]interface{}),
-		calls: make(map[string][]mockFuncCall),
+		state:         make(map[string]interface{}),
+		calls:         make(map[string][]mockFuncCall),
+		notFoundError: errors.New("NotFound"),
 	}
 	return c
 }
