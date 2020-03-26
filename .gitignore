@@ -86,3 +86,4 @@ splunk-operator-*.yaml
 splunk-operator-*.tar.gz
 clair-scanner
 clair-scanner-logs
+release-*
