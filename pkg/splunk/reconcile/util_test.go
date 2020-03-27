@@ -381,7 +381,6 @@ func TestMergePodUpdates(t *testing.T) {
 		if MergePodUpdates(&current, &revised, name) {
 			t.Errorf("MergePodUpdates() re-run returned %t; want %t", true, false)
 		}
-
 	}
 
 	// should be no updates to merge if they are empty
@@ -404,6 +403,23 @@ func TestMergePodUpdates(t *testing.T) {
 	revised.Spec.SchedulerName = "gp2"
 	matcher = func() bool { return current.Spec.SchedulerName == revised.Spec.SchedulerName }
 	podUpdateTester("SchedulerName")
+
+	// check new Volume added
+	revised.Spec.Volumes = []corev1.Volume{{Name: "new-volume-added"}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Volumes, revised.Spec.Volumes) }
+	podUpdateTester("Volume added")
+
+	// check Volume updated
+	current.Spec.Volumes = []corev1.Volume{{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret1"}}}}
+	revised.Spec.Volumes = []corev1.Volume{{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2"}}}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Volumes, revised.Spec.Volumes) }
+	podUpdateTester("Volume updated - secret name change")
+
+	defaultMode := int32(440)
+	current.Spec.Volumes = []corev1.Volume{{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret1"}}}}
+	revised.Spec.Volumes = []corev1.Volume{{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret1", DefaultMode: &defaultMode}}}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Volumes, revised.Spec.Volumes) }
+	podUpdateTester("Volume updated - default mode chanage")
 
 	// check container different Annotations
 	revised.ObjectMeta.Annotations = map[string]string{"one": "two"}
