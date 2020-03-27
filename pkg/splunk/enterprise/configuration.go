@@ -196,6 +196,33 @@ func GetSplunkService(cr enterprisev1.MetaObject, spec enterprisev1.CommonSpec, 
 	return service
 }
 
+// setVolumeDefaults set properties in Volumes to default values
+func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
+
+	// work-around openapi validation error by ensuring it is not nil
+	if spec.Volumes == nil {
+		spec.Volumes = []corev1.Volume{}
+	}
+
+	for _, v := range spec.Volumes {
+		if v.Secret != nil {
+			if v.Secret.DefaultMode == nil {
+				perm := int32(corev1.SecretVolumeSourceDefaultMode)
+				v.Secret.DefaultMode = &perm
+			}
+			continue
+		}
+
+		if v.ConfigMap != nil {
+			if v.ConfigMap.DefaultMode == nil {
+				perm := int32(corev1.ConfigMapVolumeSourceDefaultMode)
+				v.ConfigMap.DefaultMode = &perm
+			}
+			continue
+		}
+	}
+}
+
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
 func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
@@ -210,10 +237,9 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
 	}
-	// work-around openapi validation error by ensuring it is not nill
-	if spec.Volumes == nil {
-		spec.Volumes = []corev1.Volume{}
-	}
+
+	setVolumeDefaults(spec)
+
 	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
 }
 
@@ -392,6 +418,7 @@ func getSplunkVolumeMounts() []corev1.VolumeMount {
 
 // addSplunkVolumeToTemplate modifies the podTemplateSpec object to incorporates an additional VolumeSource.
 func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name string, volumeSource corev1.VolumeSource) {
+
 	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
 		Name:         "mnt-splunk-" + name,
 		VolumeSource: volumeSource,
@@ -556,12 +583,19 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		}
 	}
 
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+
 	// add defaults secrets to all splunk containers
 	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
-			SecretName: GetSplunkSecretsName(cr.GetIdentifier(), instanceType),
+			SecretName:  GetSplunkSecretsName(cr.GetIdentifier(), instanceType),
+			DefaultMode: &secretVolDefaultMode,
 		},
 	})
+
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
 	// add inline defaults to all splunk containers
 	if spec.Defaults != "" {
@@ -570,6 +604,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: GetSplunkDefaultsName(cr.GetIdentifier(), instanceType),
 				},
+				DefaultMode: &configMapVolDefaultMode,
 			},
 		})
 	}

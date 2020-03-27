@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -197,8 +198,39 @@ func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
 	return false
 }
 
-// SortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
-func SortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+// SortVolumes returns a sorted list of Kubernetes Volumes.
+func sortVolumes(volumes []corev1.Volume) []corev1.Volume {
+	sorted := make([]corev1.Volume, len(volumes))
+	copy(sorted, volumes)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	return sorted
+}
+
+// CompareVolumes is a generic comparer of two Kubernetes Volumes.
+// It returns true if there are material differences between them, or false otherwise.
+func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copies of a and b
+	aSorted := sortVolumes(a)
+	bSorted := sortVolumes(b)
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+		// Must use DeepEqual() because there are pointers inside.
+		if !reflect.DeepEqual(aSorted[n], bSorted[n]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// sortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
+func sortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	sorted := make([]corev1.VolumeMount, len(mounts))
 	copy(sorted, mounts)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -214,8 +246,8 @@ func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
 	}
 
 	// make sorted copies of a and b
-	aSorted := SortVolumeMounts(a)
-	bSorted := SortVolumeMounts(b)
+	aSorted := sortVolumeMounts(a)
+	bSorted := sortVolumeMounts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
