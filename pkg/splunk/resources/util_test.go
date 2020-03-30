@@ -583,3 +583,63 @@ func TestValidateCommonSpec(t *testing.T) {
 		t.Error("ValidateCommonSpec() returned nil; want ERROR")
 	}
 }
+
+func TestCompareVolumes(t *testing.T) {
+	var a []corev1.Volume
+	var b []corev1.Volume
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareVolumes(a, b)
+		}
+		compareTester(t, "CompareVolumes", f, a, b, want)
+	}
+
+	// No change. Empty list.
+	test(false)
+
+	var nullVolume corev1.Volume
+
+	var defaultMode int32 = 420
+	var readMode int32 = 440
+
+	secret1Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret1"}}}
+	secret2Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2"}}}
+	secret3Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2", DefaultMode: &defaultMode}}}
+	secret4Volume := corev1.Volume{Name: "test-volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret2", DefaultMode: &readMode}}}
+
+	// No change. Same count of empty volumes.
+	a = []corev1.Volume{nullVolume, nullVolume}
+	b = []corev1.Volume{nullVolume, nullVolume}
+	test(false)
+
+	// Change. Different count.
+	a = []corev1.Volume{nullVolume, nullVolume}
+	b = []corev1.Volume{nullVolume, nullVolume, nullVolume}
+	test(true)
+
+	// No change. Same volume.
+	a = []corev1.Volume{secret1Volume}
+	b = []corev1.Volume{secret1Volume}
+	test(false)
+
+	// Change. Different volume.
+	a = []corev1.Volume{secret1Volume}
+	b = []corev1.Volume{secret2Volume}
+	test(true)
+
+	// Change. Different count.
+	a = []corev1.Volume{secret1Volume}
+	b = []corev1.Volume{secret1Volume, secret2Volume}
+	test(true)
+
+	// No change. Same volume with default mode.
+	a = []corev1.Volume{secret2Volume}
+	b = []corev1.Volume{secret3Volume}
+	test(false)
+
+	// Change. Different mode.
+	a = []corev1.Volume{secret3Volume}
+	b = []corev1.Volume{secret4Volume}
+	test(true)
+}

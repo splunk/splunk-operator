@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -197,8 +198,86 @@ func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
 	return false
 }
 
-// SortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
-func SortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+// sortVolumes returns a sorted list of Kubernetes Volumes.
+func sortVolumes(volumes []corev1.Volume) []corev1.Volume {
+	sorted := make([]corev1.Volume, len(volumes))
+	copy(sorted, volumes)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	return sorted
+}
+
+func compareSecretVolume(a, b *corev1.SecretVolumeSource) bool {
+	if a.SecretName != b.SecretName {
+		return true
+	}
+
+	if a.DefaultMode != nil && b.DefaultMode != nil {
+		if *a.DefaultMode != *b.DefaultMode {
+			return true
+		}
+	}
+	return false
+}
+
+func compareConfigMapVolume(a, b *corev1.ConfigMapVolumeSource) bool {
+	if a.Name != b.Name {
+		return true
+	}
+
+	if a.DefaultMode != nil && b.DefaultMode != nil {
+		if *a.DefaultMode != *b.DefaultMode {
+			return true
+		}
+	}
+
+	if a.LocalObjectReference != b.LocalObjectReference {
+		return true
+	}
+
+	if a.Optional != nil && b.Optional != nil {
+		if *a.Optional != *b.Optional {
+			return true
+		}
+	}
+	return false
+}
+
+// CompareVolumes is a generic comparer of two Kubernetes Volumes.
+// It returns true if there are material differences between them, or false otherwise.
+func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {
+	// first, check for short-circuit opportunity
+	if len(a) != len(b) {
+		return true
+	}
+
+	// make sorted copies of a and b
+	aSorted := sortVolumes(a)
+	bSorted := sortVolumes(b)
+
+	// iterate elements, checking for differences
+	for n := range aSorted {
+
+		// Compare secret volume separately because defaultMode is optional
+		if aSorted[n].VolumeSource.Secret != nil {
+			return compareSecretVolume(aSorted[n].VolumeSource.Secret, bSorted[n].VolumeSource.Secret)
+		}
+
+		// Compare config volume separately because defaultMode is optional
+		if aSorted[n].ConfigMap != nil {
+			return compareConfigMapVolume(aSorted[n].VolumeSource.ConfigMap, bSorted[n].VolumeSource.ConfigMap)
+		}
+
+		// Must use DeepEqual() because there are pointers inside.
+		if !reflect.DeepEqual(aSorted[n], bSorted[n]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// sortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
+func sortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	sorted := make([]corev1.VolumeMount, len(mounts))
 	copy(sorted, mounts)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -214,8 +293,8 @@ func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
 	}
 
 	// make sorted copies of a and b
-	aSorted := SortVolumeMounts(a)
-	bSorted := SortVolumeMounts(b)
+	aSorted := sortVolumeMounts(a)
+	bSorted := sortVolumeMounts(b)
 
 	// iterate elements, checking for differences
 	for n := range aSorted {
