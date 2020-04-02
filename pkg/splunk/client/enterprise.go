@@ -171,7 +171,7 @@ type SearchHeadCaptainMemberInfo struct {
 	// The name for this member. Displayed on the Splunk Web manager page.
 	Label string `json:"label"`
 
-	// Timestamp for last heartbeat recieved from the peer
+	// Timestamp for last heartbeat received from the peer
 	LastHeartbeat int64 `json:"last_heartbeat"`
 
 	// REST API endpoint for management
@@ -486,7 +486,7 @@ type ClusterMasterPeerInfo struct {
 	// Flag indicating if this peer belongs to the current committed generation and is searchable.
 	Searchable bool `json:"is_searchable"`
 
-	// Timestamp for last heartbeat recieved from the peer.
+	// Timestamp for last heartbeat received from the peer.
 	LastHeartbeat int64 `json:"last_heartbeat"`
 
 	// The ID of the configuration bundle this peer is using.
