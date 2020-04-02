@@ -279,6 +279,22 @@ func CompareByMarshall(a interface{}, b interface{}) bool {
 	return false
 }
 
+// CompareIPLists compares 2 list of IP addresses
+func CompareIPLists(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return true
+	}
+
+	sort.Strings(a)
+	sort.Strings(b)
+
+	if !reflect.DeepEqual(a, b) {
+		return true
+	}
+
+	return false
+}
+
 // GetIstioAnnotations returns a map of istio annotations for a pod template
 func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	// list of ports within the deployments that we want istio to leave alone

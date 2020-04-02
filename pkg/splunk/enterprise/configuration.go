@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -157,7 +158,10 @@ func GetSplunkService(cr enterprisev1.MetaObject, spec enterprisev1.CommonSpec, 
 	var service *corev1.Service
 	if isHeadless {
 		service = &corev1.Service{}
+
+		// Initialize to defaults
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
 		service = spec.ServiceTemplate.DeepCopy()
 	}
@@ -165,10 +169,11 @@ func GetSplunkService(cr enterprisev1.MetaObject, spec enterprisev1.CommonSpec, 
 		Kind:       "Service",
 		APIVersion: "v1",
 	}
+
 	service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	service.Spec.Selector = getSplunkLabels(cr.GetIdentifier(), instanceType)
-	service.Spec.Ports = resources.SortServicePorts(getSplunkServicePorts(instanceType)) // note that port order is important for tests
+	service.Spec.Ports = append(service.Spec.Ports, resources.SortServicePorts(getSplunkServicePorts(instanceType))...) // note that port order is important for tests
 
 	// ensure labels and annotations are not nil
 	if service.ObjectMeta.Labels == nil {
@@ -223,10 +228,30 @@ func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
 	}
 }
 
+func setServiceTemplateDefaults(spec *enterprisev1.CommonSplunkSpec) {
+	if spec.CommonSpec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range spec.CommonSpec.ServiceTemplate.Spec.Ports {
+			var p *corev1.ServicePort = &spec.CommonSpec.ServiceTemplate.Spec.Ports[idx]
+			if p.Protocol == "" {
+				p.Protocol = corev1.ProtocolTCP
+			}
+
+			if p.TargetPort.IntValue() == 0 {
+				p.TargetPort.IntVal = p.Port
+			}
+		}
+	}
+
+	if spec.CommonSpec.ServiceTemplate.Spec.Type == "" {
+		spec.CommonSpec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+}
+
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
 func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.CommonSpec.Image = GetSplunkImage(spec.CommonSpec.Image)
+
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("0.1"),
@@ -239,6 +264,7 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	}
 
 	setVolumeDefaults(spec)
+	setServiceTemplateDefaults(spec)
 
 	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
 }
@@ -360,13 +386,13 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 	switch instanceType {
 	case SplunkStandalone:
 		result["dfccontrol"] = 17000
-		result["datarecieve"] = 19000
+		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
 		result["hec"] = 8088
 		result["s2s"] = 9997
 	case SplunkSearchHead:
 		result["dfccontrol"] = 17000
-		result["datarecieve"] = 19000
+		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
 	case SplunkIndexer:
 		result["hec"] = 8088
@@ -383,7 +409,7 @@ func getSplunkContainerPorts(instanceType InstanceType) []corev1.ContainerPort {
 		l = append(l, corev1.ContainerPort{
 			Name:          key,
 			ContainerPort: int32(value),
-			Protocol:      "TCP",
+			Protocol:      corev1.ProtocolTCP,
 		})
 	}
 	return l
@@ -394,9 +420,10 @@ func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSplunkPorts(instanceType) {
 		l = append(l, corev1.ServicePort{
-			Name:     key,
-			Port:     int32(value),
-			Protocol: "TCP",
+			Name:       key,
+			Port:       int32(value),
+			TargetPort: intstr.FromInt(value),
+			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	return l
@@ -569,6 +596,20 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr enterprisev1.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar) {
+
+	// Add custom ports to splunk containers
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range podTemplateSpec.Spec.Containers {
+			for _, p := range spec.ServiceTemplate.Spec.Ports {
+
+				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: int32(p.TargetPort.IntValue()),
+					Protocol:      p.Protocol,
+				})
+			}
+		}
+	}
 
 	// Add custom volumes to splunk containers
 	if spec.Volumes != nil {

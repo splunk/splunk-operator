@@ -22,21 +22,30 @@ import (
 )
 
 // ApplyService creates or updates a Kubernetes Service
-func ApplyService(client ControllerClient, service *corev1.Service) error {
+func ApplyService(client ControllerClient, revised *corev1.Service) error {
 	scopedLog := log.WithName("ApplyService").WithValues(
-		"name", service.GetObjectMeta().GetName(),
-		"namespace", service.GetObjectMeta().GetNamespace())
+		"name", revised.GetObjectMeta().GetName(),
+		"namespace", revised.GetObjectMeta().GetNamespace())
 
-	namespacedName := types.NamespacedName{Namespace: service.GetNamespace(), Name: service.GetName()}
+	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current corev1.Service
 
 	err := client.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		// found existing Service: do nothing
-		scopedLog.Info("Found existing Service")
-	} else {
-		err = CreateResource(client, service)
+	if err != nil {
+		return CreateResource(client, revised)
 	}
 
-	return err
+	// check for changes in service template
+	hasUpdates := MergeServiceSpecUpdates(&current.Spec, &revised.Spec, current.GetObjectMeta().GetName())
+	*revised = current // caller expects that object passed represents latest state
+
+	// only update if there are material differences, as determined by comparison function
+	if hasUpdates {
+		scopedLog.Info("Updating existing Service")
+		return UpdateResource(client, revised)
+	}
+
+	// all is good!
+	scopedLog.Info("No update to existing Service")
+	return nil
 }
