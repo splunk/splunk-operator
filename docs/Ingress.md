@@ -205,12 +205,6 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
-  - port:
-      number: 9997
-      name: tcp
-      protocol: TCP
-    hosts:
-    - "*"
 ```
 
 Note that `credentialName` references the same `secretName` created and
@@ -266,14 +260,6 @@ spec:
         port:
           number: 8000
         host: splunk-example-search-head-service
-  tcp:
-  - match:
-    - port: 9997
-    route:
-    - destination:
-        port:
-          number: 9997
-        host: splunk-example-indexer-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -341,3 +327,76 @@ spec:
           name: SPLUNK_ISTIO_SESSION
           ttl: 3600s
 ```
+
+## Example: Using Istio for S2S Traffic
+
+Istio can be used to route Splunk-to-Splunk (S2S) traffic directly to your indexers.
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: splunk-s2s
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 9997
+      name: tcp-s2s
+      protocol: TCP
+    hosts:
+    - "splunk.example.com"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: splunk-s2s
+spec:
+  hosts:
+  - "splunk.example.com"
+  gateways:
+  - "splunk-s2s"
+  tcp:
+  - match:
+    - port: 9997
+    route:
+    - destination:
+        port:
+          number: 9997
+        host: splunk-example-indexer-service
+```
+
+If you'd like to encrypt the S2S connections from your forwarders, you can use
+Istio to terminate and forward the traffic for you. Just modify your `Gateway`
+to use `TLS` instead of `TCP`:
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: splunk-s2s
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 9997
+      name: tcp-s2s
+      protocol: TLS
+    tls:
+      mode: SIMPLE
+      credentialName: "splunk-example-com-tls"
+    hosts:
+    - "splunk.example.com"
+```
+
+*Please note: this configuration requires that `outputs.conf` on your forwarders
+includes the parameter `tlsHostname = splunk.example.com`. Istio requires this TLS
+parameter to be defined for it to know which `VirtualService` to route to. If this
+is not defined, your forwarders will fail to connect.*
+
+If you only have one indexer cluster that you would like Istio to route all S2S
+traffic to, you can optionally replace "splunk.example.com" in the above examples
+with "*". In this case, you do not have to set `tlsHostname` in `outputs.conf` on
+your forwarders.
