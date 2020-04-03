@@ -119,7 +119,7 @@ Other make targets include (more info below):
 Ensure that you have the Custom Resource Definitions installed in your cluster:
 
 ```
-kubectl apply -f deploy/crds/combined.yaml
+kubectl apply -f deploy/crds
 ```
 
 Use this to run the operator as a local foreground process on your machine:

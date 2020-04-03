@@ -71,21 +71,6 @@ generate:
 	@cp deploy/rbac.yaml deploy/role.yaml
 	@operator-sdk generate crds
 	@rm -f deploy/role.yaml deploy/crds/*_cr.yaml
-	@echo Rebuilding deploy/crds/combined.yaml
-	@echo "---" > deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_standalones_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_searchheadclusters_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_indexerclusters_crd.yaml >> deploy/crds/combined.yaml
-	@echo "---" >> deploy/crds/combined.yaml
-	@cat deploy/crds/enterprise.splunk.com_sparks_crd.yaml >> deploy/crds/combined.yaml
-	@echo Rebuilding deploy/all-in-one-scoped.yaml
-	@cat deploy/crds/combined.yaml deploy/rbac.yaml deploy/operator.yaml > deploy/all-in-one-scoped.yaml
-	@echo Rebuilding deploy/all-in-one-cluster.yaml
-	@cat deploy/crds/combined.yaml deploy/rbac.yaml deploy/cluster_operator.yaml > deploy/all-in-one-cluster.yaml
 
 package: lint fmt generate
 	@build/package.sh
