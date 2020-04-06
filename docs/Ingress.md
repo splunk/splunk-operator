@@ -328,9 +328,19 @@ spec:
           ttl: 3600s
 ```
 
-## Example: Using Istio for S2S Traffic
+## Example: Using Istio for Splunk-to-Splunk (S2S) Traffic
 
 Istio can be used to route Splunk-to-Splunk (S2S) traffic directly to your indexers.
+
+First, you need to modify your `ingress-gateway` Service to listen for S2S TCP
+connections on port 9997:
+
+```
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-s2s","port":9997,"protocol":"TCP"}]}}'
+```
+
+The following example can be used to create a Gateway and VirtualService for
+forwarding unencrypted S2S traffic:
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -368,7 +378,7 @@ spec:
 ```
 
 If you'd like to encrypt the S2S connections from your forwarders, you can use
-Istio to terminate and forward the traffic for you. Just modify your `Gateway`
+Istio to terminate TLS and forward the traffic for you. Just modify your `Gateway`
 to use `TLS` instead of `TCP`:
 
 ```yaml
@@ -391,12 +401,12 @@ spec:
     - "splunk.example.com"
 ```
 
-*Please note: this configuration requires that `outputs.conf` on your forwarders
-includes the parameter `tlsHostname = splunk.example.com`. Istio requires this TLS
-parameter to be defined for it to know which `VirtualService` to route to. If this
-is not defined, your forwarders will fail to connect.*
+*Please note*: this TLS example requires that `outputs.conf` on your forwarders
+includes the parameter `tlsHostname = splunk.example.com`. Istio requires this
+TLS header to be defined for it to know which indexers to forward the traffic
+to. If this parameter is not defined, your forwarder connections will fail.
 
-If you only have one indexer cluster that you would like Istio to route all S2S
-traffic to, you can optionally replace "splunk.example.com" in the above examples
-with "*". In this case, you do not have to set `tlsHostname` in `outputs.conf` on
-your forwarders.
+If you only have one indexer cluster that you would like to use for all S2S
+traffic, you can optionally replace `splunk.example.com` in the above examples
+with the wildcard `*`. When you use this wildcard, you do not have to set the
+`tlsHostname` parameter in `outputs.conf` on your forwarders.
