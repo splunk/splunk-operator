@@ -1,0 +1,305 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [{
+        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "kind": "IndexerCluster",
+        "metadata": {
+          "name": "example"
+        },
+        "spec": {}
+      },
+      {
+        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "kind": "LicenseMaster",
+        "metadata": {
+          "name": "example"
+        },
+        "spec": {}
+      },
+      {
+        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "kind": "SearchHeadCluster",
+        "metadata": {
+          "name": "example"
+        },
+        "spec": {}
+      },
+      {
+        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "kind": "Spark",
+        "metadata": {
+          "name": "example"
+        },
+        "spec": {}
+      },
+      {
+        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "kind": "Standalone",
+        "metadata": {
+          "name": "example"
+        },
+        "spec": {}
+      }]
+    capabilities: Seamless Upgrades
+    categories: Big Data, Logging & Tracing, Monitoring, AI/Machine Learning
+    certified: "false"
+    containerImage: docker.io/splunk/splunk-operator:0.1.0
+    createdAt: "2019-12-18"
+    description: The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
+      Administrators to deploy and operate Enterprise deployments in a Kubernetes
+      infrastructure.
+    repository: ""
+    support: somebody
+  name: splunk.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v1alpha2
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+    - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+      kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
+      version: v1alpha2
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+    - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
+      kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v1alpha2
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+    - description: Spark is the Schema for a Spark cluster
+      kind: Spark
+      name: sparks.enterprise.splunk.com
+      version: v1alpha2
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v1alpha2
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+  description: |
+    Splunk Enterprise is a platform for operational intelligence. Our software
+    lets you collect, analyze, and act upon the untapped value of big data that
+    your technology infrastructure, security systems, and business applications
+    generate. It gives you insights to drive operational performance and
+    business results.
+
+    Please refer to [Splunk
+    products](https://www.splunk.com/en_us/software.html) for more knowledge
+    about the features and capabilities of Splunk, and how you can bring it into
+    your organization.
+
+    Please see the [getting started
+    guide](https://splunk.github.io/splunk-operator/) to get up and running with
+    the Splunk Operator for Kubernetes.
+
+    * [Known Issues for the Splunk
+    Operator](https://splunk.github.io/splunk-operator/#known-issues-for-the-splunk-operator)
+    * [Prerequisites for the Splunk
+    Operator](https://splunk.github.io/splunk-operator/#prerequisites-for-the-splunk-operator)
+    * [Installing the Splunk
+    Operator](https://splunk.github.io/splunk-operator/#installing-the-splunk-operator)
+    * [Creating Splunk Enterprise
+    Deployments](https://splunk.github.io/splunk-operator/#creating-splunk-enterprise-deployments)
+
+    COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source
+    product developed by Splunkers with contributions from the community of
+    partners and customers. This unique product will be enhanced, maintained and
+    supported by the community, led by Splunkers with deep subject matter
+    expertise. The primary reason why Splunk is taking this approach is to push
+    product development closer to those that use and depend upon it. This direct
+    connection will help us all be more successful and move at a rapid pace.
+
+    For help, please first read our [Frequently Asked
+    Questions](https://splunk.github.io/splunk-operator/FAQ.html)
+
+    Community Support & Discussions on
+    [Slack](https://splunk-usergroups.slack.com/) channel #splunk-operator
+
+    File Issues or Enhancements in
+    [GitHub](https://github.com/splunk/splunk-operator/issues)
+    splunk/splunk-operator
+  displayName: Splunk Operator for Kubernetes
+  install:
+    spec:
+      deployments:
+      - name: splunk-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              name: splunk-operator
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                name: splunk-operator
+            spec:
+              containers:
+              - env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: OPERATOR_NAME
+                  value: splunk-operator
+                - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+                  value: docker.io/splunk/splunk:8.0.3
+                - name: RELATED_IMAGE_SPLUNK_SPARK
+                  value: docker.io/splunk/spark:0.0.2
+                image: docker.io/splunk/splunk-operator:0.1.0
+                imagePullPolicy: IfNotPresent
+                name: splunk-operator
+                resources: {}
+              serviceAccountName: splunk-operator
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          - endpoints
+          - persistentvolumeclaims
+          - configmaps
+          - secrets
+          - pods
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          - daemonsets
+          - replicasets
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        serviceAccountName: splunk-operator
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - Splunk
+  - logging
+  links:
+  - name: Getting Started with the Splunk Operator for Kubernetes
+    url: https://splunk.github.io/splunk-operator/
+  - name: Introducing the Splunk Operator for Kubernetes
+    url: https://www.splunk.com/en_us/blog/cloud/introducing-the-splunk-operator-for-kubernetes.html
+  - name: An Insider's Guide to Splunk on Containers and Kubernetes
+    url: https://www.splunk.com/blog/2019/05/08/an-insider-s-guide-to-splunk-on-containers-and-kubernetes.html
+  maintainers:
+  - email: docker-maint@splunk.com
+    name: Splunk Docker Maintainers
+  maturity: alpha
+  minKubeVersion: 1.13.0
+  provider:
+    name: Splunk Inc.
+  version: 0.1.0

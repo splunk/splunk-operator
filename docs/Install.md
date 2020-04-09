@@ -17,15 +17,13 @@ wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-install
 
 ## Installation By a Regular User
 
-Kubernetes only allows administrators to install new
-`CustomResourceDefinition`, `ClusterRole` and `ClusterRoleBinding` objects.
-All other objects included in the `splunk-operator.yaml` file can be installed
-by regular users within their own namespaces. If you are not an administrator,
-you can have someone else create these objects for you by running
+Kubernetes only allows administrators to install new `CustomResourceDefinition`
+objects. All other objects included in the `splunk-operator.yaml` file can be
+installed by regular users within their own namespaces. If you are not an
+administrator, you can have someone else create these objects for you by running
 
 ```
 kubectl apply -f http://tiny.cc/splunk-operator-crds
-kubectl apply -f http://tiny.cc/splunk-operator-rbac
 ```
 
 You should then be able download and use the following YAML to install the

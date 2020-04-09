@@ -39,6 +39,10 @@ local:
 	@mkdir -p ./build/_output/bin
 	@go build -v -o ./build/_output/bin/splunk-operator-local ./cmd/manager
 
+scorecard:
+	@echo Running operator-sdk scorecard tests
+	@build/run_scorecard.sh
+
 test:
 	@echo Running unit tests for splunk-operator
 	@go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/resources github.com/splunk/splunk-operator/pkg/splunk/spark github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/reconcile github.com/splunk/splunk-operator/pkg/splunk/client
@@ -68,9 +72,9 @@ generate:
 	@echo Running operator-sdk generate k8s
 	@operator-sdk generate k8s
 	@echo Running operator-sdk generate crds
-	@cp deploy/rbac.yaml deploy/role.yaml
 	@operator-sdk generate crds
-	@rm -f deploy/role.yaml deploy/crds/*_cr.yaml
+	@rm -f deploy/crds/*_cr.yaml
+	@build/make_bundle.sh
 
 package: lint fmt generate
 	@build/package.sh

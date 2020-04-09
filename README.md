@@ -54,6 +54,7 @@ which are used by various `make` targets:
 go get -u golang.org/x/lint/golint
 go get -u golang.org/x/tools/cmd/cover
 go get -u github.com/mattn/goveralls
+go get -u github.com/mikefarah/yq/v3
 ```
 
 
@@ -106,7 +107,8 @@ Other make targets include (more info below):
 * `make image`: builds the `splunk/splunk-operator` container image without using `splunk/splunk-operator-builder`
 * `make local`: builds the splunk-operator-local binary for test and debugging purposes
 * `make test`: Runs unit tests with Coveralls code coverage output to coverage.out
-* `make generate`: runs operator-generate k8s and crds commands, updating installation YAML files
+* `make scorecard`: Runs operator-sdk scorecard tests using OLM installation bundle
+* `make generate`: runs operator-generate k8s, crds and csv commands, updating installation YAML files and OLM bundle
 * `make package`: generates tarball of the `splunk/splunk-operator` container image and installation YAML file
 * `make clean`: removes the binary build output and `splunk/splunk-operator` container image
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context

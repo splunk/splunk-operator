@@ -78,6 +78,8 @@ tags
 
 .idea
 .DS_Store
+.osdk-scorecard.yaml
+.yq_script.yaml
 Gopkg.lock
 vendor/
 push_targets
