@@ -89,3 +89,4 @@ splunk-operator-*.tar.gz
 clair-scanner
 clair-scanner-logs
 release-*
+deploy/olm-certified
