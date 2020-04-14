@@ -46,6 +46,21 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: spec.customresourcedefinitions.owned[4].resources
   value: $RESOURCES
 - command: update
+  path: spec.customresourcedefinitions.owned[0].displayName
+  value: IndexerCluster
+- command: update
+  path: spec.customresourcedefinitions.owned[1].displayName
+  value: LicenseMaster
+- command: update
+  path: spec.customresourcedefinitions.owned[2].displayName
+  value: SearchHeadCluster
+- command: update
+  path: spec.customresourcedefinitions.owned[3].displayName
+  value: Spark
+- command: update
+  path: spec.customresourcedefinitions.owned[4].displayName
+  value: Standalone
+- command: update
   path: metadata.annotations.alm-examples
   value: |-
     [{

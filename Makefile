@@ -76,7 +76,7 @@ generate:
 	@rm -f deploy/crds/*_cr.yaml
 	@build/make_bundle.sh
 
-package: lint fmt generate
+package: lint fmt generate image
 	@build/package.sh
 
 clean: stop_clair_scanner
