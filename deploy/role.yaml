@@ -1,6 +1,6 @@
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: splunk:operator:namespace-manager
 rules:
@@ -52,17 +52,3 @@ rules:
   - '*'
   verbs:
   - '*'
----
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRole
-metadata:
-  labels:
-    rbac.authorization.k8s.io/aggregate-to-admin: "true"
-  name: splunk:operator:resource-manager
-rules:
-  - apiGroups:
-      - enterprise.splunk.com
-    resources:
-      - '*'
-    verbs:
-      - '*'

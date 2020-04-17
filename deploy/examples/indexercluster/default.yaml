@@ -1,0 +1,5 @@
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: IndexerCluster
+metadata:
+  name: test
+spec: {}
