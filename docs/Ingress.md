@@ -205,12 +205,6 @@ spec:
     - "deployer.splunk.example.com"
     - "cluster-master.splunk.example.com"
     - "license-master.splunk.example.com"
-  - port:
-      number: 9997
-      name: tcp
-      protocol: TCP
-    hosts:
-    - "*"
 ```
 
 Note that `credentialName` references the same `secretName` created and
@@ -266,14 +260,6 @@ spec:
         port:
           number: 8000
         host: splunk-example-search-head-service
-  tcp:
-  - match:
-    - port: 9997
-    route:
-    - destination:
-        port:
-          number: 9997
-        host: splunk-example-indexer-service
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -341,3 +327,86 @@ spec:
           name: SPLUNK_ISTIO_SESSION
           ttl: 3600s
 ```
+
+## Example: Using Istio for Splunk-to-Splunk (S2S) Traffic
+
+Istio can be used to route Splunk-to-Splunk (S2S) traffic directly to your indexers.
+
+First, you need to modify your `ingress-gateway` Service to listen for S2S TCP
+connections on port 9997:
+
+```
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-s2s","port":9997,"protocol":"TCP"}]}}'
+```
+
+The following example can be used to create a Gateway and VirtualService for
+forwarding unencrypted S2S traffic:
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: splunk-s2s
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 9997
+      name: tcp-s2s
+      protocol: TCP
+    hosts:
+    - "splunk.example.com"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: splunk-s2s
+spec:
+  hosts:
+  - "splunk.example.com"
+  gateways:
+  - "splunk-s2s"
+  tcp:
+  - match:
+    - port: 9997
+    route:
+    - destination:
+        port:
+          number: 9997
+        host: splunk-example-indexer-service
+```
+
+If you'd like to encrypt the S2S connections from your forwarders, you can use
+Istio to terminate TLS and forward the traffic for you. Just modify your `Gateway`
+to use `TLS` instead of `TCP`:
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: splunk-s2s
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 9997
+      name: tcp-s2s
+      protocol: TLS
+    tls:
+      mode: SIMPLE
+      credentialName: "splunk-example-com-tls"
+    hosts:
+    - "splunk.example.com"
+```
+
+*Please note*: this TLS example requires that `outputs.conf` on your forwarders
+includes the parameter `tlsHostname = splunk.example.com`. Istio requires this
+TLS header to be defined for it to know which indexers to forward the traffic
+to. If this parameter is not defined, your forwarder connections will fail.
+
+If you only have one indexer cluster that you would like to use for all S2S
+traffic, you can optionally replace `splunk.example.com` in the above examples
+with the wildcard `*`. When you use this wildcard, you do not have to set the
+`tlsHostname` parameter in `outputs.conf` on your forwarders.
