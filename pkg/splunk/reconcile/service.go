@@ -23,7 +23,7 @@ import (
 
 // ApplyService creates or updates a Kubernetes Service
 func ApplyService(client ControllerClient, revised *corev1.Service) error {
-	scopedLog := log.WithName("ApplyService").WithValues(
+	scopedLog := rconcilelog.WithName("ApplyService").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
 

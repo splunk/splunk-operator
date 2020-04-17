@@ -38,7 +38,7 @@ func ApplyIndexerCluster(client ControllerClient, cr *enterprisev1.IndexerCluste
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyIndexerCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := rconcilelog.WithName("ApplyIndexerCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateIndexerClusterSpec(&cr.Spec)

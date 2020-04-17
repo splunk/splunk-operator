@@ -74,7 +74,7 @@ func indexerClusterPodManagerTester(t *testing.T, method string, mockHandlers []
 	wantCalls map[string][]mockFuncCall, wantError error, initObjects ...runtime.Object) {
 
 	// test for updating
-	scopedLog := log.WithName(method)
+	scopedLog := rconcilelog.WithName(method)
 	cr := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",

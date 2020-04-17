@@ -101,7 +101,7 @@ func ApplyStatefulSet(c ControllerClient, revised *appsv1.StatefulSet) (enterpri
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
 func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, mgr StatefulSetPodManager, desiredReplicas int32) (enterprisev1.ResourcePhase, error) {
 
-	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
+	scopedLog := rconcilelog.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
@@ -165,7 +165,7 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
 				return enterprisev1.PhaseError, err
 			}
-			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			rconcilelog.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
 			err = c.Delete(context.Background(), &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)

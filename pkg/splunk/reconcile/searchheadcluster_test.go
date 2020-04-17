@@ -73,7 +73,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 	wantCalls map[string][]mockFuncCall, wantError error, initObjects ...runtime.Object) {
 
 	// test for updating
-	scopedLog := log.WithName(method)
+	scopedLog := rconcilelog.WithName(method)
 	cr := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",

@@ -32,7 +32,7 @@ import (
 )
 
 // kubernetes logger used by splunk.reconcile package
-var log = logf.Log.WithName("splunk.reconcile")
+var rconcilelog = logf.Log.WithName("splunk.reconcile")
 
 // simple stdout logger, used for debugging
 //var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
@@ -50,7 +50,7 @@ type ControllerClient interface {
 
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(client ControllerClient, obj ResourceObject) error {
-	scopedLog := log.WithName("CreateResource").WithValues(
+	scopedLog := rconcilelog.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
@@ -68,7 +68,7 @@ func CreateResource(client ControllerClient, obj ResourceObject) error {
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
 func UpdateResource(client ControllerClient, obj ResourceObject) error {
-	scopedLog := log.WithName("UpdateResource").WithValues(
+	scopedLog := rconcilelog.WithName("UpdateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Update(context.TODO(), obj)
@@ -100,7 +100,7 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta, name string) bool {
-	scopedLog := log.WithName("MergePodMetaUpdates").WithValues("name", name)
+	scopedLog := rconcilelog.WithName("MergePodMetaUpdates").WithValues("name", name)
 	result := false
 
 	// check Annotations
@@ -125,7 +125,7 @@ func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta,
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
 func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
-	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
+	scopedLog := rconcilelog.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
 
 	// check for changes in Affinity
@@ -207,7 +207,7 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 
 // MergeServiceSpecUpdates merges the current and revised spec of the service object
 func MergeServiceSpecUpdates(current *corev1.ServiceSpec, revised *corev1.ServiceSpec, name string) bool {
-	scopedLog := log.WithName("MergeServiceSpecUpdates").WithValues("name", name)
+	scopedLog := rconcilelog.WithName("MergeServiceSpecUpdates").WithValues("name", name)
 	result := false
 
 	// check service Type

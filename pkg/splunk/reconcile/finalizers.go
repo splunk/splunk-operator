@@ -32,7 +32,7 @@ const (
 // CheckSplunkDeletion checks to see if deletion was requested for the custom resource.
 // If so, it will process and remove any remaining finalizers.
 func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, error) {
-	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := rconcilelog.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
 	// sanity check: return early if missing GetDeletionTimestamp
@@ -73,7 +73,7 @@ func CheckSplunkDeletion(cr enterprisev1.MetaObject, c ControllerClient) (bool, 
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
 func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
-	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := rconcilelog.WithName("DeleteSplunkPvc").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	var component string
 	switch cr.GetTypeMeta().Kind {
@@ -121,7 +121,7 @@ func DeleteSplunkPvc(cr enterprisev1.MetaObject, c ControllerClient) error {
 
 // RemoveSplunkFinalizer removes a finalizer from a custom resource.
 func RemoveSplunkFinalizer(cr enterprisev1.MetaObject, c ControllerClient, finalizer string) error {
-	scopedLog := log.WithName("RemoveSplunkFinalizer").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := rconcilelog.WithName("RemoveSplunkFinalizer").WithValues("kind", cr.GetTypeMeta().Kind, "name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 	scopedLog.Info("Removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed

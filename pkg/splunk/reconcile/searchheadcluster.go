@@ -37,7 +37,7 @@ func ApplySearchHeadCluster(client ControllerClient, cr *enterprisev1.SearchHead
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
+	scopedLog := rconcilelog.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetIdentifier(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := enterprise.ValidateSearchHeadClusterSpec(&cr.Spec)

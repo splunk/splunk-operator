@@ -25,7 +25,7 @@ import (
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
 func ApplyDeployment(c ControllerClient, revised *appsv1.Deployment) (enterprisev1.ResourcePhase, error) {
-	scopedLog := log.WithName("ApplyDeployment").WithValues(
+	scopedLog := rconcilelog.WithName("ApplyDeployment").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
 

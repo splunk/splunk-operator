@@ -108,6 +108,9 @@ type CommonSplunkSpec struct {
 
 	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
+
+	// SecretsRef refers to kubernetes secret that holds Splunk secrets that are overriden by
+	SecretsRef corev1.ObjectReference `json:"secretsRef"`
 }
 
 // MetaObject is used to represent common interfaces of custom resources

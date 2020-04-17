@@ -41,6 +41,7 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 	}
 	out.LicenseMasterRef = in.LicenseMasterRef
 	out.IndexerClusterRef = in.IndexerClusterRef
+	out.SecretsRef = in.SecretsRef
 	return
 }
 

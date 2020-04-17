@@ -314,25 +314,60 @@ func GetSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 }
 
 // GetSplunkSecrets returns a Kubernetes Secret containing randomly generated default secrets to use for a Splunk Enterprise resource.
-func GetSplunkSecrets(cr enterprisev1.MetaObject, instanceType InstanceType, idxcSecret []byte, pass4SymmKey []byte) *corev1.Secret {
-	// idxc_secret is option, and may be used to override random generation
-	if len(idxcSecret) == 0 {
-		idxcSecret = generateSplunkSecret()
+func GetSplunkSecrets(cr enterprisev1.MetaObject, instanceType InstanceType, idxcSecretFromIndexerOrLM []byte, pass4SymmKeyFromLM []byte, overridenSecrets *corev1.Secret) *corev1.Secret {
+
+	scopedLog := enterpriselog.WithName("GetSplunkSecrets").WithValues(
+		"kind", cr.GetTypeMeta().Kind, "instanceType", instanceType, "Custom Resource namespace", cr.GetNamespace(), "idxcSecretFromIndexerOrLM", idxcSecretFromIndexerOrLM,
+		"pass4SymmKeyFromLM", pass4SymmKeyFromLM)
+
+	scopedLog.Info("Preparing Splunk Secrets")
+
+	if overridenSecrets != nil {
+		scopedLog.Info(fmt.Sprintf(" Overriden secrets %v", overridenSecrets.Data))
 	}
 
-	// pass4SymmKey is option, and may be used to override random generation
-	if len(pass4SymmKey) == 0 {
-		pass4SymmKey = generateSplunkSecret()
+	var secretData = make(map[string][]byte)
+
+	// HecToken
+	if overridenSecrets != nil && len(overridenSecrets.Data[HecToken]) > 0 {
+		secretData[HecToken] = overridenSecrets.Data[HecToken]
+	} else {
+		secretData[HecToken] = generateHECToken()
 	}
 
-	// generate some default secret values to share across the cluster
-	secretData := map[string][]byte{
-		"hec_token":    generateHECToken(),
-		"password":     generateSplunkSecret(),
-		"pass4SymmKey": pass4SymmKey,
-		"idxc_secret":  idxcSecret,
-		"shc_secret":   generateSplunkSecret(),
+	// Password
+	if overridenSecrets != nil && len(overridenSecrets.Data[Password]) > 0 {
+		secretData[Password] = overridenSecrets.Data[Password]
+	} else {
+		secretData[Password] = generateSplunkSecret()
 	}
+
+	// Pass4SymmKey
+	if len(pass4SymmKeyFromLM) > 0 {
+		secretData[Pass4SymmKey] = pass4SymmKeyFromLM
+	} else if overridenSecrets != nil && len(overridenSecrets.Data[Pass4SymmKey]) > 0 {
+		secretData[Pass4SymmKey] = overridenSecrets.Data[Pass4SymmKey]
+	} else {
+		secretData[Pass4SymmKey] = generateSplunkSecret()
+	}
+
+	// IdxcSecret
+	if len(idxcSecretFromIndexerOrLM) > 0 {
+		secretData[IdxcSecret] = idxcSecretFromIndexerOrLM
+	} else if overridenSecrets != nil && len(overridenSecrets.Data[IdxcSecret]) > 0 {
+		secretData[IdxcSecret] = overridenSecrets.Data[IdxcSecret]
+	} else {
+		secretData[IdxcSecret] = generateSplunkSecret()
+	}
+
+	// ShcSecret
+	if overridenSecrets != nil && len(overridenSecrets.Data[ShcSecret]) > 0 {
+		secretData[ShcSecret] = overridenSecrets.Data[ShcSecret]
+	} else {
+		secretData[ShcSecret] = generateSplunkSecret()
+	}
+
+	// default.yml
 	secretData["default.yml"] = []byte(fmt.Sprintf(`
 splunk:
     hec_disabled: 0
@@ -350,6 +385,8 @@ splunk:
 		secretData["pass4SymmKey"],
 		secretData["idxc_secret"],
 		secretData["shc_secret"]))
+
+	scopedLog.Info(fmt.Sprintf("Prepared Splunk Secrets %v", secretData))
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

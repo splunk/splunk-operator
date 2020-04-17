@@ -272,7 +272,7 @@ func TestGetSplunkSecrets(t *testing.T) {
 		},
 	}
 
-	got := GetSplunkSecrets(&cr, SplunkIndexer, nil, nil)
+	got := GetSplunkSecrets(&cr, SplunkIndexer, nil, nil, nil)
 
 	if len(got.Data["hec_token"]) != 36 {
 		t.Errorf("GetSplunkSecrets() hec_token len = %d; want %d", len(got.Data["hec_token"]), 36)
@@ -300,7 +300,7 @@ func TestGetSplunkSecrets(t *testing.T) {
 
 	idxcSecret := []byte{'a', 'b'}
 	pass4SymmKey := []byte{'a', 'b'}
-	got = GetSplunkSecrets(&cr, SplunkIndexer, idxcSecret, pass4SymmKey)
+	got = GetSplunkSecrets(&cr, SplunkIndexer, idxcSecret, pass4SymmKey, nil)
 
 	if !bytes.Equal(got.Data["idxc_secret"], idxcSecret) {
 		t.Errorf("GetSplunkSecrets() idxc_secret = %v; want %v", got.Data["idxc_secret"], idxcSecret)
@@ -308,6 +308,39 @@ func TestGetSplunkSecrets(t *testing.T) {
 
 	if !bytes.Equal(got.Data["pass4SymmKey"], pass4SymmKey) {
 		t.Errorf("GetSplunkSecrets() pass4SymmKey = %v; want %v", got.Data["pass4SymmKey"], idxcSecret)
+	}
+
+	passwordOverride := []byte{'c', 'd'}
+	pass4SymmKeyOverride := []byte{'e', 'f'}
+	shcSecretOverride := []byte{'g', 'h'}
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mySecret",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"pass4SymmKey": pass4SymmKeyOverride,
+			"password":     passwordOverride,
+			"shc_secret":   shcSecretOverride,
+		},
+	}
+
+	got = GetSplunkSecrets(&cr, SplunkIndexer, idxcSecret, pass4SymmKey, &secret)
+
+	if !bytes.Equal(got.Data["idxc_secret"], idxcSecret) {
+		t.Errorf("GetSplunkSecrets() override test idxc_secret = %v; want %v", got.Data["idxc_secret"], idxcSecret)
+	}
+
+	if !bytes.Equal(got.Data["shc_secret"], shcSecretOverride) {
+		t.Errorf("GetSplunkSecrets() override test shc_secret = %v; want %v", got.Data["shc_secret"], shcSecretOverride)
+	}
+
+	if !bytes.Equal(got.Data["password"], passwordOverride) {
+		t.Errorf("GetSplunkSecrets() override test password = %v; want %v", got.Data["password"], passwordOverride)
+	}
+
+	if !bytes.Equal(got.Data["pass4SymmKey"], pass4SymmKey) {
+		t.Errorf("GetSplunkSecrets() override test pass4SymmKey = %v; want %v", got.Data["pass4SymmKey"], pass4SymmKey)
 	}
 }
 

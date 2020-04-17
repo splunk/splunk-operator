@@ -31,34 +31,48 @@ import (
 func ApplySplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType enterprise.InstanceType) (*corev1.Secret, error) {
 	var err error
 
+	scopedLog := rconcilelog.WithName("ApplySplunkConfig").WithValues(
+		"kind", cr.GetTypeMeta().Kind, "instanceType", instanceType, "Custom Resource namespace", cr.GetNamespace())
+
 	// if reference to indexer cluster, extract and re-use idxc.secret
 	// IndexerRef is not relevant for Indexer, and Indexer will use value from LicenseMaster to prevent cyclical dependency
-	var idxcSecret []byte
+	var idxcSecretFromIndexerOrLM []byte
 	if instanceType.ToKind() != "indexer" && instanceType.ToKind() != "license-master" && spec.IndexerClusterRef.Name != "" {
-		idxcSecret, err = GetSplunkSecret(client, cr, spec.IndexerClusterRef, enterprise.SplunkIndexer, "idxc_secret")
+		idxcSecretFromIndexerOrLM, err = GetSplunkSecret(client, cr, spec.IndexerClusterRef, enterprise.SplunkIndexer, "idxc_secret")
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// if reference to license master, extract and re-use pass4SymmKey
-	var pass4SymmKey []byte
+	// if reference to license master, extract and re-use pass4SymmKeyFromLM
+	var pass4SymmKeyFromLM []byte
 	if instanceType.ToKind() != "license-master" && spec.LicenseMasterRef.Name != "" {
-		pass4SymmKey, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "pass4SymmKey")
+		pass4SymmKeyFromLM, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "pass4SymmKey")
 		if err != nil {
 			return nil, err
 		}
 		if instanceType.ToKind() == "indexer" {
 			// get pass4SymmKey from LicenseMaster to avoid cyclical dependency
-			idxcSecret, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "idxc_secret")
+			idxcSecretFromIndexerOrLM, err = GetSplunkSecret(client, cr, spec.LicenseMasterRef, enterprise.SplunkLicenseMaster, "idxc_secret")
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
+	scopedLog.Info("Checking for overriden secrets..")
+
+	var overridenSecrets *corev1.Secret
+
+	if spec.SecretsRef.Name != "" {
+		overridenSecrets, err = GetSplunkSecretsToOverride(client, cr, spec.SecretsRef, instanceType)
+		if err != nil {
+			scopedLog.Error(err, fmt.Sprintf("Configured secretsRef does not exist %v", spec.SecretsRef.Name))
+		}
+	}
+
 	// create or retrieve splunk secrets
-	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecret, pass4SymmKey)
+	secrets := enterprise.GetSplunkSecrets(cr, instanceType, idxcSecretFromIndexerOrLM, pass4SymmKeyFromLM, overridenSecrets)
 	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), resources.AsOwner(cr)))
 	if secrets, err = ApplySecret(client, secrets); err != nil {
 		return nil, err
@@ -78,7 +92,7 @@ func ApplySplunkConfig(client ControllerClient, cr enterprisev1.MetaObject, spec
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
 func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error {
-	scopedLog := log.WithName("ApplyConfigMap").WithValues(
+	scopedLog := rconcilelog.WithName("ApplyConfigMap").WithValues(
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
 
@@ -103,7 +117,7 @@ func ApplyConfigMap(client ControllerClient, configMap *corev1.ConfigMap) error 
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
 func ApplySecret(client ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
-	scopedLog := log.WithName("ApplySecret").WithValues(
+	scopedLog := rconcilelog.WithName("ApplySecret").WithValues(
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
@@ -134,7 +148,7 @@ func GetSplunkSecret(client ControllerClient, cr enterprisev1.MetaObject, ref co
 		Name:      enterprise.GetSplunkSecretsName(ref.Name, instanceType),
 	}
 
-	scopedLog := log.WithName("GetSplunkSecret").WithValues(
+	scopedLog := rconcilelog.WithName("GetSplunkSecret").WithValues(
 		"kind", cr.GetTypeMeta().Kind, "name", namespacedName.Name, "namespace", namespacedName.Namespace, "secretName", secretName)
 
 	var secret corev1.Secret
@@ -150,4 +164,28 @@ func GetSplunkSecret(client ControllerClient, cr enterprisev1.MetaObject, ref co
 
 	scopedLog.Info("Re-using secret")
 	return result, nil
+}
+
+// GetSplunkSecretsToOverride is used to retrieve overriden secrets.
+func GetSplunkSecretsToOverride(client ControllerClient, cr enterprisev1.MetaObject, ref corev1.ObjectReference, instanceType enterprise.InstanceType) (*corev1.Secret, error) {
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = cr.GetNamespace()
+	}
+	namespacedName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      ref.Name,
+	}
+
+	scopedLog := rconcilelog.WithName("GetSplunkSecretsToOverride").WithValues(
+		"kind", cr.GetTypeMeta().Kind, "name", namespacedName.Name, "namespace", namespacedName.Namespace, "instanceType", instanceType)
+
+	var secret corev1.Secret
+	err := client.Get(context.TODO(), namespacedName, &secret)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get secret: %v", err)
+	}
+
+	scopedLog.Info(fmt.Sprintf("Returning overriden secret %v", secret.Data))
+	return &secret, nil
 }
