@@ -36,12 +36,20 @@ const (
 	// SplunkLicenseMaster controls one or more license slaves
 	SplunkLicenseMaster InstanceType = "license-master"
 
-	// Splunk secrets
-	HecToken     string = "hec_token"
-	Password     string = "password"
+	// HecToken key
+	HecToken string = "hec_token"
+
+	// Password key
+	Password string = "password"
+
+	// Pass4SymmKey key
 	Pass4SymmKey string = "pass4SymmKey"
-	IdxcSecret   string = "idxc_secret"
-	ShcSecret    string = "shc_secret"
+
+	// IdxcSecret key
+	IdxcSecret string = "idxc_secret"
+
+	// ShcSecret key
+	ShcSecret string = "shc_secret"
 )
 
 // ToString returns a string for a given InstanceType
