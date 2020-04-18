@@ -42,12 +42,20 @@ var log = logf.Log.WithName("controller_standalone")
 // Add creates a new Standalone Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileStandalone{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	// Use a new go client to work-around issues with the operator sdk design.
+	// If WATCH_NAMESPACE is empty for monitoring cluster-wide custom Splunk resources,
+	// the default caching client will attempt to list all resources in all namespaces for
+	// any get requests, even if the request is namespace-scoped.
+	options := client.Options{}
+	client, err := client.New(mgr.GetConfig(), options)
+	if err != nil {
+		return err
+	}
+	reconciler := ReconcileStandalone{
+		client: client,
+		scheme: mgr.GetScheme(),
+	}
+	return add(mgr, &reconciler)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: splunk-operator
+  template:
+    metadata:
+      labels:
+        name: splunk-operator
+    spec:
+      serviceAccountName: splunk-operator
+      containers:
+      - name: splunk-operator
+        image: splunk/splunk-operator
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "splunk-operator"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: "docker.io/splunk/splunk:8.0.3-20200415"
+        - name: RELATED_IMAGE_SPLUNK_SPARK
+          value: "docker.io/splunk/spark:0.0.2"
