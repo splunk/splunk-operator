@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -584,6 +585,69 @@ func TestValidateCommonSpec(t *testing.T) {
 	}
 }
 
+func TestCompareTolerations(t *testing.T) {
+	var a []corev1.Toleration
+	var b []corev1.Toleration
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareTolerations(a, b)
+		}
+		compareTester(t, "CompareTolerations", f, a, b, want)
+	}
+
+	// No change
+	test(false)
+	var nullToleration corev1.Toleration
+
+	toleration1 := corev1.Toleration{
+		Key:      "key1",
+		Operator: corev1.TolerationOpEqual,
+		Value:    "value1",
+		Effect:   corev1.TaintEffectNoSchedule,
+	}
+	toleration2 := corev1.Toleration{
+		Key:      "key1",
+		Operator: corev1.TolerationOpEqual,
+		Value:    "value1",
+		Effect:   corev1.TaintEffectNoSchedule,
+	}
+
+	// No change
+	a = []corev1.Toleration{nullToleration, nullToleration}
+	b = []corev1.Toleration{nullToleration, nullToleration}
+	test(false)
+
+	// No change
+	a = []corev1.Toleration{toleration1}
+	b = []corev1.Toleration{toleration2}
+	test(false)
+
+	// Change effect
+	var toleration corev1.Toleration
+
+	toleration = toleration2
+	toleration.Effect = corev1.TaintEffectNoExecute
+	a = []corev1.Toleration{toleration}
+	b = []corev1.Toleration{toleration1}
+	test(true)
+
+	// Change operator
+	toleration = toleration2
+	toleration.Operator = corev1.TolerationOpExists
+	a = []corev1.Toleration{toleration}
+	b = []corev1.Toleration{toleration1}
+	test(true)
+
+	// Change value
+	toleration = toleration2
+	toleration.Value = "newValue"
+	a = []corev1.Toleration{toleration}
+	b = []corev1.Toleration{toleration1}
+	test(true)
+
+}
+
 func TestCompareVolumes(t *testing.T) {
 	var a []corev1.Volume
 	var b []corev1.Volume
@@ -635,4 +699,70 @@ func TestCompareVolumes(t *testing.T) {
 	a = []corev1.Volume{secret3Volume}
 	b = []corev1.Volume{secret4Volume}
 	test(false)
+}
+
+func TestSortAndCompareSlices(t *testing.T) {
+
+	// Test panic cases
+	var done sync.WaitGroup
+
+	var deferFunc = func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expect code panic when comparing slices")
+		}
+		done.Done()
+	}
+
+	done.Add(1)
+	go func() {
+		var a corev1.ServicePort
+		var b corev1.ContainerPort
+		defer deferFunc()
+		sortAndCompareSlices(a, b, "Name")
+	}()
+
+	done.Add(1)
+	go func() {
+		var a []corev1.ServicePort
+		var b []corev1.ContainerPort
+
+		defer deferFunc()
+		sortAndCompareSlices(a, b, "Name")
+	}()
+	done.Add(1)
+	go func() {
+		defer deferFunc()
+		a := []corev1.ServicePort{{Name: "http", Port: 80}}
+		b := []corev1.ServicePort{{Name: "http", Port: 80}}
+		sortAndCompareSlices(a, b, "SortFieldNameDoesNotExist")
+	}()
+	done.Wait()
+
+	// Test inequality
+	var a []corev1.ServicePort
+	var b []corev1.ServicePort
+	a = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}}
+	b = []corev1.ServicePort{{Name: "http", Port: 81}, {Name: "https", Port: 443}}
+	if !sortAndCompareSlices(a, b, "Name") {
+		t.Errorf("Expect 2 slices to be not equal - (%v, %v)", a, b)
+	}
+
+	a = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}}
+	b = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}, {Name: "ssh", Port: 22}}
+	if !sortAndCompareSlices(a, b, "Name") {
+		t.Errorf("Expect 2 slices to be not equal - (%v, %v)", a, b)
+	}
+
+	// Test equality
+	a = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}}
+	b = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}}
+	if sortAndCompareSlices(a, b, "Name") {
+		t.Errorf("Expect 2 slices to be equal - (%v, %v)", a, b)
+	}
+
+	a = []corev1.ServicePort{{Name: "ssh", Port: 22}, {Name: "https", Port: 443}, {Name: "http", Port: 80}}
+	b = []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}, {Name: "ssh", Port: 22}}
+	if sortAndCompareSlices(a, b, "Name") {
+		t.Errorf("Expect 2 slices to be equal - (%v, %v)", a, b)
+	}
 }

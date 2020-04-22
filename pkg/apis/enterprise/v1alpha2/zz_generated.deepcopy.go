@@ -13,6 +13,13 @@ import (
 func (in *CommonSpec) DeepCopyInto(out *CommonSpec) {
 	*out = *in
 	in.Affinity.DeepCopyInto(&out.Affinity)
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	in.ServiceTemplate.DeepCopyInto(&out.ServiceTemplate)
 	return

@@ -114,29 +114,6 @@ func SortContainerPorts(ports []corev1.ContainerPort) []corev1.ContainerPort {
 	return sorted
 }
 
-// CompareContainerPorts is a generic comparer of two Kubernetes ContainerPorts.
-// It returns true if there are material differences between them, or false otherwise.
-// TODO: could use refactoring; lots of boilerplate copy-pasta here
-func CompareContainerPorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
-	// first, check for short-circuit opportunity
-	if len(a) != len(b) {
-		return true
-	}
-
-	// make sorted copies of a and b
-	aSorted := SortContainerPorts(a)
-	bSorted := SortContainerPorts(b)
-
-	// iterate elements, checking for differences
-	for n := range aSorted {
-		if aSorted[n] != bSorted[n] {
-			return true
-		}
-	}
-
-	return false
-}
-
 // SortServicePorts returns a sorted list of Kubernetes ServicePorts.
 func SortServicePorts(ports []corev1.ServicePort) []corev1.ServicePort {
 	sorted := make([]corev1.ServicePort, len(ports))
@@ -145,118 +122,41 @@ func SortServicePorts(ports []corev1.ServicePort) []corev1.ServicePort {
 	return sorted
 }
 
+// CompareContainerPorts is a generic comparer of two Kubernetes ContainerPorts.
+// It returns true if there are material differences between them, or false otherwise.
+// TODO: could use refactoring; lots of boilerplate copy-pasta here
+func CompareContainerPorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
+	return sortAndCompareSlices(a, b, "ContainerPort")
+}
+
 // CompareServicePorts is a generic comparer of two Kubernetes ServicePorts.
 // It returns true if there are material differences between them, or false otherwise.
 // TODO: could use refactoring; lots of boilerplate copy-pasta here
 func CompareServicePorts(a []corev1.ServicePort, b []corev1.ServicePort) bool {
-	// first, check for short-circuit opportunity
-	if len(a) != len(b) {
-		return true
-	}
-
-	// make sorted copies of a and b
-	aSorted := SortServicePorts(a)
-	bSorted := SortServicePorts(b)
-
-	// iterate elements, checking for differences
-	for n := range aSorted {
-		if aSorted[n] != bSorted[n] {
-			return true
-		}
-	}
-
-	return false
-}
-
-// SortEnvs returns a sorted list of Kubernetes EnvVar.
-func SortEnvs(envvars []corev1.EnvVar) []corev1.EnvVar {
-	sorted := make([]corev1.EnvVar, len(envvars))
-	copy(sorted, envvars)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
-	return sorted
+	return sortAndCompareSlices(a, b, "Port")
 }
 
 // CompareEnvs is a generic comparer of two Kubernetes Env variables.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
-	// first, check for short-circuit opportunity
-	if len(a) != len(b) {
-		return true
-	}
-
-	// make sorted copies of a and b
-	aSorted := SortEnvs(a)
-	bSorted := SortEnvs(b)
-
-	// iterate elements, checking for differences
-	for n := range aSorted {
-		if aSorted[n] != bSorted[n] {
-			return true
-		}
-	}
-
-	return false
+	return sortAndCompareSlices(a, b, "Name")
 }
 
-// SortVolumes returns a sorted list of Kubernetes Volumes.
-func sortVolumes(volumes []corev1.Volume) []corev1.Volume {
-	sorted := make([]corev1.Volume, len(volumes))
-	copy(sorted, volumes)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
-	return sorted
+// CompareTolerations compares the 2 list of tolerations
+func CompareTolerations(a []corev1.Toleration, b []corev1.Toleration) bool {
+	return sortAndCompareSlices(a, b, "Key")
 }
 
 // CompareVolumes is a generic comparer of two Kubernetes Volumes.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {
-	// first, check for short-circuit opportunity
-	if len(a) != len(b) {
-		return true
-	}
-
-	// make sorted copies of a and b
-	aSorted := sortVolumes(a)
-	bSorted := sortVolumes(b)
-
-	// iterate elements, checking for differences
-	for n := range aSorted {
-		// Must use DeepEqual() because there are pointers inside.
-		if !reflect.DeepEqual(aSorted[n], bSorted[n]) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// sortVolumeMounts returns a sorted list of Kubernetes VolumeMounts.
-func sortVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	sorted := make([]corev1.VolumeMount, len(mounts))
-	copy(sorted, mounts)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
-	return sorted
+	return sortAndCompareSlices(a, b, "Name")
 }
 
 // CompareVolumeMounts is a generic comparer of two Kubernetes VolumeMounts.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
-	// first, check for short-circuit opportunity
-	if len(a) != len(b) {
-		return true
-	}
-
-	// make sorted copies of a and b
-	aSorted := sortVolumeMounts(a)
-	bSorted := sortVolumeMounts(b)
-
-	// iterate elements, checking for differences
-	for n := range aSorted {
-		if aSorted[n] != bSorted[n] {
-			return true
-		}
-	}
-
-	return false
+	return sortAndCompareSlices(a, b, "Name")
 }
 
 // CompareByMarshall compares two Kubernetes objects by marshalling them to JSON.
@@ -445,4 +345,59 @@ func ValidateCommonSpec(spec *enterprisev1.CommonSpec, defaultResources corev1.R
 	ValidateResources(&spec.Resources, defaultResources)
 
 	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
+}
+
+// sortAndCompareSlices sorts and compare the slices for equality. Return true if NOT equal. False otherwise
+func sortAndCompareSlices(a interface{}, b interface{}, keyName string) bool {
+	aType := reflect.TypeOf(a)
+	bType := reflect.TypeOf(b)
+
+	if aType.Kind() != reflect.Slice || bType.Kind() != reflect.Slice {
+		panic(fmt.Sprintf("SortAndCompareSlices can only be used on slices: Kind(a)=%v, Kind(b)=%v", aType.Kind(), bType.Kind()))
+	}
+
+	if aType.Elem() != bType.Elem() {
+		panic(fmt.Sprintf("SortAndCompareSlides can only be used on slices on the same type: Elem(a)=%v, Elem(b)=%v", aType.Elem(), bType.Elem()))
+	}
+
+	_, found := aType.Elem().FieldByName(keyName)
+	if !found {
+		panic(fmt.Sprintf("SortAndCompareSlides cannot find the specified key name '%s' to sort on", keyName))
+	}
+
+	aValue := reflect.ValueOf(a)
+	bValue := reflect.ValueOf(b)
+	if aValue.Len() != bValue.Len() {
+		return true
+	}
+
+	sortFunc := func(s interface{}, i, j int) bool {
+		sValue := reflect.ValueOf(s)
+
+		val1 := sValue.Index(i).FieldByName(keyName)
+		val2 := sValue.Index(j).FieldByName(keyName)
+
+		switch val1.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return val1.Int() < val2.Int()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return val1.Uint() < val2.Uint()
+		case reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+			return val1.Float() < val2.Float()
+		case reflect.String:
+			return val1.String() < val2.String()
+		default:
+			panic(fmt.Sprintf("SortAndCompareSlides can only sort on keyName of int, uint, float or string type: Kind(%s)=%v", keyName, val1.Kind()))
+		}
+	}
+
+	sort.Slice(a, func(i, j int) bool {
+		return sortFunc(a, i, j)
+	})
+
+	sort.Slice(b, func(i, j int) bool {
+		return sortFunc(b, i, j)
+	})
+
+	return !reflect.DeepEqual(a, b)
 }

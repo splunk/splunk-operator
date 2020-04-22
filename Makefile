@@ -1,6 +1,6 @@
 # Makefile for Splunk Operator
 
-.PHONY: all builder builder-image image package local clean run fmt lint
+.PHONY: all builder builder-image image package local clean run fmt lint test
 
 # Security Scanner Variables
 SCANNER_DATE := `date +%Y-%m-%d`
