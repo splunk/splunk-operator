@@ -179,6 +179,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      affinity,
+					Tolerations:   cr.Spec.Tolerations,
 					SchedulerName: cr.Spec.SchedulerName,
 					Hostname:      GetSparkServiceName(instanceType, cr.GetIdentifier(), false),
 					Containers: []corev1.Container{

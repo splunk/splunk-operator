@@ -339,5 +339,108 @@ func TestGetService(t *testing.T) {
 	}
 
 	test(SplunkIndexer, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"user-defined","port":32000,"targetPort":6443},{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"status":{"loadBalancer":{}}}`)
+}
 
+func TestSetVolumeDefault(t *testing.T) {
+	cr := enterprisev1.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	if cr.Spec.CommonSplunkSpec.Volumes == nil {
+		t.Errorf("setVolumeDefaults() returns nil for Volumes")
+	}
+
+	mode := int32(644)
+	cr.Spec.CommonSplunkSpec.Volumes = []corev1.Volume{
+		{
+			Name: "vol1",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "top-secret1",
+				},
+			},
+		},
+		{
+			Name: "vol2",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  "top-secret2",
+					DefaultMode: &mode,
+				},
+			},
+		},
+	}
+
+	// Make sure the default mode is set correcty
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	if cr.Spec.CommonSplunkSpec.Volumes == nil {
+		t.Errorf("setVolumeDefaults() returns nil for Volumes")
+	}
+
+	for _, v := range cr.Spec.CommonSplunkSpec.Volumes {
+		if v.Name == "vol1" {
+			if *v.Secret.DefaultMode != int32(corev1.SecretVolumeSourceDefaultMode) {
+				t.Errorf("setVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", int32(corev1.SecretVolumeSourceDefaultMode), *v.Secret.DefaultMode)
+			}
+		} else if v.Name == "vol2" {
+			if *v.Secret.DefaultMode != mode {
+				t.Errorf("setVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", mode, *v.Secret.DefaultMode)
+			}
+		}
+	}
+
+}
+
+func TestSetServiceTemplateDefaults(t *testing.T) {
+	cr := enterprisev1.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.IndexerClusterSpec{
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				CommonSpec: enterprisev1.CommonSpec{
+					ServiceTemplate: corev1.Service{
+						Spec: corev1.ServiceSpec{
+							Ports: []corev1.ServicePort{
+								{
+									Name: "http",
+									Port: 80,
+								},
+								{
+									Name: "https",
+									Port: 443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	setServiceTemplateDefaults(&cr.Spec.CommonSplunkSpec)
+	for _, p := range cr.Spec.CommonSplunkSpec.CommonSpec.ServiceTemplate.Spec.Ports {
+		switch p.Name {
+		case "http":
+			if p.TargetPort.IntValue() != int(p.Port) {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want %d, Got %d", p.Port, p.TargetPort.IntVal)
+			}
+			if p.Protocol != corev1.ProtocolTCP {
+				t.Errorf("setServiceTemplateDefaults() did not set protocol correctly. Want %s, Got %s", corev1.ProtocolTCP, p.Protocol)
+			}
+		case "https":
+			if p.TargetPort.IntValue() != 8443 {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want 8443, Got %d", p.TargetPort.IntVal)
+			}
+		}
+	}
 }
