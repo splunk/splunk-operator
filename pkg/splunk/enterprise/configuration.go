@@ -566,6 +566,7 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 				},
 				Spec: corev1.PodSpec{
 					Affinity:      affinity,
+					Tolerations:   spec.Tolerations,
 					SchedulerName: spec.SchedulerName,
 					Containers: []corev1.Container{
 						{

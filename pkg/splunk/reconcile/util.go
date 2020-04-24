@@ -137,6 +137,14 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 		result = true
 	}
 
+	if resources.CompareTolerations(current.Tolerations, revised.Tolerations) {
+		scopedLog.Info("Pod Tolerations differs",
+			"current", current.Tolerations,
+			"revised", revised.Tolerations)
+		current.Tolerations = revised.Tolerations
+		result = true
+	}
+
 	// check for changes in SchedulerName
 	if current.SchedulerName != revised.SchedulerName {
 		scopedLog.Info("Pod SchedulerName differs",

@@ -71,6 +71,9 @@ type CommonSpec struct {
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
 	Affinity corev1.Affinity `json:"affinity"`
 
+	// Pod's tolerations for Kubernetes node's taint
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
 	// resource requirements for the pod containers
 	Resources corev1.ResourceRequirements `json:"resources"`
 
