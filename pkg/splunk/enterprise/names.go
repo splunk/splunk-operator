@@ -44,7 +44,7 @@ const (
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
-	// bytes used to generate random hexidecimal strings (e.g. HEC tokens)
+	// bytes used to generate random hexadecimal strings (e.g. HEC tokens)
 	hexBytes = "ABCDEF01234567890"
 
 	// bytes used to generate Splunk secrets
