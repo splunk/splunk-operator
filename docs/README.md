@@ -54,6 +54,7 @@ We have tested basic functionality of the Splunk Operator with the following:
 
 * [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/) (EKS)
 * [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine/) (GKE)
+* [Azure Kubernetes Service](https://azure.microsoft.com/en-us/services/kubernetes-service/) (AKS)
 * [Red Hat OpenShift](https://www.openshift.com/) (4.1)
 * [Docker Enterprise Edition](https://docs.docker.com/ee/) (3.1)
 * [Open Source Kubernetes](https://kubernetes.io/) (1.15.1)
