@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 )
 
 func splunkDeletionTester(t *testing.T, cr enterprisev1.MetaObject, delete func(enterprisev1.MetaObject, ControllerClient) (bool, error)) {
@@ -62,7 +62,7 @@ func splunkDeletionTester(t *testing.T, cr enterprisev1.MetaObject, delete func(
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
 		wantDeleted = true
 		mockCalls["Update"] = []mockFuncCall{
-			{metaName: fmt.Sprintf("*v1alpha2.%s-%s-%s", cr.GetTypeMeta().Kind, cr.GetNamespace(), cr.GetIdentifier())},
+			{metaName: fmt.Sprintf("*v1alpha3.%s-%s-%s", cr.GetTypeMeta().Kind, cr.GetNamespace(), cr.GetIdentifier())},
 		}
 		if component != "" {
 			mockCalls["Delete"] = []mockFuncCall{
