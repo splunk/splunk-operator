@@ -51,7 +51,7 @@ func getSplunkVolumeClaims(cr enterprisev1.MetaObject, spec *enterprisev1.Common
 	volumeClaims := []corev1.PersistentVolumeClaim{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "etc",
+				Name:      "pvc-etc",
 				Namespace: cr.GetNamespace(),
 				Labels:    labels,
 			},
@@ -66,7 +66,7 @@ func getSplunkVolumeClaims(cr enterprisev1.MetaObject, spec *enterprisev1.Common
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "var",
+				Name:      "pvc-var",
 				Namespace: cr.GetNamespace(),
 				Labels:    labels,
 			},
@@ -429,20 +429,6 @@ func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	return l
 }
 
-// getSplunkVolumeMounts returns a standard collection of Kubernetes volume mounts.
-func getSplunkVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      "pvc-etc",
-			MountPath: "/opt/splunk/etc",
-		},
-		{
-			Name:      "pvc-var",
-			MountPath: "/opt/splunk/var",
-		},
-	}
-}
-
 // addSplunkVolumeToTemplate modifies the podTemplateSpec object to incorporates an additional VolumeSource.
 func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name string, volumeSource corev1.VolumeSource) {
 
@@ -530,15 +516,6 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 		labels[k] = v
 	}
 
-	// prepare volume claims
-	volumeClaims, err := getSplunkVolumeClaims(cr, spec, labels)
-	if err != nil {
-		return nil, err
-	}
-	for idx := range volumeClaims {
-		volumeClaims[idx].ObjectMeta.Name = fmt.Sprintf("pvc-%s", volumeClaims[idx].ObjectMeta.Name)
-	}
-
 	// create statefulset configuration
 	statefulSet := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -574,13 +551,55 @@ func getSplunkStatefulSet(cr enterprisev1.MetaObject, spec *enterprisev1.CommonS
 							ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
 							Name:            "splunk",
 							Ports:           ports,
-							VolumeMounts:    getSplunkVolumeMounts(),
 						},
 					},
 				},
 			},
-			VolumeClaimTemplates: volumeClaims,
 		},
+	}
+
+	// update template to include storage for etc and var volumes
+	if spec.EphemeralStorage {
+		// add ephemeral volumes to the splunk pod for etc and opt
+		emptyVolumeSource := corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{Name: "mnt-splunk-etc", VolumeSource: emptyVolumeSource},
+			{Name: "mnt-splunk-var", VolumeSource: emptyVolumeSource},
+		}
+
+		// add volume mounts to splunk container for the ephemeral volumes
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "mnt-splunk-etc",
+				MountPath: "/opt/splunk/etc",
+			},
+			{
+				Name:      "mnt-splunk-var",
+				MountPath: "/opt/splunk/var",
+			},
+		}
+
+	} else {
+		// prepare and append persistent volume claims if storage is not ephemeral
+		var err error
+		statefulSet.Spec.VolumeClaimTemplates, err = getSplunkVolumeClaims(cr, spec, labels)
+		if err != nil {
+			return nil, err
+		}
+
+		// add volume mounts to splunk container for the PVCs
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "pvc-etc",
+				MountPath: "/opt/splunk/etc",
+			},
+			{
+				Name:      "pvc-var",
+				MountPath: "/opt/splunk/var",
+			},
+		}
 	}
 
 	// append labels and annotations from parent

@@ -86,6 +86,10 @@ func podManagerTester(t *testing.T, method string, mgr StatefulSetPodManager) {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        replicas,

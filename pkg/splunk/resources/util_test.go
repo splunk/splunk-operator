@@ -177,6 +177,70 @@ func TestGenerateSecret(t *testing.T) {
 	test("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 10)
 }
 
+func TestSortContainerPorts(t *testing.T) {
+	var ports []corev1.ContainerPort
+	var want []corev1.ContainerPort
+
+	test := func() {
+		got := SortContainerPorts(ports)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("SortContainerPorts() got %v; want %v", got, want)
+		}
+	}
+
+	ports = []corev1.ContainerPort{
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+		{ContainerPort: 3000},
+	}
+	want = ports
+	test()
+
+	ports = []corev1.ContainerPort{
+		{ContainerPort: 3000},
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+	}
+	want = []corev1.ContainerPort{
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+		{ContainerPort: 3000},
+	}
+	test()
+}
+
+func TestSortServicePorts(t *testing.T) {
+	var ports []corev1.ServicePort
+	var want []corev1.ServicePort
+
+	test := func() {
+		got := SortServicePorts(ports)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("SortServicePorts() got %v; want %v", got, want)
+		}
+	}
+
+	ports = []corev1.ServicePort{
+		{Port: 100},
+		{Port: 200},
+		{Port: 3000},
+	}
+	want = ports
+	test()
+
+	ports = []corev1.ServicePort{
+		{Port: 3000},
+		{Port: 100},
+		{Port: 200},
+	}
+	want = []corev1.ServicePort{
+		{Port: 100},
+		{Port: 200},
+		{Port: 3000},
+	}
+	test()
+}
+
 func compareTester(t *testing.T, method string, f func() bool, a interface{}, b interface{}, want bool) {
 	got := f()
 	if got != want {
@@ -427,6 +491,40 @@ func TestCompareByMarshall(t *testing.T) {
 
 	a = corev1.ResourceRequirements{Requests: medium, Limits: high}
 	b = corev1.ResourceRequirements{Requests: low, Limits: high}
+	test(true)
+}
+
+func TestCompareSortedStrings(t *testing.T) {
+	var a []string
+	var b []string
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareSortedStrings(a, b)
+		}
+		compareTester(t, "CompareSortedStrings", f, a, b, want)
+	}
+
+	test(false)
+
+	ip1 := "192.168.2.1"
+	ip2 := "192.168.2.100"
+	ip3 := "192.168.10.1"
+
+	a = []string{ip1, ip2}
+	b = []string{ip1, ip2}
+	test(false)
+
+	a = []string{ip1, ip3, ip2}
+	b = []string{ip3, ip2, ip1}
+	test(false)
+
+	a = []string{ip1, ip3}
+	b = []string{ip3, ip2}
+	test(true)
+
+	a = []string{ip1, ip3}
+	b = []string{ip3}
 	test(true)
 }
 

@@ -94,6 +94,9 @@ type CommonSplunkSpec struct {
 	// Storage capacity to request for /opt/splunk/var persistent volume claims (default=”50Gi”)
 	VarStorage string `json:"varStorage"`
 
+	// If true, ephemeral (emptyDir) storage will be used for /opt/splunk/etc and /opt/splunk/var volumes
+	EphemeralStorage bool `json:"ephemeralStorage"`
+
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
 	Volumes []corev1.Volume `json:"volumes"`
 

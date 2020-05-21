@@ -243,7 +243,7 @@ func MergeServiceSpecUpdates(current *corev1.ServiceSpec, revised *corev1.Servic
 		result = true
 	}
 
-	if resources.CompareIPLists(current.ExternalIPs, revised.ExternalIPs) {
+	if resources.CompareSortedStrings(current.ExternalIPs, revised.ExternalIPs) {
 		scopedLog.Info("External IPs differs",
 			"current", current.ExternalIPs,
 			"revised", revised.ExternalIPs)

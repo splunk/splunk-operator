@@ -5,12 +5,31 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
+OLD_VERSIONS="v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
 OLM_CATALOG=deploy/olm-catalog
 OLM_CERTIFIED=deploy/olm-certified
 YAML_SCRIPT_FILE=.yq_script.yaml
+
+# create yq template to append older CRD versions
+rm -f $YAML_SCRIPT_FILE
+for v in $OLD_VERSIONS; do
+  cat << EOF >>$YAML_SCRIPT_FILE
+- command: update
+  path: spec.versions[+]
+  value:
+    name: $v
+    served: true
+    storage: false
+EOF
+done
+
+# append older versions to CRD files
+for crd in deploy/crds/*_crd.yaml; do
+  yq w -i -s $YAML_SCRIPT_FILE $crd
+done
 
 RESOURCES="
   - kind: StatefulSets
@@ -130,5 +149,5 @@ mkdir -p $OLM_CERTIFIED/splunk
 cp $OLM_CATALOG/splunk/$VERSION/*_crd.yaml $OLM_CERTIFIED/splunk/
 yq w $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml metadata.certified "true" > $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
 yq w $OLM_CATALOG/splunk/splunk.package.yaml packageName "splunk-certified" > $OLM_CERTIFIED/splunk/splunk.package.yaml
-sed -i '' "s,$DOCKER_IO_PATH/spark,$REDHAT_REGISTRY_PATH/spark,g" $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
+sed -i'' "s,$DOCKER_IO_PATH/spark,$REDHAT_REGISTRY_PATH/spark,g" $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
 zip $OLM_CERTIFIED/splunk.zip -j $OLM_CERTIFIED/splunk $OLM_CERTIFIED/splunk/*

@@ -179,8 +179,8 @@ func CompareByMarshall(a interface{}, b interface{}) bool {
 	return false
 }
 
-// CompareIPLists compares 2 list of IP addresses
-func CompareIPLists(a []string, b []string) bool {
+// CompareSortedStrings returns true if there are differences between the two sorted lists of strings, or false otherwise.
+func CompareSortedStrings(a []string, b []string) bool {
 	if len(a) != len(b) {
 		return true
 	}
