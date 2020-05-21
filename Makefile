@@ -1,6 +1,6 @@
 # Makefile for Splunk Operator
 
-.PHONY: all builder builder-image image package local clean run fmt lint test
+.PHONY: all builder builder-image image package local clean run fmt lint test cluster-up cluster-down int-test
 
 # Security Scanner Variables
 SCANNER_DATE := `date +%Y-%m-%d`
@@ -93,3 +93,13 @@ fmt:
 
 lint:
 	@golint ./...
+
+cluster-up:
+	@test/deploy-cluster.sh up
+
+cluster-down:
+	@test/deploy-cluster.sh down
+
+int-test:
+	@echo Run integration test
+	@test/run-tests.sh
