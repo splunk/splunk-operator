@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 )
 
 // StatefulSetPodManager is used to manage the pods within a StatefulSet
@@ -154,10 +154,10 @@ func UpdateStatefulSetPods(c ControllerClient, statefulSet *appsv1.StatefulSet, 
 		}
 
 		// delete PVCs used by the pod so that a future scale up will have clean state
-		for _, vol := range []string{"pvc-etc", "pvc-var"} {
+		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
 			namespacedName := types.NamespacedName{
-				Namespace: statefulSet.GetNamespace(),
-				Name:      fmt.Sprintf("%s-%s", vol, podName),
+				Namespace: vol.ObjectMeta.Namespace,
+				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
 			}
 			var pvc corev1.PersistentVolumeClaim
 			err := c.Get(context.TODO(), namespacedName, &pvc)

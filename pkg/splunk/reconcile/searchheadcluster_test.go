@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -117,6 +117,10 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        replicas,

@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
@@ -56,8 +56,10 @@ func getSparkMasterServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSparkMasterPorts() {
 		l = append(l, corev1.ServicePort{
-			Name: key,
-			Port: int32(value),
+			Name:       key,
+			Port:       int32(value),
+			TargetPort: intstr.FromInt(value),
+			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	return l
@@ -89,8 +91,10 @@ func getSparkWorkerServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSparkWorkerPorts() {
 		l = append(l, corev1.ServicePort{
-			Name: key,
-			Port: int32(value),
+			Name:       key,
+			Port:       int32(value),
+			TargetPort: intstr.FromInt(value),
+			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	return l
@@ -219,6 +223,7 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 	if isHeadless {
 		service = &corev1.Service{}
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
 		service = cr.Spec.ServiceTemplate.DeepCopy()
 	}

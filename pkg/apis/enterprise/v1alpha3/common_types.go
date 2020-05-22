@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1alpha2
+package v1alpha3
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -93,6 +93,9 @@ type CommonSplunkSpec struct {
 
 	// Storage capacity to request for /opt/splunk/var persistent volume claims (default=”50Gi”)
 	VarStorage string `json:"varStorage"`
+
+	// If true, ephemeral (emptyDir) storage will be used for /opt/splunk/etc and /opt/splunk/var volumes
+	EphemeralStorage bool `json:"ephemeralStorage"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
 	Volumes []corev1.Volume `json:"volumes"`

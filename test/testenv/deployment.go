@@ -10,7 +10,7 @@ import (
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv

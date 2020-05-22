@@ -26,8 +26,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 )
 
 func TestAsOwner(t *testing.T) {
@@ -175,6 +176,70 @@ func TestGenerateSecret(t *testing.T) {
 
 	test("ABCDEF01234567890", 10)
 	test("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 10)
+}
+
+func TestSortContainerPorts(t *testing.T) {
+	var ports []corev1.ContainerPort
+	var want []corev1.ContainerPort
+
+	test := func() {
+		got := SortContainerPorts(ports)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("SortContainerPorts() got %v; want %v", got, want)
+		}
+	}
+
+	ports = []corev1.ContainerPort{
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+		{ContainerPort: 3000},
+	}
+	want = ports
+	test()
+
+	ports = []corev1.ContainerPort{
+		{ContainerPort: 3000},
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+	}
+	want = []corev1.ContainerPort{
+		{ContainerPort: 100},
+		{ContainerPort: 200},
+		{ContainerPort: 3000},
+	}
+	test()
+}
+
+func TestSortServicePorts(t *testing.T) {
+	var ports []corev1.ServicePort
+	var want []corev1.ServicePort
+
+	test := func() {
+		got := SortServicePorts(ports)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("SortServicePorts() got %v; want %v", got, want)
+		}
+	}
+
+	ports = []corev1.ServicePort{
+		{Port: 100},
+		{Port: 200},
+		{Port: 3000},
+	}
+	want = ports
+	test()
+
+	ports = []corev1.ServicePort{
+		{Port: 3000},
+		{Port: 100},
+		{Port: 200},
+	}
+	want = []corev1.ServicePort{
+		{Port: 100},
+		{Port: 200},
+		{Port: 3000},
+	}
+	test()
 }
 
 func compareTester(t *testing.T, method string, f func() bool, a interface{}, b interface{}, want bool) {
@@ -430,6 +495,40 @@ func TestCompareByMarshall(t *testing.T) {
 	test(true)
 }
 
+func TestCompareSortedStrings(t *testing.T) {
+	var a []string
+	var b []string
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareSortedStrings(a, b)
+		}
+		compareTester(t, "CompareSortedStrings", f, a, b, want)
+	}
+
+	test(false)
+
+	ip1 := "192.168.2.1"
+	ip2 := "192.168.2.100"
+	ip3 := "192.168.10.1"
+
+	a = []string{ip1, ip2}
+	b = []string{ip1, ip2}
+	test(false)
+
+	a = []string{ip1, ip3, ip2}
+	b = []string{ip3, ip2, ip1}
+	test(false)
+
+	a = []string{ip1, ip3}
+	b = []string{ip3, ip2}
+	test(true)
+
+	a = []string{ip1, ip3}
+	b = []string{ip3}
+	test(true)
+}
+
 func TestGetIstioAnnotations(t *testing.T) {
 	var ports []corev1.ContainerPort
 	var want map[string]string
@@ -582,6 +681,56 @@ func TestValidateCommonSpec(t *testing.T) {
 	err := ValidateCommonSpec(&spec, defaultResources)
 	if err == nil {
 		t.Error("ValidateCommonSpec() returned nil; want ERROR")
+	}
+}
+
+func TestSetServiceTemplateDefaults(t *testing.T) {
+	cr := enterprisev1.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.IndexerClusterSpec{
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				CommonSpec: enterprisev1.CommonSpec{
+					ServiceTemplate: corev1.Service{
+						Spec: corev1.ServiceSpec{
+							Ports: []corev1.ServicePort{
+								{
+									Name: "http",
+									Port: 80,
+								},
+								{
+									Name: "https",
+									Port: 443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	setServiceTemplateDefaults(&cr.Spec.CommonSpec)
+	for _, p := range cr.Spec.CommonSpec.ServiceTemplate.Spec.Ports {
+		switch p.Name {
+		case "http":
+			if p.TargetPort.IntValue() != int(p.Port) {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want %d, Got %d", p.Port, p.TargetPort.IntVal)
+			}
+			if p.Protocol != corev1.ProtocolTCP {
+				t.Errorf("setServiceTemplateDefaults() did not set protocol correctly. Want %s, Got %s", corev1.ProtocolTCP, p.Protocol)
+			}
+		case "https":
+			if p.TargetPort.IntValue() != 8443 {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want 8443, Got %d", p.TargetPort.IntVal)
+			}
+		}
 	}
 }
 

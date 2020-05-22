@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha2"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,6 +86,10 @@ func podManagerTester(t *testing.T, method string, mgr StatefulSetPodManager) {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        replicas,
