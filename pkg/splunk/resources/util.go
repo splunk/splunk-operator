@@ -341,10 +341,33 @@ func ValidateCommonSpec(spec *enterprisev1.CommonSpec, defaultResources corev1.R
 		spec.SchedulerName = "default-scheduler"
 	}
 
+	// set default values for service template
+	setServiceTemplateDefaults(spec)
+
 	// if not provided, set default resource requests and limits
 	ValidateResources(&spec.Resources, defaultResources)
 
 	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
+}
+
+// setServiceTemplateDefaults sets default values for service templates
+func setServiceTemplateDefaults(spec *enterprisev1.CommonSpec) {
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range spec.ServiceTemplate.Spec.Ports {
+			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
+			if p.Protocol == "" {
+				p.Protocol = corev1.ProtocolTCP
+			}
+
+			if p.TargetPort.IntValue() == 0 {
+				p.TargetPort.IntVal = p.Port
+			}
+		}
+	}
+
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
 }
 
 // sortAndCompareSlices sorts and compare the slices for equality. Return true if NOT equal. False otherwise

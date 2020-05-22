@@ -228,25 +228,6 @@ func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
 	}
 }
 
-func setServiceTemplateDefaults(spec *enterprisev1.CommonSplunkSpec) {
-	if spec.CommonSpec.ServiceTemplate.Spec.Ports != nil {
-		for idx := range spec.CommonSpec.ServiceTemplate.Spec.Ports {
-			var p *corev1.ServicePort = &spec.CommonSpec.ServiceTemplate.Spec.Ports[idx]
-			if p.Protocol == "" {
-				p.Protocol = corev1.ProtocolTCP
-			}
-
-			if p.TargetPort.IntValue() == 0 {
-				p.TargetPort.IntVal = p.Port
-			}
-		}
-	}
-
-	if spec.CommonSpec.ServiceTemplate.Spec.Type == "" {
-		spec.CommonSpec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
-	}
-}
-
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
 func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
@@ -264,7 +245,6 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 	}
 
 	setVolumeDefaults(spec)
-	setServiceTemplateDefaults(spec)
 
 	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
 }

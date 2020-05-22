@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 )
@@ -680,6 +681,56 @@ func TestValidateCommonSpec(t *testing.T) {
 	err := ValidateCommonSpec(&spec, defaultResources)
 	if err == nil {
 		t.Error("ValidateCommonSpec() returned nil; want ERROR")
+	}
+}
+
+func TestSetServiceTemplateDefaults(t *testing.T) {
+	cr := enterprisev1.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.IndexerClusterSpec{
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				CommonSpec: enterprisev1.CommonSpec{
+					ServiceTemplate: corev1.Service{
+						Spec: corev1.ServiceSpec{
+							Ports: []corev1.ServicePort{
+								{
+									Name: "http",
+									Port: 80,
+								},
+								{
+									Name: "https",
+									Port: 443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	setServiceTemplateDefaults(&cr.Spec.CommonSpec)
+	for _, p := range cr.Spec.CommonSpec.ServiceTemplate.Spec.Ports {
+		switch p.Name {
+		case "http":
+			if p.TargetPort.IntValue() != int(p.Port) {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want %d, Got %d", p.Port, p.TargetPort.IntVal)
+			}
+			if p.Protocol != corev1.ProtocolTCP {
+				t.Errorf("setServiceTemplateDefaults() did not set protocol correctly. Want %s, Got %s", corev1.ProtocolTCP, p.Protocol)
+			}
+		case "https":
+			if p.TargetPort.IntValue() != 8443 {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want 8443, Got %d", p.TargetPort.IntVal)
+			}
+		}
 	}
 }
 

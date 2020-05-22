@@ -219,6 +219,7 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 	if isHeadless {
 		service = &corev1.Service{}
 		service.Spec.ClusterIP = corev1.ClusterIPNone
+		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
 		service = cr.Spec.ServiceTemplate.DeepCopy()
 	}
