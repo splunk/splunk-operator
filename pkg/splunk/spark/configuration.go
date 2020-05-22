@@ -56,8 +56,10 @@ func getSparkMasterServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSparkMasterPorts() {
 		l = append(l, corev1.ServicePort{
-			Name: key,
-			Port: int32(value),
+			Name:       key,
+			Port:       int32(value),
+			TargetPort: intstr.FromInt(value),
+			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	return l
@@ -89,8 +91,10 @@ func getSparkWorkerServicePorts() []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSparkWorkerPorts() {
 		l = append(l, corev1.ServicePort{
-			Name: key,
-			Port: int32(value),
+			Name:       key,
+			Port:       int32(value),
+			TargetPort: intstr.FromInt(value),
+			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	return l
