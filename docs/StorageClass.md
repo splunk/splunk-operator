@@ -42,6 +42,30 @@ spec:
 If no `storageClassName` is provided, the default Storage Class for your
 Kubernetes cluster will be used.
 
+
+## Ephemeral Storage
+
+For testing and demonstration purposes, you may bypass the use of persistent
+storage by setting `ephemeralStorage: true` within any Splunk custom resource
+spec. This will mount local, ephemeral volumes for `/opt/splunk/etc` and
+`/opt/splunk/var` using the Kubernetes
+[emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) feature.
+
+*Please note that the contents of these directories will automatically be deleted
+forever whenever the Pod is removed from a node (for any reason). We strongly
+discourage and do not support using this for any production environments.*
+
+
+## Performance Considerations
+
+Splunk Enterprise’s performance is heavily dependent on the performance of your
+underlying storage infrastructure. Different Storage Class providers have a
+wide range of performance characteristics, and how you configure and architect
+your storage infrastructure will have a significant impact on the performance
+of Splunk Enterprise. While we cannot provide any guidance on performance at this
+point in time, we aim to do so in the future as this project matures.
+
+
 ## Amazon Elastic Kubernetes Service (EKS)
 
 Users of EKS can create Storage Classes that use
@@ -67,25 +91,21 @@ Please see the Kubernetes
 for additional Storage Class configuration options that are available.
 
 
-## Performance Considerations
-
-Splunk Enterprise’s performance is heavily dependent on the performance of your
-underlying storage infrastructure. Different Storage Class providers have a
-wide range of performance characteristics, and how you configure and architect
-your storage infrastructure will have a significant impact on the performance
-of Splunk Enterprise. While we cannot provide any guidance on performance at this
-point in time, we aim to do so in the future as this project matures.
-
-
 ## Local Persistent Volumes
 
-Users of Kubernetes 1.14 or later can consider using
+Users of Kubernetes 1.14 or later may use
 [Local Persistent Volumes](https://kubernetes.io/blog/2019/04/04/kubernetes-1.14-local-persistent-volumes-ga/)
 with their Splunk cluster. The use of local, direct-attached storage can offer
 performance on par with running Splunk on bare metal, at the cost of
 sacrificing high availability provided by other storage options. Splunk’s
 built-in clustering technologies mitigate this cost by replicating your
 data across multiple instances.
+
+If you are interested in using Local Persistent Volumes, we recommend
+considering these open source projects:
+
+* [TopoLVM](https://blog.kintone.io/entry/topolvm) (uses LVM to dynamically provision and manage volumes)
+* [Local Path Provisioner](https://github.com/rancher/local-path-provisioner) (shares a single, mounted volume on each node)
 
 
 ## Additional Providers
