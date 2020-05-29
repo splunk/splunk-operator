@@ -72,26 +72,28 @@ This repository consists of the following code used to build the splunk-operator
 
 * `cmd/manager/main.go`: Provides the main() function, where everything begins
 * `pkg/apis/`: Source code for the operator's custom resource definition types
-* `pkg/controllers/`: Source code for CRD controllers that watch for changes
-* `pkg/splunk/reconcile/`: Source code the controllers use to interact with Kubernetes APIs
-* `pkg/splunk/enterprise/`: Source code for managing Splunk Enterprise deployments
-* `pkg/splunk/spark/`: Source code for managing Spark cluster deployments
-* `pkg/splunk/resources/`: Generic utility code used by other splunk modules
+* `pkg/controllers/`: Used to register controllers that watch for changes to custom resources
+* `pkg/splunk/enterprise/`: Source code for controllers that manage Splunk Enterprise resources
+* `pkg/splunk/spark/`: Source code for controllers that manage Spark resources
+* `pkg/splunk/controller/`: Common code shared across Splunk controllers
+* `pkg/splunk/common/`: Common code used by most other splunk packages
 * `pkg/splunk/client/`: Simple client for Splunk Enterprise REST API
-* `pkg/splunk/test/`: Common code used for testing other modules
+* `pkg/splunk/test/`: Common code used by other packages for unit testing
 
-`main()` basically just instantiates the `controllers`, and the `controllers` call
-into the `reconcile` module to perform actions. The `reconcile` module uses the `enterprise`
-and `spark` modules. The types provided by `pkg/apis/` and generic utility code in
-`pkg/splunk/resources/` are used universally. Note that the source code for `main()`,
-`pkg/apis` and `pkg/controllers` are all generated from templates provided by the
-Operator SDK.
+`main()` uses `pkg/controllers` to register all the `enterprise` and `spark`
+controllers that manage custom resources by watching for Kubernetes events.
+The `enterprise` and `spark` controllers are implemented using common code provided
+by the `controllers` package. The `enterprise` controllers also use the REST API client
+provided in the `pkg/splunk/client` package. The types provided by `pkg/apis/` and
+common code in the `pkg/splunk/common/` package are used universally. Note that the
+source code for `main()` is generated from a template provided by the Operator SDK.
 
 In addition to the source code, this repository includes:
 
 * `build`: Build scripts, templates, etc. used to build the container image
 * `deploy`: Kubernetes YAML templates used to install the Splunk Operator
 * `docs`: Getting Started Guide and other documentation in Markdown format
+* `test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
 
 
 ## Building the operator

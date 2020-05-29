@@ -15,6 +15,6 @@
 /*
 Package spark is used to manipulate manage configuration for Spark cluster deployments.
 Methods within this package are functional in nature; they do not to change state and/or mutate data.
-This package has dependencies on resources.
+This package has dependencies on the common and reconcile packages.
 */
 package spark

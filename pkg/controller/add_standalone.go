@@ -22,7 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
-	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 func init() {
@@ -30,13 +32,13 @@ func init() {
 }
 
 // blank assignment to verify that StandaloneController implements SplunkController
-var _ splunkreconcile.SplunkController = &StandaloneController{}
+var _ splctrl.SplunkController = &StandaloneController{}
 
 // StandaloneController is used to manage Standalone custom resources
 type StandaloneController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (splctrl StandaloneController) GetInstance() enterprisev1.MetaObject {
+func (ctrl StandaloneController) GetInstance() splcommon.MetaObject {
 	return &enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterprisev1.APIVersion,
@@ -46,12 +48,12 @@ func (splctrl StandaloneController) GetInstance() enterprisev1.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (splctrl StandaloneController) GetWatchTypes() []runtime.Object {
+func (ctrl StandaloneController) GetWatchTypes() []runtime.Object {
 	return []runtime.Object{&appsv1.StatefulSet{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (splctrl StandaloneController) Reconcile(client client.Client, cr enterprisev1.MetaObject) (reconcile.Result, error) {
+func (ctrl StandaloneController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterprisev1.Standalone)
-	return splunkreconcile.ApplyStandalone(client, instance)
+	return enterprise.ApplyStandalone(client, instance)
 }

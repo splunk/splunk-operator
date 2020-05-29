@@ -17,16 +17,16 @@ package controller
 import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
 // SplunkControllersToAdd is a list of Splunk controllers to add to the Manager
-var SplunkControllersToAdd []splunkreconcile.SplunkController
+var SplunkControllersToAdd []splctrl.SplunkController
 
 // AddToManager adds all Splunk Controllers to the Manager
 func AddToManager(mgr manager.Manager) error {
-	for _, splctrl := range SplunkControllersToAdd {
-		if err := splunkreconcile.AddToManager(mgr, splctrl); err != nil {
+	for _, ctrl := range SplunkControllersToAdd {
+		if err := splctrl.AddToManager(mgr, ctrl); err != nil {
 			return err
 		}
 	}

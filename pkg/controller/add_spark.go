@@ -22,7 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
-	splunkreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	spark "github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 func init() {
@@ -30,13 +32,13 @@ func init() {
 }
 
 // blank assignment to verify that SparkController implements SplunkController
-var _ splunkreconcile.SplunkController = &SparkController{}
+var _ splctrl.SplunkController = &SparkController{}
 
 // SparkController is used to manage Spark custom resources
 type SparkController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (splctrl SparkController) GetInstance() enterprisev1.MetaObject {
+func (ctrl SparkController) GetInstance() splcommon.MetaObject {
 	return &enterprisev1.Spark{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterprisev1.APIVersion,
@@ -46,12 +48,12 @@ func (splctrl SparkController) GetInstance() enterprisev1.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (splctrl SparkController) GetWatchTypes() []runtime.Object {
+func (ctrl SparkController) GetWatchTypes() []runtime.Object {
 	return []runtime.Object{&appsv1.Deployment{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (splctrl SparkController) Reconcile(client client.Client, cr enterprisev1.MetaObject) (reconcile.Result, error) {
+func (ctrl SparkController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterprisev1.Spark)
-	return splunkreconcile.ApplySpark(client, instance)
+	return spark.ApplySpark(client, instance)
 }

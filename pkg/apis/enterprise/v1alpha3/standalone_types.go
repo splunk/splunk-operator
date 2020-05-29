@@ -17,6 +17,8 @@ package v1alpha3
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // default all fields to being optional
@@ -45,7 +47,7 @@ type StandaloneSpec struct {
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
 type StandaloneStatus struct {
 	// current phase of the standalone instances
-	Phase ResourcePhase `json:"phase"`
+	Phase splcommon.Phase `json:"phase"`
 
 	// number of desired standalone instances
 	Replicas int32 `json:"replicas"`
@@ -75,20 +77,8 @@ type Standalone struct {
 	Status StandaloneStatus `json:"status,omitempty"`
 }
 
-// GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
-func (cr *Standalone) GetIdentifier() string {
-	return cr.ObjectMeta.Name
-}
-
-// GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
-func (cr *Standalone) GetNamespace() string {
-	return cr.ObjectMeta.Namespace
-}
-
-// GetTypeMeta is a convenience function to return a TypeMeta object
-func (cr *Standalone) GetTypeMeta() metav1.TypeMeta {
-	return cr.TypeMeta
-}
+// blank assignment to verify that Standalone implements splcommon.MetaObject
+var _ splcommon.MetaObject = &Standalone{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

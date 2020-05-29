@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -44,22 +45,22 @@ var _ = Describe("Smoke test", func() {
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
-			Eventually(func() enterprisev1.ResourcePhase {
+			Eventually(func() splcommon.Phase {
 				err = deployment.GetInstance(deployment.GetName(), standalone)
 				if err != nil {
-					return enterprisev1.PhaseError
+					return splcommon.PhaseError
 				}
 				testenvInstance.Log.Info("Waiting for standalone instance status to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 				dumpGetPods(testenvInstance.GetName())
 
 				return standalone.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// In a steady state, we should stay in Ready and not flip-flop around
-			Consistently(func() enterprisev1.ResourcePhase {
+			Consistently(func() splcommon.Phase {
 				_ = deployment.GetInstance(deployment.GetName(), standalone)
 				return standalone.Status.Phase
-			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 		})
 	})
 
@@ -71,40 +72,40 @@ var _ = Describe("Smoke test", func() {
 
 			// Ensure indexers go to Ready phase
 			idc := &enterprisev1.IndexerCluster{}
-			Eventually(func() enterprisev1.ResourcePhase {
+			Eventually(func() splcommon.Phase {
 				err := deployment.GetInstance(deployment.GetName(), idc)
 				if err != nil {
-					return enterprisev1.PhaseError
+					return splcommon.PhaseError
 				}
 				testenvInstance.Log.Info("Waiting for indexer cluster instance status to be ready", "instance", idc.ObjectMeta.Name, "Phase", idc.Status.Phase)
 
 				dumpGetPods(testenvInstance.GetName())
 
 				return idc.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// In a steady state, we should stay in Ready and not flip-flop around
-			Consistently(func() enterprisev1.ResourcePhase {
+			Consistently(func() splcommon.Phase {
 				_ = deployment.GetInstance(deployment.GetName(), idc)
 				return idc.Status.Phase
-			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 
 			shc := &enterprisev1.SearchHeadCluster{}
 			// Ensure search head cluster go to Ready phase
-			Eventually(func() enterprisev1.ResourcePhase {
+			Eventually(func() splcommon.Phase {
 				err := deployment.GetInstance(deployment.GetName(), shc)
 				if err != nil {
-					return enterprisev1.PhaseError
+					return splcommon.PhaseError
 				}
 				testenvInstance.Log.Info("Waiting for search head cluster instance status to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 				return shc.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// In a steady state, we should stay in Ready and not flip-flop around
-			Consistently(func() enterprisev1.ResourcePhase {
+			Consistently(func() splcommon.Phase {
 				_ = deployment.GetInstance(deployment.GetName(), shc)
 				return shc.Status.Phase
-			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(enterprisev1.PhaseReady))
+			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 		})
 	})
 })

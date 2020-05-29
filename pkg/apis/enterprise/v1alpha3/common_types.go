@@ -16,39 +16,13 @@ package v1alpha3
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-)
 
-// ResourcePhase is used to represent the current phase of a custom resource
-// +kubebuilder:validation:Enum=Pending;Ready;Updating;ScalingUp;ScalingDown;Terminating;Error
-type ResourcePhase string
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+)
 
 const (
 	// APIVersion is a string representation of this API
 	APIVersion = "enterprise.splunk.com/v1alpha3"
-
-	// PhasePending means a custom resource has just been created and is not yet ready
-	PhasePending ResourcePhase = "Pending"
-
-	// PhaseReady means a custom resource is ready and up to date
-	PhaseReady ResourcePhase = "Ready"
-
-	// PhaseUpdating means a custom resource is in the process of updating to a new desired state (spec)
-	PhaseUpdating ResourcePhase = "Updating"
-
-	// PhaseScalingUp means a customer resource is in the process of scaling up
-	PhaseScalingUp ResourcePhase = "ScalingUp"
-
-	// PhaseScalingDown means a customer resource is in the process of scaling down
-	PhaseScalingDown ResourcePhase = "ScalingDown"
-
-	// PhaseTerminating means a customer resource is in the process of being removed
-	PhaseTerminating ResourcePhase = "Terminating"
-
-	// PhaseError means an error occured with custom resource management
-	PhaseError ResourcePhase = "Error"
 )
 
 // default all fields to being optional
@@ -59,34 +33,9 @@ const (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// CommonSpec defines the desired state of parameters that are common across all CRD types
-type CommonSpec struct {
-	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
-	Image string `json:"image"`
-
-	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
-	// +kubebuilder:validation:Enum=Always;IfNotPresent
-	ImagePullPolicy string `json:"imagePullPolicy"`
-
-	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
-	SchedulerName string `json:"schedulerName"`
-
-	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
-	Affinity corev1.Affinity `json:"affinity"`
-
-	// Pod's tolerations for Kubernetes node's taint
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-
-	// resource requirements for the pod containers
-	Resources corev1.ResourceRequirements `json:"resources"`
-
-	// ServiceTemplate is a template used to create Kubernetes services
-	ServiceTemplate corev1.Service `json:"serviceTemplate"`
-}
-
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
-	CommonSpec `json:",inline"`
+	splcommon.Spec `json:",inline"`
 
 	// Name of StorageClass to use for persistent volume claims
 	StorageClassName string `json:"storageClassName"`
@@ -117,14 +66,4 @@ type CommonSplunkSpec struct {
 
 	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
-}
-
-// MetaObject is used to represent common interfaces of custom resources
-type MetaObject interface {
-	GetIdentifier() string
-	GetNamespace() string
-	GetTypeMeta() metav1.TypeMeta
-	GetObjectMeta() metav1.Object
-	GetObjectKind() schema.ObjectKind
-	DeepCopyObject() runtime.Object
 }

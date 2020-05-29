@@ -17,6 +17,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -59,10 +60,10 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 
 		Spec: enterprisev1.StandaloneSpec{
 			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				CommonSpec: enterprisev1.CommonSpec{
+				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
+				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -97,7 +98,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.Licen
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				CommonSpec: enterprisev1.CommonSpec{
+				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 			},
@@ -122,7 +123,7 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int) *enterp
 		Spec: enterprisev1.IndexerClusterSpec{
 			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				CommonSpec: enterprisev1.CommonSpec{
+				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
@@ -150,7 +151,7 @@ func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string
 		Spec: enterprisev1.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				CommonSpec: enterprisev1.CommonSpec{
+				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				IndexerClusterRef: corev1.ObjectReference{

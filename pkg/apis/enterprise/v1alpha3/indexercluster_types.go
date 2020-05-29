@@ -16,6 +16,8 @@ package v1alpha3
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // default all fields to being optional
@@ -58,10 +60,10 @@ type IndexerClusterMemberStatus struct {
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
 type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
-	Phase ResourcePhase `json:"phase"`
+	Phase splcommon.Phase `json:"phase"`
 
 	// current phase of the cluster master
-	ClusterMasterPhase ResourcePhase `json:"clusterMasterPhase"`
+	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase"`
 
 	// desired number of indexer peers
 	Replicas int32 `json:"replicas"`
@@ -107,20 +109,8 @@ type IndexerCluster struct {
 	Status IndexerClusterStatus `json:"status,omitempty"`
 }
 
-// GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
-func (cr *IndexerCluster) GetIdentifier() string {
-	return cr.ObjectMeta.Name
-}
-
-// GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
-func (cr *IndexerCluster) GetNamespace() string {
-	return cr.ObjectMeta.Namespace
-}
-
-// GetTypeMeta is a convenience function to return a TypeMeta object
-func (cr *IndexerCluster) GetTypeMeta() metav1.TypeMeta {
-	return cr.TypeMeta
-}
+// blank assignment to verify that IndexerCluster implements splcommon.MetaObject
+var _ splcommon.MetaObject = &IndexerCluster{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

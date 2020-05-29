@@ -16,6 +16,8 @@ package v1alpha3
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // default all fields to being optional
@@ -28,7 +30,7 @@ import (
 
 // SparkSpec defines the desired state of a Spark cluster
 type SparkSpec struct {
-	CommonSpec `json:",inline"`
+	splcommon.Spec `json:",inline"`
 
 	// Number of spark worker pods
 	Replicas int32 `json:"replicas"`
@@ -37,10 +39,10 @@ type SparkSpec struct {
 // SparkStatus defines the observed state of a Spark cluster
 type SparkStatus struct {
 	// current phase of the spark workers
-	Phase ResourcePhase `json:"phase"`
+	Phase splcommon.Phase `json:"phase"`
 
 	// current phase of the spark master
-	MasterPhase ResourcePhase `json:"masterPhase"`
+	MasterPhase splcommon.Phase `json:"masterPhase"`
 
 	// number of desired spark workers
 	Replicas int32 `json:"replicas"`
@@ -71,20 +73,8 @@ type Spark struct {
 	Status SparkStatus `json:"status,omitempty"`
 }
 
-// GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
-func (cr *Spark) GetIdentifier() string {
-	return cr.ObjectMeta.Name
-}
-
-// GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
-func (cr *Spark) GetNamespace() string {
-	return cr.ObjectMeta.Namespace
-}
-
-// GetTypeMeta is a convenience function to return a TypeMeta object
-func (cr *Spark) GetTypeMeta() metav1.TypeMeta {
-	return cr.TypeMeta
-}
+// blank assignment to verify that Spark implements splcommon.MetaObject
+var _ splcommon.MetaObject = &Spark{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

@@ -14,7 +14,5 @@
 
 /*
 Package enterprise is used to manipulate manage configuration for Splunk Enterprise deployments.
-Methods within this package are functional in nature; they do not to change state and/or mutate data.
-This package has dependencies on spark and resources.
 */
 package enterprise
