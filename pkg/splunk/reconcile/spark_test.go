@@ -31,7 +31,7 @@ func TestApplySpark(t *testing.T) {
 		{metaName: "*v1.Deployment-test-splunk-stack1-spark-worker"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2], funcCalls[3]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": {funcCalls[2], funcCalls[3]}}
 	current := enterprisev1.Spark{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Spark",

@@ -39,7 +39,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[4], funcCalls[5]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": {funcCalls[4], funcCalls[5]}}
 	statefulSet := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -89,7 +89,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password": []byte{'1', '2', '3'},
+			"password": {'1', '2', '3'},
 		},
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}

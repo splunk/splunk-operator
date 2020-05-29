@@ -30,7 +30,7 @@ func TestApplyStandalone(t *testing.T) {
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": {funcCalls[2]}}
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",

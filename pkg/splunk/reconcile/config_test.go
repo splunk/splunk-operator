@@ -56,7 +56,7 @@ func TestApplySplunkConfig(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"idxc_secret": []byte{'a', 'b'},
+			"idxc_secret": {'a', 'b'},
 		},
 	}
 	searchHeadRevised.Spec.IndexerClusterRef.Name = "stack2"
@@ -83,8 +83,8 @@ func TestApplySplunkConfig(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"pass4SymmKey": []byte{'a', 'b'},
-			"idxc_secret":  []byte{'a', 'b'},
+			"pass4SymmKey": {'a', 'b'},
+			"idxc_secret":  {'a', 'b'},
 		},
 	}
 	indexerRevised := indexerCR.DeepCopy()
@@ -134,7 +134,7 @@ func TestApplySecret(t *testing.T) {
 		},
 	}
 	revised := current.DeepCopy()
-	revised.Data = map[string][]byte{"a": []byte{'1', '2'}}
+	revised.Data = map[string][]byte{"a": {'1', '2'}}
 	reconcile := func(c *mockClient, cr interface{}) error {
 		_, err := ApplySecret(c, cr.(*corev1.Secret))
 		return err

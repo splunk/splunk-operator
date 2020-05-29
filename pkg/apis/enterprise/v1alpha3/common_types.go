@@ -26,6 +26,9 @@ import (
 type ResourcePhase string
 
 const (
+	// APIVersion is a string representation of this API
+	APIVersion = "enterprise.splunk.com/v1alpha3"
+
 	// PhasePending means a custom resource has just been created and is not yet ready
 	PhasePending ResourcePhase = "Pending"
 

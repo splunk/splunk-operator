@@ -30,7 +30,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{metaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}
 	createCalls := map[string][]mockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": []mockFuncCall{funcCalls[2]}}
+	updateCalls := map[string][]mockFuncCall{"Get": funcCalls, "Update": {funcCalls[2]}}
 	current := enterprisev1.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
