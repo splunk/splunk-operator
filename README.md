@@ -55,6 +55,7 @@ go get -u golang.org/x/lint/golint
 go get -u golang.org/x/tools/cmd/cover
 go get -u github.com/mattn/goveralls
 go get -u github.com/mikefarah/yq/v3
+go get -u github.com/go-delve/delve/cmd/dlv
 ```
 
 

@@ -44,39 +44,31 @@ type SplunkController interface {
 
 // AddToManager adds a specific Splunk Controller to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func AddToManager(mgr manager.Manager, splctrl SplunkController) error {
-	// Use a new go client to work-around issues with the operator sdk design.
-	// If WATCH_NAMESPACE is empty for monitoring cluster-wide custom Splunk resources,
-	// the default caching client will attempt to list all resources in all namespaces for
-	// any get requests, even if the request is namespace-scoped.
-	options := client.Options{}
-	client, err := client.New(mgr.GetConfig(), options)
-	if err != nil {
-		return err
-	}
-
-	reconciler := splunkReconciler{
-		client:  client,
-		scheme:  mgr.GetScheme(),
-		splctrl: splctrl,
-	}
+func AddToManager(mgr manager.Manager, splctrl SplunkController, c client.Client) error {
 
 	// Create a new controller
-	instance := reconciler.splctrl.GetInstance()
-	c, err := controller.New(instance.GetObjectKind().GroupVersionKind().Kind, mgr, controller.Options{Reconciler: reconciler})
+	instance := splctrl.GetInstance()
+	kind := instance.GetObjectKind().GroupVersionKind().Kind
+	opts := controller.Options{
+		Reconciler: splunkReconciler{
+			client:  c,
+			splctrl: splctrl,
+		},
+	}
+	ctrl, err := controller.New(kind, mgr, opts)
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to primary custom resource
-	err = c.Watch(&source.Kind{Type: instance}, &handler.EnqueueRequestForObject{})
+	err = ctrl.Watch(&source.Kind{Type: instance}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to secondary resources
 	for _, t := range splctrl.GetWatchTypes() {
-		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
+		err = ctrl.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    instance,
 		})
@@ -96,7 +88,6 @@ type splunkReconciler struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client  client.Client
-	scheme  *runtime.Scheme
 	splctrl SplunkController
 }
 

@@ -16,8 +16,6 @@ package controller
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -32,85 +30,82 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
-// TestControllerState manages state for testing the splunk.controller library
-type TestControllerState struct {
+// MockControllerState manages state for testing the splunk.controller library
+type MockControllerState struct {
+	instance        splcommon.MetaObject
+	watchTypes      []runtime.Object
 	reconcileCalls  int
 	reconcileError  error
 	reconcileResult reconcile.Result
 }
 
-// TestController is used to test the splunk.controller library
-type TestController struct {
-	state *TestControllerState
+// blank assignment to verify that MockController implements SplunkController
+var _ SplunkController = &MockController{}
+
+// MockController is used to test the splunk.controller library
+type MockController struct {
+	state *MockControllerState
 }
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (ctrl TestController) GetInstance() splcommon.MetaObject {
-	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-	}
+func (ctrl MockController) GetInstance() splcommon.MetaObject {
+	return ctrl.state.instance
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl TestController) GetWatchTypes() []runtime.Object {
-	return []runtime.Object{&corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-	}}
+func (ctrl MockController) GetWatchTypes() []runtime.Object {
+	return ctrl.state.watchTypes
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (ctrl TestController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
+func (ctrl MockController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	ctrl.state.reconcileCalls++
 	return ctrl.state.reconcileResult, ctrl.state.reconcileError
 }
 
 // GetCalls returns the number of times Reconcile() was called
-func (ctrl TestController) GetCalls() int {
+func (ctrl MockController) GetCalls() int {
 	return ctrl.state.reconcileCalls
 }
 
 // ResetCalls resets the number of times Reconcile() was called to zero
-func (ctrl TestController) ResetCalls() {
+func (ctrl MockController) ResetCalls() {
 	ctrl.state.reconcileCalls = 0
 }
 
-func newTestController() *TestController {
-	return &TestController{
-		state: new(TestControllerState),
-	}
-}
-
-func newTestManager(t *testing.T) manager.Manager {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-	if err != nil {
-		t.Errorf("config.GetConfig() returned %v; want nil", err)
-	}
-
-	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          "test",
-		MetricsBindAddress: fmt.Sprintf("localhost:8080"),
-	})
-	if err != nil {
-		t.Errorf("manager.New() returned %v; want nil", err)
+func newMockController() MockController {
+	state := &MockControllerState{
+		instance: &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			},
+		},
+		watchTypes: []runtime.Object{&corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+			},
+		}},
 	}
 
-	return mgr
+	return MockController{state: state}
 }
 
 func TestAddToManager(t *testing.T) {
-	ctrl := newTestController()
-	mgr := newTestManager(t)
-	err := AddToManager(mgr, ctrl)
+	cfg, err := config.GetConfig()
+	if err != nil {
+		t.Errorf("TestAddToManager: GetConfig() returned %v; want nil", err)
+	}
+
+	mgr, err := manager.New(cfg, manager.Options{Namespace: "test"})
+	if err != nil {
+		t.Errorf("TestAddToManager: manager.New() returned %v; want nil", err)
+	}
+
+	c := spltest.NewMockClient()
+	ctrl := newMockController()
+	err = AddToManager(mgr, ctrl, c)
 	if err != nil {
 		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
 	}
@@ -125,8 +120,7 @@ func TestReconcile(t *testing.T) {
 	getCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	c := spltest.NewMockClient()
-	ctrl := newTestController()
-	mgr := newTestManager(t)
+	ctrl := newMockController()
 
 	test := func(testname string, wantCalls int, wantResult reconcile.Result, wantError error) {
 		c.ResetCalls()
@@ -134,7 +128,6 @@ func TestReconcile(t *testing.T) {
 
 		reconciler := splunkReconciler{
 			client:  c,
-			scheme:  mgr.GetScheme(),
 			splctrl: ctrl,
 		}
 
@@ -159,7 +152,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// test for watch event when not found (deleted)
-	test("NotFound", 0, reconcile.Result{false, 0}, errors.New("NotFound"))
+	test("NotFound", 0, reconcile.Result{Requeue: false, RequeueAfter: 0}, errors.New("NotFound"))
 
 	obj := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -174,15 +167,15 @@ func TestReconcile(t *testing.T) {
 	c.AddObject(&obj)
 
 	// test for watch event that triggers Reconcile and is successful
-	test("Success", 1, reconcile.Result{false, 0}, nil)
+	test("Success", 1, reconcile.Result{Requeue: false, RequeueAfter: 0}, nil)
 
 	// test for watch event that triggers Reconcile, which returns error
 	ctrl.state.reconcileError = errors.New("ABadThing")
-	ctrl.state.reconcileResult = reconcile.Result{true, 5}
+	ctrl.state.reconcileResult = reconcile.Result{Requeue: true, RequeueAfter: 5}
 	test("ReconcileError", 1, ctrl.state.reconcileResult, nil)
 
 	// test for watch event that triggers Reconcile, which returns no error but wants requeue
 	ctrl.state.reconcileError = nil
-	ctrl.state.reconcileResult = reconcile.Result{true, 10}
+	ctrl.state.reconcileResult = reconcile.Result{Requeue: true, RequeueAfter: 10}
 	test("ReconcileError", 1, ctrl.state.reconcileResult, nil)
 }

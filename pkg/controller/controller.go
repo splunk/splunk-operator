@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -25,10 +26,21 @@ var SplunkControllersToAdd []splctrl.SplunkController
 
 // AddToManager adds all Splunk Controllers to the Manager
 func AddToManager(mgr manager.Manager) error {
+	// Use a new go client to work-around issues with the operator sdk design.
+	// If WATCH_NAMESPACE is empty for monitoring cluster-wide custom Splunk resources,
+	// the default caching client will attempt to list all resources in all namespaces for
+	// any get requests, even if the request is namespace-scoped.
+	c, err := client.New(mgr.GetConfig(), client.Options{})
+	if err != nil {
+		return err
+	}
+
+	// call AddToManager for each of the registered controllers
 	for _, ctrl := range SplunkControllersToAdd {
-		if err := splctrl.AddToManager(mgr, ctrl); err != nil {
+		if err = splctrl.AddToManager(mgr, ctrl, c); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
