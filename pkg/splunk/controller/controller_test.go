@@ -19,12 +19,21 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -92,20 +101,108 @@ func newMockController() MockController {
 	return MockController{state: state}
 }
 
+// blank assignment to verify that MockFieldIndexer implements client.FieldIndexer
+var _ client.FieldIndexer = &MockFieldIndexer{}
+
+type MockFieldIndexer struct{}
+
+// IndexField for MockFieldIndexer just returns nil
+func (idx MockFieldIndexer) IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+	return nil
+}
+
+// blank assignment to verify that MockManager implements manager.Manager
+var _ manager.Manager = &MockManager{}
+
+// MockManager is used to test methods that involve the Kubernetes manager
+type MockManager struct{}
+
+// Add for MockManager just returns nil
+func (mgr MockManager) Add(r manager.Runnable) error {
+	return mgr.SetFields(r)
+}
+
+// SetFields for MockManager just returns nil
+func (mgr MockManager) SetFields(i interface{}) error {
+	if _, err := inject.InjectorInto(mgr.SetFields, i); err != nil {
+		return err
+	}
+	return nil
+}
+
+// AddHealthzCheck for MockManager just returns nil
+func (mgr MockManager) AddHealthzCheck(name string, check healthz.Checker) error {
+	return nil
+}
+
+// AddReadyzCheck for MockManager just returns nil
+func (mgr MockManager) AddReadyzCheck(name string, check healthz.Checker) error {
+	return nil
+}
+
+// Start for MockManager just returns nil
+func (mgr MockManager) Start(<-chan struct{}) error {
+	return nil
+}
+
+// GetConfig returns an initialized Config
+func (mgr MockManager) GetConfig() *rest.Config {
+	return &rest.Config{}
+}
+
+// GetScheme returns an initialized Scheme
+func (mgr MockManager) GetScheme() *runtime.Scheme {
+	return &runtime.Scheme{}
+}
+
+// GetClient returns a MockClient
+func (mgr MockManager) GetClient() client.Client {
+	return spltest.NewMockClient()
+}
+
+// GetFieldIndexer returns a client.FieldIndexer configured with the client
+func (mgr MockManager) GetFieldIndexer() client.FieldIndexer {
+	return MockFieldIndexer{}
+}
+
+// GetCache returns a cache.Cache
+func (mgr MockManager) GetCache() cache.Cache {
+	return &informertest.FakeInformers{}
+}
+
+// GetEventRecorderFor returns a new EventRecorder for the provided name
+func (mgr MockManager) GetEventRecorderFor(name string) record.EventRecorder {
+	broadcaster := record.NewBroadcaster()
+	return broadcaster.NewRecorder(mgr.GetScheme(), corev1.EventSource{})
+}
+
+// GetRESTMapper returns a RESTMapper
+func (mgr MockManager) GetRESTMapper() meta.RESTMapper {
+	return &meta.DefaultRESTMapper{}
+}
+
+// GetAPIReader returns a reader that will be configured to use the API server.
+func (mgr MockManager) GetAPIReader() client.Reader {
+	return mgr.GetClient()
+}
+
+// GetWebhookServer returns a webhook.Server
+func (mgr MockManager) GetWebhookServer() *webhook.Server {
+	s := webhook.Server{}
+	mgr.SetFields(s)
+	return &s
+}
+
+// NewMockManager returns a new instance of a MockManager
+func NewMockManager() manager.Manager {
+	return MockManager{}
+}
+
 func TestAddToManager(t *testing.T) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		t.Errorf("TestAddToManager: GetConfig() returned %v; want nil", err)
-	}
-
-	mgr, err := manager.New(cfg, manager.Options{Namespace: "test"})
-	if err != nil {
-		t.Errorf("TestAddToManager: manager.New() returned %v; want nil", err)
-	}
-
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
-	err = AddToManager(mgr, ctrl, c)
+	mgr := NewMockManager()
+	err := AddToManager(mgr, ctrl, c)
 	if err != nil {
 		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
 	}
@@ -152,7 +249,8 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// test for watch event when not found (deleted)
-	test("NotFound", 0, reconcile.Result{Requeue: false, RequeueAfter: 0}, errors.New("NotFound"))
+	c.NotFoundError = apierrors.NewNotFound(schema.GroupResource{Group: "v1", Resource: "ConfigMap"}, "defaults")
+	test("NotFound", 0, reconcile.Result{Requeue: false, RequeueAfter: 0}, nil)
 
 	obj := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
