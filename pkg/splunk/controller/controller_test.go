@@ -189,7 +189,7 @@ func (mgr MockManager) GetAPIReader() client.Reader {
 // GetWebhookServer returns a webhook.Server
 func (mgr MockManager) GetWebhookServer() *webhook.Server {
 	s := webhook.Server{}
-	mgr.SetFields(s)
+	mgr.SetFields(&s)
 	return &s
 }
 
