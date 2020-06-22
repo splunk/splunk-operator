@@ -65,6 +65,12 @@ Kubernetes, version 1.12 or later. Setting up, configuring and managing
 Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
 of support. For evaluation, we recommend using EKS or GKE.
 
+*Kubernetes releases 1.16.0 and 1.16.1 contain a
+[critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
+crash your API server when using custom resource definitions. Please do not
+attempt to run the Splunk Operator using these releases. This bug is fixed in
+Kuberenetes 1.16.2.*
+
 The Splunk Operator requires three docker images to be present or available
 to your Kubernetes cluster:
 
