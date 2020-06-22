@@ -16,6 +16,8 @@ package v1alpha3
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // default all fields to being optional
@@ -34,7 +36,7 @@ type LicenseMasterSpec struct {
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
 type LicenseMasterStatus struct {
 	// current phase of the license master
-	Phase ResourcePhase `json:"phase"`
+	Phase splcommon.Phase `json:"phase"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -52,20 +54,8 @@ type LicenseMaster struct {
 	Status LicenseMasterStatus `json:"status,omitempty"`
 }
 
-// GetIdentifier is a convenience function to return unique identifier for the Splunk enterprise deployment
-func (cr *LicenseMaster) GetIdentifier() string {
-	return cr.ObjectMeta.Name
-}
-
-// GetNamespace is a convenience function to return namespace for a Splunk enterprise deployment
-func (cr *LicenseMaster) GetNamespace() string {
-	return cr.ObjectMeta.Namespace
-}
-
-// GetTypeMeta is a convenience function to return a TypeMeta object
-func (cr *LicenseMaster) GetTypeMeta() metav1.TypeMeta {
-	return cr.TypeMeta
-}
+// blank assignment to verify that LicenseMaster implements splcommon.MetaObject
+var _ splcommon.MetaObject = &LicenseMaster{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

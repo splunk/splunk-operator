@@ -22,12 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // getSparkLabels returns a map of labels to use for Spark components.
 func getSparkLabels(identifier string, instanceType InstanceType) map[string]string {
-	return resources.GetLabels("spark", instanceType.ToString(), identifier)
+	return splcommon.GetLabels("spark", instanceType.ToString(), identifier)
 }
 
 // getSparkMasterPorts returns a map of ports to use for Spark master instances.
@@ -102,7 +102,7 @@ func getSparkWorkerServicePorts() []corev1.ServicePort {
 
 // ValidateSparkSpec checks validity and makes default updates to a SparkSpec, and returns error if something is wrong.
 func ValidateSparkSpec(spec *enterprisev1.SparkSpec) error {
-	spec.CommonSpec.Image = GetSparkImage(spec.CommonSpec.Image)
+	spec.Spec.Image = GetSparkImage(spec.Spec.Image)
 	if spec.Replicas == 0 {
 		spec.Replicas = 1
 	}
@@ -116,7 +116,7 @@ func ValidateSparkSpec(spec *enterprisev1.SparkSpec) error {
 			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
 	}
-	return resources.ValidateCommonSpec(&spec.CommonSpec, defaultResources)
+	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
 }
 
 // GetSparkDeployment returns a Kubernetes Deployment object for the Spark master configured for a Spark resource.
@@ -127,7 +127,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 	var replicas int32
 	switch instanceType {
 	case SparkMaster:
-		ports = resources.SortContainerPorts(getSparkMasterContainerPorts())
+		ports = splcommon.SortContainerPorts(getSparkMasterContainerPorts())
 		envVariables = []corev1.EnvVar{
 			{
 				Name:  "SPLUNK_ROLE",
@@ -136,14 +136,14 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 		}
 		replicas = 1
 	case SparkWorker:
-		ports = resources.SortContainerPorts(getSparkWorkerContainerPorts())
+		ports = splcommon.SortContainerPorts(getSparkWorkerContainerPorts())
 		envVariables = []corev1.EnvVar{
 			{
 				Name:  "SPLUNK_ROLE",
 				Value: "splunk_spark_worker",
 			}, {
 				Name:  "SPARK_MASTER_HOSTNAME",
-				Value: GetSparkServiceName(SparkMaster, cr.GetIdentifier(), false),
+				Value: GetSparkServiceName(SparkMaster, cr.GetName(), false),
 			}, {
 				Name:  "SPARK_WORKER_PORT", // this is set in new versions of splunk/spark container, but defined here for backwards-compatability
 				Value: "7777",
@@ -153,9 +153,9 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 	}
 
 	// prepare labels, annotations and affinity
-	annotations := resources.GetIstioAnnotations(ports)
-	affinity := resources.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetIdentifier(), instanceType.ToString())
-	selectLabels := getSparkLabels(cr.GetIdentifier(), instanceType)
+	annotations := splcommon.GetIstioAnnotations(ports)
+	affinity := splcommon.AppendPodAntiAffinity(&cr.Spec.Affinity, cr.GetName(), instanceType.ToString())
+	selectLabels := getSparkLabels(cr.GetName(), instanceType)
 	labels := make(map[string]string)
 	for k, v := range selectLabels {
 		labels[k] = v
@@ -168,7 +168,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSparkDeploymentName(instanceType, cr.GetIdentifier()),
+			Name:      GetSparkDeploymentName(instanceType, cr.GetName()),
 			Namespace: cr.GetNamespace(),
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -185,7 +185,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 					Affinity:      affinity,
 					Tolerations:   cr.Spec.Tolerations,
 					SchedulerName: cr.Spec.SchedulerName,
-					Hostname:      GetSparkServiceName(instanceType, cr.GetIdentifier(), false),
+					Hostname:      GetSparkServiceName(instanceType, cr.GetName(), false),
 					Containers: []corev1.Container{
 						{
 							Image:           cr.Spec.Image,
@@ -201,10 +201,10 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 	}
 
 	// append labels and annotations from parent
-	resources.AppendParentMeta(deployment.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	splcommon.AppendParentMeta(deployment.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// make Spark object the owner
-	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), resources.AsOwner(cr)))
+	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), splcommon.AsOwner(cr)))
 
 	// update with common spark pod config
 	err := updateSparkPodTemplateWithConfig(&deployment.Spec.Template, cr, instanceType)
@@ -231,16 +231,16 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 		Kind:       "Service",
 		APIVersion: "v1",
 	}
-	service.ObjectMeta.Name = GetSparkServiceName(instanceType, cr.GetIdentifier(), isHeadless)
+	service.ObjectMeta.Name = GetSparkServiceName(instanceType, cr.GetName(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
-	service.Spec.Selector = getSparkLabels(cr.GetIdentifier(), instanceType)
+	service.Spec.Selector = getSparkLabels(cr.GetName(), instanceType)
 
 	// prepare ports (note that port order is important for tests)
 	switch instanceType {
 	case SparkMaster:
-		service.Spec.Ports = resources.SortServicePorts(getSparkMasterServicePorts())
+		service.Spec.Ports = splcommon.SortServicePorts(getSparkMasterServicePorts())
 	case SparkWorker:
-		service.Spec.Ports = resources.SortServicePorts(getSparkWorkerServicePorts())
+		service.Spec.Ports = splcommon.SortServicePorts(getSparkWorkerServicePorts())
 	}
 
 	// ensure labels and annotations are not nil
@@ -257,9 +257,9 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 	}
 
 	// append labels and annotations from parent
-	resources.AppendParentMeta(service.GetObjectMeta(), cr.GetObjectMeta())
+	splcommon.AppendParentMeta(service.GetObjectMeta(), cr.GetObjectMeta())
 
-	service.SetOwnerReferences(append(service.GetOwnerReferences(), resources.AsOwner(cr)))
+	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr)))
 
 	return service
 }

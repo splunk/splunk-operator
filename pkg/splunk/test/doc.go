@@ -14,5 +14,7 @@
 
 /*
 Package test includes common code used for testing other modules.
+This package has no depedencies outside of the standard go and kubernetes libraries,
+and the splunk.common package.
 */
 package test

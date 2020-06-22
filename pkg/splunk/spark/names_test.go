@@ -62,6 +62,7 @@ func TestGetSparkImage(t *testing.T) {
 
 	os.Setenv("RELATED_IMAGE_SPLUNK_SPARK", "splunk-test/spark")
 	test("splunk-test/spark")
+	os.Setenv("RELATED_IMAGE_SPLUNK_SPARK", "splunk/spark")
 
 	specImage = "splunk/spark-test"
 	test("splunk/spark-test")

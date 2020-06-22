@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -106,7 +106,7 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 		return podName
 	}
 
-	return resources.GetServiceFQDN(namespace,
+	return splcommon.GetServiceFQDN(namespace,
 		fmt.Sprintf(
 			"%s.%s",
 			podName,

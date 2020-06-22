@@ -101,6 +101,7 @@ func TestGetSplunkImage(t *testing.T) {
 
 	os.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk-test/splunk")
 	test("splunk-test/splunk")
+	os.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk/splunk")
 
 	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
