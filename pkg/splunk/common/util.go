@@ -52,13 +52,17 @@ func AsOwner(cr MetaObject) metav1.OwnerReference {
 func AppendParentMeta(child, parent metav1.Object) {
 	// append labels from parent
 	for k, v := range parent.GetLabels() {
-		child.GetLabels()[k] = v
+		// prevent clobber of labels added by operator
+		if _, ok := child.GetLabels()[k]; !ok {
+			child.GetLabels()[k] = v
+		}
 	}
 
 	// append annotations from parent
 	for k, v := range parent.GetAnnotations() {
 		// ignore Annotations set by kubectl
-		if !strings.HasPrefix(k, "kubectl.kubernetes.io/") {
+		// AND prevent clobber of annotations added by operator
+		if _, ok := child.GetAnnotations()[k]; !ok && !strings.HasPrefix(k, "kubectl.kubernetes.io/") {
 			child.GetAnnotations()[k] = v
 		}
 	}

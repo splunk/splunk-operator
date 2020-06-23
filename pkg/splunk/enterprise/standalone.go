@@ -75,6 +75,12 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		return result, err
 	}
 
+	// create or update a regular service
+	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkStandalone, false))
+	if err != nil {
+		return result, err
+	}
+
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(cr)
 	if err != nil {
