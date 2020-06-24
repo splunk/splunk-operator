@@ -74,10 +74,12 @@ func TestAppendParentMeta(t *testing.T) {
 	child := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
+				"a": "z",
 				"c": "d",
 			},
 			Annotations: map[string]string{
 				"three": "four",
+				"one":   "ten",
 			},
 		},
 	}
@@ -86,7 +88,7 @@ func TestAppendParentMeta(t *testing.T) {
 
 	// check Labels
 	want := map[string]string{
-		"a": "b",
+		"a": "z",
 		"c": "d",
 	}
 	if !reflect.DeepEqual(child.GetLabels(), want) {
@@ -95,7 +97,7 @@ func TestAppendParentMeta(t *testing.T) {
 
 	// check Annotations
 	want = map[string]string{
-		"one":   "two",
+		"one":   "ten",
 		"three": "four",
 	}
 	if !reflect.DeepEqual(child.GetAnnotations(), want) {
