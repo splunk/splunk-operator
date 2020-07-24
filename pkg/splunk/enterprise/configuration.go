@@ -608,7 +608,10 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	// For multisite / multipart IndexerCluster, the cluster-master service from the referenced IndexerCluster must be used
 	if instanceType == SplunkIndexer && spec.IndexerClusterRef.Name == "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)
-	} else if instanceType != SplunkClusterMaster && spec.IndexerClusterRef.Name != "" {
+	} else if instanceType == SplunkClusterMaster {
+		// This makes splunk-ansible configure indexer-discovery on cluster-master
+		clusterMasterURL = "localhost"
+	} else if spec.IndexerClusterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerClusterRef.Name, false)
 		if spec.IndexerClusterRef.Namespace != "" {
 			clusterMasterURL = splcommon.GetServiceFQDN(spec.IndexerClusterRef.Namespace, clusterMasterURL)
