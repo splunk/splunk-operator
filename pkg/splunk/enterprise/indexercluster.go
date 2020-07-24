@@ -81,13 +81,13 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	}
 
 	// create or update a headless service for indexer cluster
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkIndexer, true))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkIndexer, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		return result, err
 	}
@@ -95,7 +95,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	// create cluster master resources if no reference to an indexer cluster is defined
 	if len(cr.Spec.IndexerClusterRef.Name) == 0 {
 		// create or update a regular service for the cluster master
-		err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkClusterMaster, false))
+		err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, false))
 		if err != nil {
 			return result, err
 		}

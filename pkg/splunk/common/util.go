@@ -233,15 +233,18 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 }
 
 // GetLabels returns a map of labels to use for managed components.
-func GetLabels(component, name, identifier string) map[string]string {
+func GetLabels(component, name, instanceIdentifier string, partOfIdentifier string) map[string]string {
 	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-	return map[string]string{
+	labels := map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  component,
 		"app.kubernetes.io/name":       name,
-		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", identifier, component),
-		"app.kubernetes.io/instance":   fmt.Sprintf("splunk-%s-%s", identifier, name),
+		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", partOfIdentifier, component),
 	}
+	if len(instanceIdentifier) > 0 {
+		labels["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", instanceIdentifier, name)
+	}
+	return labels
 }
 
 // AppendPodAntiAffinity appends a Kubernetes Affinity object to include anti-affinity for pods of the same type, and returns the result.

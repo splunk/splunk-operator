@@ -561,7 +561,7 @@ func TestGetIstioAnnotations(t *testing.T) {
 
 func TestGetLabels(t *testing.T) {
 	test := func(component, name, identifier string, want map[string]string) {
-		got := GetLabels(component, name, identifier)
+		got := GetLabels(component, name, identifier, identifier)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, identifier, got, want)
 		}

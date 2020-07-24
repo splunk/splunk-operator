@@ -81,19 +81,19 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	}
 
 	// create or update a headless search head cluster service
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkSearchHead, true))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update a regular search head cluster service
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkSearchHead, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update a deployer service
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkDeployer, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
 	if err != nil {
 		return result, err
 	}

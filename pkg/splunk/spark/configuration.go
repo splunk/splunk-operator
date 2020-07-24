@@ -27,7 +27,7 @@ import (
 
 // getSparkLabels returns a map of labels to use for Spark components.
 func getSparkLabels(identifier string, instanceType InstanceType) map[string]string {
-	return splcommon.GetLabels("spark", instanceType.ToString(), identifier)
+	return splcommon.GetLabels("spark", instanceType.ToString(), identifier, identifier)
 }
 
 // getSparkMasterPorts returns a map of ports to use for Spark master instances.
