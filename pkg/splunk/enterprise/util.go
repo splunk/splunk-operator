@@ -134,10 +134,21 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	}
 
 	// create or retrieve splunk secrets
-	secrets := getSplunkSecrets(cr, instanceType, idxcSecret, pass4SymmKey)
-	secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), splcommon.AsOwner(cr)))
-	if secrets, err = splctrl.ApplySecret(client, secrets); err != nil {
-		return nil, err
+	var secrets *corev1.Secret
+	if instanceType == SplunkIndexer && len(spec.IndexerClusterRef.Name) > 0 {
+		secrets = &corev1.Secret{}
+		secretRefName := GetSplunkSecretsName(spec.IndexerClusterRef.Name, SplunkIndexer)
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: secretRefName}
+		err := client.Get(context.TODO(), namespacedName, secrets)
+		if err != nil {
+			return nil, fmt.Errorf("Secret from referenced IndexerCluster (IndexerClusterRef) not found: '%s', %w", secretRefName, err)
+		}
+	} else {
+		secrets = getSplunkSecrets(cr, instanceType, idxcSecret, pass4SymmKey)
+		secrets.SetOwnerReferences(append(secrets.GetOwnerReferences(), splcommon.AsOwner(cr)))
+		if secrets, err = splctrl.ApplySecret(client, secrets); err != nil {
+			return nil, err
+		}
 	}
 
 	// create splunk defaults (for inline config)

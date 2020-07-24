@@ -480,9 +480,14 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
 
 	// add defaults secrets to all splunk containers
+	secretIdentifier := cr.GetName()
+	if instanceType == SplunkIndexer && len(spec.IndexerClusterRef.Name) > 0 {
+		// For multisite/multipart IndexerCluster, mount the secret of the part containing the cluster-master instead of creating one
+		secretIdentifier = spec.IndexerClusterRef.Name
+	}
 	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
-			SecretName:  GetSplunkSecretsName(cr.GetName(), instanceType),
+			SecretName:  GetSplunkSecretsName(secretIdentifier, instanceType),
 			DefaultMode: &secretVolDefaultMode,
 		},
 	})
@@ -580,7 +585,8 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 
 	// append URL for cluster master, if configured
 	var clusterMasterURL string
-	if instanceType == SplunkIndexer {
+	// For multisite / multipart IndexerCluster, the cluster-master service from the referenced IndexerCluster must be used
+	if instanceType == SplunkIndexer && spec.IndexerClusterRef.Name == "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)
 	} else if instanceType != SplunkClusterMaster && spec.IndexerClusterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerClusterRef.Name, false)

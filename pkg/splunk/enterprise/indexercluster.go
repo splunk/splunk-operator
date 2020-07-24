@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -91,35 +92,54 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
-	// create or update a regular service for the cluster master
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkClusterMaster, false))
-	if err != nil {
-		return result, err
+	// create cluster master resources if no reference to an indexer cluster is defined
+	if len(cr.Spec.IndexerClusterRef.Name) == 0 {
+		// create or update a regular service for the cluster master
+		err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkClusterMaster, false))
+		if err != nil {
+			return result, err
+		}
+
+		// create or update statefulset for the cluster master
+		statefulSet, err := getClusterMasterStatefulSet(cr)
+		if err != nil {
+			return result, err
+		}
+		clusterMasterManager := splctrl.DefaultStatefulSetPodManager{}
+		phase, err := clusterMasterManager.Update(client, statefulSet, 1)
+		if err != nil {
+			return result, err
+		}
+		cr.Status.ClusterMasterPhase = phase
+	} else {
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.IndexerClusterRef.Name,
+		}
+		masterIdxCluster := &enterprisev1.IndexerCluster{}
+		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
+		if err == nil {
+			cr.Status.ClusterMasterPhase = masterIdxCluster.Status.ClusterMasterPhase
+		} else {
+			cr.Status.ClusterMasterPhase = splcommon.PhaseError
+		}
 	}
 
-	// create or update statefulset for the cluster master
-	statefulSet, err := getClusterMasterStatefulSet(cr)
-	if err != nil {
-		return result, err
+	if cr.Spec.Replicas > 0 {
+		// create or update statefulset for the indexers
+		statefulSet, err := getIndexerStatefulSet(cr)
+		if err != nil {
+			return result, err
+		}
+		mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
+		if err != nil {
+			return result, err
+		}
+		cr.Status.Phase = phase
+	} else {
+		cr.Status.Phase = splcommon.PhaseReady
 	}
-	clusterMasterManager := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := clusterMasterManager.Update(client, statefulSet, 1)
-	if err != nil {
-		return result, err
-	}
-	cr.Status.ClusterMasterPhase = phase
-
-	// create or update statefulset for the indexers
-	statefulSet, err = getIndexerStatefulSet(cr)
-	if err != nil {
-		return result, err
-	}
-	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
-	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
-	if err != nil {
-		return result, err
-	}
-	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
@@ -226,7 +246,12 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
 func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, mgr.cr.GetName(), false))
+	masterIdxcName := mgr.cr.GetName()
+	// For multisite / multipart cluster, use the cluster-master API of the referenced IndexerCluster
+	if len(mgr.cr.Spec.IndexerClusterRef.Name) > 0 {
+		masterIdxcName = mgr.cr.Spec.IndexerClusterRef.Name
+	}
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
@@ -298,9 +323,7 @@ func getClusterMasterStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.State
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
 func validateIndexerClusterSpec(spec *enterprisev1.IndexerClusterSpec) error {
-	if spec.Replicas == 0 {
-		spec.Replicas = 1
-	}
+	// IndexerCluster must support 0 replicas for multisite / multipart clusters
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
 
