@@ -150,6 +150,55 @@ spec:
 EOF
 ```
 
+If different specs are needed for different parts of the indexer cluster, it is possible
+to build an indexer cluster from multiple IndexerCluster resources referencing the same
+cluster-master using the `indexerClusterRef` parameter.
+For instance to define a size or StorageClass for the PersistentVolumes of the cluster-master
+different from the indexers:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: IndexerCluster
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  # Only create a cluster-master
+  replicas: 0
+  storageClassName: standard
+  varStorage: "4Gi"
+---
+apiVersion: enterprise.splunk.com/v1alpha2
+kind: IndexerCluster
+metadata:
+  name: example-part1
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  # No cluster-master created, uses the referenced one
+  indexerClusterRef:
+    name: example
+  replicas: 3
+  storageClassName: local
+  varStorage: "128Gi"
+EOF
+```
+
+When binding multiple IndexerCluster resources together this way, it is the part containing
+the cluster-master which controls the [applications loaded](#installing-splunk-apps) to all
+the parts of the indexer cluster, and the indexer services that it creates select the indexers
+deployed by all the IndexerCluster parts, while the indexer services created by each other
+part only select the indexers that it manages.
+
+Separating the cluster-master from the indexers can also allow to better control
+the upgrade cycle to respect the recommended order: cluster-master, then search-heads,
+then indexers, by defining and updating the docker image used by each IndexerCluster part.
+
+This solution can also be used to build a [multisite cluster](MultisiteExamples.md)
+by defining a different zone affinity and site in each child IndexerCluster resource.
+
 ### Search Head Clusters
 
 To scale search performance and provide high availability, customers will
