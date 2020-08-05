@@ -576,12 +576,16 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	}
 
 	// prepare container env variables
+	role := instanceType.ToRole()
+	if instanceType == SplunkStandalone && len(spec.IndexerClusterRef.Name) > 0 {
+		role = SplunkSearchHead.ToRole()
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
 		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: instanceType.ToRole()},
+		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATVE_ADMIN_PASSWORD", Value: "true"},
 	}
 
