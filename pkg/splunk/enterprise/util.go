@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,9 +34,59 @@ import (
 // kubernetes logger used by splunk.enterprise package
 var log = logf.Log.WithName("splunk.enterprise")
 
+// ApplyCommonSecretObject creates/updates the namespace scoped "splunk-secrets" K8S secret object
+func ApplyCommonSecretObject(client splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	var current corev1.Secret
+
+	// Types of Splunk Secret Tokens
+	tokenTypes := []string{"hec_token", "password", "pass4symmkey", "idxc_secret", "shc_secret"}
+
+	// Check if a K8S secrets object "splunk-secrets" exists in the namespace
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: "splunk-secrets"}
+	err := client.Get(context.TODO(), namespacedName, &current)
+	if err != nil {
+		// Not found, generate random strings as values for all types of tokens
+		secretData := make(map[string][]byte)
+		for _, tokenType := range tokenTypes {
+			secretData[tokenType] = splcommon.GenerateSecret(secretBytes, 24)
+		}
+
+		result := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-secrets",
+				Namespace: cr.GetNamespace(),
+			},
+			Data: secretData,
+		}
+		current = result
+	} else {
+		// Found, generate random strings as values for missing types of tokens
+		for _, tokenType := range tokenTypes {
+			if _, ok := current.Data[tokenType]; !ok {
+				// Splunk secret token not found, Generate Splunk Secret Token
+				current.Data[tokenType] = splcommon.GenerateSecret(secretBytes, 24)
+			}
+		}
+	}
+
+	// Creates/updates the K8S secret object "splunk-secrets" via REST APIs
+	_, err = splctrl.ApplySecret(client, &current)
+	if err != nil {
+		//scopedLog.Error(err, "Failed to update resource")
+	}
+
+	return nil
+}
+
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
 func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
 	var err error
+
+	// Creates/updates the namespace scoped "splunk-secrets" K8S secret object
+	err = ApplyCommonSecretObject(client, cr)
+	if err != nil {
+		return nil, err
+	}
 
 	// if reference to indexer cluster, extract and re-use idxc.secret
 	// IndexerRef is not relevant for Indexer, and Indexer will use value from LicenseMaster to prevent cyclical dependency

@@ -48,6 +48,10 @@ func enterpriseObjectCopier(dst, src runtime.Object) bool {
 	return true
 }
 
+func TestApplyCommonSecretObject(t *testing.T) {
+
+}
+
 func TestApplySplunkConfig(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},

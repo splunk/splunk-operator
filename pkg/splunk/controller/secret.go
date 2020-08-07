@@ -35,12 +35,14 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
-		// found existing Secret: do nothing
-		scopedLog.Info("Found existing Secret")
+		scopedLog.Info("Updating existing Secret")
+		err = UpdateResource(client, secret)
 	} else {
+		scopedLog.Info("Creating a new Secret")
 		err = CreateResource(client, secret)
-		result = secret
 	}
+
+	result = secret
 
 	return result, err
 }
