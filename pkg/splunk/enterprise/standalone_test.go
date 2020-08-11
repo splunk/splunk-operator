@@ -28,13 +28,14 @@ import (
 
 func TestApplyStandalone(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secrets"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[3]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[4]}}
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
