@@ -33,6 +33,7 @@ import (
 
 func TestApplySearchHeadCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
@@ -41,7 +42,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[4], funcCalls[5]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[5], funcCalls[6]}}
 	statefulSet := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",

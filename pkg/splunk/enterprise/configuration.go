@@ -544,10 +544,10 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
 	if spec.DefaultsURL != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", splunkDefaults, spec.DefaultsURL)
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
 	}
 	if spec.Defaults != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", splunkDefaults, "/mnt/splunk-defaults/default.yml")
+		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
 	}
 
 	// prepare container env variables
@@ -557,6 +557,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
 		{Name: "SPLUNK_ROLE", Value: instanceType.ToRole()},
+		{Name: "SPLUNK_DECLARATVE_ADMIN_PASSWORD", Value: "true"},
 	}
 
 	// update variables for licensing, if configured
