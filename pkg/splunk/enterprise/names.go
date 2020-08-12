@@ -49,6 +49,9 @@ const (
 
 	// bytes used to generate Splunk secrets
 	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	// namespace scoped secret name
+	commonSecretName = "splunk-secrets"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

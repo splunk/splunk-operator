@@ -27,12 +27,13 @@ import (
 
 func TestApplyLicenseMaster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-master-secrets"},
 		{MetaName: "*v1.Service-test-splunk-stack1-license-master-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[2]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[3]}}
 	current := enterprisev1.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",

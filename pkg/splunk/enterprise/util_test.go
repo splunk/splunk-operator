@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -48,8 +49,63 @@ func enterpriseObjectCopier(dst, src runtime.Object) bool {
 	return true
 }
 
+func TestApplyCommonSecretObject(t *testing.T) {
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
+	}
+
+	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+		_, err := ApplyCommonSecretObject(c, "test")
+		return err
+	}
+
+	// "splunk-secrets" object doesn't exist
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	spltest.ReconcileTester(t, "TestApplyCommonSecretObject", "test", "test", createCalls, updateCalls, reconcile)
+
+	// Partially baked "splunk-secrets" object(applies to empty as well)
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      commonSecretName,
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"hec_token":    splcommon.GenerateSecret(secretBytes, 24),
+			"password":     splcommon.GenerateSecret(secretBytes, 24),
+			"pass4symmkey": splcommon.GenerateSecret(secretBytes, 24),
+		},
+	}
+	spltest.ReconcileTester(t, "TestApplyCommonSecretObject", "test", "test", createCalls, updateCalls, reconcile, &secret)
+
+	// Fully baked splunk-secrets object
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	secret = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      commonSecretName,
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"hec_token":    splcommon.GenerateSecret(secretBytes, 24),
+			"password":     splcommon.GenerateSecret(secretBytes, 24),
+			"pass4symmkey": splcommon.GenerateSecret(secretBytes, 24),
+			"idxc_secret":  splcommon.GenerateSecret(secretBytes, 24),
+			"shc_secret":   splcommon.GenerateSecret(secretBytes, 24),
+		},
+	}
+	spltest.ReconcileTester(t, "TestApplyCommonSecretObject", "test", "test", createCalls, updateCalls, reconcile, &secret)
+
+}
+
 func TestApplySplunkConfig(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
@@ -86,6 +142,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	searchHeadRevised.Spec.IndexerClusterRef.Name = "stack2"
 	updateCalls["Get"] = []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack2-indexer-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secrets"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
@@ -121,11 +178,12 @@ func TestApplySplunkConfig(t *testing.T) {
 		return err
 	}
 	funcCalls = []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack2-license-master-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack2-license-master-secrets"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secrets"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[2]}, "Create": {funcCalls[2]}}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[3]}, "Create": {funcCalls[0], funcCalls[3]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	spltest.ReconcileTester(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, &secret)
 }
