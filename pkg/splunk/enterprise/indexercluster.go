@@ -42,7 +42,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	scopedLog := log.WithName("ApplyIndexerCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
-	err := validateIndexerClusterSpec(&cr.Spec)
+	err := validateIndexerClusterSpec(cr)
 	if err != nil {
 		return result, err
 	}
@@ -322,9 +322,13 @@ func getClusterMasterStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.State
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
-func validateIndexerClusterSpec(spec *enterprisev1.IndexerClusterSpec) error {
+func validateIndexerClusterSpec(cr *enterprisev1.IndexerCluster) error {
 	// IndexerCluster must support 0 replicas for multisite / multipart clusters
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+	// Multisite / multipart clusters: can't reference a cluster master located in another namespace because of Service and Secret limitations
+	if len(cr.Spec.IndexerClusterRef.Namespace) > 0 && cr.Spec.IndexerClusterRef.Namespace != cr.GetNamespace() {
+		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
+	}
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
 // getIndexerExtraEnv returns extra environment variables used by search head clusters

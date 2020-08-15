@@ -38,6 +38,8 @@ Advantages:
 - some operations are performed per site which mitigates the risk of impact on the whole cluster (e.g. Splunk upgrades, scaling up resources)
 - specific indexer services are created per site allowing to send events to the indexers located in the same zone, avoiding possible cost of cross-zone traffic. Indexer discovery from cluster-master can do this for forwarders, but this solution also covers http/HEC traffic
 
+Limitation: all the IndexerCluster resources must be located in the same namespace
+
 #### Deploy the cluster-master
 
 Note: the image version is defined in these resources as this allows to control the upgrade cycle 
