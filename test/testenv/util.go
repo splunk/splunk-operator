@@ -109,7 +109,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.Licen
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseMasterName string, replicas int) *enterprisev1.IndexerCluster {
+func newIndexerCluster(name, ns, licenseMasterName string, replicas int, indexerClusterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
 	new := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -129,6 +129,10 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int) *enterp
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterName,
 				},
+				IndexerClusterRef: corev1.ObjectReference{
+					Name: indexerClusterRef,
+				},
+				Defaults: ansibleConfig,
 			},
 			Replicas: int32(replicas),
 		},
@@ -137,7 +141,7 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int) *enterp
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string) *enterprisev1.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string, ansibleConfig string) *enterprisev1.SearchHeadCluster {
 	new := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -160,6 +164,7 @@ func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterName,
 				},
+				Defaults: ansibleConfig,
 			},
 		},
 	}

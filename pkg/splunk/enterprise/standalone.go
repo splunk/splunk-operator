@@ -70,13 +70,13 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	}
 
 	// create or update a headless service (this is required by DFS for Spark->standalone comms, possibly other things)
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkStandalone, true))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update a regular service
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkStandalone, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
 	if err != nil {
 		return result, err
 	}

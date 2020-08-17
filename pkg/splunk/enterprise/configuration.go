@@ -28,8 +28,14 @@ import (
 )
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
-func getSplunkLabels(identifier string, instanceType InstanceType) map[string]string {
-	return splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), identifier)
+func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
+	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-master is used
+	// to set the label app.kubernetes.io/part-of on all the parts so that its indexer service can select
+	// the indexers from all the parts. Otherwise partOfIdentifier is equal to instanceIdentifier.
+	if instanceType != SplunkIndexer || len(partOfIdentifier) == 0 {
+		partOfIdentifier = instanceIdentifier
+	}
+	return splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), instanceIdentifier, partOfIdentifier)
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
@@ -90,7 +96,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterprisev1.CommonSpl
 }
 
 // getSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkService(cr splcommon.MetaObject, spec splcommon.Spec, instanceType InstanceType, isHeadless bool) *corev1.Service {
+func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	// use template if not headless
 	var service *corev1.Service
@@ -101,7 +107,7 @@ func getSplunkService(cr splcommon.MetaObject, spec splcommon.Spec, instanceType
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
-		service = spec.ServiceTemplate.DeepCopy()
+		service = spec.Spec.ServiceTemplate.DeepCopy()
 	}
 	service.TypeMeta = metav1.TypeMeta{
 		Kind:       "Service",
@@ -110,7 +116,21 @@ func getSplunkService(cr splcommon.MetaObject, spec splcommon.Spec, instanceType
 
 	service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetName(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
-	service.Spec.Selector = getSplunkLabels(cr.GetName(), instanceType)
+	instanceIdentifier := cr.GetName()
+	var partOfIdentifier string
+	if instanceType == SplunkIndexer {
+		if len(spec.IndexerClusterRef.Name) == 0 {
+			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
+			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
+			partOfIdentifier = instanceIdentifier
+			instanceIdentifier = ""
+		} else {
+			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-master
+			// in the app.kubernetes.io/part-of label
+			partOfIdentifier = spec.IndexerClusterRef.Name
+		}
+	}
+	service.Spec.Selector = getSplunkLabels(instanceIdentifier, instanceType, partOfIdentifier)
 	service.Spec.Ports = append(service.Spec.Ports, splcommon.SortServicePorts(getSplunkServicePorts(instanceType))...) // note that port order is important for tests
 
 	// ensure labels and annotations are not nil
@@ -339,7 +359,7 @@ func getSplunkStatefulSet(cr splcommon.MetaObject, spec *enterprisev1.CommonSplu
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
-	selectLabels := getSplunkLabels(cr.GetName(), instanceType)
+	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.IndexerClusterRef.Name)
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
 	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
@@ -480,9 +500,14 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
 
 	// add defaults secrets to all splunk containers
+	secretIdentifier := cr.GetName()
+	if instanceType == SplunkIndexer && len(spec.IndexerClusterRef.Name) > 0 {
+		// For multisite/multipart IndexerCluster, mount the secret of the part containing the cluster-master instead of creating one
+		secretIdentifier = spec.IndexerClusterRef.Name
+	}
 	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
-			SecretName:  GetSplunkSecretsName(cr.GetName(), instanceType),
+			SecretName:  GetSplunkSecretsName(secretIdentifier, instanceType),
 			DefaultMode: &secretVolDefaultMode,
 		},
 	})
@@ -551,12 +576,16 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	}
 
 	// prepare container env variables
+	role := instanceType.ToRole()
+	if instanceType == SplunkStandalone && len(spec.IndexerClusterRef.Name) > 0 {
+		role = SplunkSearchHead.ToRole()
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
 		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: instanceType.ToRole()},
+		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATVE_ADMIN_PASSWORD", Value: "true"},
 	}
 
@@ -580,9 +609,13 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 
 	// append URL for cluster master, if configured
 	var clusterMasterURL string
-	if instanceType == SplunkIndexer {
+	// For multisite / multipart IndexerCluster, the cluster-master service from the referenced IndexerCluster must be used
+	if instanceType == SplunkIndexer && spec.IndexerClusterRef.Name == "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)
-	} else if instanceType != SplunkClusterMaster && spec.IndexerClusterRef.Name != "" {
+	} else if instanceType == SplunkClusterMaster {
+		// This makes splunk-ansible configure indexer-discovery on cluster-master
+		clusterMasterURL = "localhost"
+	} else if spec.IndexerClusterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerClusterRef.Name, false)
 		if spec.IndexerClusterRef.Namespace != "" {
 			clusterMasterURL = splcommon.GetServiceFQDN(spec.IndexerClusterRef.Namespace, clusterMasterURL)

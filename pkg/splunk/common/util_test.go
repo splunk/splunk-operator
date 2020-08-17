@@ -560,19 +560,36 @@ func TestGetIstioAnnotations(t *testing.T) {
 }
 
 func TestGetLabels(t *testing.T) {
-	test := func(component, name, identifier string, want map[string]string) {
-		got := GetLabels(component, name, identifier)
+	test := func(component, name, instanceIdentifier string, partOfIdentifier string, want map[string]string) {
+		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier)
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, identifier, got, want)
+			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
 		}
 	}
 
-	test("indexer", "cluster-master", "t1", map[string]string{
+	test("indexer", "cluster-master", "t1", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
 		"app.kubernetes.io/name":       "cluster-master",
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
 		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+	})
+
+	// Multipart IndexerCluster - selector of indexer service for main part
+	test("indexer", "indexer", "", "cluster1", map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/name":       "indexer",
+		"app.kubernetes.io/part-of":    "splunk-cluster1-indexer",
+	})
+
+	// Multipart IndexerCluster - labels of child IndexerCluster part
+	test("indexer", "indexer", "site1", "cluster1", map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/name":       "indexer",
+		"app.kubernetes.io/part-of":    "splunk-cluster1-indexer",
+		"app.kubernetes.io/instance":   "splunk-site1-indexer",
 	})
 }
 

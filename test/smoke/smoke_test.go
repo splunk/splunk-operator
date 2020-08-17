@@ -1,6 +1,8 @@
 package basic
 
 import (
+	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -89,6 +91,99 @@ var _ = Describe("Smoke test", func() {
 				_ = deployment.GetInstance(deployment.GetName(), idc)
 				return idc.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+
+			shc := &enterprisev1.SearchHeadCluster{}
+			// Ensure search head cluster go to Ready phase
+			Eventually(func() splcommon.Phase {
+				err := deployment.GetInstance(deployment.GetName(), shc)
+				if err != nil {
+					return splcommon.PhaseError
+				}
+				testenvInstance.Log.Info("Waiting for search head cluster instance status to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+				return shc.Status.Phase
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// In a steady state, we should stay in Ready and not flip-flop around
+			Consistently(func() splcommon.Phase {
+				_ = deployment.GetInstance(deployment.GetName(), shc)
+				return shc.Status.Phase
+			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+		})
+	})
+
+	Context("Multisite cluster deployment (C3 - multisite indexer cluster, search head cluster)", func() {
+		It("can deploy indexers and search head cluster", func() {
+
+			siteCount := 3
+			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
+			Expect(err).To(Succeed(), "Unable to deploy cluster")
+
+			// Ensure the part containing the cluster-master go to Ready phase
+			idc := &enterprisev1.IndexerCluster{}
+			Eventually(func() splcommon.Phase {
+				err := deployment.GetInstance(deployment.GetName(), idc)
+				if err != nil {
+					return splcommon.PhaseError
+				}
+				testenvInstance.Log.Info("Waiting for cluster-master instance status to be ready", "instance", idc.ObjectMeta.Name, "Phase", idc.Status.Phase)
+				dumpGetPods(testenvInstance.GetName())
+				// Test ClusterMasterPhase, as Phase is always Ready with replicas = 0 (no indexers)
+				return idc.Status.ClusterMasterPhase
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// In a steady state, we should stay in Ready and not flip-flop around
+			Consistently(func() splcommon.Phase {
+				_ = deployment.GetInstance(deployment.GetName(), idc)
+				return idc.Status.ClusterMasterPhase
+			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// Ensure the indexers of all sites go to Ready phase
+			siteIndexerMap := map[string][]string{}
+			for site := 1; site <= siteCount; site++ {
+				siteName := fmt.Sprintf("site%d", site)
+				instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)
+				siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
+				// Ensure indexers go to Ready phase
+				idc := &enterprisev1.IndexerCluster{}
+				Eventually(func() splcommon.Phase {
+					err := deployment.GetInstance(instanceName, idc)
+					if err != nil {
+						return splcommon.PhaseError
+					}
+					testenvInstance.Log.Info("Waiting for indexer site instance status to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+					dumpGetPods(testenvInstance.GetName())
+					return idc.Status.Phase
+				}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+
+				// In a steady state, we should stay in Ready and not flip-flop around
+				Consistently(func() splcommon.Phase {
+					_ = deployment.GetInstance(instanceName, idc)
+					return idc.Status.Phase
+				}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+			}
+
+			// Ensure cluster configured as multisite
+			Eventually(func() map[string][]string {
+				podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+				stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/sites?output_mode=json"
+				command := []string{"/bin/sh"}
+				stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+					return map[string][]string{}
+				}
+				testenvInstance.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+				siteIndexerResponse := ClusterMasterSitesResponse{}
+				json.Unmarshal([]byte(stdout), &siteIndexerResponse)
+				siteIndexerStatus := map[string][]string{}
+				for _, site := range siteIndexerResponse.Entries {
+					siteIndexerStatus[site.Name] = []string{}
+					for _, peer := range site.Content.Peers {
+						siteIndexerStatus[site.Name] = append(siteIndexerStatus[site.Name], peer.ServerName)
+					}
+				}
+				return siteIndexerStatus
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(siteIndexerMap))
 
 			shc := &enterprisev1.SearchHeadCluster{}
 			// Ensure search head cluster go to Ready phase

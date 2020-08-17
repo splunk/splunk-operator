@@ -66,7 +66,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 	}
 
 	// create or update a service
-	err = splctrl.ApplyService(client, getSplunkService(cr, cr.Spec.Spec, SplunkLicenseMaster, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, false))
 	if err != nil {
 		return result, err
 	}
