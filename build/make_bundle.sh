@@ -149,5 +149,8 @@ mkdir -p $OLM_CERTIFIED/splunk
 cp $OLM_CATALOG/splunk/$VERSION/*_crd.yaml $OLM_CERTIFIED/splunk/
 yq w $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml metadata.certified "true" > $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
 yq w $OLM_CATALOG/splunk/splunk.package.yaml packageName "splunk-certified" > $OLM_CERTIFIED/splunk/splunk.package.yaml
-sed -i'' "s,$DOCKER_IO_PATH/spark,$REDHAT_REGISTRY_PATH/spark,g" $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
+
+# Mac OS expects sed -i '', Linux expects sed -i''. To workaround this, using .bak
+sed -i.bak "s,$DOCKER_IO_PATH/spark,$REDHAT_REGISTRY_PATH/spark,g" $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
+rm -f $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml.bak
 zip $OLM_CERTIFIED/splunk.zip -j $OLM_CERTIFIED/splunk $OLM_CERTIFIED/splunk/*
