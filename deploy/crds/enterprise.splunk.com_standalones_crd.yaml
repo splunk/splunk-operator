@@ -994,6 +994,38 @@ spec:
                       type: object
                   type: object
               type: object
+            smartstore:
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
+                on docs.splunk.com
+              properties:
+                indexes:
+                  description: List of Splunk indexes
+                  items:
+                    description: IndexSpec defines Splunk index name and storage path
+                    properties:
+                      location:
+                        description: Index location on the remote storage path
+                        type: string
+                      name:
+                        description: Splunk index name
+                        type: string
+                    type: object
+                  type: array
+                volumes:
+                  description: List of remote storage volumes
+                  items:
+                    description: VolumeSpec defines remote volume name and remote
+                      volume URI
+                    properties:
+                      endpoint:
+                        description: Remote volume URI
+                        type: string
+                      name:
+                        description: Remote volume name
+                        type: string
+                    type: object
+                  type: array
+              type: object
             sparkImage:
               description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
                 environment variables)
@@ -2289,6 +2321,38 @@ spec:
             selector:
               description: selector for pods, used by HorizontalPodAutoscaler
               type: string
+            smartstore:
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
+                on docs.splunk.com
+              properties:
+                indexes:
+                  description: List of Splunk indexes
+                  items:
+                    description: IndexSpec defines Splunk index name and storage path
+                    properties:
+                      location:
+                        description: Index location on the remote storage path
+                        type: string
+                      name:
+                        description: Splunk index name
+                        type: string
+                    type: object
+                  type: array
+                volumes:
+                  description: List of remote storage volumes
+                  items:
+                    description: VolumeSpec defines remote volume name and remote
+                      volume URI
+                    properties:
+                      endpoint:
+                        description: Remote volume URI
+                        type: string
+                      name:
+                        description: Remote volume name
+                        type: string
+                    type: object
+                  type: array
+              type: object
           type: object
       type: object
   version: v1alpha3

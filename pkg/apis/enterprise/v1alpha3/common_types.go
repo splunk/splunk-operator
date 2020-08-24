@@ -67,3 +67,30 @@ type CommonSplunkSpec struct {
 	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
 }
+
+// SmartStoreSpec defines Splunk indexes and remote storage volume configuration
+type SmartStoreSpec struct {
+	// List of remote storage volumes
+	VolList []VolumeSpec `json:"volumes,omitempty"`
+
+	// List of Splunk indexes
+	IndexList []IndexSpec `json:"indexes,omitempty"`
+}
+
+// VolumeSpec defines remote volume name and remote volume URI
+type VolumeSpec struct {
+	// Remote volume name
+	Name string `json:"name"`
+
+	// Remote volume URI
+	Endpoint string `json:"endpoint"`
+}
+
+// IndexSpec defines Splunk index name and storage path
+type IndexSpec struct {
+	// Splunk index name
+	Name string `json:"name"`
+
+	// Index location on the remote storage path
+	RemoteLocation string `json:"location"`
+}

@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +45,9 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(cr)
 	if err != nil {
+		// To do: sgontla: later delete these listings. (for now just to test CSPL-320)
+		LogSmartStoreVolumes(cr.Status.SmartStore.VolList)
+		LogSmartStoreIndexes(cr.Status.SmartStore.IndexList)
 		return result, err
 	}
 
@@ -51,6 +55,9 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		cr.Status.SmartStore = cr.Spec.SmartStore
+	}
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
 		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
@@ -322,12 +329,23 @@ func getClusterMasterStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.State
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
+
 func validateIndexerClusterSpec(cr *enterprisev1.IndexerCluster) error {
 	// IndexerCluster must support 0 replicas for multisite / multipart clusters
 	// Multisite / multipart clusters: can't reference a cluster master located in another namespace because of Service and Secret limitations
 	if len(cr.Spec.IndexerClusterRef.Namespace) > 0 && cr.Spec.IndexerClusterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
 	}
+
+	if cr.Spec.IndexerClusterRef.Name == "" {
+		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		if err != nil {
+			return err
+		}
+	} else if isSmartstoreConfigured(&cr.Spec.SmartStore) {
+		return (fmt.Errorf("Smartstore configuration is only supported with Cluster Master spec"))
+	}
+
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
