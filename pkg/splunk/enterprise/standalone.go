@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -41,12 +42,18 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(&cr.Spec)
 	if err != nil {
+		// To do: sgontla: later delete these listings. (for now just to test CSPL-320)
+		LogSmartStoreVolumes(cr.Status.SmartStore.VolList)
+		LogSmartStoreIndexes(cr.Status.SmartStore.IndexList)
 		return result, err
 	}
 
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		cr.Status.SmartStore = cr.Spec.SmartStore
+	}
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
@@ -123,6 +130,12 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 	if spec.Replicas == 0 {
 		spec.Replicas = 1
 	}
+
+	err := ValidateSplunkSmartstoreSpec(&spec.SmartStore)
+	if err != nil {
+		return err
+	}
+
 	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

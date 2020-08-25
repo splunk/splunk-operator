@@ -25,7 +25,10 @@ import (
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -638,4 +641,70 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
 	}
+}
+
+// LogSmartStoreVolumes logs smartstore volumes
+func LogSmartStoreVolumes(volumeList []enterprisev1.VolumeSpec) {
+	scopedLog := logC.WithName("LogSmartStoreVolumes")
+	//var temp string
+	for _, volume := range volumeList {
+		scopedLog.Info("Volume: ", "name: ", volume.Name, "endpoint: ", volume.Endpoint)
+	}
+}
+
+// LogSmartStoreIndexes logs smartstore indexes
+func LogSmartStoreIndexes(indexList []enterprisev1.IndexSpec) {
+	scopedLog := logC.WithName("LogSmartStoreIndexes")
+	for _, index := range indexList {
+		scopedLog.Info("Index: ", "name: ", index.Name, "location: ", index.RemoteLocation)
+	}
+}
+
+// isSmartstoreEnabled checks and returns true if smartstore is configured
+func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
+	if smartstore == nil {
+		return false
+	}
+
+	return !(smartstore.IndexList == nil && smartstore.VolList == nil)
+}
+
+// ValidateSplunkSmartstoreSpec checks and validates the smartstore config
+func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+	// Smartstore is an optional config (at least) for now
+	if !isSmartstoreConfigured(smartstore) {
+		return nil
+	}
+
+	numVolumes := len(smartstore.VolList)
+	if numVolumes <= 0 {
+		return fmt.Errorf("Smartstore volume configuration is missing")
+		// For now, only one volume is allowed.
+	} else if numVolumes > 1 {
+		return fmt.Errorf("Only one smartstore configuration allowed. Configured Volume count = %d", numVolumes)
+	}
+
+	volume := smartstore.VolList[0]
+	// Make sure that the smartstore volume info is correct
+	if volume.Name == "" {
+		return fmt.Errorf("Volume name is missing")
+	} else if volume.Endpoint == "" {
+		return fmt.Errorf("Volume Endpoint URI is missing")
+	}
+
+	indexList := smartstore.IndexList
+	// Make sure that all the indexes are provided with the mandatory config values.
+	// Placeholder to fill any default values. All
+	for i, index := range indexList {
+		if index.Name == "" {
+			return fmt.Errorf("Index name is missing for index at: %d", i)
+		} else if index.RemoteLocation == "" {
+			return fmt.Errorf("Index RemoteLocation is missing for index at: %d", i)
+		}
+	}
+
+	// To do: sgontla: Just for logging purpose for CSPL-320, remove it later
+	LogSmartStoreVolumes(smartstore.VolList)
+	LogSmartStoreIndexes(indexList)
+	return nil
 }
