@@ -254,8 +254,8 @@ func (d *Deployment) DeployCluster(name string, indexerReplicas int) error {
 	return nil
 }
 
-// DeployMultisiteCluster deploys a lm, cluster-master, indexers in multiple sites and sh clusters
-func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, siteCount int) error {
+// DeployMultisiteClusterWithSearchHead deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerReplicas int, siteCount int) error {
 
 	var licenseMaster string
 
@@ -305,6 +305,103 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
   multisite_master: splunk-%s-cluster-master-service
   site: site0
 `, name)
+	_, err = d.DeploySearchHeadCluster(name, name, licenseMaster, siteDefaults)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DeployMultisiteCluster deploys a lm, cluster-master, indexers in multiple sites
+func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, siteCount int) error {
+
+	var licenseMaster string
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster-master
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployIndexerCluster(name, licenseMaster, 0, "", defaults)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: %s
+`, name, siteName)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// DeploySingleSiteCluster deploys a lm, cluster-master, indexers, Search Head Cluster in single site
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
+
+	var licenseMaster string
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster-master
+	defaults := `splunk:
+  multisite_master: localhost
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployIndexerCluster(name, licenseMaster, 0, "", defaults)
+	if err != nil {
+		return err
+	}
+
+	// Set Master URI
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service`, name)
+	
+   // Deploy Indxers
+    _, err = d.DeployIndexerCluster(name+"-"+"idx", licenseMaster, indexerReplicas, name, siteDefaults)
+	if err != nil {
+		return err
+	}
+
+	// Deploy Search Head Cluster
 	_, err = d.DeploySearchHeadCluster(name, name, licenseMaster, siteDefaults)
 	if err != nil {
 		return err
