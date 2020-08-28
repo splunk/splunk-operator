@@ -82,7 +82,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	}
 
 	// create or update general config resources
-	secrets, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		return result, err
 	}
@@ -108,7 +108,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		}
 
 		// create or update statefulset for the cluster master
-		statefulSet, err := getClusterMasterStatefulSet(cr)
+		statefulSet, err := getClusterMasterStatefulSet(client, cr)
 		if err != nil {
 			return result, err
 		}
@@ -134,11 +134,11 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 
 	if cr.Spec.Replicas > 0 {
 		// create or update statefulset for the indexers
-		statefulSet, err := getIndexerStatefulSet(cr)
+		statefulSet, err := getIndexerStatefulSet(client, cr)
 		if err != nil {
 			return result, err
 		}
-		mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 		phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
@@ -319,13 +319,13 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 }
 
 // getIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
-func getIndexerStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
+	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(cr, cr.Spec.Replicas))
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getClusterMasterStatefulSet(cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
+	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, getIndexerExtraEnv(cr, cr.Spec.Replicas))
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.

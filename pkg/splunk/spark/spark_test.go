@@ -68,7 +68,7 @@ func TestApplySpark(t *testing.T) {
 		_, err := ApplySpark(c, cr.(*enterprisev1.Spark))
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplySpark", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplySpark", &current, revised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestDeleteSpark(t *testing.T) {

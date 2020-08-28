@@ -38,5 +38,5 @@ func TestApplyConfigMap(t *testing.T) {
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		return ApplyConfigMap(c, cr.(*corev1.ConfigMap))
 	}
-	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
 }

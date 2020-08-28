@@ -39,5 +39,5 @@ func TestApplySecret(t *testing.T) {
 		_, err := ApplySecret(c, cr.(*corev1.Secret))
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile, false)
 }
