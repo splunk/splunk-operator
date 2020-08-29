@@ -1003,11 +1003,15 @@ spec:
                   items:
                     description: IndexSpec defines Splunk index name and storage path
                     properties:
-                      location:
-                        description: Index location on the remote storage path
-                        type: string
                       name:
                         description: Splunk index name
+                        type: string
+                      remotePath:
+                        description: Index location relative to the remote volume
+                          path
+                        type: string
+                      volumeName:
+                        description: Remote Volume name
                         type: string
                     type: object
                   type: array
@@ -1022,6 +1026,9 @@ spec:
                         type: string
                       name:
                         description: Remote volume name
+                        type: string
+                      path:
+                        description: Remote volume path
                         type: string
                     type: object
                   type: array
@@ -2330,11 +2337,15 @@ spec:
                   items:
                     description: IndexSpec defines Splunk index name and storage path
                     properties:
-                      location:
-                        description: Index location on the remote storage path
-                        type: string
                       name:
                         description: Splunk index name
+                        type: string
+                      remotePath:
+                        description: Index location relative to the remote volume
+                          path
+                        type: string
+                      volumeName:
+                        description: Remote Volume name
                         type: string
                     type: object
                   type: array
@@ -2349,6 +2360,9 @@ spec:
                         type: string
                       name:
                         description: Remote volume name
+                        type: string
+                      path:
+                        description: Remote volume path
                         type: string
                     type: object
                   type: array

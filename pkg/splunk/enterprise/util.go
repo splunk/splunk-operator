@@ -163,6 +163,26 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	return secrets, nil
 }
 
+// GetSmartstoreSecrets is used to retrieve S3 access key and secrete keys.
+// To do: sgontla:
+// 1. Support multiple secret objects
+// 2. default secret object
+// volume name other than default, look for the specific secret object, else fetch from defaults
+func GetSmartstoreSecrets(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, error) {
+	var defaultSplunksecret corev1.Secret
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      commonSecretName,
+	}
+	err := client.Get(context.TODO(), namespacedName, &defaultSplunksecret)
+	if err != nil {
+		return "", "", err
+	}
+
+	return string(defaultSplunksecret.Data[s3AccessKey]), string(defaultSplunksecret.Data[s3SecretKey]), nil
+}
+
 // GetSplunkSecret is used to retrieve a secret from another custom resource.
 func GetSplunkSecret(client splcommon.ControllerClient, cr splcommon.MetaObject, ref corev1.ObjectReference, instanceType InstanceType, secretName string) ([]byte, error) {
 	namespace := ref.Namespace
@@ -190,4 +210,45 @@ func GetSplunkSecret(client splcommon.ControllerClient, cr splcommon.MetaObject,
 
 	scopedLog.Info("Re-using secret")
 	return result, nil
+}
+
+// CreateSmartStoreConfigMap creates the configMap with Smartstore config in INI format
+func CreateSmartStoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	smartstore *enterprisev1.SmartStoreSpec) (*corev1.ConfigMap, error) {
+
+	var crKind string
+	crKind = cr.GetObjectKind().GroupVersionKind().Kind
+
+	scopedLog := log.WithName("CreateSmartStoreConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if !isSmartstoreConfigured(smartstore) {
+		return nil, fmt.Errorf("Smartstore is not configured")
+	}
+
+	// Get the list of volumes in INI format
+	volumesConfIni, err := GetSmartstoreVolumesConfig(client, cr, smartstore)
+	if err != nil {
+		return nil, err
+	} else if volumesConfIni == "" {
+		return nil, fmt.Errorf("Unable to Prepare the Smartstore Volumes list in INI format")
+	}
+
+	// Get the list of indexes in INI format
+	indexesConfIni := GetSmartstoreIndexesConfig(smartstore.IndexList)
+
+	if indexesConfIni == "" {
+		return nil, fmt.Errorf("Unable to Prepare the Smartstore indexes list in INI format")
+	}
+
+	iniSmartstoreConf := fmt.Sprintf(`%s %s`, volumesConfIni, indexesConfIni)
+
+	// Create smartstore config consisting indexes.conf
+	smartstoreConfigMap := getSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, iniSmartstoreConf)
+	smartstoreConfigMap.SetOwnerReferences(append(smartstoreConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	if err := splctrl.ApplyConfigMap(client, smartstoreConfigMap); err != nil {
+		return nil, err
+	}
+
+	scopedLog.Info("Prepared smartstore configMap with ", "index.conf:", iniSmartstoreConf)
+	return smartstoreConfigMap, nil
 }

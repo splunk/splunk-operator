@@ -56,8 +56,23 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		_, err := CreateSmartStoreConfigMap(client, cr, &cr.Spec.SmartStore)
+		if err != nil {
+			return result, err
+		}
+
+		// To do: sgontla: Do we need to update the status in K8 etcd immediately?
+		// Consider the case, where the Cluster master validates the config, and
+		// generates config map, but fails later in the flow to complete its
+		// stateful set. Meanwhile, all the indexer cluster sites notices new
+		// config map, and keeps resetting the indexers. This is not problem,
+		// as long as:
+		// 1. ApplyConfigMap avoids a CRUD update if there is no change to data,
+		// which is already happening today, so, this scenario shouldn't happen.
+		// 2. To Do: Is there anything additional to be done on indexer site?
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
+
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
 		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
