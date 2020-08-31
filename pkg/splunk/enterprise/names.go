@@ -36,9 +36,6 @@ const (
 	serviceTemplateStr = "splunk-%s-%s-%s"
 
 	// identifier
-	secretsTemplateStr = "splunk-%s-%s-secrets"
-
-	// identifier
 	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
 	// default docker image used for Splunk instances
@@ -51,7 +48,13 @@ const (
 	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	// namespace scoped secret name
-	commonSecretName = "splunk-secrets"
+	namespaceScopedSecretName = "splunk-%s-secret"
+
+	// versionedSecretIdentifier based secret name
+	versionedSecretName = "%s-secret-v%s"
+
+	// firstVersion secret
+	firstVersion = "1"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -80,11 +83,6 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 	}
 
 	return result
-}
-
-// GetSplunkSecretsName uses a template to name a Kubernetes Secret for a SplunkEnterprise resource.
-func GetSplunkSecretsName(identifier string, instanceType InstanceType) string {
-	return fmt.Sprintf(secretsTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
@@ -131,4 +129,19 @@ func GetSplunkImage(specImage string) string {
 	}
 
 	return name
+}
+
+// GetVersionedSecretName returns a versioned secret name
+func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {
+	return fmt.Sprintf(versionedSecretName, versionedSecretIdentifier, version)
+}
+
+// GetNamespaceScopedSecretName gets namespace scoped secret name
+func GetNamespaceScopedSecretName(namespace string) string {
+	return fmt.Sprintf(namespaceScopedSecretName, namespace)
+}
+
+// GetSplunkSecretTokenTypes returns all types of Splunk secret tokens
+func GetSplunkSecretTokenTypes() []string {
+	return []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
 }

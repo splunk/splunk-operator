@@ -38,5 +38,5 @@ func TestApplyService(t *testing.T) {
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		return ApplyService(c, cr.(*corev1.Service))
 	}
-	spltest.ReconcileTester(t, "TestApplyService", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplyService", &current, revised, createCalls, updateCalls, reconcile, false)
 }

@@ -72,7 +72,7 @@ func TestApplyDeployment(t *testing.T) {
 		splcommon.PhaseScalingUp,
 	}
 	wantPhaseNum = 0
-	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile, false)
 
 	// test scale down
 	*current.Spec.Replicas = 5
@@ -87,7 +87,7 @@ func TestApplyDeployment(t *testing.T) {
 		splcommon.PhaseScalingDown,
 	}
 	wantPhaseNum = 0
-	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile, false)
 
 	// check for no updates, except pending pod updates (in progress)
 	c := spltest.NewMockClient()

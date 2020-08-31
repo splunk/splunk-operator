@@ -48,6 +48,8 @@ func coreObjectCopier(dst, src runtime.Object) bool {
 		*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
 	case *corev1.Secret:
 		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+	case *corev1.SecretList:
+		*dst.(*corev1.SecretList) = *src.(*corev1.SecretList)
 	case *corev1.PersistentVolumeClaim:
 		*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
 	case *corev1.PersistentVolumeClaimList:
@@ -327,6 +329,7 @@ func ReconcileTester(t *testing.T, method string,
 	current, revised interface{},
 	createCalls, updateCalls map[string][]MockFuncCall,
 	reconcile func(*MockClient, interface{}) error,
+	listInvolved bool,
 	initObjects ...runtime.Object) {
 
 	// initialize client
@@ -348,7 +351,11 @@ func ReconcileTester(t *testing.T, method string,
 	if err != nil {
 		t.Errorf("%s returned %v; want nil", methodPlus, err)
 	}
-	c.CheckCalls(t, methodPlus, map[string][]MockFuncCall{"Get": createCalls["Get"]})
+	if listInvolved {
+		c.CheckCalls(t, methodPlus, map[string][]MockFuncCall{"Get": createCalls["Get"], "List": createCalls["List"]})
+	} else {
+		c.CheckCalls(t, methodPlus, map[string][]MockFuncCall{"Get": createCalls["Get"]})
+	}
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)

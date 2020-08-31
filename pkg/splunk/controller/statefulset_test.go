@@ -43,7 +43,7 @@ func TestApplyStatefulSet(t *testing.T) {
 		_, err := ApplyStatefulSet(c, cr.(*appsv1.StatefulSet))
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile)
+	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestDefaultStatefulSetPodManager(t *testing.T) {

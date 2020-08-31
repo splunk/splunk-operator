@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -91,53 +90,6 @@ func TestGetSplunkDefaults(t *testing.T) {
 	}
 
 	test(`{"metadata":{"name":"splunk-stack1-indexer-defaults","namespace":"test","creationTimestamp":null},"data":{"default.yml":"defaults_string"}}`)
-}
-
-func TestGetSplunkSecrets(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-
-	got := getSplunkSecrets(&cr, SplunkIndexer, nil, nil)
-
-	if len(got.Data["hec_token"]) != 36 {
-		t.Errorf("getSplunkSecrets() hec_token len = %d; want %d", len(got.Data["hec_token"]), 36)
-	}
-
-	if len(got.Data["password"]) != 24 {
-		t.Errorf("getSplunkSecrets() password len = %d; want %d", len(got.Data["password"]), 24)
-	}
-
-	if len(got.Data["pass4SymmKey"]) != 24 {
-		t.Errorf("getSplunkSecrets() pass4SymmKey len = %d; want %d", len(got.Data["pass4SymmKey"]), 24)
-	}
-
-	if len(got.Data["idxc_secret"]) != 24 {
-		t.Errorf("getSplunkSecrets() idxc_secret len = %d; want %d", len(got.Data["idxc_secret"]), 24)
-	}
-
-	if len(got.Data["shc_secret"]) != 24 {
-		t.Errorf("getSplunkSecrets() shc_secret len = %d; want %d", len(got.Data["shc_secret"]), 24)
-	}
-
-	if len(got.Data["default.yml"]) == 0 {
-		t.Errorf("getSplunkSecrets() has empty default.yml")
-	}
-
-	idxcSecret := []byte{'a', 'b'}
-	pass4SymmKey := []byte{'a', 'b'}
-	got = getSplunkSecrets(&cr, SplunkIndexer, idxcSecret, pass4SymmKey)
-
-	if !bytes.Equal(got.Data["idxc_secret"], idxcSecret) {
-		t.Errorf("getSplunkSecrets() idxc_secret = %v; want %v", got.Data["idxc_secret"], idxcSecret)
-	}
-
-	if !bytes.Equal(got.Data["pass4SymmKey"], pass4SymmKey) {
-		t.Errorf("getSplunkSecrets() pass4SymmKey = %v; want %v", got.Data["pass4SymmKey"], idxcSecret)
-	}
 }
 
 func TestGetService(t *testing.T) {

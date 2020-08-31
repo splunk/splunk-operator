@@ -223,53 +223,6 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 	}
 }
 
-// getSplunkSecrets returns a Kubernetes Secret containing randomly generated default secrets to use for a Splunk Enterprise resource.
-func getSplunkSecrets(cr splcommon.MetaObject, instanceType InstanceType, idxcSecret []byte, pass4SymmKey []byte) *corev1.Secret {
-	// idxc_secret is option, and may be used to override random generation
-	if len(idxcSecret) == 0 {
-		idxcSecret = generateSplunkSecret()
-	}
-
-	// pass4SymmKey is option, and may be used to override random generation
-	if len(pass4SymmKey) == 0 {
-		pass4SymmKey = generateSplunkSecret()
-	}
-
-	// generate some default secret values to share across the cluster
-	secretData := map[string][]byte{
-		"hec_token":    generateHECToken(),
-		"password":     generateSplunkSecret(),
-		"pass4SymmKey": pass4SymmKey,
-		"idxc_secret":  idxcSecret,
-		"shc_secret":   generateSplunkSecret(),
-	}
-	secretData["default.yml"] = []byte(fmt.Sprintf(`
-splunk:
-    hec_disabled: 0
-    hec_enableSSL: 0
-    hec_token: "%s"
-    password: "%s"
-    pass4SymmKey: "%s"
-    idxc:
-        secret: "%s"
-    shc:
-        secret: "%s"
-`,
-		secretData["hec_token"],
-		secretData["password"],
-		secretData["pass4SymmKey"],
-		secretData["idxc_secret"],
-		secretData["shc_secret"]))
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkSecretsName(cr.GetName(), instanceType),
-			Namespace: cr.GetNamespace(),
-		},
-		Data: secretData,
-	}
-}
-
 // generateSplunkSecret returns a randomly generated Splunk secret.
 func generateSplunkSecret() []byte {
 	return splcommon.GenerateSecret(secretBytes, 24)
@@ -357,7 +310,7 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -460,8 +413,14 @@ func getSplunkStatefulSet(cr splcommon.MetaObject, spec *enterprisev1.CommonSplu
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
+	// retreive the secret to upload to the statefulSet pod
+	statefulSetSecret, err := GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(instanceType, cr.GetName()))
+	if err != nil || statefulSetSecret == nil {
+		return statefulSet, err
+	}
+
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv)
+	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr)))
@@ -470,7 +429,7 @@ func getSplunkStatefulSet(cr splcommon.MetaObject, spec *enterprisev1.CommonSplu
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar) {
+func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
 
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
@@ -501,16 +460,9 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
-
-	// add defaults secrets to all splunk containers
-	secretIdentifier := cr.GetName()
-	if instanceType == SplunkIndexer && len(spec.IndexerClusterRef.Name) > 0 {
-		// For multisite/multipart IndexerCluster, mount the secret of the part containing the cluster-master instead of creating one
-		secretIdentifier = spec.IndexerClusterRef.Name
-	}
 	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
-			SecretName:  GetSplunkSecretsName(secretIdentifier, instanceType),
+			SecretName:  statefulSetSecretName,
 			DefaultMode: &secretVolDefaultMode,
 		},
 	})
@@ -589,7 +541,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
 		{Name: "SPLUNK_ROLE", Value: role},
-		{Name: "SPLUNK_DECLARATVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 	}
 
 	// update variables for licensing, if configured

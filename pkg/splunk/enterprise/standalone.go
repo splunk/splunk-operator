@@ -89,7 +89,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	}
 
 	// create or update statefulset
-	statefulSet, err := getStandaloneStatefulSet(cr)
+	statefulSet, err := getStandaloneStatefulSet(client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -109,10 +109,9 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(cr *enterprisev1.Standalone) (*appsv1.StatefulSet, error) {
-
+func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.Standalone) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}

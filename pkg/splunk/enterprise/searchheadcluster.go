@@ -75,7 +75,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	}
 
 	// create or update general config resources
-	secrets, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
 		return result, err
 	}
@@ -99,7 +99,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	}
 
 	// create or update statefulset for the deployer
-	statefulSet, err := getDeployerStatefulSet(cr)
+	statefulSet, err := getDeployerStatefulSet(client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -111,11 +111,11 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
-	statefulSet, err = getSearchHeadStatefulSet(cr)
+	statefulSet, err = getSearchHeadStatefulSet(client, cr)
 	if err != nil {
 		return result, err
 	}
-	mgr := searchHeadClusterPodManager{log: scopedLog, cr: cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+	mgr := searchHeadClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -291,7 +291,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 }
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
-func getSearchHeadStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
 	// get search head env variables with deployer
 	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
@@ -301,7 +301,7 @@ func getSearchHeadStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.State
 	})
 
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +315,8 @@ func getSearchHeadStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.State
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getDeployerStatefulSet(cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
