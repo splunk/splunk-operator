@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,9 +25,10 @@ import (
 )
 
 func TestApplySecret(t *testing.T) {
+	// Re-concile tester
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.Secret-test-secrets"}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	current := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secrets",
@@ -40,4 +42,35 @@ func TestApplySecret(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Test create and update scenarios
+	c := spltest.NewMockClient()
+
+	// Test create
+	current.Data = map[string][]byte{"a": {'1', '1'}}
+	retr, err := ApplySecret(c, &current)
+	if err != nil {
+		t.Errorf("ApplySecret failed %s", err.Error())
+	}
+
+	if !reflect.DeepEqual(retr, &current) {
+		t.Errorf("Incorrect create got %+v want %+v", retr, current)
+	}
+
+	// Test Update
+	retr.Data = map[string][]byte{"a": {'1', '2'}}
+	retr2, err := ApplySecret(c, retr)
+	if err != nil {
+		t.Errorf("ApplySecret failed %s", err.Error())
+	}
+
+	if !reflect.DeepEqual(retr, retr2) {
+		t.Errorf("Incorrect update got %+v want %+v", retr2, retr)
+	}
+
+	// Negative testing
+	_, err = ApplySecret(c, nil)
+	if err.Error() != invalidSecretObjectError {
+		t.Errorf("Didn't catch invalid secret object")
+	}
 }

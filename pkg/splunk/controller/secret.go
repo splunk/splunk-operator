@@ -16,6 +16,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,22 +27,36 @@ import (
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
 func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
+	// Invalid secret object
+	if secret == nil {
+		return nil, errors.New(invalidSecretObjectError)
+	}
+
 	scopedLog := log.WithName("ApplySecret").WithValues(
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
-	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
-	var current corev1.Secret
-	result := &current
+	var result corev1.Secret
 
-	err := client.Get(context.TODO(), namespacedName, &current)
+	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
+	err := client.Get(context.TODO(), namespacedName, &result)
 	if err == nil {
-		// found existing Secret: do nothing
-		scopedLog.Info("Found existing Secret")
+		scopedLog.Info("Found existing Secret, update if needed")
+		if !reflect.DeepEqual(&result, secret) {
+			result = *secret
+			err = UpdateResource(client, &result)
+			if err != nil {
+				return nil, err
+			}
+		}
 	} else {
+		scopedLog.Info("Didn't find secret, creating one")
 		err = CreateResource(client, secret)
-		result = secret
+		if err != nil {
+			return nil, err
+		}
+		result = *secret
 	}
 
-	return result, err
+	return &result, nil
 }
