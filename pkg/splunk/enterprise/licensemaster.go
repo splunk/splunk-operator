@@ -48,6 +48,17 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		client.Status().Update(context.TODO(), cr)
 	}()
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
+	if err != nil {
+		return result, err
+	}
+
+	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -56,12 +67,6 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		} else {
 			result.Requeue = false
 		}
-		return result, err
-	}
-
-	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
-	if err != nil {
 		return result, err
 	}
 
@@ -98,4 +103,18 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+}
+
+// getLicenseMasterURL returns URL of license master
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+	licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+	if spec.LicenseMasterRef.Namespace != "" {
+		licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Value: licenseMasterURL,
+		},
+	}
 }
