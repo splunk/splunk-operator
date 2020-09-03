@@ -110,8 +110,7 @@ var _ = Describe("Smoke test", func() {
 				_ = deployment.GetInstance(instanceName, idc)
 				return idc.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
-    
-			
+
 			// Ensure search head cluster go to Ready phase
 			shc := &enterprisev1.SearchHeadCluster{}
 			Eventually(func() splcommon.Phase {
