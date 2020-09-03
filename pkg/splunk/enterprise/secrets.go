@@ -240,7 +240,12 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
-		// Found, generate values for only missing types of tokens them
+		// Found, if data is non-existent, create a map
+		if current.Data == nil {
+			current.Data = make(map[string][]byte)
+		}
+
+		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range GetSplunkSecretTokenTypes() {
 			if _, ok := current.Data[tokenType]; !ok {
