@@ -15,6 +15,8 @@
 package enterprise
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -47,4 +49,69 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	}
 
 	return namespaceScopedSecret, nil
+}
+
+// GetSmartstoreSecrets is used to retrieve S3 access key and secrete keys.
+// To do: sgontla:
+// 1. Support multiple secret objects
+// 2. default secret object
+// volume name other than default, look for the specific secret object, else fetch from defaults
+func GetSmartstoreSecrets(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, error) {
+	namespaceScopedSecret, err := GetNamespaceScopedSecret(client, cr.GetNamespace())
+	if err != nil {
+		return "", "", err
+	}
+
+	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
+	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
+
+	if accessKey == "" {
+		return "", "", fmt.Errorf("S3 Access Key is missing")
+	} else if secretKey == "" {
+		return "", "", fmt.Errorf("S3 Secret Key is missing")
+	}
+
+	return accessKey, secretKey, nil
+}
+
+// CreateSmartStoreConfigMap creates the configMap with Smartstore config in INI format
+func CreateSmartStoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	smartstore *enterprisev1.SmartStoreSpec) (*corev1.ConfigMap, error) {
+
+	var crKind string
+	crKind = cr.GetObjectKind().GroupVersionKind().Kind
+
+	scopedLog := log.WithName("CreateSmartStoreConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if !isSmartstoreConfigured(smartstore) {
+		return nil, fmt.Errorf("Smartstore is not configured")
+	}
+
+	// Get the list of volumes in INI format
+	volumesConfIni, err := GetSmartstoreVolumesConfig(client, cr, smartstore)
+	if err != nil {
+		return nil, err
+	} else if volumesConfIni == "" {
+		return nil, fmt.Errorf("Volume stanza list is empty")
+	}
+
+	// Get the list of indexes in INI format
+	indexesConfIni := GetSmartstoreIndexesConfig(smartstore.IndexList)
+
+	// To do: sgontla: Do we need to error out, if indexes config is missing?
+	// Indexes without volume is a No, but volumes without indexes should be fine?
+	if indexesConfIni == "" {
+		scopedLog.Info("Index stanza list is empty")
+	}
+
+	iniSmartstoreConf := fmt.Sprintf(`%s %s`, volumesConfIni, indexesConfIni)
+
+	// Create smartstore config consisting indexes.conf
+	smartstoreConfigMap := getSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, iniSmartstoreConf)
+	smartstoreConfigMap.SetOwnerReferences(append(smartstoreConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	if err := splctrl.ApplyConfigMap(client, smartstoreConfigMap); err != nil {
+		return nil, err
+	}
+
+	return smartstoreConfigMap, nil
 }

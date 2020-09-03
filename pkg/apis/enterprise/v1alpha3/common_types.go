@@ -84,6 +84,9 @@ type VolumeSpec struct {
 
 	// Remote volume URI
 	Endpoint string `json:"endpoint"`
+
+	// Remote volume path
+	Path string `json:"path"`
 }
 
 // IndexSpec defines Splunk index name and storage path
@@ -91,6 +94,9 @@ type IndexSpec struct {
 	// Splunk index name
 	Name string `json:"name"`
 
-	// Index location on the remote storage path
-	RemoteLocation string `json:"location"`
+	// Index location relative to the remote volume path
+	RemotePath string `json:"remotePath"`
+
+	// Remote Volume name
+	VolName string `json:"volumeName"`
 }
