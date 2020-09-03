@@ -121,6 +121,10 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
+	if instanceType == SplunkMonitoringConsole {
+		service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetNamespace(), isHeadless)
+		instanceIdentifier = cr.GetNamespace()
+	}
 	if instanceType == SplunkIndexer {
 		if len(spec.IndexerClusterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
@@ -247,6 +251,12 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 	}
 
 	switch instanceType {
+	case SplunkMonitoringConsole:
+		result["dfccontrol"] = 17000
+		result["datareceive"] = 19000
+		result["dfsmaster"] = 9000
+		result["hec"] = 8088
+		result["s2s"] = 9997
 	case SplunkStandalone:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000

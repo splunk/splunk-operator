@@ -59,6 +59,17 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		client.Status().Update(context.TODO(), cr)
 	}()
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
+	if err != nil {
+		return result, err
+	}
+
+	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -67,12 +78,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		} else {
 			result.Requeue = false
 		}
-		return result, err
-	}
-
-	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
-	if err != nil {
 		return result, err
 	}
 
@@ -137,4 +142,14 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 
 	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+}
+
+// getStandaloneExtraEnv returns extra environment variables used by monitoring console
+func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_STANDALONE_URL",
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkStandalone, cr.GetName(), replicas, false),
+		},
+	}
 }
