@@ -394,9 +394,9 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) e
 	// Set Master URI
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-cluster-master-service`, name)
-	
-   // Deploy Indxers
-    _, err = d.DeployIndexerCluster(name+"-"+"idx", licenseMaster, indexerReplicas, name, siteDefaults)
+
+	// Deploy Indxers
+	_, err = d.DeployIndexerCluster(name+"-"+"idx", licenseMaster, indexerReplicas, name, siteDefaults)
 	if err != nil {
 		return err
 	}
