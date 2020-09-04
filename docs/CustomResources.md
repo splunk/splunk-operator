@@ -4,14 +4,15 @@ The Splunk Operator provides a collection of
 [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
 you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 
-* [Metadata Parameters](#metadata-parameters)
-* [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
-* [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources)
-* [Spark Resource Spec Parameters](#spark-resource-spec-parameters)
-* [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
-* [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
-* [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
-* [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+- [Custom Resource Guide](#custom-resource-guide)
+  - [Metadata Parameters](#metadata-parameters)
+  - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
+  - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
+  - [Spark Resource Spec Parameters](#spark-resource-spec-parameters)
+  - [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
+  - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
+  - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
+  - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -95,7 +96,7 @@ spec:
         name: splunk-licenses
   licenseMasterRef:
     name: example
-  indexerClusterRef:
+  clusterMasterRef:
     name: example
 ```
 
@@ -114,7 +115,7 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
-| indexerClusterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `IndexerCluster` instance (via `name` and optionally `namespace`) to use for indexing |
+| clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
 
 
 ## Spark Resource Spec Parameters
@@ -214,7 +215,9 @@ metadata:
   name: example
 spec:
   replicas: 3
+  clusterMasterRef: example-cm
 ```
+Note:  `clusterMasterRef` is required field in case of IndexerCluster resource since it will be used to connect the IndexerCluster to ClusterMaster resource.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),

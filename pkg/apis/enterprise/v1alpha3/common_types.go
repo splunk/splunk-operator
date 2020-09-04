@@ -64,8 +64,8 @@ type CommonSplunkSpec struct {
 	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 
-	// IndexerClusterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
-	IndexerClusterRef corev1.ObjectReference `json:"indexerClusterRef"`
+	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration

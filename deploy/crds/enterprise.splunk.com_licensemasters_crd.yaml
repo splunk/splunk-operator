@@ -616,35 +616,8 @@ spec:
                       type: array
                   type: object
               type: object
-            defaults:
-              description: Inline map of default.yml overrides used to initialize
-                the environment
-              type: string
-            defaultsUrl:
-              description: Full path or URL for one or more default.yml files, separated
-                by commas
-              type: string
-            ephemeralStorage:
-              description: If true, ephemeral (emptyDir) storage will be used for
-                /opt/splunk/etc and /opt/splunk/var volumes
-              type: boolean
-            etcStorage:
-              description: Storage capacity to request for /opt/splunk/etc persistent
-                volume claims (default=”1Gi”)
-              type: string
-            image:
-              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
-                environment variables)
-              type: string
-            imagePullPolicy:
-              description: 'Sets pull policy for all images (either “Always” or the
-                default: “IfNotPresent”)'
-              enum:
-              - Always
-              - IfNotPresent
-              type: string
-            indexerClusterRef:
-              description: IndexerClusterRef refers to a Splunk Enterprise indexer
+            clusterMasterRef:
+              description: ClusterMasterRef refers to a Splunk Enterprise indexer
                 cluster managed by the operator within Kubernetes
               properties:
                 apiVersion:
@@ -680,6 +653,33 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+            defaults:
+              description: Inline map of default.yml overrides used to initialize
+                the environment
+              type: string
+            defaultsUrl:
+              description: Full path or URL for one or more default.yml files, separated
+                by commas
+              type: string
+            ephemeralStorage:
+              description: If true, ephemeral (emptyDir) storage will be used for
+                /opt/splunk/etc and /opt/splunk/var volumes
+              type: boolean
+            etcStorage:
+              description: Storage capacity to request for /opt/splunk/etc persistent
+                volume claims (default=”1Gi”)
+              type: string
+            image:
+              description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
+                environment variables)
+              type: string
+            imagePullPolicy:
+              description: 'Sets pull policy for all images (either “Always” or the
+                default: “IfNotPresent”)'
+              enum:
+              - Always
+              - IfNotPresent
+              type: string
             licenseMasterRef:
               description: LicenseMasterRef refers to a Splunk Enterprise license
                 master managed by the operator within Kubernetes
@@ -2229,6 +2229,3 @@ spec:
   - name: v1alpha3
     served: true
     storage: true
-  - name: v1alpha2
-    served: true
-    storage: false

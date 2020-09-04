@@ -3,14 +3,21 @@
 This document includes various examples for configuring Splunk Enterprise
 deployments.
 
-* [Creating a Clustered Deployment](#creating-a-clustered-deployment)
-* [Creating a Cluster with Data Fabric Search (DFS)](#creating-a-cluster-with-data-fabric-search-(dfs))
-* [Using Default Settings](#using-default-settings)
-* [Installing Splunk Apps](#installing-splunk-apps)
-* [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
-* [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
-* [Using an External License Master](#using-an-external-license-master)
-* [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
+
+  - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
+    - [Indexer Clusters](#indexer-clusters)
+      - [Cluster Master part](#cluster-master-part)
+      - [Indexer part](#indexer-part)
+    - [Search Head Clusters](#search-head-clusters)
+    - [Cluster Services](#cluster-services)
+    - [Creating a Cluster with Data Fabric Search (DFS)](#creating-a-cluster-with-data-fabric-search-dfs)
+    - [Cleaning Up](#cleaning-up)
+  - [Using Default Settings](#using-default-settings)
+  - [Installing Splunk Apps](#installing-splunk-apps)
+  - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
+  - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
+  - [Using an External License Master](#using-an-external-license-master)
+  - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
 
 Please refer to the [Custom Resource Guide](CustomResources.md) for more
 information about the custom resources that you can use with the Splunk
@@ -37,16 +44,31 @@ metadata:
 
 When growing, customers will typically want to first expand by upgrading
 to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of an indexer cluster as easy as creating an `IndexerCluster` resource:
+The Splunk Operator makes creation of an indexer cluster as easy as creating a `ClusterMaster` resource for Cluster Master part and an `IndexerCluster` resource for indexers part respectively:
 
+#### Cluster Master part
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
+kind: ClusterMaster
+metadata:
+  name: cm
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+EOF
+```
+#### Indexer part
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: IndexerCluster
 metadata:
   name: example
   finalizers:
   - enterprise.splunk.com/delete-pvc
+spec:
+  clusterMasterRef:
+    name: cm
 EOF
 ```
 
@@ -56,7 +78,7 @@ peer.
 ```
 $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
-splunk-example-cluster-master-0    0/1     Running   0          29s
+splunk-cm-cluster-master-0         0/1     Running   0          29s
 splunk-example-indexer-0           0/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
 ```
@@ -65,13 +87,16 @@ If you want more indexers, just update it to include a `replicas` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: IndexerCluster
 metadata:
   name: example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
+  spec:
+  clusterMasterRef:
+    name: cm
   replicas: 3
 EOF
 ```
@@ -79,7 +104,7 @@ EOF
 ```
 $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
-splunk-example-cluster-master-0    1/1     Running   0          14m
+splunk-cm-cluster-master-0         1/1     Running   0          14m
 splunk-example-indexer-0           1/1     Running   0          14m
 splunk-example-indexer-1           1/1     Running   0          70s
 splunk-example-indexer-2           1/1     Running   0          70s
@@ -118,7 +143,7 @@ metadata:
   name: idc-example
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v1alpha2
+    apiVersion: enterprise.splunk.com/v1alpha3
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -134,7 +159,7 @@ idc-example   IndexerCluster/example   16%/50%   5         10        5          
 ```
 
 To create a standalone search head that uses your indexer cluster, all you
-have to do is add an `indexerClusterRef` parameter:
+have to do is add an `clusterMasterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -145,54 +170,48 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  indexerClusterRef:
-    name: example
+  clusterMasterRef:
+    name: cm
 EOF
 ```
 
-If different specs are needed for different parts of the indexer cluster, it is possible
-to build an indexer cluster from multiple IndexerCluster resources referencing the same
-cluster-master using the `indexerClusterRef` parameter.
-For instance to define a size or StorageClass for the PersistentVolumes of the cluster-master
+The important parameter to note here is the `clusterMasterRef` field which points to the cluster master of the indexer cluster.
+Having a separate CR for cluster-master gives us the control to define a size or StorageClass for the PersistentVolumes of the cluster-master
 different from the indexers:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha2
-kind: IndexerCluster
+apiVersion: enterprise.splunk.com/v1alpha3
+kind: ClusterMaster
 metadata:
-  name: example
+  name: cm
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  # Only create a cluster-master
-  replicas: 0
   storageClassName: standard
   varStorage: "4Gi"
 ---
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: IndexerCluster
 metadata:
-  name: example-part1
+  name: idxc-part1
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
   # No cluster-master created, uses the referenced one
-  indexerClusterRef:
-    name: example
+  clusterMasterRef:
+    name: cm
   replicas: 3
   storageClassName: local
   varStorage: "128Gi"
 EOF
 ```
 
-When binding multiple IndexerCluster resources together this way, it is the part containing
-the cluster-master which controls the [applications loaded](#installing-splunk-apps) to all
+In the above environment, cluster-master controls the [applications loaded](#installing-splunk-apps) to all
 the parts of the indexer cluster, and the indexer services that it creates select the indexers
-deployed by all the IndexerCluster parts, while the indexer services created by each other
-part only select the indexers that it manages.
+deployed by all the IndexerCluster parts, while the indexer services created by indexer cluster only select the indexers that it manages.
 
-Separating the cluster-master from the indexers can also allow to better control
+This can also allow to better control
 the upgrade cycle to respect the recommended order: cluster-master, then search-heads,
 then indexers, by defining and updating the docker image used by each IndexerCluster part.
 
@@ -205,7 +224,7 @@ To scale search performance and provide high availability, customers will
 often want to deploy a [search head cluster](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC).
 Similar to a `Standalone` search head, you can create a search head cluster
 that uses your indexer cluster by just adding a new `SearchHeadCluster` resource
-with an `indexerClusterRef` parameter:
+with an `clusterMasterRef` parameter pointing to the cluster master we created in the above steps:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -216,8 +235,8 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  indexerClusterRef:
-    name: example
+  clusterMasterRef:
+    name: cm
 EOF
 ```
 
@@ -227,7 +246,7 @@ together (search head clusters require a minimum of 3 members):
 ```
 $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
-splunk-example-cluster-master-0    1/1     Running   0          53m
+splunk-cm-cluster-master-0         1/1     Running   0          53m
 splunk-example-deployer-0          0/1     Running   0          29s
 splunk-example-indexer-0           1/1     Running   0          53m
 splunk-example-indexer-1           1/1     Running   0          40m
@@ -253,7 +272,7 @@ resources also creates corresponding Kubernetes services:
 ```
 $ kubectl get svc
 NAME                                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
-splunk-example-cluster-master-service   ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
+splunk-cm-cluster-master-service        ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
 splunk-example-deployer-service         ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless         ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service          ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
@@ -338,6 +357,7 @@ kubectl delete standalone single
 kubectl delete spark example
 kubectl delete shc example
 kubectl delete idc example
+kubectl delete clustermaster cm
 ```
 
 

@@ -74,7 +74,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
-	searchHeadRevised.Spec.IndexerClusterRef.Name = "stack2"
+	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
 	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license master

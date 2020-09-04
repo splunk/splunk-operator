@@ -122,7 +122,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
 	if instanceType == SplunkIndexer {
-		if len(spec.IndexerClusterRef.Name) == 0 {
+		if len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
 			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
 			partOfIdentifier = instanceIdentifier
@@ -130,7 +130,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 		} else {
 			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-master
 			// in the app.kubernetes.io/part-of label
-			partOfIdentifier = spec.IndexerClusterRef.Name
+			partOfIdentifier = spec.ClusterMasterRef.Name
 		}
 	}
 	service.Spec.Selector = getSplunkLabels(instanceIdentifier, instanceType, partOfIdentifier)
@@ -315,7 +315,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
-	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.IndexerClusterRef.Name)
+	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
 	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
@@ -532,7 +532,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 
 	// prepare container env variables
 	role := instanceType.ToRole()
-	if instanceType == SplunkStandalone && len(spec.IndexerClusterRef.Name) > 0 {
+	if instanceType == SplunkStandalone && len(spec.ClusterMasterRef.Name) > 0 {
 		role = SplunkSearchHead.ToRole()
 	}
 	env := []corev1.EnvVar{
@@ -564,16 +564,13 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 
 	// append URL for cluster master, if configured
 	var clusterMasterURL string
-	// For multisite / multipart IndexerCluster, the cluster-master service from the referenced IndexerCluster must be used
-	if instanceType == SplunkIndexer && spec.IndexerClusterRef.Name == "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)
-	} else if instanceType == SplunkClusterMaster {
+	if instanceType == SplunkClusterMaster {
 		// This makes splunk-ansible configure indexer-discovery on cluster-master
 		clusterMasterURL = "localhost"
-	} else if spec.IndexerClusterRef.Name != "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.IndexerClusterRef.Name, false)
-		if spec.IndexerClusterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.IndexerClusterRef.Namespace, clusterMasterURL)
+	} else if spec.ClusterMasterRef.Name != "" {
+		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
 		}
 	}
 	if clusterMasterURL != "" {

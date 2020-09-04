@@ -42,7 +42,7 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 		component = "license-master"
 	case "SearchHeadCluster":
 		component = "search-head"
-	case "IndexerCluster":
+	case "IndexerCluster", "ClusterMaster":
 		component = "indexer"
 	default:
 		scopedLog.Info("Skipping PVC removal")

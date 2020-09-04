@@ -39,7 +39,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "license-master"
 	case "SearchHeadCluster":
 		component = "search-head"
-	case "IndexerCluster":
+	case "IndexerCluster", "ClusterMaster":
 		component = "indexer"
 	}
 
@@ -95,6 +95,33 @@ func TestDeleteSplunkPvc(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+
+	now := time.Now().Add(time.Second * 100)
+	currentTime := metav1.NewTime(now)
+	cr.ObjectMeta.DeletionTimestamp = &currentTime
+	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+
+	// try with unrecognized finalizer
+	c := spltest.NewMockClient()
+	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
+	deleted, err := splctrl.CheckForDeletion(&cr, c)
+	if deleted != false || err == nil {
+		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
+	}
+}
+
+func TestDeleteSplunkClusterMasterPvc(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-cm",
 			Namespace: "test",
 		},
 	}

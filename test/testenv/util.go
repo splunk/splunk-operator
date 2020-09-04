@@ -108,8 +108,37 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.Licen
 	return &new
 }
 
+// newClusterMaster creates and initialize the CR for ClusterMaster Kind
+func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) *enterprisev1.ClusterMaster {
+	new := enterprisev1.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterprisev1.ClusterMasterSpec{
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Volumes: []corev1.Volume{},
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterName,
+				},
+				Defaults: ansibleConfig,
+			},
+		},
+	}
+
+	return &new
+}
+
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseMasterName string, replicas int, indexerClusterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
+func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
 	new := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -129,8 +158,8 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, indexer
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterName,
 				},
-				IndexerClusterRef: corev1.ObjectReference{
-					Name: indexerClusterRef,
+				ClusterMasterRef: corev1.ObjectReference{
+					Name: clusterMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -141,7 +170,7 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, indexer
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string, ansibleConfig string) *enterprisev1.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string) *enterprisev1.SearchHeadCluster {
 	new := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -158,8 +187,8 @@ func newSearchHeadCluster(name, ns, indexerClusterName, licenseMasterName string
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				IndexerClusterRef: corev1.ObjectReference{
-					Name: indexerClusterName,
+				ClusterMasterRef: corev1.ObjectReference{
+					Name: clusterMasterRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterName,
