@@ -29,6 +29,7 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -72,6 +73,89 @@ func TestApplyIndexerCluster(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyIndexerCluster", &current, revised, createCalls, updateCalls, reconcile, true)
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		return true, err
+	}
+	splunkDeletionTester(t, revised, deleteFunc)
+}
+
+func TestApplyIndexerClusterMasterOnlyWithSmartstore(t *testing.T) {
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-indexercluster-smartstore"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
+		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+	}
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+	listmockCall := []spltest.MockFuncCall{
+		{ListOpts: listOpts}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
+
+	current := enterprisev1.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.IndexerClusterSpec{
+			Replicas: 0,
+			SmartStore: enterprisev1.SmartStoreSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+				},
+
+				IndexList: []enterprisev1.IndexSpec{
+					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+				},
+			},
+		},
+	}
+	client := spltest.NewMockClient()
+
+	// Without S3 keys, ApplyStandalone should fail
+	_, err := ApplyIndexerCluster(client, &current)
+	if err == nil {
+		t.Errorf("ApplyIndexerCluster should fail without S3 secrets configured")
+	}
+
+	// Create namespace scoped secret
+	secret, err := ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
+	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
+	_, err = splctrl.ApplySecret(client, secret)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	revised := current.DeepCopy()
+	revised.Spec.Image = "splunk/test"
+	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		return err
+	}
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterMasterOnlyWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())

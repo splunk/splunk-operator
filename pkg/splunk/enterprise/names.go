@@ -38,6 +38,9 @@ const (
 	// identifier
 	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
+	// identifier
+	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
+
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
@@ -55,6 +58,12 @@ const (
 
 	// firstVersion secret
 	firstVersion = "1"
+
+	// identifier used for S3 access key
+	s3AccessKey = "s3_access_key"
+
+	// identifier used for S3 secret key
+	s3SecretKey = "s3_secret_key"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -88,6 +97,11 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
 	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
+}
+
+// GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
+func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
+	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.

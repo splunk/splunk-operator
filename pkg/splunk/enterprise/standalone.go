@@ -52,8 +52,14 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		_, err := CreateSmartStoreConfigMap(client, cr, &cr.Spec.SmartStore)
+		if err != nil {
+			return result, err
+		}
+
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
+
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
