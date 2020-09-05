@@ -236,15 +236,13 @@ func ApplySplunkSecret(c splcommon.ControllerClient, cr splcommon.MetaObject, se
 func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
+	// Make data
+	current.Data = make(map[string][]byte)
+
 	// Check if a K8S secrets object "splunk-secrets" exists in the namespace
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
-		// Found, if data is non-existent, create a map
-		if current.Data == nil {
-			current.Data = make(map[string][]byte)
-		}
-
 		// Generate values for only missing types of tokens them
 		var updateNeeded bool = false
 		for _, tokenType := range GetSplunkSecretTokenTypes() {
@@ -270,22 +268,19 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 		return &current, nil
 	}
 
-	// Not found, generate values for all types of tokens
-	secretData := make(map[string][]byte)
+	// Not found, update data by generating values for all types of tokens
 	for _, tokenType := range GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
-			secretData[tokenType] = generateHECToken()
+			current.Data[tokenType] = generateHECToken()
 		} else {
-			secretData[tokenType] = splcommon.GenerateSecret(secretBytes, 24)
+			current.Data[tokenType] = splcommon.GenerateSecret(secretBytes, 24)
 		}
 	}
 
-	current = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetNamespaceScopedSecretName(namespace),
-			Namespace: namespace,
-		},
-		Data: secretData,
+	// Set name and namespace
+	current.ObjectMeta = metav1.ObjectMeta{
+		Name:      GetNamespaceScopedSecretName(namespace),
+		Namespace: namespace,
 	}
 
 	// Create the secret
