@@ -41,7 +41,7 @@ var _ = Describe("Smoke test", func() {
 		}
 	})
 
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("can deploy a standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
@@ -132,7 +132,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
+	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
@@ -226,7 +226,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
+	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
 		It("can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
