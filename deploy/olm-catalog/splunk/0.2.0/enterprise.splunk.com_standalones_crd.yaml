@@ -607,8 +607,7 @@ spec:
                   type: object
               type: object
             smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
               properties:
                 indexes:
                   description: List of Splunk indexes
@@ -619,8 +618,7 @@ spec:
                         description: Splunk index name
                         type: string
                       remotePath:
-                        description: Index location relative to the remote volume
-                          path
+                        description: Index location relative to the remote volume path
                         type: string
                       volumeName:
                         description: Remote Volume name
@@ -630,8 +628,7 @@ spec:
                 volumes:
                   description: List of remote storage volumes
                   items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
+                    description: VolumeSpec defines remote volume name and remote volume URI
                     properties:
                       endpoint:
                         description: Remote volume URI
@@ -1520,8 +1517,7 @@ spec:
               description: selector for pods, used by HorizontalPodAutoscaler
               type: string
             smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
               properties:
                 indexes:
                   description: List of Splunk indexes
@@ -1532,8 +1528,7 @@ spec:
                         description: Splunk index name
                         type: string
                       remotePath:
-                        description: Index location relative to the remote volume
-                          path
+                        description: Index location relative to the remote volume path
                         type: string
                       volumeName:
                         description: Remote Volume name
@@ -1543,8 +1538,7 @@ spec:
                 volumes:
                   description: List of remote storage volumes
                   items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
+                    description: VolumeSpec defines remote volume name and remote volume URI
                     properties:
                       endpoint:
                         description: Remote volume URI

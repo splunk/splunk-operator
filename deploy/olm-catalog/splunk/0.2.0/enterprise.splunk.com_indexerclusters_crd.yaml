@@ -613,45 +613,6 @@ spec:
                       type: object
                   type: object
               type: object
-            smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
-              properties:
-                indexes:
-                  description: List of Splunk indexes
-                  items:
-                    description: IndexSpec defines Splunk index name and storage path
-                    properties:
-                      name:
-                        description: Splunk index name
-                        type: string
-                      remotePath:
-                        description: Index location relative to the remote volume
-                          path
-                        type: string
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  type: array
-                volumes:
-                  description: List of remote storage volumes
-                  items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
-                    properties:
-                      endpoint:
-                        description: Remote volume URI
-                        type: string
-                      name:
-                        description: Remote volume name
-                        type: string
-                      path:
-                        description: Remote volume path
-                        type: string
-                    type: object
-                  type: array
-              type: object
             storageClassName:
               description: Name of StorageClass to use for persistent volume claims
               type: string
@@ -1547,45 +1508,6 @@ spec:
             service_ready_flag:
               description: Indicates whether the master is ready to begin servicing, based on whether it is initialized.
               type: boolean
-            smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
-              properties:
-                indexes:
-                  description: List of Splunk indexes
-                  items:
-                    description: IndexSpec defines Splunk index name and storage path
-                    properties:
-                      name:
-                        description: Splunk index name
-                        type: string
-                      remotePath:
-                        description: Index location relative to the remote volume
-                          path
-                        type: string
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  type: array
-                volumes:
-                  description: List of remote storage volumes
-                  items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
-                    properties:
-                      endpoint:
-                        description: Remote volume URI
-                        type: string
-                      name:
-                        description: Remote volume name
-                        type: string
-                      path:
-                        description: Remote volume path
-                        type: string
-                    type: object
-                  type: array
-              type: object
           type: object
       type: object
   version: v1alpha3
