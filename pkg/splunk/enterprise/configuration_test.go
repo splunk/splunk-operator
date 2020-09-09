@@ -198,13 +198,13 @@ func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: ""},
+					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+					{Name: "salesdata1"},
+					{Name: "salesdata2", RemotePath: "salesdata2"},
+					{Name: "salesdata3", RemotePath: ""},
 				},
 			},
 		},
@@ -228,13 +228,13 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: ""},
+					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+					{Name: "salesdata1"},
+					{Name: "salesdata2", RemotePath: "salesdata2"},
+					{Name: "salesdata3", RemotePath: ""},
 				},
 			},
 		},
@@ -257,13 +257,13 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-					{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
 				},
 			},
 		},
@@ -282,13 +282,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Valid smartstore config
 	SmartStore := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-us-west-2.amazonaws.com"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
@@ -300,14 +300,14 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Only one remote volume is allowed
 	SmartStoreMultipleVolumes := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com"},
-			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-us-west-2.amazonaws.com"},
+			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
@@ -319,13 +319,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Smartstore config with missing endpoint for the volume
 	SmartStoreVolumeWithNoRemoteEndPoint := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol_1", Endpoint: ""},
+			{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
@@ -337,13 +337,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Smartstore config with missing remote name for the volume
 	SmartStoreWithVolumeNameMissing := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "", Endpoint: "https://s3-eu-west-2.amazonaws.com"},
+			{Name: "", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
@@ -352,40 +352,58 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		t.Errorf("Should not accept a volume with missing Remotename")
 	}
 
-	// Smartstore config with missing index name
-	SmartStoreWithMissingIndexName := enterprisev1.SmartStoreSpec{
+	// Smartstore config with missing path for the volume
+	SmartStoreWithVolumePathMissing := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: ""},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
-	//Smartstore config with missing remote index location
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumePathMissing)
+	if err == nil {
+		t.Errorf("Should not accept a volume with missing Remote Path")
+	}
+
+	// Smartstore config with missing index name
+	SmartStoreWithMissingIndexName := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+		},
+
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
+		},
+	}
+
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexName)
 	if err == nil {
 		t.Errorf("Should not accept an Index with missing indexname ")
 	}
 
+	//Smartstore config with missing remotePath
 	SmartStoreWithMissingIndexLocation := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
 
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemoteLocation: "testbucket-rs-london/$_index_name"},
-			{Name: "salesdata2", RemoteLocation: ""},
-			{Name: "salesdata3", RemoteLocation: "testbucket-rs-london/$_index_name"},
+			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexLocation)
-	if err == nil {
-		t.Errorf("Should not accept an Index with missing index location")
+	if err != nil {
+		t.Errorf("Should accept an Index with missing remotePath location")
 	}
 
 	// Empty smartstore config
