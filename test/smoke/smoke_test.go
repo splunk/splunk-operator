@@ -41,7 +41,7 @@ var _ = Describe("Smoke test", func() {
 		}
 	})
 
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("can deploy a standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
@@ -132,7 +132,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
+	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
@@ -226,30 +226,30 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
+	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
 		It("can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
 			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure the part containing the cluster-master go to Ready phase
-			idc := &enterprisev1.IndexerCluster{}
+			// Ensure that the cluster-master goes to Ready phase
+			cm := &enterprisev1.ClusterMaster{}
 			Eventually(func() splcommon.Phase {
-				err := deployment.GetInstance(deployment.GetName(), idc)
+				err := deployment.GetInstance(deployment.GetName(), cm)
 				if err != nil {
 					return splcommon.PhaseError
 				}
-				testenvInstance.Log.Info("Waiting for cluster-master instance status to be ready", "instance", idc.ObjectMeta.Name, "Phase", idc.Status.Phase)
+				testenvInstance.Log.Info("Waiting for cluster-master instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 				dumpGetPods(testenvInstance.GetName())
-				// Test ClusterMasterPhase, as Phase is always Ready with replicas = 0 (no indexers)
-				return idc.Status.ClusterMasterPhase
+				// Test ClusterMaster Phase to see if its ready
+				return cm.Status.Phase
 			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
 
-			// In a steady state, we should stay in Ready and not flip-flop around
+			// In a steady state, cluster-master should stay in Ready and not flip-flop around
 			Consistently(func() splcommon.Phase {
-				_ = deployment.GetInstance(deployment.GetName(), idc)
-				return idc.Status.ClusterMasterPhase
+				_ = deployment.GetInstance(deployment.GetName(), cm)
+				return cm.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// Ensure the indexers of all sites go to Ready phase
