@@ -37,6 +37,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "standalone"
 	case "LicenseMaster":
 		component = "license-master"
+	case "MonitoringConsole":
+		component = "monitoring-console"
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
@@ -46,7 +48,10 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	labels := map[string]string{
 		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
 	}
-	listOpts := []client.ListOption{
+	listOptsA := []client.ListOption{
+		client.InNamespace("test"),
+	}
+	listOptsB := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
 		client.MatchingLabels(labels),
 	}
@@ -69,12 +74,38 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		mockCalls["Update"] = []spltest.MockFuncCall{
 			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 		}
-		if component != "" {
+		if component != "indexer" {
 			mockCalls["Delete"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 			}
 			mockCalls["List"] = []spltest.MockFuncCall{
-				{ListOpts: listOpts},
+				{ListOpts: listOptsA},
+				{ListOpts: listOptsB},
+			}
+			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
+				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
+				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
+				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+			}
+			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
+				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
+				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
+				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+			}
+		} else if component == "indexer" {
+			mockCalls["Delete"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+			}
+			mockCalls["List"] = []spltest.MockFuncCall{
+				{ListOpts: listOptsB},
 			}
 		}
 	}

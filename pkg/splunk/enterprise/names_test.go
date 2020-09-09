@@ -36,6 +36,14 @@ func TestGetSplunkStatefulsetName(t *testing.T) {
 	}
 }
 
+func TestGetSplunkMonitoringConsoleDeploymentName(t *testing.T) {
+	got := GetSplunkMonitoringConsoleDeploymentName(SplunkMonitoringConsole, "t2")
+	want := "splunk-t2-monitoring-console"
+	if got != want {
+		t.Errorf("GetSplunkMonitoringConsoleDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkMonitoringConsole.ToString(), "t2", got, want)
+	}
+}
+
 func TestGetSplunkStatefulsetPodName(t *testing.T) {
 	got := GetSplunkStatefulsetPodName(SplunkSearchHead, "t3", 2)
 	want := "splunk-t3-search-head-2"
@@ -62,6 +70,14 @@ func TestGetSplunkDefaultsName(t *testing.T) {
 	want := "splunk-t1-search-head-defaults"
 	if got != want {
 		t.Errorf("GetSplunkDefaultsName(\"%s\",\"%s\") = %s; want %s", "t1", SplunkSearchHead, got, want)
+	}
+}
+
+func TestGetSplunkMonitoringconsoleConfigMapName(t *testing.T) {
+	got := GetSplunkMonitoringconsoleConfigMapName("t1", SplunkMonitoringConsole)
+	want := "splunk-t1-monitoring-console"
+	if got != want {
+		t.Errorf("GetSplunkMonitoringconsoleConfigMapName(\"%s\",\"%s\") = %s; want %s", "t1", SplunkMonitoringConsole, got, want)
 	}
 }
 

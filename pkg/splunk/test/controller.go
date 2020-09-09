@@ -170,7 +170,10 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		copyMockObject(obj, listObj.(runtime.Object))
+		//if obj.GetObjectKind() == listObj.(runtime.Object).GetObjectKind() {
+		if reflect.TypeOf(obj).String() == reflect.TypeOf(listObj.(runtime.Object)).String() {
+			copyMockObject(obj, listObj.(runtime.Object))
+		}
 		return nil
 	}
 	return c.NotFoundError
@@ -265,8 +268,10 @@ func (c *MockClient) CheckCalls(t *testing.T, testname string, wantCalls map[str
 			notEmptyWantCalls++
 		}
 
+		//t.Fatalf("%s: MockClient %s() calls = %d; want %d, got: %s \n want: %s", testname, methodName, len(gotFuncCalls), len(wantFuncCalls), gotFuncCalls, wantFuncCalls)
 		if len(gotFuncCalls) != len(wantFuncCalls) {
-			t.Fatalf("%s: MockClient %s() calls = %d; want %d", testname, methodName, len(gotFuncCalls), len(wantFuncCalls))
+			//t.Fatalf("%s: MockClient %s() calls = %d; want %d", testname, methodName, len(gotFuncCalls), len(wantFuncCalls))
+			t.Fatalf("%s: MockClient %s() calls = %d; want %d, got: %s \n want: %s", testname, methodName, len(gotFuncCalls), len(wantFuncCalls), gotFuncCalls, wantFuncCalls)
 		}
 
 		for n := range wantFuncCalls {
@@ -324,6 +329,19 @@ func getStateKeyWithKey(key client.ObjectKey, obj runtime.Object) string {
 	return fmt.Sprintf("%s-%s-%s", kind, key.Namespace, key.Name)
 }
 
+// testReconcileForResource is used to test create and update reconcile operations
+func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, resource interface{},
+	calls map[string][]MockFuncCall,
+	reconcile func(*MockClient, interface{}) error) {
+
+	c.ResetCalls()
+	err := reconcile(c, resource)
+	if err != nil {
+		t.Errorf("%s returned %v; want nil", methodPlus, err)
+	}
+	c.CheckCalls(t, methodPlus, calls)
+}
+
 // ReconcileTester is used to test create and update reconcile operations
 func ReconcileTester(t *testing.T, method string,
 	current, revised interface{},
@@ -338,33 +356,42 @@ func ReconcileTester(t *testing.T, method string,
 
 	// test create new
 	methodPlus := fmt.Sprintf("%s(create)", method)
-	err := reconcile(c, current)
-	if err != nil {
-		t.Errorf("%s returned %v; want nil", methodPlus, err)
-	}
-	c.CheckCalls(t, methodPlus, createCalls)
+	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
 
 	// test no updates required for current
 	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
-	c.ResetCalls()
-	err = reconcile(c, current)
-	if err != nil {
-		t.Errorf("%s returned %v; want nil", methodPlus, err)
-	}
+	var updateNoChangecalls map[string][]MockFuncCall
 	if listInvolved {
-		c.CheckCalls(t, methodPlus, map[string][]MockFuncCall{"Get": createCalls["Get"], "List": createCalls["List"]})
+		updateNoChangecalls = map[string][]MockFuncCall{"Get": createCalls["Get"], "List": createCalls["List"]}
 	} else {
-		c.CheckCalls(t, methodPlus, map[string][]MockFuncCall{"Get": createCalls["Get"]})
+		updateNoChangecalls = map[string][]MockFuncCall{"Get": createCalls["Get"]}
 	}
+	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
-	c.ResetCalls()
-	err = reconcile(c, revised)
-	if err != nil {
-		t.Errorf("%s returned %v; want nil", methodPlus, err)
-	}
-	c.CheckCalls(t, methodPlus, updateCalls)
+	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
+}
+
+// ReconcileTesterWithoutRedundantCheck is used to test create and update reconcile operations
+func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
+	current, revised interface{},
+	createCalls, updateCalls map[string][]MockFuncCall,
+	reconcile func(*MockClient, interface{}) error,
+	listInvolved bool,
+	initObjects ...runtime.Object) {
+
+	// initialize client
+	c := NewMockClient()
+	c.AddObjects(initObjects)
+
+	// test create new
+	methodPlus := fmt.Sprintf("%s(create)", method)
+	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
+
+	// test updates required
+	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
+	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
 }
 
 // PodManagerUpdateTester is used to a single reconcile update using a StatefulSetPodManager
