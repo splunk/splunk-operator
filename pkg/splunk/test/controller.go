@@ -43,23 +43,25 @@ type MockObjectCopier func(dst, src runtime.Object) bool
 
 // coreObjectCopier is used to copy corev1 runtime.Objects
 func coreObjectCopier(dst, src runtime.Object) bool {
-	switch src.(type) {
-	case *corev1.ConfigMap:
-		*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
-	case *corev1.Secret:
-		*dst.(*corev1.Secret) = *src.(*corev1.Secret)
-	case *corev1.SecretList:
-		*dst.(*corev1.SecretList) = *src.(*corev1.SecretList)
-	case *corev1.PersistentVolumeClaim:
-		*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
-	case *corev1.PersistentVolumeClaimList:
-		*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
-	case *corev1.Service:
-		*dst.(*corev1.Service) = *src.(*corev1.Service)
-	case *corev1.Pod:
-		*dst.(*corev1.Pod) = *src.(*corev1.Pod)
-	default:
-		return false
+	if reflect.TypeOf(dst).String() == reflect.TypeOf(src.(runtime.Object)).String() {
+		switch src.(type) {
+		case *corev1.ConfigMap:
+			*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
+		case *corev1.Secret:
+			*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+		case *corev1.SecretList:
+			*dst.(*corev1.SecretList) = *src.(*corev1.SecretList)
+		case *corev1.PersistentVolumeClaim:
+			*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
+		case *corev1.PersistentVolumeClaimList:
+			*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
+		case *corev1.Service:
+			*dst.(*corev1.Service) = *src.(*corev1.Service)
+		case *corev1.Pod:
+			*dst.(*corev1.Pod) = *src.(*corev1.Pod)
+		default:
+			return false
+		}
 	}
 	return true
 }
@@ -170,8 +172,7 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		//if obj.GetObjectKind() == listObj.(runtime.Object).GetObjectKind() {
-		if reflect.TypeOf(obj).String() == reflect.TypeOf(listObj.(runtime.Object)).String() {
+		{
 			copyMockObject(obj, listObj.(runtime.Object))
 		}
 		return nil

@@ -107,14 +107,22 @@ func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 
 // getLicenseMasterURL returns URL of license master
 func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
-	licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
-	if spec.LicenseMasterRef.Namespace != "" {
-		licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+	if spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Value: licenseMasterURL,
+			},
+		}
 	}
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
 		},
 	}
 }

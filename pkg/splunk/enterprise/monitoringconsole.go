@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// ApplyMonitoringConsole reconciles the deployment for N standalone instances of Splunk Enterprise.
+// ApplyMonitoringConsole creates the deployment for monitoring console deployment of Splunk Enterprise.
 func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
 	var secrets *corev1.Secret
 	var err error
@@ -61,22 +61,27 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
+	//by default assume we are adding new instances in the monitoring console configMap
 	addNewURLs := true
 
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
 		addNewURLs = false
 	}
 
-	//_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), extraEnv, addNewURLs)
 	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
 	if err != nil {
 		return err
 	}
-	//_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+
 	//configMapHash to trigger the configMap change in monitoring console deployment
 	configMapHash, err := getConfigMapHash(client, cr.GetNamespace())
 	if err != nil {
 		return err
+	}
+
+	//configMapHash should never be nil, just adding extra check
+	if configMapHash == "" {
+		return nil
 	}
 
 	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, 1, configMapHash, secretName)
@@ -94,10 +99,11 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 // GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.
 func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, configMapHash string, secretName string) (*appsv1.Deployment, error) {
+	var partOfIdentifier string
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
 	annotations := splcommon.GetIstioAnnotations(ports)
-	var partOfIdentifier string
-	selectLabels := getSplunkLabels(cr.GetNamespace(), instanceType, partOfIdentifier) //using Namespace here so that with every CR the name should remain same Ex- splunk-<namespace>-monitoring-console
+	//using Namespace here so that with every CR the name should remain same Ex- splunk-<namespace>-monitoring-console
+	selectLabels := getSplunkLabels(cr.GetNamespace(), instanceType, partOfIdentifier)
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetNamespace(), instanceType.ToString())
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetNamespace(), SplunkMonitoringConsole)
 
@@ -153,10 +159,6 @@ func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.
 		},
 	}
 
-	if configMapHash == "" {
-		return nil, nil
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_CONFIGMAP_HASH",
 			Value: configMapHash,
@@ -172,41 +174,25 @@ func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-//func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)
 
-	//1. Retrieve the existing McExtraEnvMap contents
-	namespacedName := types.NamespacedName{Namespace: namespace, Name: GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)}
-	err := client.Get(context.TODO(), namespacedName, &current) //save existing in current
-
-	//If no configMap and deletion of CR is requested then retrun nil
-	if err != nil && addNewURLs == false {
-		//create a configMap with no values
-		current = corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole),
-				Namespace: namespace,
-			},
-			Data: make(map[string]string),
-		}
-
-		err = splctrl.CreateResource(client, &current)
-		if err != nil {
-			return nil, err
-		}
-		return &current, nil
-	}
+	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
+	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
+	err := client.Get(context.TODO(), namespacedName, &current)
 
 	if err == nil {
 		revised := current.DeepCopy()
 		for _, url := range newURLs {
 			_, ok := revised.Data[url.Name]
-			if addNewURLs { //if new instances are coming up
-				if !ok { //key doesn't exist in the configMap, then add it
-					revised.Data[url.Name] = url.Value //if new url doesn't exist add it in configmap
+			//if new instances are coming up
+			if addNewURLs {
+				//key doesn't exist in the configMap, then add it
+				if !ok {
+					//if new url doesn't exist add it in configmap
+					revised.Data[url.Name] = url.Value
 				} else {
 					//TODO: For "SEARCH_HEAD_URL" need to find a better approach to update configMap, any other data structure?
 					if url.Name == "SPLUNK_SEARCH_HEAD_URL" {
@@ -214,9 +200,9 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 							break
 						}
 						//delete all URLs for the crName custom resource
-						currentURLs := strings.Split(revised.Data[url.Name], ",") //split the existing values
+						currentURLs := strings.Split(revised.Data[url.Name], ",")
 						for _, curr := range currentURLs {
-							if strings.Contains(curr, crName) { //delete that entry
+							if strings.Contains(curr, crName) {
 								revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
 								if strings.HasPrefix(revised.Data[url.Name], ",") {
 									res := revised.Data[url.Name]
@@ -254,8 +240,8 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 						}
 					}
 				}
-			} else { //removing custom resource. Update configMap
-				//check if only dummy entery exist then no deletion can happen
+			} else {
+				//removing custom resource. Update configMap
 				if strings.Contains(revised.Data[url.Name], url.Value) {
 					revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
 					if strings.HasPrefix(revised.Data[url.Name], ",") {
@@ -286,13 +272,24 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		return &current, nil
 	}
 
-	for _, url := range newURLs {
-		current.Data[url.Name] = url.Value
+	//If no configMap and deletion of CR is requested then create a empty configMap
+	if err != nil && addNewURLs == false {
+		current = corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMap,
+				Namespace: namespace,
+			},
+			Data: make(map[string]string),
+		}
+	} else {
+		//else create a new configMap with new entries
+		for _, url := range newURLs {
+			current.Data[url.Name] = url.Value
+		}
 	}
 
-	// Set name and namespace
 	current.ObjectMeta = metav1.ObjectMeta{
-		Name:      GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole),
+		Name:      configMap,
 		Namespace: namespace,
 	}
 
@@ -315,7 +312,7 @@ func getConfigMapHash(client splcommon.ControllerClient, namespace string) (stri
 		return "", err
 	}
 
-	contents := current.Data //map[string]string
+	contents := current.Data
 
 	hash := md5.New()
 	b := new(bytes.Buffer)
@@ -327,7 +324,8 @@ func getConfigMapHash(client splcommon.ControllerClient, namespace string) (stri
 		keys = append(keys, k)
 	}
 
-	sort.Strings(keys) //sort keys here
+	//sort keys here
+	sort.Strings(keys)
 
 	//now iterate through the map in sorted order
 	for _, k := range keys {

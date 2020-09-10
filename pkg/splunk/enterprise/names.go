@@ -38,9 +38,6 @@ const (
 	// identifier
 	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
-	//identifier
-	monitoringconsoleTemplateStr = "splunk-%s-%s"
-
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
@@ -109,7 +106,7 @@ func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string 
 
 // GetSplunkMonitoringconsoleConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType InstanceType) string {
-	return fmt.Sprintf(monitoringconsoleTemplateStr, identifier, instanceType.ToKind())
+	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.

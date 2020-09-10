@@ -63,6 +63,10 @@ func TestGetSplunkServiceName(t *testing.T) {
 
 	test("splunk-t1-deployer-headless", SplunkDeployer, "t1", true)
 	test("splunk-t2-search-head-service", SplunkSearchHead, "t2", false)
+	test("splunk-t3-license-master-service", SplunkLicenseMaster, "t3", false)
+
+	LicenseMasterRefName := "stack1"
+	test("splunk-stack1-license-master-service", SplunkLicenseMaster, LicenseMasterRefName, false)
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {
