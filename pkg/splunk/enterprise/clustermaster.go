@@ -26,6 +26,7 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster master.
@@ -141,5 +142,6 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, getIndexerExtraEnv(cr, 0))
+	var extraEnvVar []corev1.EnvVar
+	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
 }
