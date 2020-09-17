@@ -93,12 +93,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		return result, err
 	}
 
-	// create or update a headless service for indexer cluster
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
-	if err != nil {
-		return result, err
-	}
-
 	// create or update a regular service for indexer cluster (ingestion)
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
