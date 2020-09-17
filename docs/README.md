@@ -26,7 +26,7 @@ be more successful and move at a rapid pace.
 **For help, please first read our [Frequently Asked Questions](FAQ.md)**
 
 **Community Support & Discussions on
-[Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator
+[Slack](https://splunk-usergroups.slack.com)** channel #kubernetes
 
 **File Issues or Enhancements in
 [GitHub](https://github.com/splunk/splunk-operator/issues)** splunk/splunk-operator
