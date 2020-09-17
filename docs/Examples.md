@@ -44,9 +44,9 @@ metadata:
 
 When growing, customers will typically want to first expand by upgrading
 to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of an indexer cluster as easy as creating a `ClusterMaster` resource for Cluster Master part and an `IndexerCluster` resource for indexers part respectively:
+The Splunk Operator makes creation of an indexer cluster as easy as creating a `ClusterMaster` resource for Cluster Master and an `IndexerCluster` resource for indexers part respectively:
 
-#### Cluster Master part
+#### Cluster Master
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v1alpha3
