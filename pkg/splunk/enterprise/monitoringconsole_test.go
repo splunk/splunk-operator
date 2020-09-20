@@ -136,137 +136,53 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false)
 
-	//extra check for "SPLUNK_SEARCH_HEAD_URL"
-
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
-	env = []corev1.EnvVar{
-		{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	newURLsAdded = true
 
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
 			Namespace: "test",
 		},
-		Data: map[string]string{"SPLUNK_SEARCH_HEAD_URL": "splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local"},
+		Data: map[string]string{"A": "a,b"},
 	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
-	//more SH scenarios
-	//extra check for "SPLUNK_SEARCH_HEAD_URL"
-
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
-	env = []corev1.EnvVar{
-		{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	newURLsAdded = true
-
-	current = corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-monitoring-console",
-			Namespace: "test",
-		},
-		Data: map[string]string{"SPLUNK_SEARCH_HEAD_URL": "splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
-	//extra check for "SPLUNK_SEARCH_HEAD_URL"
-
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
-	env = []corev1.EnvVar{
-		{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	newURLsAdded = true
-
-	current = corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-monitoring-console",
-			Namespace: "test",
-		},
-		Data: map[string]string{"SPLUNK_SEARCH_HEAD_URL": "splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
-	//extra check for "SPLUNK_SEARCH_HEAD_URL"
-
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
-	env = []corev1.EnvVar{
-		{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	newURLsAdded = true
-
-	current = corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-monitoring-console",
-			Namespace: "test",
-		},
-		Data: map[string]string{"SPLUNK_SEARCH_HEAD_URL": "splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local,splunk-test-search-head-4.splunk-test-search-head-headless.default.svc.cluster.local"},
-	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
-	//test if url.Value contains any prefix/suffix/,,
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	newURLsAdded = false
 
-	current = corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-monitoring-console",
-			Namespace: "test",
-		},
-		Data: map[string]string{"a": "b,c"},
-	}
-
-	env = []corev1.EnvVar{
-		{Name: "a", Value: "b"},
-	}
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
 
-	//check more Deletion scenarios
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
-	newURLsAdded = false
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a"},
+	}
 
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
 			Namespace: "test",
 		},
-		Data: map[string]string{"a": "b,a,c"},
+		Data: map[string]string{"A": "test-a"},
 	}
+	newURLsAdded = false
 
-	env = []corev1.EnvVar{
-		{Name: "a", Value: "b"},
-	}
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
 
-	//check more Deletion scenarios
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
-	newURLsAdded = false
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a,test-b"},
+	}
 
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
 			Namespace: "test",
 		},
-		Data: map[string]string{"a": "b,a,c"},
+		Data: map[string]string{"A": "test-a"},
 	}
+	newURLsAdded = true
 
-	env = []corev1.EnvVar{
-		{Name: "a", Value: "c"},
-	}
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
 }

@@ -81,25 +81,24 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//configMapHash should never be nil, just adding extra check
 	if configMapHash == "" {
-		return nil
+		return err
 	}
 
-	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, 1, configMapHash, secretName)
+	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, configMapHash, secretName)
 	if err != nil {
 		return err
 	}
 
 	_, err = splctrl.ApplyDeployment(client, deploymentMC)
-	if err != nil {
-		return err
-	}
 
 	return err
 }
 
 // GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, configMapHash string, secretName string) (*appsv1.Deployment, error) {
+func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapHash string, secretName string) (*appsv1.Deployment, error) {
 	var partOfIdentifier string
+	// there will be always 1 replica of monitoring console
+	replicas := int32(1)
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
 	annotations := splcommon.GetIstioAnnotations(ports)
 	//using Namespace here so that with every CR the name should remain same Ex- splunk-<namespace>-monitoring-console
@@ -185,82 +184,10 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 
 	if err == nil {
 		revised := current.DeepCopy()
-		for _, url := range newURLs {
-			_, ok := revised.Data[url.Name]
-			//if new instances are coming up
-			if addNewURLs {
-				//key doesn't exist in the configMap, then add it
-				if !ok {
-					//if new url doesn't exist add it in configmap
-					revised.Data[url.Name] = url.Value
-				} else {
-					//TODO: For "SEARCH_HEAD_URL" need to find a better approach to update configMap, any other data structure?
-					if url.Name == "SPLUNK_SEARCH_HEAD_URL" {
-						if revised.Data[url.Name] == url.Value {
-							break
-						}
-						//delete all URLs for the crName custom resource
-						currentURLs := strings.Split(revised.Data[url.Name], ",")
-						for _, curr := range currentURLs {
-							if strings.Contains(curr, crName) {
-								revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
-								if strings.HasPrefix(revised.Data[url.Name], ",") {
-									res := revised.Data[url.Name]
-									revised.Data[url.Name] = strings.TrimPrefix(res, ",")
-								}
-								if strings.HasSuffix(revised.Data[url.Name], ",") {
-									res := revised.Data[url.Name]
-									revised.Data[url.Name] = strings.TrimSuffix(res, ",")
-								}
-								if strings.Contains(revised.Data[url.Name], ",,") {
-									res := revised.Data[url.Name]
-									revised.Data[url.Name] = strings.ReplaceAll(res, ",,", ",")
-								}
-							}
-						}
-						newInsURLs := strings.Split(url.Value, ",")
-						for _, newEntry := range newInsURLs {
-							if !(strings.Contains(revised.Data[url.Name], newEntry)) {
-								if revised.Data[url.Name] == "" {
-									revised.Data[url.Name] = newEntry
-								} else {
-									str := []string{revised.Data[url.Name], newEntry}
-									revised.Data[url.Name] = strings.Join(str, ",")
-								}
-							}
-						}
-					} else {
-						//now add the incoming URLs as fresh entry
-						newInsURL := strings.Split(url.Value, ",")
-						for _, newEntry := range newInsURL {
-							if !(strings.Contains(revised.Data[url.Name], newEntry)) {
-								str := []string{revised.Data[url.Name], newEntry}
-								revised.Data[url.Name] = strings.Join(str, ",")
-							}
-						}
-					}
-				}
-			} else {
-				//removing custom resource. Update configMap
-				if strings.Contains(revised.Data[url.Name], url.Value) {
-					revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
-					if strings.HasPrefix(revised.Data[url.Name], ",") {
-						str := revised.Data[url.Name]
-						revised.Data[url.Name] = strings.TrimPrefix(str, ",")
-					}
-					if strings.HasSuffix(revised.Data[url.Name], ",") {
-						str := revised.Data[url.Name]
-						revised.Data[url.Name] = strings.TrimSuffix(str, ",")
-					}
-					if strings.Contains(revised.Data[url.Name], ",,") {
-						str := revised.Data[url.Name]
-						revised.Data[url.Name] = strings.ReplaceAll(str, ",,", ",")
-					}
-					if revised.Data[url.Name] == "" {
-						delete(revised.Data, url.Name)
-					}
-				}
-			}
+		if addNewURLs {
+			AddURLsConfigMap(revised, crName, newURLs)
+		} else {
+			DeleteURLsConfigMap(revised, crName, newURLs, true)
 		}
 		if !reflect.DeepEqual(revised.Data, current.Data) {
 			current.Data = revised.Data
@@ -299,6 +226,76 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 	}
 
 	return &current, nil
+}
+
+//AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
+func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
+	for _, url := range newURLs {
+		_, ok := revised.Data[url.Name]
+		if !ok {
+			revised.Data[url.Name] = url.Value
+		} else {
+			newInsURLs := strings.Split(url.Value, ",")
+			currentURLs := strings.Split(revised.Data[url.Name], ",")
+			var crURLs string
+			for _, curr := range currentURLs {
+				if strings.Contains(curr, crName) {
+					if crURLs == "" {
+						crURLs = curr
+					} else {
+						str := []string{curr, crURLs}
+						crURLs = strings.Join(str, ",")
+					}
+				}
+			}
+			if len(crURLs) == len(url.Value) {
+				//reconcile
+				break
+			} else if len(crURLs) < len(url.Value) {
+				//scaling UP
+				for _, newEntry := range newInsURLs {
+					if !strings.Contains(revised.Data[url.Name], newEntry) {
+						str := []string{revised.Data[url.Name], newEntry}
+						revised.Data[url.Name] = strings.Join(str, ",")
+					}
+				}
+			} else {
+				//scaling DOWN pods
+				DeleteURLsConfigMap(revised, crName, newURLs, false)
+			}
+		}
+	}
+}
+
+//DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
+func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
+	for _, url := range newURLs {
+		currentURLs := strings.Split(revised.Data[url.Name], ",")
+		sort.Strings(currentURLs)
+		for _, curr := range currentURLs {
+			//scale DOWN
+			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
+				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
+			} else if strings.Contains(curr, crName) && deleteCR {
+				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
+			}
+			if strings.HasPrefix(revised.Data[url.Name], ",") {
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.TrimPrefix(str, ",")
+			}
+			if strings.HasSuffix(revised.Data[url.Name], ",") {
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.TrimSuffix(str, ",")
+			}
+			if strings.Contains(revised.Data[url.Name], ",,") {
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.ReplaceAll(str, ",,", ",")
+			}
+			if revised.Data[url.Name] == "" {
+				delete(revised.Data, url.Name)
+			}
+		}
+	}
 }
 
 func getConfigMapHash(client splcommon.ControllerClient, namespace string) (string, error) {

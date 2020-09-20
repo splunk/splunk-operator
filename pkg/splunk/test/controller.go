@@ -172,9 +172,7 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		{
-			copyMockObject(obj, listObj.(runtime.Object))
-		}
+		copyMockObject(obj, listObj.(runtime.Object))
 		return nil
 	}
 	return c.NotFoundError

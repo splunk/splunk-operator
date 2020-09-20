@@ -490,7 +490,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
-	// add inline defaults to all splunk containers
+	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
 	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
 		addSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
