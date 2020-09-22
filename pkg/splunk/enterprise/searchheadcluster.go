@@ -62,6 +62,17 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		}
 	}()
 
+	// create or update general config resources
+	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err != nil {
+		return result, err
+	}
+
+	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -71,12 +82,6 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		} else {
 			result.Requeue = false
 		}
-		return result, err
-	}
-
-	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
-	if err != nil {
 		return result, err
 	}
 
@@ -294,11 +299,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
 	// get search head env variables with deployer
-	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
-	env = append(env, corev1.EnvVar{
-		Name:  "SPLUNK_DEPLOYER_URL",
-		Value: GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
-	})
+	env := getSearchHeadEnv(cr)
 
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
@@ -312,6 +313,18 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 	}
 
 	return ss, nil
+}
+
+func getSearchHeadEnv(cr *enterprisev1.SearchHeadCluster) []corev1.EnvVar {
+
+	// get search head env variables with deployer
+	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
+	env = append(env, corev1.EnvVar{
+		Name:  "SPLUNK_DEPLOYER_URL",
+		Value: GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
+	})
+
+	return env
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.

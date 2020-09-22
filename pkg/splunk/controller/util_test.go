@@ -148,6 +148,11 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("Container Ports")
 
+	// check container different Env
+	revised.Spec.Containers[0].Env = []corev1.EnvVar{{Name: "A", Value: "ab"}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
+	podUpdateTester("Container Env")
+
 	// check container different VolumeMounts
 	revised.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "mnt-spark"}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
