@@ -76,6 +76,11 @@ func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) stri
 	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType)
 }
 
+// GetSplunkMonitoringConsoleDeploymentName uses a template to name a Kubernetes Deployment for Splunk MC instance.
+func GetSplunkMonitoringConsoleDeploymentName(instanceType InstanceType, identifier string) string {
+	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType)
+}
+
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
 func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int32) string {
 	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
@@ -97,6 +102,11 @@ func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadle
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
 	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
+}
+
+// GetSplunkMonitoringconsoleConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
+func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType InstanceType) string {
+	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
