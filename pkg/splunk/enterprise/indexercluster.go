@@ -77,6 +77,9 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	if cr.Status.Peers == nil {
 		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
 	}
+	if cr.Status.IndexerSecretChanged == nil {
+		cr.Status.IndexerSecretChanged = []bool{}
+	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {

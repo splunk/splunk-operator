@@ -86,11 +86,20 @@ type IndexerClusterStatus struct {
 	// Indicates whether the master is ready to begin servicing, based on whether it is initialized.
 	ServiceReady bool `json:"service_ready_flag"`
 
+	// Indicates when the idxc_secret has been changed for a peer
+	IndexerSecretChanged []bool `json:"indexer_secret_changed_flag"`
+
 	// Indicates if the cluster is in maintenance mode.
 	MaintenanceMode bool `json:"maintenance_mode"`
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
+
+	// Indicates resource version of namespace scoped secret
+	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
+
+	// Indicated whether cm is in maintenance mode
+	ClusterMasterMaintenanceMode bool `json:"cluster_master_maintenance_mode"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`

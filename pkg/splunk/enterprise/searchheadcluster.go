@@ -55,6 +55,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	if cr.Status.Members == nil {
 		cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
 	}
+	if cr.Status.ShcSecretChanged == nil {
+		cr.Status.ShcSecretChanged = []bool{}
+	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
