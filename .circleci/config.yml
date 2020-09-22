@@ -57,7 +57,7 @@ executors:
       NUM_NODES: 2
       # Size of k8s cluster.
       NUM_WORKERS: 3
-      ENTERPRISE_IMAGE_NAME: splunk/splunk:8.0.3-20200415
+      ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
       IMAGE_NAME: splunk/splunk-operator
       IMAGE_FILENAME: splunk-operator
     machine:

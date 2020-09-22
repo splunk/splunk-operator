@@ -1,4 +1,4 @@
-package smoke
+package monitoringconsoletest
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "smoke-" + testenv.RandomDNSName(2)
+	testSuiteName   = "mc-" + testenv.RandomDNSName(2)
 )
 
 // TestBasic is the main entry point
