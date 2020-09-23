@@ -584,7 +584,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 // You can only use this on a cluster master.
 // See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
-	// sent request to remove from search head cluster consensus
+	// sent request to remove a peer from Cluster Master peers list
 	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.ManagementURI, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {

@@ -76,7 +76,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
-	searchHeadRevised.Spec.IndexerClusterRef.Name = "stack2"
+	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
 	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license master
@@ -106,13 +106,12 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestCreateSmartStoreConfigMap(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
-			Replicas: 1,
+		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},

@@ -4,14 +4,16 @@ The Splunk Operator provides a collection of
 [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
 you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 
-* [Metadata Parameters](#metadata-parameters)
-* [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
-* [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources)
-* [Spark Resource Spec Parameters](#spark-resource-spec-parameters)
-* [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
-* [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
-* [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
-* [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+- [Custom Resource Guide](#custom-resource-guide)
+  - [Metadata Parameters](#metadata-parameters)
+  - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
+  - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
+  - [Spark Resource Spec Parameters](#spark-resource-spec-parameters)
+  - [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
+  - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
+  - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
+  - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
+  - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -31,7 +33,7 @@ you would like the resource to reside within:
 If you do not provide a `namespace`, you current context will be used.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: Standalone
 metadata:
   name: s1
@@ -49,7 +51,7 @@ associated with the instance when you delete it.
 ## Common Spec Parameters for All Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: Standalone
 metadata:
   name: example
@@ -81,7 +83,7 @@ configuration parameters:
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: Standalone
 metadata:
   name: example
@@ -95,7 +97,7 @@ spec:
         name: splunk-licenses
   licenseMasterRef:
     name: example
-  indexerClusterRef:
+  clusterMasterRef:
     name: example
 ```
 
@@ -114,13 +116,13 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
-| indexerClusterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `IndexerCluster` instance (via `name` and optionally `namespace`) to use for indexing |
+| clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
 
 
 ## Spark Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: Spark
 metadata:
   name: example
@@ -139,7 +141,7 @@ the `Spark` resource provides the following `Spec` configuration parameters:
 ## LicenseMaster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: LicenseMaster
 metadata:
   name: example
@@ -159,7 +161,7 @@ The `LicenseMaster` resource does not provide any additional configuration param
 ## Standalone Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: Standalone
 metadata:
   name: example
@@ -183,7 +185,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 ## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -204,17 +206,47 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 | sparkImage | string  | Container image Data Fabric Search (DFS) will use for JDK and Spark libraries (overrides `RELATED_IMAGE_SPLUNK_SPARK` environment variables) |
 | sparkRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `Spark` instance (via `name` and optionally `namespace`). When defined, Data Fabric Search (DFS) will be enabled and configured to use it. |
 
+## ClusterMaster Resource Spec Parameters
+ClusterMaster resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
+```yaml
+apiVersion: enterprise.splunk.com/v1alpha3
+kind: ClusterMaster
+metadata:
+  name: example-cm
+spec:
+  smartstore:
+    defaults:
+        remotePath: $_index_name
+        volumeName: msos_s2s3_vol
+    indexes:
+      - name: salesdata1
+        remotePath: $_index_name
+        volumeName: msos_s2s3_vol
+      - name: salesdata2
+        remotePath: $_index_name
+        volumeName: msos_s2s3_vol
+      - name: salesdata3
+        remotePath: $_index_name
+        volumeName: msos_s2s3_vol
+    volumes:
+      - name: msos_s2s3_vol
+        path: <remote path>
+        endpoint: <remote endpoint>
+        secretRef: s3-secret
+```
 
 ## IndexerCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1alpha3
 kind: IndexerCluster
 metadata:
   name: example
 spec:
   replicas: 3
+  clusterMasterRef: example-cm
 ```
+Note:  `clusterMasterRef` is required field in case of IndexerCluster resource since it will be used to connect the IndexerCluster to ClusterMaster resource.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),

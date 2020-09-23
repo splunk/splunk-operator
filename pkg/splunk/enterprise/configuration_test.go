@@ -58,9 +58,9 @@ func TestGetSplunkService(t *testing.T) {
 	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"status":{"loadBalancer":{}}}`)
 	test(SplunkIndexer, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"clusterIP":"None","type":"ClusterIP"},"status":{"loadBalancer":{}}}`)
 	// Multipart IndexerCluster - test part-of and instance labels for child part
-	cr.Spec.IndexerClusterRef.Name = "cluster1"
+	cr.Spec.ClusterMasterRef.Name = "cluster1"
 	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"}},"status":{"loadBalancer":{}}}`)
-	cr.Spec.IndexerClusterRef.Name = ""
+	cr.Spec.ClusterMasterRef.Name = ""
 
 	cr.Spec.ServiceTemplate.Spec.Type = "LoadBalancer"
 	cr.Spec.ServiceTemplate.ObjectMeta.Labels = map[string]string{"1": "2"}
@@ -189,14 +189,13 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 }
 
-func TestSmartstoreApplyIndexerClusterFailsOnInvalidSmartStoreConfig(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
-			Replicas: 1,
+		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
@@ -213,9 +212,9 @@ func TestSmartstoreApplyIndexerClusterFailsOnInvalidSmartStoreConfig(t *testing.
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyIndexerCluster(client, &cr)
+	_, err := ApplyClusterMaster(client, &cr)
 	if err == nil {
-		t.Errorf("ApplyIndexerCluster should fail on invalid smartstore config")
+		t.Errorf("ApplyClusterMaster should fail on invalid smartstore config")
 	}
 }
 
@@ -249,14 +248,13 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	}
 }
 
-func TestSmartStoreConfigDoesNotFailOnIndexerClusterCRForCM(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "idxc_CM",
+			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
-			Replicas: 3,
+		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
@@ -271,41 +269,10 @@ func TestSmartStoreConfigDoesNotFailOnIndexerClusterCRForCM(t *testing.T) {
 		},
 	}
 
-	err := validateIndexerClusterSpec(&cr)
+	err := validateClusterMasterSpec(&cr)
 
 	if err != nil {
-		t.Errorf("Smartstore configuration should not fail on IndexerCluster CR with CM: %v", err)
-	}
-}
-
-func TestSmartStoreConfigFailsOnIndexerClusterCRForIndexers(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "idxc",
-			Namespace: "test",
-		},
-		Spec: enterprisev1.IndexerClusterSpec{
-			Replicas: 3,
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
-				},
-
-				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1"},
-					{Name: "salesdata2", RemotePath: "salesdata2"},
-					{Name: "salesdata3", RemotePath: ""},
-				},
-			},
-		},
-	}
-
-	cr.Spec.IndexerClusterRef.Name = "testRefWithCM"
-
-	err := validateIndexerClusterSpec(&cr)
-
-	if err == nil {
-		t.Errorf("Indexer Cluster Custom Resource for indexers should not allow Smartstore configuration")
+		t.Errorf("Smartstore configuration should not fail on ClusterMaster CR: %v", err)
 	}
 }
 

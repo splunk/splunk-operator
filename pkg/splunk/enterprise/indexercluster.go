@@ -17,7 +17,6 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -45,9 +44,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(cr)
 	if err != nil {
-		// To do: sgontla: later delete these listings. (for now just to test CSPL-320)
-		LogSmartStoreVolumes(cr.Status.SmartStore.VolList)
-		LogSmartStoreIndexes(cr.Status.SmartStore.IndexList)
 		return result, err
 	}
 
@@ -55,24 +51,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
-	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		_, err := CreateSmartStoreConfigMap(client, cr, &cr.Spec.SmartStore)
-		if err != nil {
-			return result, err
-		}
-
-		// To do: sgontla: Do we need to update the status in K8 etcd immediately?
-		// Consider the case, where the Cluster master validates the config, and
-		// generates config map, but fails later in the flow to complete its
-		// stateful set. Meanwhile, all the indexer cluster sites notices new
-		// config map, and keeps resetting the indexers. This is not problem,
-		// as long as:
-		// 1. ApplyConfigMap avoids a CRUD update if there is no change to data,
-		// which is already happening today, so, this scenario shouldn't happen.
-		// 2. To Do: Is there anything additional to be done on indexer site?
-		cr.Status.SmartStore = cr.Spec.SmartStore
-	}
-
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
 		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
@@ -114,54 +92,29 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
-	// create cluster master resources if no reference to an indexer cluster is defined
-	if len(cr.Spec.IndexerClusterRef.Name) == 0 {
-		// create or update a regular service for the cluster master
-		err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, false))
-		if err != nil {
-			return result, err
-		}
-
-		// create or update statefulset for the cluster master
-		statefulSet, err := getClusterMasterStatefulSet(client, cr)
-		if err != nil {
-			return result, err
-		}
-		clusterMasterManager := splctrl.DefaultStatefulSetPodManager{}
-		phase, err := clusterMasterManager.Update(client, statefulSet, 1)
-		if err != nil {
-			return result, err
-		}
-		cr.Status.ClusterMasterPhase = phase
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterMasterRef.Name,
+	}
+	masterIdxCluster := &enterprisev1.ClusterMaster{}
+	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
+	if err == nil {
+		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
 	} else {
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      cr.Spec.IndexerClusterRef.Name,
-		}
-		masterIdxCluster := &enterprisev1.IndexerCluster{}
-		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
-		if err == nil {
-			cr.Status.ClusterMasterPhase = masterIdxCluster.Status.ClusterMasterPhase
-		} else {
-			cr.Status.ClusterMasterPhase = splcommon.PhaseError
-		}
+		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
 
-	if cr.Spec.Replicas > 0 {
-		// create or update statefulset for the indexers
-		statefulSet, err := getIndexerStatefulSet(client, cr)
-		if err != nil {
-			return result, err
-		}
-		mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
-		phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
-		if err != nil {
-			return result, err
-		}
-		cr.Status.Phase = phase
-	} else {
-		cr.Status.Phase = splcommon.PhaseReady
+	// create or update statefulset for the indexers
+	statefulSet, err := getIndexerStatefulSet(client, cr)
+	if err != nil {
+		return result, err
 	}
+	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
+	if err != nil {
+		return result, err
+	}
+	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
@@ -170,7 +123,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	return result, nil
 }
 
-// indexerClusterPodManager is used to manage the pods within a search head cluster
+// indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
 	log             logr.Logger
 	cr              *enterprisev1.IndexerCluster
@@ -186,7 +139,7 @@ func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statef
 		return splcommon.PhaseError, err
 	}
 
-	// update CR status with SHC information
+	// update CR status with IDXC information
 	err = mgr.updateStatus(statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
 		mgr.log.Error(err, "Indexer cluster is not ready")
@@ -268,16 +221,12 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
 func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
-	masterIdxcName := mgr.cr.GetName()
-	// For multisite / multipart cluster, use the cluster-master API of the referenced IndexerCluster
-	if len(mgr.cr.Spec.IndexerClusterRef.Name) > 0 {
-		masterIdxcName = mgr.cr.Spec.IndexerClusterRef.Name
-	}
+	masterIdxcName := mgr.cr.Spec.ClusterMasterRef.Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
-// updateStatus for indexerClusterPodManager uses the REST API to update the status for a SearcHead custom resource
+// updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
 func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSet) error {
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 
@@ -338,38 +287,21 @@ func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.I
 	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(cr, cr.Spec.Replicas))
 }
 
-// getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, getIndexerExtraEnv(cr, cr.Spec.Replicas))
-}
-
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
-
 func validateIndexerClusterSpec(cr *enterprisev1.IndexerCluster) error {
-	// IndexerCluster must support 0 replicas for multisite / multipart clusters
+	// We cannot have 0 replicas in IndexerCluster spec, since this refers to number of indexers in an indexer cluster
+	if cr.Spec.Replicas == 0 {
+		cr.Spec.Replicas = 1
+	}
+
+	// Cannot leave clusterMasterRef field empty or else we cannot connect to CM
+	if len(cr.Spec.ClusterMasterRef.Name) == 0 {
+		return fmt.Errorf("IndexerCluster spec should refer to ClusterMaster via clusterMasterRef")
+	}
+
 	// Multisite / multipart clusters: can't reference a cluster master located in another namespace because of Service and Secret limitations
-	if len(cr.Spec.IndexerClusterRef.Namespace) > 0 && cr.Spec.IndexerClusterRef.Namespace != cr.GetNamespace() {
+	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
 	}
-
-	if cr.Spec.IndexerClusterRef.Name == "" {
-		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
-		if err != nil {
-			return err
-		}
-	} else if isSmartstoreConfigured(&cr.Spec.SmartStore) {
-		return (fmt.Errorf("Smartstore configuration is only supported with Cluster Master spec"))
-	}
-
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
-}
-
-// getIndexerExtraEnv returns extra environment variables used by search head clusters
-func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetName(), replicas, false),
-		},
-	}
 }

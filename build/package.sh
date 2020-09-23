@@ -21,16 +21,12 @@ rm -f release-${VERSION}/*
 docker image save splunk/splunk-operator:${VERSION} | gzip -c > release-${VERSION}/splunk-operator-${VERSION}.tar.gz
 
 echo Generating release-${VERSION}/splunk-operator-crds.yaml
-echo "---" > release-${VERSION}/splunk-operator-crds.yaml
-cat deploy/crds/enterprise.splunk.com_standalones_crd.yaml >> release-${VERSION}/splunk-operator-crds.yaml
-echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
-cat deploy/crds/enterprise.splunk.com_licensemasters_crd.yaml >> release-${VERSION}/splunk-operator-crds.yaml
-echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
-cat deploy/crds/enterprise.splunk.com_searchheadclusters_crd.yaml >> release-${VERSION}/splunk-operator-crds.yaml
-echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
-cat deploy/crds/enterprise.splunk.com_indexerclusters_crd.yaml >> release-${VERSION}/splunk-operator-crds.yaml
-echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
-cat deploy/crds/enterprise.splunk.com_sparks_crd.yaml >> release-${VERSION}/splunk-operator-crds.yaml
+touch release-${VERSION}/splunk-operator-crds.yaml
+for i in `ls deploy/crds/|grep crd.yaml`
+do
+    echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
+    cat deploy/crds/$i >> release-${VERSION}/splunk-operator-crds.yaml
+done
 
 echo Generating release-${VERSION}/splunk-operator-noadmin.yaml
 cat deploy/service_account.yaml deploy/role.yaml deploy/role_binding.yaml > release-${VERSION}/splunk-operator-noadmin.yaml

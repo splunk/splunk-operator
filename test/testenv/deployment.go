@@ -157,9 +157,21 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMast
 	return deployed.(*enterprisev1.LicenseMaster), err
 }
 
+//DeployClusterMaster deploys the cluster master
+func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansibleConfig string) (*enterprisev1.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name)
+	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
+	deployed, err := d.deployCR(name, cm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.ClusterMaster), err
+}
+
 //DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, indexerClusterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
-	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, indexerClusterRef, ansibleConfig)
+func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
+	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
+	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
 	deployed, err := d.deployCR(name, indexer)
 	if err != nil {
 		return nil, err
@@ -168,8 +180,9 @@ func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count 
 }
 
 // DeploySearchHeadCluster deploys a search head cluster
-func (d *Deployment) DeploySearchHeadCluster(name, indexerClusterName, licenseMasterName string, ansibleConfig string) (*enterprisev1.SearchHeadCluster, error) {
-	indexer := newSearchHeadCluster(name, d.testenv.namespace, indexerClusterName, licenseMasterName, ansibleConfig)
+func (d *Deployment) DeploySearchHeadCluster(name, clusterMasterRef, licenseMasterName string, ansibleConfig string) (*enterprisev1.SearchHeadCluster, error) {
+	d.testenv.Log.Info("Deploying search head cluster", "name", name)
+	indexer := newSearchHeadCluster(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig)
 	deployed, err := d.deployCR(name, indexer)
 	return deployed.(*enterprisev1.SearchHeadCluster), err
 }
@@ -224,8 +237,8 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// DeployCluster deploys a lm, indexer and sh clusters
-func (d *Deployment) DeployCluster(name string, indexerReplicas int) error {
+// DeploySingleSiteCluster deploys a lm, indexer and sh clusters
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
 
 	var licenseMaster string
 
@@ -240,13 +253,19 @@ func (d *Deployment) DeployCluster(name string, indexerReplicas int) error {
 		licenseMaster = name
 	}
 
-	// Deploy the indexer cluster
-	_, err := d.DeployIndexerCluster(name, licenseMaster, indexerReplicas, "", "")
+	// Deploy the cluster master
+	_, err := d.DeployClusterMaster(name, licenseMaster, "")
 	if err != nil {
 		return err
 	}
 
-	_, err = d.DeploySearchHeadCluster(name, name, licenseMaster, "")
+	// Deploy the indexer cluster
+	_, err = d.DeployIndexerCluster(name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	if err != nil {
+		return err
+	}
+
+	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
 	if err != nil {
 		return err
 	}
@@ -283,7 +302,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployIndexerCluster(name, licenseMaster, 0, "", defaults)
+	_, err := d.DeployClusterMaster(name, licenseMaster, defaults)
 	if err != nil {
 		return err
 	}
@@ -305,7 +324,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
   multisite_master: splunk-%s-cluster-master-service
   site: site0
 `, name)
-	_, err = d.DeploySearchHeadCluster(name, name, licenseMaster, siteDefaults)
+	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
 	if err != nil {
 		return err
 	}
@@ -342,7 +361,7 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployIndexerCluster(name, licenseMaster, 0, "", defaults)
+	_, err := d.DeployClusterMaster(name, licenseMaster, defaults)
 	if err != nil {
 		return err
 	}
@@ -358,53 +377,6 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 		if err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-// DeploySingleSiteCluster deploys a lm, cluster-master, indexers, Search Head Cluster in single site
-func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
-
-	var licenseMaster string
-
-	// If license file specified, deploy License Master
-	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
-		_, err := d.DeployLicenseMaster(name)
-		if err != nil {
-			return err
-		}
-
-		licenseMaster = name
-	}
-
-	// Deploy the cluster-master
-	defaults := `splunk:
-  multisite_master: localhost
-  idxc:
-    search_factor: 2
-    replication_factor: 2
-`
-	_, err := d.DeployIndexerCluster(name, licenseMaster, 0, "", defaults)
-	if err != nil {
-		return err
-	}
-
-	// Set Master URI
-	siteDefaults := fmt.Sprintf(`splunk:
-  multisite_master: splunk-%s-cluster-master-service`, name)
-
-	// Deploy Indxers
-	_, err = d.DeployIndexerCluster(name+"-"+"idx", licenseMaster, indexerReplicas, name, siteDefaults)
-	if err != nil {
-		return err
-	}
-
-	// Deploy Search Head Cluster
-	_, err = d.DeploySearchHeadCluster(name, name, licenseMaster, siteDefaults)
-	if err != nil {
-		return err
 	}
 
 	return nil

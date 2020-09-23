@@ -34,9 +34,6 @@ type IndexerClusterSpec struct {
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
-
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 }
 
 // IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.
@@ -91,9 +88,6 @@ type IndexerClusterStatus struct {
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
-
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

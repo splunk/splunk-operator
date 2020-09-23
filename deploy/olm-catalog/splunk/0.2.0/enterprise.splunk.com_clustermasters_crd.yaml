@@ -1,31 +1,27 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: licensemasters.enterprise.splunk.com
+  name: clustermasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
-    description: Status of license master
+    description: Status of cluster master
     name: Phase
     type: string
-  - JSONPath: .metadata.creationTimestamp
-    description: Age of license master
-    name: Age
-    type: date
   group: enterprise.splunk.com
   names:
-    kind: LicenseMaster
-    listKind: LicenseMasterList
-    plural: licensemasters
+    kind: ClusterMaster
+    listKind: ClusterMasterList
+    plural: clustermasters
     shortNames:
-    - lm
-    singular: licensemaster
+    - cm-idxc
+    singular: clustermaster
   scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
-      description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+      description: ClusterMaster is the Schema for the clustermasters API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -40,8 +36,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-            license master.
+          description: ClusterMasterSpec defines the desired state of ClusterMaster
           properties:
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
@@ -979,6 +974,45 @@ spec:
                           type: array
                       type: object
                   type: object
+              type: object
+            smartstore:
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
+                on docs.splunk.com
+              properties:
+                indexes:
+                  description: List of Splunk indexes
+                  items:
+                    description: IndexSpec defines Splunk index name and storage path
+                    properties:
+                      name:
+                        description: Splunk index name
+                        type: string
+                      remotePath:
+                        description: Index location relative to the remote volume
+                          path
+                        type: string
+                      volumeName:
+                        description: Remote Volume name
+                        type: string
+                    type: object
+                  type: array
+                volumes:
+                  description: List of remote storage volumes
+                  items:
+                    description: VolumeSpec defines remote volume name and remote
+                      volume URI
+                    properties:
+                      endpoint:
+                        description: Remote volume URI
+                        type: string
+                      name:
+                        description: Remote volume name
+                        type: string
+                      path:
+                        description: Remote volume path
+                        type: string
+                    type: object
+                  type: array
               type: object
             storageClassName:
               description: Name of StorageClass to use for persistent volume claims
@@ -2208,11 +2242,10 @@ spec:
               type: array
           type: object
         status:
-          description: LicenseMasterStatus defines the observed state of a Splunk
-            Enterprise license master.
+          description: ClusterMasterStatus defines the observed state of ClusterMaster
           properties:
             phase:
-              description: current phase of the license master
+              description: current phase of the cluster master
               enum:
               - Pending
               - Ready
@@ -2222,6 +2255,48 @@ spec:
               - Terminating
               - Error
               type: string
+            selector:
+              description: selector for pods, used by HorizontalPodAutoscaler
+              type: string
+            smartstore:
+              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
+                on docs.splunk.com
+              properties:
+                indexes:
+                  description: List of Splunk indexes
+                  items:
+                    description: IndexSpec defines Splunk index name and storage path
+                    properties:
+                      name:
+                        description: Splunk index name
+                        type: string
+                      remotePath:
+                        description: Index location relative to the remote volume
+                          path
+                        type: string
+                      volumeName:
+                        description: Remote Volume name
+                        type: string
+                    type: object
+                  type: array
+                volumes:
+                  description: List of remote storage volumes
+                  items:
+                    description: VolumeSpec defines remote volume name and remote
+                      volume URI
+                    properties:
+                      endpoint:
+                        description: Remote volume URI
+                        type: string
+                      name:
+                        description: Remote volume name
+                        type: string
+                      path:
+                        description: Remote volume path
+                        type: string
+                    type: object
+                  type: array
+              type: object
           type: object
       type: object
   version: v1alpha3
