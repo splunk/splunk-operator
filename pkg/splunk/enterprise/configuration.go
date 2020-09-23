@@ -121,6 +121,10 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
+	if instanceType == SplunkMonitoringConsole {
+		service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetNamespace(), isHeadless)
+		instanceIdentifier = cr.GetNamespace()
+	}
 	if instanceType == SplunkIndexer {
 		if len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
@@ -260,6 +264,9 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 	}
 
 	switch instanceType {
+	case SplunkMonitoringConsole:
+		result["hec"] = 8088
+		result["s2s"] = 9997
 	case SplunkStandalone:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000
@@ -483,8 +490,8 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
-	// add inline defaults to all splunk containers
-	if spec.Defaults != "" {
+	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
+	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
 		addSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{

@@ -177,6 +177,15 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 				result = true
 			}
 
+			// check Env
+			if splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
+				scopedLog.Info("Pod Container Env differ",
+					"current", current.Containers[idx].Env,
+					"revised", revised.Containers[idx].Env)
+				current.Containers[idx].Env = revised.Containers[idx].Env
+				result = true
+			}
+
 			// check VolumeMounts
 			if splcommon.CompareVolumeMounts(current.Containers[idx].VolumeMounts, revised.Containers[idx].VolumeMounts) {
 				scopedLog.Info("Pod Container VolumeMounts differ",
