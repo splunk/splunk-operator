@@ -114,13 +114,22 @@ func TestCreateSmartStoreConfigMap(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+					},
+					{Name: "salesdata2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+					},
+					{Name: "salesdata3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+					},
 				},
 			},
 		},
@@ -148,5 +157,5 @@ func TestCreateSmartStoreConfigMap(t *testing.T) {
 		configTester(t, "CreateSmartStoreConfigMap()", f, want)
 	}
 
-	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"idxCluster","uid":"","controller":true}]},"data":{"indexes.conf":"\n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n \n[salesdata1]\nremotePath = volume:$_index_name\n\n[salesdata2]\nremotePath = volume:salesdata2\n\n[salesdata3]\nremotePath = volume:$_index_name\n"}}`)
+	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"idxCluster","uid":"","controller":true}]},"data":{"indexes.conf":"\n[default]\nrepFactor = auto\nmaxDataSize = auto\nhomePath = $SPLUNK_DB/$_index_name/db\ncoldPath = $SPLUNK_DB/$_index_name/colddb\nthawedPath = $SPLUNK_DB/$_index_name/thaweddb\n \n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n\n \n[salesdata1]\nremotePath = volume:msos_s2s3_vol/remotepath1\nhomePath = $SPLUNK_DB/remotepath1/db\ncoldPath = $SPLUNK_DB/remotepath1/colddb\nthawedPath = $SPLUNK_DB/remotepath1/thaweddb\n\n[salesdata2]\nremotePath = volume:msos_s2s3_vol/remotepath2\nhomePath = $SPLUNK_DB/remotepath2/db\ncoldPath = $SPLUNK_DB/remotepath2/colddb\nthawedPath = $SPLUNK_DB/remotepath2/thaweddb\n\n[salesdata3]\nremotePath = volume:msos_s2s3_vol/remotepath3\nhomePath = $SPLUNK_DB/remotepath3/db\ncoldPath = $SPLUNK_DB/remotepath3/colddb\nthawedPath = $SPLUNK_DB/remotepath3/thaweddb\n","server.conf":"","splunk-test-secret":""}}`)
 }

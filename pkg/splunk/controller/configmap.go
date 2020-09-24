@@ -48,3 +48,10 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 
 	return err
 }
+
+// CheckAndGetIfConfigMapExists returns true if a configMap with the given name exists, else returns false
+func CheckAndGetIfConfigMapExists(client splcommon.ControllerClient, namespacedName types.NamespacedName) (bool, corev1.ConfigMap) {
+	var confMap corev1.ConfigMap
+
+	return client.Get(context.TODO(), namespacedName, &confMap) == nil, confMap
+}

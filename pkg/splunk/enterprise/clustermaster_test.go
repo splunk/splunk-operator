@@ -35,6 +35,8 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 	}
 	listOpts := []client.ListOption{
@@ -42,8 +44,8 @@ func TestApplyClusterMaster(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[4], funcCalls[5]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[4], funcCalls[7]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -117,6 +119,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 	}
 	listOpts := []client.ListOption{
@@ -124,8 +128,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[9]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -138,17 +142,27 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+					},
+					{Name: "salesdata2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+					},
+					{Name: "salesdata3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+					},
 				},
 			},
 		},
 	}
+
 	client := spltest.NewMockClient()
 
 	// Without S3 keys, ApplyStandalone should fail
@@ -177,14 +191,4 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
-
-	// test deletion
-	currentTime := metav1.NewTime(time.Now())
-	revised.ObjectMeta.DeletionTimestamp = &currentTime
-	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterMaster(c, cr.(*enterprisev1.ClusterMaster))
-		return true, err
-	}
-	splunkDeletionTester(t, revised, deleteFunc)
 }

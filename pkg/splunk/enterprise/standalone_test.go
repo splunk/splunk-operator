@@ -42,6 +42,8 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	listOpts := []client.ListOption{
@@ -50,8 +52,8 @@ func TestApplyStandalone(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
 
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -97,6 +99,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	listOpts := []client.ListOption{
@@ -105,9 +109,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[13], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
-	//createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[13], funcCalls[16]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9], funcCalls[16]}, "List": {listmockCall[0], listmockCall[0]}}
 
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -121,13 +124,21 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
-
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+					},
+					{Name: "salesdata2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+					},
+					{Name: "salesdata3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+					},
 				},
 			},
 		},
@@ -161,16 +172,74 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true, secret)
+}
 
-	// test deletion
-	currentTime := metav1.NewTime(time.Now())
-	revised.ObjectMeta.DeletionTimestamp = &currentTime
-	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
-		return true, err
+func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
+	current := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.StandaloneSpec{
+			Replicas: 1,
+			SmartStore: enterprisev1.SmartStoreSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+				},
+				IndexList: []enterprisev1.IndexSpec{
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+					},
+					{Name: "salesdata2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+					},
+					{Name: "salesdata3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+					},
+				},
+			},
+		},
 	}
-	splunkDeletionTester(t, revised, deleteFunc)
+
+	client := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	secret, err := ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
+	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
+	_, err = splctrl.ApplySecret(client, secret)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	_, err = ApplyStandalone(client, &current)
+	if err != nil {
+		t.Errorf("ApplyStandalone should not fail with full configuration")
+	}
+
+	// Now change the secret key
+	secret.Data[s3AccessKey] = []byte("changed")
+
+	_, err = splctrl.ApplySecret(client, secret)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	changed := AreRemoteVolumeKeysChanged(client, &current, SplunkStandalone, &current.Spec.SmartStore, &err)
+
+	if changed {
+		t.Errorf("Key change was not detected %v", err)
+	}
 }
 
 func TestGetStandaloneStatefulSet(t *testing.T) {

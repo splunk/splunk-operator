@@ -26,6 +26,7 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -51,8 +52,14 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-cluster-master", cr.GetName())
-	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		_, err := CreateSmartStoreConfigMap(client, cr, &cr.Spec.SmartStore)
+
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
+		AreRemoteVolumeKeysChanged(client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, &err) {
+
+		if err != nil {
+			return result, err
+		}
+		_, err = CreateSmartStoreConfigMap(client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
 		}
@@ -131,11 +138,21 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 		return err
 	}
 
+	cr.Spec.SparkImage = spark.GetSparkImage(cr.Spec.SparkImage)
+
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
+
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
+	needToSetupSplunkOperatorApp, _, _ := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
+
+	if needToSetupSplunkOperatorApp {
+		setupInitContainer(&ss.Spec.Template, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
+	}
+
+	return ss, err
 }

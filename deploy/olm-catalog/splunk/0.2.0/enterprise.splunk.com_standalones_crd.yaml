@@ -996,13 +996,77 @@ spec:
               type: object
             smartstore:
               description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
+                and server.conf.spec on docs.splunk.com
               properties:
+                cacheManager:
+                  description: Defines Cache manager settings
+                  properties:
+                    evictionPadding:
+                      description: Additional size beyond 'minFreeSize' before eviction
+                        kicks in
+                      type: integer
+                    evictionPolicy:
+                      description: Eviction policy to use
+                      type: string
+                    hotlistBloomFilterRecencyHours:
+                      description: Time period relative to the bucket's age, during
+                        which the bloom filter file is protected from cache eviction
+                      type: integer
+                    hotlistRecencySecs:
+                      description: Time period relative to the bucket's age, during
+                        which the bucket is protected from cache eviction
+                      type: integer
+                    maxCacheSize:
+                      description: Max cache size per partition
+                      type: integer
+                    maxConcurrentDownloads:
+                      description: Maximum number of buckets that can be downloaded
+                        from remote storage in parallel
+                      type: integer
+                    maxConcurrentUploads:
+                      description: Maximum number of buckets that can be uploaded
+                        to remote storage in parallel
+                      type: integer
+                  type: object
+                defaults:
+                  description: Default configuration for indexes
+                  properties:
+                    maxGlobalDataSizeMB:
+                      description: MaxGlobalDataSizeMB defines the maximum amount
+                        of space for warm and cold buckets of an index
+                      type: integer
+                    maxGlobalRawDataSizeMB:
+                      description: MaxGlobalDataSizeMB defines the maximum amount
+                        of cumulative space for warm and cold buckets of an index
+                      type: integer
+                    remotePath:
+                      description: Index location relative to the remote volume path
+                      type: string
+                    volumeName:
+                      description: Remote Volume name
+                      type: string
+                  type: object
                 indexes:
                   description: List of Splunk indexes
                   items:
                     description: IndexSpec defines Splunk index name and storage path
                     properties:
+                      hotlistBloomFilterRecencyHours:
+                        description: Time period relative to the bucket's age, during
+                          which the bloom filter file is protected from cache eviction
+                        type: integer
+                      hotlistRecencySecs:
+                        description: Time period relative to the bucket's age, during
+                          which the bucket is protected from cache eviction
+                        type: integer
+                      maxGlobalDataSizeMB:
+                        description: MaxGlobalDataSizeMB defines the maximum amount
+                          of space for warm and cold buckets of an index
+                        type: integer
+                      maxGlobalRawDataSizeMB:
+                        description: MaxGlobalDataSizeMB defines the maximum amount
+                          of cumulative space for warm and cold buckets of an index
+                        type: integer
                       name:
                         description: Splunk index name
                         type: string
@@ -1029,6 +1093,9 @@ spec:
                         type: string
                       path:
                         description: Remote volume path
+                        type: string
+                      secretRef:
+                        description: Secret object name
                         type: string
                     type: object
                   type: array
@@ -2330,13 +2397,77 @@ spec:
               type: string
             smartstore:
               description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                on docs.splunk.com
+                and server.conf.spec on docs.splunk.com
               properties:
+                cacheManager:
+                  description: Defines Cache manager settings
+                  properties:
+                    evictionPadding:
+                      description: Additional size beyond 'minFreeSize' before eviction
+                        kicks in
+                      type: integer
+                    evictionPolicy:
+                      description: Eviction policy to use
+                      type: string
+                    hotlistBloomFilterRecencyHours:
+                      description: Time period relative to the bucket's age, during
+                        which the bloom filter file is protected from cache eviction
+                      type: integer
+                    hotlistRecencySecs:
+                      description: Time period relative to the bucket's age, during
+                        which the bucket is protected from cache eviction
+                      type: integer
+                    maxCacheSize:
+                      description: Max cache size per partition
+                      type: integer
+                    maxConcurrentDownloads:
+                      description: Maximum number of buckets that can be downloaded
+                        from remote storage in parallel
+                      type: integer
+                    maxConcurrentUploads:
+                      description: Maximum number of buckets that can be uploaded
+                        to remote storage in parallel
+                      type: integer
+                  type: object
+                defaults:
+                  description: Default configuration for indexes
+                  properties:
+                    maxGlobalDataSizeMB:
+                      description: MaxGlobalDataSizeMB defines the maximum amount
+                        of space for warm and cold buckets of an index
+                      type: integer
+                    maxGlobalRawDataSizeMB:
+                      description: MaxGlobalDataSizeMB defines the maximum amount
+                        of cumulative space for warm and cold buckets of an index
+                      type: integer
+                    remotePath:
+                      description: Index location relative to the remote volume path
+                      type: string
+                    volumeName:
+                      description: Remote Volume name
+                      type: string
+                  type: object
                 indexes:
                   description: List of Splunk indexes
                   items:
                     description: IndexSpec defines Splunk index name and storage path
                     properties:
+                      hotlistBloomFilterRecencyHours:
+                        description: Time period relative to the bucket's age, during
+                          which the bloom filter file is protected from cache eviction
+                        type: integer
+                      hotlistRecencySecs:
+                        description: Time period relative to the bucket's age, during
+                          which the bucket is protected from cache eviction
+                        type: integer
+                      maxGlobalDataSizeMB:
+                        description: MaxGlobalDataSizeMB defines the maximum amount
+                          of space for warm and cold buckets of an index
+                        type: integer
+                      maxGlobalRawDataSizeMB:
+                        description: MaxGlobalDataSizeMB defines the maximum amount
+                          of cumulative space for warm and cold buckets of an index
+                        type: integer
                       name:
                         description: Splunk index name
                         type: string
@@ -2363,6 +2494,9 @@ spec:
                         type: string
                       path:
                         description: Remote volume path
+                        type: string
+                      secretRef:
+                        description: Secret object name
                         type: string
                     type: object
                   type: array

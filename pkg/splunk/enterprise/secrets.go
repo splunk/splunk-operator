@@ -33,6 +33,22 @@ func GetNamespaceScopedSecret(c splcommon.ControllerClient, namespace string) (*
 	return &namespaceScopedSecret, nil
 }
 
+// GetNamespaceScopedSecretByName retreives namespace scoped secret object for a given name
+func GetNamespaceScopedSecretByName(c splcommon.ControllerClient, cr splcommon.MetaObject, name string) (*corev1.Secret, error) {
+	var namespaceScopedSecret corev1.Secret
+
+	// Check if a namespace scoped secret exists
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
+	err := c.Get(context.TODO(), namespacedName, &namespaceScopedSecret)
+
+	if err != nil {
+		// Didn't find it
+		return nil, err
+	}
+
+	return &namespaceScopedSecret, nil
+}
+
 // GetVersionedSecretVersion checks if the secretName includes the versionedSecretIdentifier and if so, extracts the version
 func GetVersionedSecretVersion(secretName string, versionedSecretIdentifier string) (int, error) {
 	// Extracting version from secret's name

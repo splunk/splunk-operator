@@ -84,7 +84,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
-	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, configMapHash, secretName)
+	deploymentMC, err := getMonitoringConsoleDeployment(client, cr, &spec, SplunkMonitoringConsole, configMapHash, secretName)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 }
 
 // GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapHash string, secretName string) (*appsv1.Deployment, error) {
+func getMonitoringConsoleDeployment(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapHash string, secretName string) (*appsv1.Deployment, error) {
 	var partOfIdentifier string
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
@@ -167,7 +167,7 @@ func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.
 	splcommon.AppendParentMeta(deploymentMC.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(&deploymentMC.Spec.Template, cr, spec, instanceType, env, secretName)
+	updateSplunkPodTemplateWithConfig(client, &deploymentMC.Spec.Template, cr, spec, instanceType, env, secretName)
 
 	return deploymentMC, nil
 }

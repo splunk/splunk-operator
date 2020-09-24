@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -62,27 +63,25 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 	}
 }
 
-// GetSmartstoreSecrets is used to retrieve S3 access key and secrete keys.
-// To do: sgontla:
-// 1. Support multiple secret objects
-// 2. default secret object
-// volume name other than default, look for the specific secret object, else fetch from defaults
-func GetSmartstoreSecrets(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, error) {
-	namespaceScopedSecret, err := GetNamespaceScopedSecret(client, cr.GetNamespace())
+// GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
+func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, string, error) {
+	namespaceScopedSecret, err := GetNamespaceScopedSecretByName(client, cr, volume.SecretRef)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
 	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
 
+	//SetSecretOwnerRef(client, namespaceScopedSecret, cr)
+
 	if accessKey == "" {
-		return "", "", fmt.Errorf("S3 Access Key is missing")
+		return "", "", "", fmt.Errorf("S3 Access Key is missing")
 	} else if secretKey == "" {
-		return "", "", fmt.Errorf("S3 Secret Key is missing")
+		return "", "", "", fmt.Errorf("S3 Secret Key is missing")
 	}
 
-	return accessKey, secretKey, nil
+	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
 // CreateSmartStoreConfigMap creates the configMap with Smartstore config in INI format
@@ -94,35 +93,71 @@ func CreateSmartStoreConfigMap(client splcommon.ControllerClient, cr splcommon.M
 
 	scopedLog := log.WithName("CreateSmartStoreConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	if !isSmartstoreConfigured(smartstore) {
-		return nil, fmt.Errorf("Smartstore is not configured")
-	}
+	// 1. Prepare the indexes.conf entries
+	mapSplunkConfDetails := make(map[string]string)
 
 	// Get the list of volumes in INI format
-	volumesConfIni, err := GetSmartstoreVolumesConfig(client, cr, smartstore)
+	volumesConfIni, err := GetSmartstoreVolumesConfig(client, cr, smartstore, mapSplunkConfDetails)
 	if err != nil {
 		return nil, err
-	} else if volumesConfIni == "" {
-		return nil, fmt.Errorf("Volume stanza list is empty")
+	}
+
+	if volumesConfIni == "" {
+		scopedLog.Info("Volume stanza list is empty")
 	}
 
 	// Get the list of indexes in INI format
 	indexesConfIni := GetSmartstoreIndexesConfig(smartstore.IndexList)
 
-	// To do: sgontla: Do we need to error out, if indexes config is missing?
-	// Indexes without volume is a No, but volumes without indexes should be fine?
 	if indexesConfIni == "" {
 		scopedLog.Info("Index stanza list is empty")
+	} else if volumesConfIni == "" {
+		return nil, fmt.Errorf("Indexes without Volume configuration is not allowed")
 	}
 
-	iniSmartstoreConf := fmt.Sprintf(`%s %s`, volumesConfIni, indexesConfIni)
+	defaultsConfIni := GetSmartstoreIndexesDefaults(smartstore.Defaults)
+
+	iniSmartstoreConf := fmt.Sprintf(`%s %s %s`, defaultsConfIni, volumesConfIni, indexesConfIni)
+	mapSplunkConfDetails["indexes.conf"] = iniSmartstoreConf
+
+	// 2. Prepare server.conf entries
+	iniServerConf := GetServerConfigEntries(&smartstore.DeepCopy().CacheManagerConf)
+	mapSplunkConfDetails["server.conf"] = iniServerConf
 
 	// Create smartstore config consisting indexes.conf
-	smartstoreConfigMap := getSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, iniSmartstoreConf)
-	smartstoreConfigMap.SetOwnerReferences(append(smartstoreConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
-	if err := splctrl.ApplyConfigMap(client, smartstoreConfigMap); err != nil {
+	SplunkOperatorAppConfigMap := prepareSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, mapSplunkConfDetails)
+
+	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	if err := splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap); err != nil {
 		return nil, err
 	}
 
-	return smartstoreConfigMap, nil
+	return SplunkOperatorAppConfigMap, nil
+}
+
+//  setupInitContainer modifies the podTemplateSpec object to incorporate support for DFS.
+func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, sparkImage string, imagePullPolicy string, commandOnContainer string) {
+	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
+	containerSpec := corev1.Container{
+		Image:           sparkImage,
+		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
+		Name:            "init",
+
+		Command: []string{"bash", "-c", commandOnContainer},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "pvc-etc", MountPath: "/op/spl/et"},
+		},
+
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.25"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+	}
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
 }

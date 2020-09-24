@@ -75,6 +75,37 @@ type SmartStoreSpec struct {
 
 	// List of Splunk indexes
 	IndexList []IndexSpec `json:"indexes,omitempty"`
+
+	// Default configuration for indexes
+	Defaults IndexConfDefaultsSpec `json:"defaults,omitempty"`
+
+	// Defines Cache manager settings
+	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
+}
+
+// CacheManagerSpec defines cachemanager specific configuration
+type CacheManagerSpec struct {
+	IndexAndCacheManagerCommonSpec `json:",inline"`
+
+	// Eviction policy to use
+	EvictionPolicy string `json:"evictionPolicy,omitempty"`
+
+	// Max cache size per partition
+	MaxCacheSizeMB int `json:"maxCacheSize,omitempty"`
+
+	// Additional size beyond 'minFreeSize' before eviction kicks in
+	EvictionPaddingSizeMB int `json:"evictionPadding,omitempty"`
+
+	// Maximum number of buckets that can be downloaded from remote storage in parallel
+	MaxConcurrentDownloads int `json:"maxConcurrentDownloads,omitempty"`
+
+	// Maximum number of buckets that can be uploaded to remote storage in parallel
+	MaxConcurrentUploads int `json:"maxConcurrentUploads,omitempty"`
+}
+
+// IndexConfDefaultsSpec defines Splunk indexes.conf global/defaults
+type IndexConfDefaultsSpec struct {
+	IndexAndGlobalCommonSpec `json:",inline"`
 }
 
 // VolumeSpec defines remote volume name and remote volume URI
@@ -87,6 +118,9 @@ type VolumeSpec struct {
 
 	// Remote volume path
 	Path string `json:"path"`
+
+	// Secret object name
+	SecretRef string `json:"secretRef"`
 }
 
 // IndexSpec defines Splunk index name and storage path
@@ -94,9 +128,31 @@ type IndexSpec struct {
 	// Splunk index name
 	Name string `json:"name"`
 
+	IndexAndCacheManagerCommonSpec `json:",inline"`
+
+	IndexAndGlobalCommonSpec `json:",inline"`
+}
+
+// IndexAndGlobalCommonSpec defines configurations that can be configured at index level or at global level
+type IndexAndGlobalCommonSpec struct {
 	// Index location relative to the remote volume path
-	RemotePath string `json:"remotePath"`
+	RemotePath string `json:"remotePath,omitempty"`
 
 	// Remote Volume name
-	VolName string `json:"volumeName"`
+	VolName string `json:"volumeName,omitempty"`
+
+	// MaxGlobalDataSizeMB defines the maximum amount of space for warm and cold buckets of an index
+	MaxGlobalDataSizeMB int `json:"maxGlobalDataSizeMB,omitempty"`
+
+	// MaxGlobalDataSizeMB defines the maximum amount of cumulative space for warm and cold buckets of an index
+	MaxGlobalRawDataSizeMB int `json:"maxGlobalRawDataSizeMB,omitempty"`
+}
+
+// IndexAndCacheManagerCommonSpec defines configurations that can be configured at index level or at server level
+type IndexAndCacheManagerCommonSpec struct {
+	// Time period relative to the bucket's age, during which the bucket is protected from cache eviction
+	HotlistRecencySecs int `json:"hotlistRecencySecs,omitempty"`
+
+	// Time period relative to the bucket's age, during which the bloom filter file is protected from cache eviction
+	HotlistBloomFilterRecencyHours int `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
