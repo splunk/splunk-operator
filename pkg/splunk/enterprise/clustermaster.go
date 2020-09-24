@@ -76,6 +76,17 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 	}()
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	if err != nil {
+		return result, err
+	}
+
+	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -138,4 +149,26 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
+}
+
+// getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
+func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.ClusterMasterRef.Name != "" {
+		clusterMasterURL := GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_CLUSTER_MASTER_URL",
+				Value: clusterMasterURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+		},
+	}
 }

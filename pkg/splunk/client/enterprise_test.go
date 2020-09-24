@@ -16,6 +16,7 @@ package client
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -24,6 +25,20 @@ import (
 func splunkClientTester(t *testing.T, testMethod string, status int, body string, wantRequest *http.Request, test func(SplunkClient) error) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantRequest, status, body, nil)
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+	err := test(*c)
+	if err != nil {
+		t.Errorf("%s err = %v", testMethod, err)
+	}
+	mockSplunkClient.CheckRequests(t, testMethod)
+}
+
+func splunkClientMultipleTester(t *testing.T, testMethod string, status []int, body []string, wantRequest []*http.Request, test func(SplunkClient) error) {
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	for i := 0; i < len(wantRequest); i++ {
+		mockSplunkClient.AddHandler(wantRequest[i], status[i], body[i], nil)
+	}
 	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 	err := test(*c)
@@ -342,4 +357,168 @@ func TestDecommissionIndexerClusterPeer(t *testing.T) {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
 	splunkClientTester(t, "TestDecommissionIndexerClusterPeer", 200, "", wantRequest, test)
+}
+
+func TestConfigurePeers(t *testing.T) {
+	request1, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
+	request2, _ := http.NewRequest("GET", "https://localhost:8089/services/search/distributed/peers?count=0&output_mode=json", nil)
+	request3, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_indexer/edit", nil)
+	request4, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit", nil)
+	request5, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_indexerclustergroup_idxc_label/edit", nil)
+	request6, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", nil)
+	request7, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", nil)
+	request8, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed?count=0&output_mode=json", nil)
+	request9, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", nil)
+	request10, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/apps/local/splunk_monitoring_console", nil)
+	var wantRequests []*http.Request
+	wantRequests = append(wantRequests, request1)
+	wantRequests = append(wantRequests, request2)
+	wantRequests = append(wantRequests, request3)
+	wantRequests = append(wantRequests, request4)
+	wantRequests = append(wantRequests, request5)
+	wantRequests = append(wantRequests, request6)
+	wantRequests = append(wantRequests, request7)
+	wantRequests = append(wantRequests, request8)
+	wantRequests = append(wantRequests, request9)
+	wantRequests = append(wantRequests, request10)
+	body := []string{
+		`{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","addOns":{"DFS":{"parameters":{"vCPU":"0"},"type":"add_on"},"hadoop":{"parameters":{"erp_type":"report","guid":"6F416E61-B40E-461C-A782-CBC186E98133","maxNodes":"200"},"type":"external_results_provider"}},"build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","dfs_enabled":false,"eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
+		`{"links":{"create":"/services/search/distributed/peers/_new","_reload":"/services/search/distributed/peers/_reload"},"origin":"https://localhost:8089/services/search/distributed/peers","updated":"2020-09-22T21:43:33+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"splunk-example-cluster-master-service:8089","id":"https://localhost:8089/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","list":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","_reload":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/_reload","edit":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","remove":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","disable":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/disable","quarantine":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/quarantine"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"build":"a1a6394cc5ae","bundle_isIndexing":["15065687072217053252 - false","16923722576385601869 - false","8527338655074501134 - false","5466829646820181037 - false","12887664000706842849 - false"],"bundle_versions":["15065687072217053252","16923722576385601869","8527338655074501134","5466829646820181037","12887664000706842849"],"cluster_label":["idxc_label"],"cpu_arch":"x86_64","disabled":false,"eai:acl":null,"enableRFSMonitoring":false,"guid":"19F5CA13-A561-4D1B-9341-A7BFC3E92F06","host":"splunk-example-cluster-master-0","host_fqdn":"splunk-example-cluster-master-0","isForwarding":true,"is_https":true,"licenseSignature":"c2bf3f573bbaf36ae13f326762945905","numberOfCores":"1","numberOfVirtualCores":"2","os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","peerName":"splunk-example-cluster-master-0","peerType":"configured","physicalMemoryMB":"7764","remote_session":"2bOC3nPGg_s2UREElAhLcKFXxuMNgwasCQPJG^tlXJ5LMzX1aCC8zwgWN2dCtUD2TyQ1szY0sdQhOwJyK_Igj6JUfEmcVGrsd3BtBvFOb0R_6F9kYRzHKz3","replicationStatus":"Successful","rtsearch_enabled":true,"search_groups":["dmc_group_cluster_master","dmc_group_license_master","dmc_indexerclustergroup_idxc_label"],"searchable_indexes":["_audit","_internal","_introspection","_metrics","_metrics_rollup","_telemetry","_thefishbucket","history","main","summary"],"server_roles":["license_master","cluster_master","search_head"],"shcluster_label":"","startup_time":1600810341,"status":"Up","status_details":[],"version":"8.0.5"}}],"paging":{"total":4,"perPage":30,"offset":0},"messages":[]}`,
+		"",
+		"",
+		"",
+		`{"links":{"create":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_new","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_reload","_acl":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_acl"},"origin":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav","updated":"2020-09-23T23:50:25+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"default.distributed","id":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","list":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed/_reload","edit":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed"},"author":"nobody","acl":{"app":"splunk_monitoring_console","can_change_perms":true,"can_list":true,"can_share_app":true,"can_share_global":true,"can_share_user":false,"can_write":true,"modifiable":true,"owner":"nobody","perms":{"read":["admin"],"write":["admin"]},"removable":false,"sharing":"app"},"fields":{"required":["eai:data"],"optional":[],"wildcard":[]},"content":{"disabled":false,"eai:acl":null,"eai:appName":"splunk_monitoring_console","eai:data":"<nav color=\"#3C444D\">\n  <view name=\"monitoringconsole_overview\" default=\"true\" />\n  <view name=\"monitoringconsole_landing\" />\n  <view name=\"monitoringconsole_check\" />\n  <view name=\"monitoringconsole_instances\" />\n  <collection label=\"Indexing\">\n    <collection label=\"Performance\">\n      <view name=\"indexing_performance_instance\" />\n      <view name=\"indexing_performance_advanced\" />\n      <view name=\"indexing_performance_deployment\" />\n    <\/collection>\n    <collection label=\"Indexer Clustering\">\n        <!--<a href=\"Clustering\">Indexer Clustering: Status<\/a>-->\n      <view name=\"indexer_clustering_status\" />\n      <view name=\"indexer_clustering_service_activity\" />\n    <\/collection>\n    <collection label=\"Indexes and Volumes\">\n      <view name=\"indexes_and_volumes_instance\" />\n      <view name=\"indexes_and_volumes_deployment\" />\n      <view name=\"index_detail_instance\" />\n      <view name=\"index_detail_deployment\" />\n      <view name=\"volume_detail_instance\" />\n      <view name=\"volume_detail_deployment\" />\n    <\/collection>\n    <collection label=\"Inputs\">\n      <view name=\"http_event_collector_instance\" />\n      <view name=\"http_event_collector_deployment\" />\n      <view name=\"splunk_tcpin_performance_instance\" />\n      <view name=\"splunk_tcpin_performance_deployment\" />\n      <view name=\"data_quality\" />\n    <\/collection>\n    <collection label=\"License Usage\">\n      <view name=\"license_usage_today\" />\n      <view name=\"license_usage_30days\" />\n    <\/collection>\n    <collection label=\"SmartStore\">\n      <view name=\"smartstore_activity_instance\" />\n      <view name=\"smartstore_activity_deployment\" />\n      <view name=\"smartstore_cache_performance_instance\" />\n      <view name=\"smartstore_cache_performance_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Search\">\n    <collection label=\"Activity\">\n      <view name=\"search_activity_instance\" />\n      <view name=\"search_activity_deployment\" />\n      <view name=\"search_usage_statistics_instance\" />\n      <view name=\"search_usage_statistics_deployment\" />\n    <\/collection>\n    <collection label=\"Distributed Search\">\n      <view name=\"distributed_search_instance\" />\n      <view name=\"distributed_search_deployment\" />\n    <\/collection>\n    <collection label=\"Search Head Clustering\">\n      <view name=\"shc_status_and_conf\" />\n      <view name=\"shc_conf_rep\" />\n      <view name=\"shc_artifact_replication\" />\n      <view name=\"shc_scheduler_delegation_statistics\" />\n      <view name=\"shc_app_deployment\" />\n    <\/collection>\n    <collection label=\"Scheduler Activity\">\n      <view name=\"scheduler_activity_instance\" />\n      <view name=\"scheduler_activity_deployment\" />\n    <\/collection>\n    <collection label=\"KV Store\">\n      <view name=\"kv_store_instance\" />\n      <view name=\"kv_store_deployment\" />\n    <\/collection>\n    <collection label=\"Knowledge Bundle Replication\">\n      <view name=\"bundle_replication\" />\n      <view name=\"cascading_replication\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Resource Usage\">\n    <view name=\"resource_usage_instance\" />\n    <view name=\"resource_usage_machine\" />\n    <view name=\"resource_usage_deployment\" />\n    <view name=\"resource_usage_cpu_instance\" />\n    <view name=\"resource_usage_cpu_deployment\" />\n    <collection label=\"Workload Management\">\n      <view name=\"workload_management\" />\n      <view name=\"workload_management_per_pool_instance\" />\n      <view name=\"workload_management_per_pool_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Forwarders\">\n    <view name=\"forwarder_instance\" />\n    <view name=\"forwarder_deployment\" />\n  <\/collection>\n  <collection label=\"Settings\">\n    <view name=\"monitoringconsole_configure\" />\n    <view name=\"monitoringconsole_forwarder_setup\" />\n    <view name=\"monitoringconsole_alerts_setup\" />\n    <view name=\"monitoringconsole_overview_preferences\"/>\n    <view name=\"monitoringconsole_check_list\" />\n  <\/collection>\n  <a href=\"search\">Run a Search<\/a>\n<\/nav>","eai:digest":"31adb23c29a2d1402e5867ee6b9b5a92","eai:userName":"nobody","rootNode":"nav"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
+		"",
+		`{"links":{"create":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_new","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_reload","_acl":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_acl"},"origin":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav","updated":"2020-09-23T23:50:25+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"default.distributed","id":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","list":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed/_reload","edit":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed"},"author":"nobody","acl":{"app":"splunk_monitoring_console","can_change_perms":true,"can_list":true,"can_share_app":true,"can_share_global":true,"can_share_user":false,"can_write":true,"modifiable":true,"owner":"nobody","perms":{"read":["admin"],"write":["admin"]},"removable":false,"sharing":"app"},"fields":{"required":["eai:data"],"optional":[],"wildcard":[]},"content":{"disabled":false,"eai:acl":null,"eai:appName":"splunk_monitoring_console","eai:data":"<nav color=\"#3C444D\">\n  <view name=\"monitoringconsole_overview\" default=\"true\" />\n  <view name=\"monitoringconsole_landing\" />\n  <view name=\"monitoringconsole_check\" />\n  <view name=\"monitoringconsole_instances\" />\n  <collection label=\"Indexing\">\n    <collection label=\"Performance\">\n      <view name=\"indexing_performance_instance\" />\n      <view name=\"indexing_performance_advanced\" />\n      <view name=\"indexing_performance_deployment\" />\n    <\/collection>\n    <collection label=\"Indexer Clustering\">\n        <!--<a href=\"Clustering\">Indexer Clustering: Status<\/a>-->\n      <view name=\"indexer_clustering_status\" />\n      <view name=\"indexer_clustering_service_activity\" />\n    <\/collection>\n    <collection label=\"Indexes and Volumes\">\n      <view name=\"indexes_and_volumes_instance\" />\n      <view name=\"indexes_and_volumes_deployment\" />\n      <view name=\"index_detail_instance\" />\n      <view name=\"index_detail_deployment\" />\n      <view name=\"volume_detail_instance\" />\n      <view name=\"volume_detail_deployment\" />\n    <\/collection>\n    <collection label=\"Inputs\">\n      <view name=\"http_event_collector_instance\" />\n      <view name=\"http_event_collector_deployment\" />\n      <view name=\"splunk_tcpin_performance_instance\" />\n      <view name=\"splunk_tcpin_performance_deployment\" />\n      <view name=\"data_quality\" />\n    <\/collection>\n    <collection label=\"License Usage\">\n      <view name=\"license_usage_today\" />\n      <view name=\"license_usage_30days\" />\n    <\/collection>\n    <collection label=\"SmartStore\">\n      <view name=\"smartstore_activity_instance\" />\n      <view name=\"smartstore_activity_deployment\" />\n      <view name=\"smartstore_cache_performance_instance\" />\n      <view name=\"smartstore_cache_performance_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Search\">\n    <collection label=\"Activity\">\n      <view name=\"search_activity_instance\" />\n      <view name=\"search_activity_deployment\" />\n      <view name=\"search_usage_statistics_instance\" />\n      <view name=\"search_usage_statistics_deployment\" />\n    <\/collection>\n    <collection label=\"Distributed Search\">\n      <view name=\"distributed_search_instance\" />\n      <view name=\"distributed_search_deployment\" />\n    <\/collection>\n    <collection label=\"Search Head Clustering\">\n      <view name=\"shc_status_and_conf\" />\n      <view name=\"shc_conf_rep\" />\n      <view name=\"shc_artifact_replication\" />\n      <view name=\"shc_scheduler_delegation_statistics\" />\n      <view name=\"shc_app_deployment\" />\n    <\/collection>\n    <collection label=\"Scheduler Activity\">\n      <view name=\"scheduler_activity_instance\" />\n      <view name=\"scheduler_activity_deployment\" />\n    <\/collection>\n    <collection label=\"KV Store\">\n      <view name=\"kv_store_instance\" />\n      <view name=\"kv_store_deployment\" />\n    <\/collection>\n    <collection label=\"Knowledge Bundle Replication\">\n      <view name=\"bundle_replication\" />\n      <view name=\"cascading_replication\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Resource Usage\">\n    <view name=\"resource_usage_instance\" />\n    <view name=\"resource_usage_machine\" />\n    <view name=\"resource_usage_deployment\" />\n    <view name=\"resource_usage_cpu_instance\" />\n    <view name=\"resource_usage_cpu_deployment\" />\n    <collection label=\"Workload Management\">\n      <view name=\"workload_management\" />\n      <view name=\"workload_management_per_pool_instance\" />\n      <view name=\"workload_management_per_pool_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Forwarders\">\n    <view name=\"forwarder_instance\" />\n    <view name=\"forwarder_deployment\" />\n  <\/collection>\n  <collection label=\"Settings\">\n    <view name=\"monitoringconsole_configure\" />\n    <view name=\"monitoringconsole_forwarder_setup\" />\n    <view name=\"monitoringconsole_alerts_setup\" />\n    <view name=\"monitoringconsole_overview_preferences\"/>\n    <view name=\"monitoringconsole_check_list\" />\n  <\/collection>\n  <a href=\"search\">Run a Search<\/a>\n<\/nav>","eai:digest":"31adb23c29a2d1402e5867ee6b9b5a92","eai:userName":"nobody","rootNode":"nav"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
+		"",
+		"",
+	}
+	mock := true
+	test := func(c SplunkClient) error {
+		return c.ConfigurePeers(mock)
+	}
+	status := []int{
+		200, 200, 200, 200, 200, 200, 201, 200, 200, 200, 200,
+	}
+	splunkClientMultipleTester(t, "TestConfigurePeers", status, body, wantRequests, test)
+}
+func TestGetMonitoringconsoleServerRoles(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
+	test := func(c SplunkClient) error {
+		info, err := c.GetMonitoringconsoleServerRoles()
+		if err != nil {
+			return err
+		}
+		if len(info.ServerRoles) == 0 {
+			t.Errorf("There should be atleast one server role assigned to this host")
+		}
+		return nil
+	}
+	body := `{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","addOns":{"DFS":{"parameters":{"vCPU":"0"},"type":"add_on"},"hadoop":{"parameters":{"erp_type":"report","guid":"6F416E61-B40E-461C-A782-CBC186E98133","maxNodes":"200"},"type":"external_results_provider"}},"build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","dfs_enabled":false,"eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
+}
+func TestUpdateDMCGroups(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/indexer/edit", nil)
+	test := func(c SplunkClient) error {
+		err := c.UpdateDMCGroups("indexer", "splunk_cluster_master")
+		if err != nil {
+			t.Errorf("Unable to update monitoring console clustering groups")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestUpdateDMCGroups", 201, "", wantRequest, test)
+}
+func TestUpdateDMCClusteringLabelGroup(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_indexerclustergroup_abc/edit", nil)
+	test := func(c SplunkClient) error {
+		err := c.UpdateDMCClusteringLabelGroup("abc", "splunk_cluster_master")
+		if err != nil {
+			t.Errorf("Unable to update monitoring console clustering groups")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestUpdateDMCClusteringLabelGroup", 201, "", wantRequest, test)
+}
+
+func TestGetMonitoringconsoleAssetTable(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", nil)
+	wantDispatchBuckets := int64(0)
+	test := func(c SplunkClient) error {
+		info, err := c.GetMonitoringconsoleAssetTable()
+		if err != nil {
+			return err
+		}
+		if info.DispatchBuckets != wantDispatchBuckets {
+			t.Errorf("info.Status=%d; want %d", info.DispatchBuckets, wantDispatchBuckets)
+		}
+		return nil
+	}
+	body := `{"links":{"create":"/services/search/distributed/peers/_new","_reload":"/services/search/distributed/peers/_reload"},"origin":"https://localhost:8089/services/search/distributed/peers","updated":"2020-09-22T21:43:33+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"splunk-example-cluster-master-service:8089","id":"https://localhost:8089/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","list":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","_reload":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/_reload","edit":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","remove":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","disable":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/disable","quarantine":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/quarantine"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"build":"a1a6394cc5ae","bundle_isIndexing":["15065687072217053252 - false","16923722576385601869 - false","8527338655074501134 - false","5466829646820181037 - false","12887664000706842849 - false"],"bundle_versions":["15065687072217053252","16923722576385601869","8527338655074501134","5466829646820181037","12887664000706842849"],"cluster_label":["idxc_label"],"cpu_arch":"x86_64","disabled":false,"eai:acl":null,"enableRFSMonitoring":false,"guid":"19F5CA13-A561-4D1B-9341-A7BFC3E92F06","host":"splunk-example-cluster-master-0","host_fqdn":"splunk-example-cluster-master-0","isForwarding":true,"is_https":true,"licenseSignature":"c2bf3f573bbaf36ae13f326762945905","numberOfCores":"1","numberOfVirtualCores":"2","os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","peerName":"splunk-example-cluster-master-0","peerType":"configured","physicalMemoryMB":"7764","remote_session":"2bOC3nPGg_s2UREElAhLcKFXxuMNgwasCQPJG^tlXJ5LMzX1aCC8zwgWN2dCtUD2TyQ1szY0sdQhOwJyK_Igj6JUfEmcVGrsd3BtBvFOb0R_6F9kYRzHKz3","replicationStatus":"Successful","rtsearch_enabled":true,"search_groups":["dmc_group_cluster_master","dmc_group_license_master","dmc_indexerclustergroup_idxc_label"],"searchable_indexes":["_audit","_internal","_introspection","_metrics","_metrics_rollup","_telemetry","_thefishbucket","history","main","summary"],"server_roles":["license_master","cluster_master","search_head"],"shcluster_label":"","startup_time":1600810341,"status":"Up","status_details":[],"version":"8.0.5"}}],"paging":{"total":4,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
+}
+
+func TestPostMonitoringconsoleAssetTable(t *testing.T) {
+	var apiResponseMCAssetBuild *DMCAssetBuildFull
+	apiResponseMCAssetBuild = new(DMCAssetBuildFull)
+	apiResponseMCAssetBuild = &DMCAssetBuildFull{
+		DispatchAutoCancel: "30",
+		DispatchBuckets:    int64(0),
+	}
+
+	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", body)
+	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	test := func(c SplunkClient) error {
+		return c.PostMonitoringconsoleAssetTable(apiResponseMCAssetBuild)
+	}
+	splunkClientTester(t, "TestPostMonitoringconsoleAssetTable", 201, "", wantRequest, test)
+}
+
+func TestGetMonitoringConsoleUISettings(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed?count=0&output_mode=json", nil)
+	wantEaiAppName := "splunk_monitoring_console"
+	test := func(c SplunkClient) error {
+		info, err := c.GetMonitoringConsoleUISettings()
+		if err != nil {
+			return err
+		}
+		if info.EaiAppName != wantEaiAppName {
+			t.Errorf("info.Status=%s; want %s", info.EaiAppName, wantEaiAppName)
+		}
+		return nil
+	}
+	body := `{"links":{"create":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_new","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_reload","_acl":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_acl"},"origin":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav","updated":"2020-09-23T23:50:25+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"default.distributed","id":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","list":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed/_reload","edit":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed"},"author":"nobody","acl":{"app":"splunk_monitoring_console","can_change_perms":true,"can_list":true,"can_share_app":true,"can_share_global":true,"can_share_user":false,"can_write":true,"modifiable":true,"owner":"nobody","perms":{"read":["admin"],"write":["admin"]},"removable":false,"sharing":"app"},"fields":{"required":["eai:data"],"optional":[],"wildcard":[]},"content":{"disabled":false,"eai:acl":null,"eai:appName":"splunk_monitoring_console","eai:data":"<nav color=\"#3C444D\">\n  <view name=\"monitoringconsole_overview\" default=\"true\" />\n  <view name=\"monitoringconsole_landing\" />\n  <view name=\"monitoringconsole_check\" />\n  <view name=\"monitoringconsole_instances\" />\n  <collection label=\"Indexing\">\n    <collection label=\"Performance\">\n      <view name=\"indexing_performance_instance\" />\n      <view name=\"indexing_performance_advanced\" />\n      <view name=\"indexing_performance_deployment\" />\n    <\/collection>\n    <collection label=\"Indexer Clustering\">\n        <!--<a href=\"Clustering\">Indexer Clustering: Status<\/a>-->\n      <view name=\"indexer_clustering_status\" />\n      <view name=\"indexer_clustering_service_activity\" />\n    <\/collection>\n    <collection label=\"Indexes and Volumes\">\n      <view name=\"indexes_and_volumes_instance\" />\n      <view name=\"indexes_and_volumes_deployment\" />\n      <view name=\"index_detail_instance\" />\n      <view name=\"index_detail_deployment\" />\n      <view name=\"volume_detail_instance\" />\n      <view name=\"volume_detail_deployment\" />\n    <\/collection>\n    <collection label=\"Inputs\">\n      <view name=\"http_event_collector_instance\" />\n      <view name=\"http_event_collector_deployment\" />\n      <view name=\"splunk_tcpin_performance_instance\" />\n      <view name=\"splunk_tcpin_performance_deployment\" />\n      <view name=\"data_quality\" />\n    <\/collection>\n    <collection label=\"License Usage\">\n      <view name=\"license_usage_today\" />\n      <view name=\"license_usage_30days\" />\n    <\/collection>\n    <collection label=\"SmartStore\">\n      <view name=\"smartstore_activity_instance\" />\n      <view name=\"smartstore_activity_deployment\" />\n      <view name=\"smartstore_cache_performance_instance\" />\n      <view name=\"smartstore_cache_performance_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Search\">\n    <collection label=\"Activity\">\n      <view name=\"search_activity_instance\" />\n      <view name=\"search_activity_deployment\" />\n      <view name=\"search_usage_statistics_instance\" />\n      <view name=\"search_usage_statistics_deployment\" />\n    <\/collection>\n    <collection label=\"Distributed Search\">\n      <view name=\"distributed_search_instance\" />\n      <view name=\"distributed_search_deployment\" />\n    <\/collection>\n    <collection label=\"Search Head Clustering\">\n      <view name=\"shc_status_and_conf\" />\n      <view name=\"shc_conf_rep\" />\n      <view name=\"shc_artifact_replication\" />\n      <view name=\"shc_scheduler_delegation_statistics\" />\n      <view name=\"shc_app_deployment\" />\n    <\/collection>\n    <collection label=\"Scheduler Activity\">\n      <view name=\"scheduler_activity_instance\" />\n      <view name=\"scheduler_activity_deployment\" />\n    <\/collection>\n    <collection label=\"KV Store\">\n      <view name=\"kv_store_instance\" />\n      <view name=\"kv_store_deployment\" />\n    <\/collection>\n    <collection label=\"Knowledge Bundle Replication\">\n      <view name=\"bundle_replication\" />\n      <view name=\"cascading_replication\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Resource Usage\">\n    <view name=\"resource_usage_instance\" />\n    <view name=\"resource_usage_machine\" />\n    <view name=\"resource_usage_deployment\" />\n    <view name=\"resource_usage_cpu_instance\" />\n    <view name=\"resource_usage_cpu_deployment\" />\n    <collection label=\"Workload Management\">\n      <view name=\"workload_management\" />\n      <view name=\"workload_management_per_pool_instance\" />\n      <view name=\"workload_management_per_pool_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Forwarders\">\n    <view name=\"forwarder_instance\" />\n    <view name=\"forwarder_deployment\" />\n  <\/collection>\n  <collection label=\"Settings\">\n    <view name=\"monitoringconsole_configure\" />\n    <view name=\"monitoringconsole_forwarder_setup\" />\n    <view name=\"monitoringconsole_alerts_setup\" />\n    <view name=\"monitoringconsole_overview_preferences\"/>\n    <view name=\"monitoringconsole_check_list\" />\n  <\/collection>\n  <a href=\"search\">Run a Search<\/a>\n<\/nav>","eai:digest":"31adb23c29a2d1402e5867ee6b9b5a92","eai:userName":"nobody","rootNode":"nav"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
+}
+
+func TestUpdateLookupUISettings(t *testing.T) {
+	var apiResponseUISettings *UISettings
+	apiResponseUISettings = new(UISettings)
+	apiResponseUISettings = &UISettings{
+		Disabled:    false,
+		EaiACL:      "",
+		EaiAppName:  "splunk_monitoring_console",
+		EaiUserName: "nobody",
+	}
+	wantconfiguredPeers := "&member=splunk-example-cluster-master-service:8089&"
+	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
+	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	test := func(c SplunkClient) error {
+		return c.UpdateLookupUISettings(wantconfiguredPeers, apiResponseUISettings)
+	}
+	splunkClientTester(t, "TestPostMonitoringconsoleAssetTable", 200, "", wantRequest, test)
+}
+
+func TestUpdateMonitoringConsoleApp(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/apps/local/splunk_monitoring_console", nil)
+	// test error response
+	test := func(c SplunkClient) error {
+		err := c.UpdateMonitoringConsoleApp()
+		if err != nil {
+			t.Errorf("MonitoringConsole App not updated")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestUpdateMonitoringConsoleApp", 200, "", wantRequest, test)
 }

@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,6 +48,17 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	secretName := ""
 	if secrets != nil {
 		secretName = secrets.GetName()
+	}
+
+	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
+		mgr := monitoingConsolePodManager{cr: &cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		c := mgr.getMonitoringConsoleClient(cr)
+		//pass boolean here
+		err := c.ConfigurePeers(false)
+		if err != nil {
+			return nil
+		}
+		return nil
 	}
 
 	// create or update a regular monitoring console service
@@ -92,6 +104,19 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	_, err = splctrl.ApplyDeployment(client, deploymentMC)
 
 	return err
+}
+
+// getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
+func (mgr *monitoingConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+}
+
+// indexerClusterPodManager is used to manage the pods within an indexer cluster
+type monitoingConsolePodManager struct {
+	cr              *splcommon.MetaObject
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
 // GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.

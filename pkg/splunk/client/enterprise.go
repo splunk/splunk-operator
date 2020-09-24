@@ -21,8 +21,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("cmd")
 
 // SplunkHTTPClient defines the interface used by SplunkClient.
 // It is used to mock alternative implementations used for testing.
@@ -61,15 +67,15 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 }
 
 // Do processes a Splunk REST API request and unmarshals response into obj, if not nil.
-func (c *SplunkClient) Do(request *http.Request, expectedStatus int, obj interface{}) error {
+func (c *SplunkClient) Do(request *http.Request, expectedStatus string, obj interface{}) error {
 	// send HTTP response and check status
 	request.SetBasicAuth(c.Username, c.Password)
 	response, err := c.Client.Do(request)
 	if err != nil {
 		return err
 	}
-	if response.StatusCode != expectedStatus {
-		return fmt.Errorf("Response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
+	if !strings.Contains(expectedStatus, strconv.Itoa(response.StatusCode)) {
+		return fmt.Errorf("Response code=%d from %s; want %s", response.StatusCode, request.URL, expectedStatus)
 	}
 	if obj == nil {
 		return nil
@@ -90,7 +96,7 @@ func (c *SplunkClient) Get(path string, obj interface{}) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, 200, obj)
+	return c.Do(request, "200", obj)
 }
 
 // SearchHeadCaptainInfo represents the status of the search head cluster.
@@ -286,7 +292,7 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, 200, nil)
+	return c.Do(request, "200", nil)
 }
 
 // RemoveSearchHeadClusterMember removes a search head cluster member.
@@ -590,7 +596,7 @@ func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, 200, nil)
+	return c.Do(request, "200", nil)
 }
 
 // DecommissionIndexerClusterPeer takes an indexer cluster peer offline using the decommission endpoint.
@@ -606,5 +612,270 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if err != nil {
 		return err
 	}
-	return c.Do(request, 200, nil)
+	return c.Do(request, "200", nil)
+}
+
+//ServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
+type ServerRolesInfo struct {
+	ServerRoles []string `json:"server_roles"`
+}
+
+//DistributedPeer is the struct for information about distributed peers to the monitoring console
+type DistributedPeer struct {
+	ClusterLabel []string `json:"cluster_label"`
+	ServerRoles  []string `json:"server_roles"`
+}
+
+//DMCAssetBuildFull contents in each entry
+type DMCAssetBuildFull struct {
+	DispatchAutoCancel string `json:"dispatch.auto_cancel"`
+	DispatchBuckets    int64  `json:"dispatch.buckets"`
+}
+
+//UISettings for the POST calls to the UI
+type UISettings struct {
+	EaiData     string `json:"eai:data"`
+	Disabled    bool   `json:"disabled"`
+	EaiACL      string `json:"eai:acl"`
+	EaiAppName  string `json:"eai:appName"`
+	EaiUserName string `json:"eai:userName"`
+}
+
+//ConfigurePeers change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
+func (c *SplunkClient) ConfigurePeers(mock bool) error {
+	var configuredPeers, indexerMemberList, licenseMasterMemberList, clusterMasterMemberList string
+	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
+	if err != nil {
+		return err
+	}
+
+	apiResponseDistributedPeers := struct {
+		Entry []struct {
+			Name    string          `json:"name"`
+			Content DistributedPeer `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/search/distributed/peers"
+	err = c.Get(path, &apiResponseDistributedPeers)
+	if err != nil {
+		return err
+	}
+
+	if !mock {
+		for _, e := range apiResponseDistributedPeers.Entry {
+			if configuredPeers == "" {
+				configuredPeers = e.Name
+			} else {
+				str := []string{configuredPeers, e.Name}
+				configuredPeers = strings.Join(str, ",")
+			}
+			for _, s := range e.Content.ServerRoles {
+				if s == "indexer" {
+					indexerMemberList = indexerMemberList + "&member=" + e.Name
+				}
+				if s == "license_master" {
+					licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
+				}
+				if s == "cluster_master" {
+					clusterMasterMemberList = clusterMasterMemberList + "&member=" + e.Name
+				}
+			}
+		}
+
+		for _, e := range apiResponseServerRoles.ServerRoles {
+			if e == "indexer" {
+				indexerMemberList = "&member=localhost:localhost" + indexerMemberList
+			}
+			if e == "license_master" {
+				licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
+			}
+			if e == "cluster_master" {
+				clusterMasterMemberList = "&member=localhost:localhost" + clusterMasterMemberList
+			}
+		}
+	}
+	reqBodyIndexer := indexerMemberList + "&default=true"
+	reqBodyLicenseMaster := licenseMasterMemberList + "&default=false"
+	err = c.UpdateDMCGroups("dmc_group_indexer", reqBodyIndexer)
+	if err != nil {
+		return err
+	}
+	err = c.UpdateDMCGroups("dmc_group_license_master", reqBodyLicenseMaster)
+	if err != nil {
+		return err
+	}
+
+	clusterRoleDict := make(map[string][]string)
+	//map of Name to Roles
+	for _, e := range apiResponseDistributedPeers.Entry {
+		for _, s := range e.Content.ClusterLabel {
+			clusterRoleDict[e.Name] = append(clusterRoleDict[e.Name], s)
+		}
+	}
+	//map of roles to names. TODO: check different labels here
+	clusterRoleDictToDict := make(map[string][]string)
+	for key, value := range clusterRoleDict {
+		for _, val := range value {
+			clusterRoleDictToDict[val] = append(clusterRoleDictToDict[val], key)
+		}
+	}
+
+	//make request body for all cluster roles
+	clusterRoleDictToDictString := make(map[string]string)
+	for key, value := range clusterRoleDictToDict {
+		for _, val := range value {
+			clusterRoleDictToDictString[key] = clusterRoleDictToDictString[key] + "&member=" + val
+		}
+	}
+
+	for key, value := range clusterRoleDictToDictString {
+		if key == "" {
+			break
+		} else {
+			//scopedLog = log.WithName("clusterRoleDictToDict label ROLE  NAME").WithValues("ROLE", key, "NAME", value)
+			err = c.UpdateDMCClusteringLabelGroup(key, value)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	apiResponseMCAssetTableBuild, err := c.GetMonitoringconsoleAssetTable()
+	if err != nil {
+		return err
+	}
+	err = c.PostMonitoringconsoleAssetTable(apiResponseMCAssetTableBuild)
+	if err != nil {
+		return err
+	}
+	UISettingsObject, err := c.GetMonitoringConsoleUISettings()
+	if err != nil {
+		return err
+	}
+	err = c.UpdateLookupUISettings(configuredPeers, UISettingsObject)
+	if err != nil {
+		return err
+	}
+	err = c.UpdateMonitoringConsoleApp()
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+//GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*ServerRolesInfo, error) {
+	apiResponseServerRoles := struct {
+		Entry []struct {
+			Content ServerRolesInfo `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/server/info/server-info"
+	err := c.Get(path, &apiResponseServerRoles)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponseServerRoles.Entry) < 1 {
+		return nil, err
+	}
+	return &apiResponseServerRoles.Entry[0].Content, nil
+}
+
+//UpdateDMCGroups dmc* groups with new members
+func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string) error {
+	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/%s/edit", c.ManagementURI, dmcGroupName)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
+	err = c.Do(request, "200, 201, 409", nil)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+//UpdateDMCClusteringLabelGroup update respective clustering group
+func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMembers string) error {
+	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/dmc_indexerclustergroup_%s/edit", c.ManagementURI, groupName)
+	reqBodyClusterGroup := groupMembers + "&default=false"
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyClusterGroup))
+	err = c.Do(request, "200, 201, 409", nil)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+//GetMonitoringconsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
+func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*DMCAssetBuildFull, error) {
+	apiResponseMCAssetTableBuild := struct {
+		Entry []struct {
+			Content DMCAssetBuildFull `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full"
+	err := c.Get(path, &apiResponseMCAssetTableBuild)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponseMCAssetTableBuild.Entry) < 1 {
+		return nil, err
+	}
+	return &apiResponseMCAssetTableBuild.Entry[0].Content, nil
+}
+
+//PostMonitoringconsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
+func (c *SplunkClient) PostMonitoringconsoleAssetTable(apiResponseMCAssetTableBuild *DMCAssetBuildFull) error {
+	reqBodyAssetTable := "&trigger_actions=true&dispatch.auto_cancel=" + apiResponseMCAssetTableBuild.DispatchAutoCancel + "&dispatch.buckets=" + strconv.FormatInt(apiResponseMCAssetTableBuild.DispatchBuckets, 10) + "&dispatch.enablePreview=true"
+	endpoint := fmt.Sprintf("%s", c.ManagementURI) + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyAssetTable))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	err = c.Do(request, "201", nil)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+//GetMonitoringConsoleUISettings do a Get
+func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
+	apiResponseUISettings := struct {
+		Entry []struct {
+			Content UISettings `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed"
+	err := c.Get(path, &apiResponseUISettings)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponseUISettings.Entry) < 1 {
+		return nil, err
+	}
+	return &apiResponseUISettings.Entry[0].Content, nil
+}
+
+//UpdateLookupUISettings etc/apps/splunk_monitoring_console/lookups/assets.csv and update the app
+func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiResponseUISettings *UISettings) error {
+	reqBodyMCLookups := "configuredPeers=" + configuredPeers + "&eai:appName=" + apiResponseUISettings.EaiAppName + "&eai:acl=" + apiResponseUISettings.EaiACL + "&eai:userName=" + apiResponseUISettings.EaiUserName + "&disabled=" + strconv.FormatBool(apiResponseUISettings.Disabled)
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyMCLookups))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	err = c.Do(request, "200", nil)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+//UpdateMonitoringConsoleApp updates the monitoring console app
+func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/apps/local/splunk_monitoring_console", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	err = c.Do(request, "200", nil)
+	if err != nil {
+		return err
+	}
+	//scopedLog.Info("SUCCESS!!!!!!")
+	return err
 }

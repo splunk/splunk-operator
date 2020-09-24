@@ -34,6 +34,7 @@ import (
 func TestApplyIndexerCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1alpha3.ClusterMaster-test-master1"},
@@ -46,8 +47,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[6]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -68,8 +69,9 @@ func TestApplyIndexerCluster(t *testing.T) {
 	}
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
+	mockCalls := true
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster), mockCalls)
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyIndexerCluster", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -79,7 +81,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster), mockCalls)
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
