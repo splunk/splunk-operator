@@ -75,13 +75,13 @@ const (
 	commandForDfc = "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"
 
 	// command for init container on a standalone without DFC
-	commandForStandaloneSmartstore = "mkdir -p /op/spl/et/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /op/spl/et/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /op/spl/et/apps/splunk-operator/local/server.conf"
+	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
 
 	// command for init container with Smartstore enabled and DFC enabled
 	commandForDfcAndSmartstore = commandForDfc + commandMerger + commandForStandaloneSmartstore
 
 	// command for init container on a CM
-	commandForCMSmartstore = "mkdir -p /op/spl/et/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /op/spl/et/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /op/spl/et/master-apps/splunk-operator/local/server.conf"
+	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

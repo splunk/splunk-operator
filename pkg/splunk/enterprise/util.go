@@ -145,7 +145,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, sparkImage stri
 
 		Command: []string{"bash", "-c", commandOnContainer},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "pvc-etc", MountPath: "/op/spl/et"},
+			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
 		},
 
 		Resources: corev1.ResourceRequirements{

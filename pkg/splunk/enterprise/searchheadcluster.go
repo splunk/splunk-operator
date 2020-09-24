@@ -367,7 +367,7 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev
 		volMounts = []corev1.VolumeMount{
 			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
 			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
-			{Name: "pvc-etc", MountPath: "/op/spl/et"},
+			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
 		}
 	} else {
 		commands = []string{"bash", "-c", commandForDfc}
