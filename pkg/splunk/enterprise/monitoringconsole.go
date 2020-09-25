@@ -50,7 +50,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		secretName = secrets.GetName()
 	}
 	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
-		mgr := monitoingConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
 		c := mgr.getMonitoringConsoleClient(cr)
 		err := c.ConfigurePeers(false)
 		if err != nil {
@@ -103,14 +103,14 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	return err
 }
 
-// getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
-func (mgr *monitoingConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+// getMonitoringConsoleClient for monitoringConsolePodManager returns a SplunkClient for monitoring console
+func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
-// indexerClusterPodManager is used to manage the pods within an indexer cluster
-type monitoingConsolePodManager struct {
+// monitoringConsolePodManager is used to manage the monitoring console pod
+type monitoringConsolePodManager struct {
 	cr              *splcommon.MetaObject
 	spec            *enterprisev1.CommonSplunkSpec
 	secrets         *corev1.Secret
