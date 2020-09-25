@@ -15,9 +15,11 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -47,9 +49,32 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 		if err = splctrl.ApplyConfigMap(client, defaultsMap); err != nil {
 			return nil, err
 		}
+		// We will update the annotation for resource version in the pod template spec
+		// of the CR, so that any change in the ConfigMap will lead to recycle of the pod.
+		err = updateDefaultConfigMapAnnotations(client, cr, defaultsMap)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return namespaceScopedSecret, nil
+}
+
+// updateDefaultConfigMapAnnotations checks and gets the default config map and updates the annotation
+// for the resource version of the ConfigMap in the pod template spec for the CR.
+func updateDefaultConfigMapAnnotations(client splcommon.ControllerClient, cr splcommon.MetaObject, configMap *corev1.ConfigMap) error {
+	namespacedName := types.NamespacedName{Namespace: configMap.GetNamespace(), Name: configMap.GetName()}
+	var current corev1.ConfigMap
+
+	err := client.Get(context.TODO(), namespacedName, &current)
+	if err != nil {
+		return err
+	}
+	annotationsMap := cr.GetObjectMeta().GetAnnotations()
+	if annotationsMap != nil {
+		annotationsMap["defaultConfigRev"] = current.ObjectMeta.ResourceVersion
+	}
+	return nil
 }
 
 // getIndexerExtraEnv returns extra environment variables used by indexer clusters
