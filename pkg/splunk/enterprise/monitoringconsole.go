@@ -49,18 +49,15 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	if secrets != nil {
 		secretName = secrets.GetName()
 	}
-
 	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
-		mgr := monitoingConsolePodManager{cr: &cr, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		mgr := monitoingConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
 		c := mgr.getMonitoringConsoleClient(cr)
-		//pass boolean here
 		err := c.ConfigurePeers(false)
 		if err != nil {
-			return nil
+			return err
 		}
-		return nil
+		return err
 	}
-
 	// create or update a regular monitoring console service
 	err = splctrl.ApplyService(client, getSplunkService(cr, &spec, SplunkMonitoringConsole, false))
 	if err != nil {
@@ -115,6 +112,7 @@ func (mgr *monitoingConsolePodManager) getMonitoringConsoleClient(cr splcommon.M
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type monitoingConsolePodManager struct {
 	cr              *splcommon.MetaObject
+	spec            *enterprisev1.CommonSplunkSpec
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }

@@ -620,19 +620,19 @@ type ServerRolesInfo struct {
 	ServerRoles []string `json:"server_roles"`
 }
 
-//DistributedPeer is the struct for information about distributed peers to the monitoring console
+//DistributedPeer is the struct for information about distributed peers of the monitoring console
 type DistributedPeer struct {
 	ClusterLabel []string `json:"cluster_label"`
 	ServerRoles  []string `json:"server_roles"`
 }
 
-//DMCAssetBuildFull contents in each entry
-type DMCAssetBuildFull struct {
+//MCAssetBuildFull is the struct for information about asset table
+type MCAssetBuildFull struct {
 	DispatchAutoCancel string `json:"dispatch.auto_cancel"`
 	DispatchBuckets    int64  `json:"dispatch.buckets"`
 }
 
-//UISettings for the POST calls to the UI
+//UISettings is the struct for storing monitoring console app UI settings
 type UISettings struct {
 	EaiData     string `json:"eai:data"`
 	Disabled    bool   `json:"disabled"`
@@ -643,7 +643,7 @@ type UISettings struct {
 
 //ConfigurePeers change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
 func (c *SplunkClient) ConfigurePeers(mock bool) error {
-	var configuredPeers, indexerMemberList, licenseMasterMemberList, clusterMasterMemberList string
+	var configuredPeers, indexerMemberList, licenseMasterMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
 	if err != nil {
 		return err
@@ -676,9 +676,6 @@ func (c *SplunkClient) ConfigurePeers(mock bool) error {
 				if s == "license_master" {
 					licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
 				}
-				if s == "cluster_master" {
-					clusterMasterMemberList = clusterMasterMemberList + "&member=" + e.Name
-				}
 			}
 		}
 
@@ -688,9 +685,6 @@ func (c *SplunkClient) ConfigurePeers(mock bool) error {
 			}
 			if e == "license_master" {
 				licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
-			}
-			if e == "cluster_master" {
-				clusterMasterMemberList = "&member=localhost:localhost" + clusterMasterMemberList
 			}
 		}
 	}
@@ -732,7 +726,6 @@ func (c *SplunkClient) ConfigurePeers(mock bool) error {
 		if key == "" {
 			break
 		} else {
-			//scopedLog = log.WithName("clusterRoleDictToDict label ROLE  NAME").WithValues("ROLE", key, "NAME", value)
 			err = c.UpdateDMCClusteringLabelGroup(key, value)
 			if err != nil {
 				return err
@@ -803,11 +796,11 @@ func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMemb
 	return err
 }
 
-//GetMonitoringconsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
-func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*DMCAssetBuildFull, error) {
+//GetMonitoringconsoleAssetTable to GET monitoring console asset table.
+func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildFull, error) {
 	apiResponseMCAssetTableBuild := struct {
 		Entry []struct {
-			Content DMCAssetBuildFull `json:"content"`
+			Content MCAssetBuildFull `json:"content"`
 		} `json:"entry"`
 	}{}
 	path := "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full"
@@ -822,7 +815,7 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*DMCAssetBuildFull, err
 }
 
 //PostMonitoringconsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
-func (c *SplunkClient) PostMonitoringconsoleAssetTable(apiResponseMCAssetTableBuild *DMCAssetBuildFull) error {
+func (c *SplunkClient) PostMonitoringconsoleAssetTable(apiResponseMCAssetTableBuild *MCAssetBuildFull) error {
 	reqBodyAssetTable := "&trigger_actions=true&dispatch.auto_cancel=" + apiResponseMCAssetTableBuild.DispatchAutoCancel + "&dispatch.buckets=" + strconv.FormatInt(apiResponseMCAssetTableBuild.DispatchBuckets, 10) + "&dispatch.enablePreview=true"
 	endpoint := fmt.Sprintf("%s", c.ManagementURI) + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyAssetTable))
@@ -834,7 +827,7 @@ func (c *SplunkClient) PostMonitoringconsoleAssetTable(apiResponseMCAssetTableBu
 	return err
 }
 
-//GetMonitoringConsoleUISettings do a Get
+//GetMonitoringConsoleUISettings do a Get for UI settings
 func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	apiResponseUISettings := struct {
 		Entry []struct {
@@ -852,7 +845,7 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	return &apiResponseUISettings.Entry[0].Content, nil
 }
 
-//UpdateLookupUISettings etc/apps/splunk_monitoring_console/lookups/assets.csv and update the app
+//UpdateLookupUISettings updates assets.csv
 func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiResponseUISettings *UISettings) error {
 	reqBodyMCLookups := "configuredPeers=" + configuredPeers + "&eai:appName=" + apiResponseUISettings.EaiAppName + "&eai:acl=" + apiResponseUISettings.EaiACL + "&eai:userName=" + apiResponseUISettings.EaiUserName + "&disabled=" + strconv.FormatBool(apiResponseUISettings.Disabled)
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
@@ -876,6 +869,5 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	if err != nil {
 		return err
 	}
-	//scopedLog.Info("SUCCESS!!!!!!")
 	return err
 }

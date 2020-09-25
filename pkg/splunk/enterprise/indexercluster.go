@@ -68,13 +68,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
-	if !mockCalls {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
-		if err != nil {
-			return result, err
-		}
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -131,6 +124,12 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		if !mockCalls {
+			err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+			if err != nil {
+				return result, err
+			}
+		}
 		result.Requeue = false
 	}
 	return result, nil
