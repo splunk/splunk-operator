@@ -127,17 +127,17 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1",
+					{Name: "salesdata1", RemotePath: "remotepath1",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata2",
+					{Name: "salesdata2", RemotePath: "remotepath2",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata3",
+					{Name: "salesdata3", RemotePath: "remotepath3",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+							VolName: "msos_s2s3_vol"},
 					},
 				},
 			},
@@ -190,17 +190,17 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1",
+					{Name: "salesdata1", RemotePath: "remotepath1",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata2",
+					{Name: "salesdata2", RemotePath: "remotepath1",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata3",
+					{Name: "salesdata3", RemotePath: "remotepath1",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+							VolName: "msos_s2s3_vol"},
 					},
 				},
 			},

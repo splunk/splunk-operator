@@ -692,7 +692,7 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 
 	//return !(smartstore.IndexList == nil && smartstore.VolList == nil)
 
-	return smartstore.IndexList != nil || smartstore.VolList != nil || (smartstore.Defaults.RemotePath != "" && smartstore.Defaults.VolName != "")
+	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
 }
 
 func checkIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
@@ -783,9 +783,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 
 	defaults := smartstore.Defaults
 	// When volName is configured, bucket remote path should also be configured
-	if (defaults.VolName == "") != (defaults.RemotePath == "") {
-		return fmt.Errorf("volName and remotePath go together: volName = %s, remotePath = %s", defaults.VolName, defaults.RemotePath)
-	} else if defaults.VolName != "" {
+	if defaults.VolName != "" {
 		_, err = checkIfVolumeExists(volList, defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
@@ -799,10 +797,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 			return fmt.Errorf("Index name is missing for index at: %d", i)
 		}
 
-		// When volName is configured, bucket remote path should also be configured
-		if (index.VolName == "") != (index.RemotePath == "") {
-			return fmt.Errorf("volName and remotePath go together: volName = %s, remotePath = %s", index.VolName, index.RemotePath)
-		} else if index.VolName == "" && defaults.VolName == "" {
+		if index.VolName == "" && defaults.VolName == "" {
 			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
 		}
 
@@ -826,7 +821,7 @@ func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.
 	var volumesConf string
 
 	volumes := smartstore.VolList
-	for i := len(volumes) - 1; i >= 0; i-- {
+	for i := 0; i < len(volumes); i++ {
 		s3AccessKey, s3SecretKey, secVersion, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
 		if err != nil {
 			return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
@@ -842,8 +837,7 @@ path = s3://%s
 remote.s3.access_key = %s
 remote.s3.secret_key = %s
 remote.s3.endpoint = %s
-%s
-`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumesConf)
+`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint)
 	}
 
 	return volumesConf, nil
@@ -854,20 +848,45 @@ func GetSmartstoreIndexesConfig(indexes []enterprisev1.IndexSpec) string {
 
 	var indexesConf string
 
+	defaultRemotePath := "$_index_name"
+
 	for i := 0; i < len(indexes); i++ {
 		// Write the index stanza name
 		indexesConf = fmt.Sprintf(`%s
 [%s]`, indexesConf, indexes[i].Name)
 
-		// Check if the remotePath and Volumes are non-defaults
 		if indexes[i].RemotePath != "" && indexes[i].VolName != "" {
 			indexesConf = fmt.Sprintf(`%s
-remotePath = volume:%s/%s
-homePath = $SPLUNK_DB/%s/db
-coldPath = $SPLUNK_DB/%s/colddb
-thawedPath = $SPLUNK_DB/%s/thaweddb
-`, indexesConf, indexes[i].VolName, indexes[i].RemotePath, indexes[i].RemotePath, indexes[i].RemotePath, indexes[i].RemotePath)
+remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, indexes[i].RemotePath)
+		} else if indexes[i].VolName != "" {
+			indexesConf = fmt.Sprintf(`%s
+remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, defaultRemotePath)
 		}
+
+		if indexes[i].HotlistBloomFilterRecencyHours != 0 {
+			indexesConf = fmt.Sprintf(`%s
+hotlist_bloom_filter_recency_hours = %d`, indexesConf, indexes[i].HotlistBloomFilterRecencyHours)
+		}
+
+		if indexes[i].HotlistRecencySecs != 0 {
+			indexesConf = fmt.Sprintf(`%s
+hotlist_recency_secs = %d`, indexesConf, indexes[i].HotlistRecencySecs)
+		}
+
+		if indexes[i].MaxGlobalDataSizeMB != 0 {
+			indexesConf = fmt.Sprintf(`%s
+maxGlobalDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalDataSizeMB)
+		}
+
+		if indexes[i].MaxGlobalRawDataSizeMB != 0 {
+			indexesConf = fmt.Sprintf(`%s
+maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
+		}
+
+		// Add a new line in betwen index stanzas
+		// Do not add config beyond here
+		indexesConf = fmt.Sprintf(`%s
+`, indexesConf)
 	}
 
 	return indexesConf
@@ -880,8 +899,7 @@ func GetServerConfigEntries(cacheManagerConf *enterprisev1.CacheManagerSpec) str
 	}
 
 	var serverConfIni string
-	serverConfIni = fmt.Sprintf(`
-[cachemanager]`)
+	serverConfIni = fmt.Sprintf(`[cachemanager]`)
 
 	emptyStanza := serverConfIni
 
@@ -935,12 +953,7 @@ func GetSmartstoreIndexesDefaults(defaults enterprisev1.IndexConfDefaultsSpec) s
 
 	remotePath := "$_index_name"
 
-	if defaults.RemotePath != "" {
-		remotePath = defaults.RemotePath
-	}
-
-	indexDefaults := fmt.Sprintf(`
-[default]
+	indexDefaults := fmt.Sprintf(`[default]
 repFactor = auto
 maxDataSize = auto
 homePath = $SPLUNK_DB/%s/db
@@ -949,9 +962,10 @@ thawedPath = $SPLUNK_DB/%s/thaweddb`,
 		remotePath, remotePath, remotePath)
 
 	// Do not change any of the following Sprintf formats(Intentionally indented)
-	if defaults.RemotePath != "" {
+	if defaults.VolName != "" {
+		//if defaults.VolName != "" && defaults.RemotePath != "" {
 		indexDefaults = fmt.Sprintf(`%s
-remotePath = volume:%s/%s`, indexDefaults, defaults.VolName, defaults.RemotePath)
+remotePath = volume:%s/%s`, indexDefaults, defaults.VolName, remotePath)
 	}
 
 	if defaults.MaxGlobalDataSizeMB != 0 {

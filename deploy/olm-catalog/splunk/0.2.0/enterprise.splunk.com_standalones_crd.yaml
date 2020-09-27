@@ -1039,9 +1039,6 @@ spec:
                       description: MaxGlobalDataSizeMB defines the maximum amount
                         of cumulative space for warm and cold buckets of an index
                       type: integer
-                    remotePath:
-                      description: Index location relative to the remote volume path
-                      type: string
                     volumeName:
                       description: Remote Volume name
                       type: string
@@ -2440,9 +2437,6 @@ spec:
                       description: MaxGlobalDataSizeMB defines the maximum amount
                         of cumulative space for warm and cold buckets of an index
                       type: integer
-                    remotePath:
-                      description: Index location relative to the remote volume path
-                      type: string
                     volumeName:
                       description: Remote Volume name
                       type: string

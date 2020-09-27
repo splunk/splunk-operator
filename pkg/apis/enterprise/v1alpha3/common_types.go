@@ -128,6 +128,9 @@ type IndexSpec struct {
 	// Splunk index name
 	Name string `json:"name"`
 
+	// Index location relative to the remote volume path
+	RemotePath string `json:"remotePath,omitempty"`
+
 	IndexAndCacheManagerCommonSpec `json:",inline"`
 
 	IndexAndGlobalCommonSpec `json:",inline"`
@@ -135,8 +138,6 @@ type IndexSpec struct {
 
 // IndexAndGlobalCommonSpec defines configurations that can be configured at index level or at global level
 type IndexAndGlobalCommonSpec struct {
-	// Index location relative to the remote volume path
-	RemotePath string `json:"remotePath,omitempty"`
 
 	// Remote Volume name
 	VolName string `json:"volumeName,omitempty"`

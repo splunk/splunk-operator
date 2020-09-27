@@ -146,17 +146,17 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1",
+					{Name: "salesdata1", RemotePath: "remotepath1",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath1"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata2",
+					{Name: "salesdata2", RemotePath: "remotepath2",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath2"},
+							VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata3",
+					{Name: "salesdata3", RemotePath: "remotepath3",
 						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-							VolName: "msos_s2s3_vol", RemotePath: "remotepath3"},
+							VolName: "msos_s2s3_vol"},
 					},
 				},
 			},
