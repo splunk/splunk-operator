@@ -16,7 +16,6 @@ package enterprise
 
 import (
 	"os"
-	"reflect"
 	"testing"
 )
 
@@ -118,31 +117,4 @@ func TestGetSplunkImage(t *testing.T) {
 
 	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
-}
-
-func TestGetVersionedSecretName(t *testing.T) {
-	versionedSecretIdentifier := "splunk-test"
-	version := firstVersion
-	secretName := GetVersionedSecretName(versionedSecretIdentifier, version)
-	wantSecretName := "splunk-test-secret-v1"
-	if secretName != wantSecretName {
-		t.Errorf("Incorrect versioned secret name got %s want %s", secretName, wantSecretName)
-	}
-}
-
-func TestGetNamespaceScopedSecretName(t *testing.T) {
-	namespace := "test"
-	gotName := GetNamespaceScopedSecretName(namespace)
-	wantName := "splunk-test-secret"
-	if gotName != wantName {
-		t.Errorf("Incorrect namespace scoped secret name got %s want %s", gotName, wantName)
-	}
-}
-
-func TestGetSplunkSecretTokenTypes(t *testing.T) {
-	wantSecretTokens := []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
-	secretTokens := GetSplunkSecretTokenTypes()
-	if !reflect.DeepEqual(secretTokens, wantSecretTokens) {
-		t.Errorf("Incorrect secret tokens returned got %+v want %+v", secretTokens, wantSecretTokens)
-	}
 }

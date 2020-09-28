@@ -26,10 +26,12 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplyStandalone(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
@@ -44,14 +46,19 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
+		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[12], funcCalls[13]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13]}, "Update": {funcCalls[8], funcCalls[13]}, "List": {listmockCall[0], listmockCall[0]}}
 
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -68,7 +75,7 @@ func TestApplyStandalone(t *testing.T) {
 		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -87,6 +94,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
@@ -99,15 +107,19 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
+		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[13], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
-	//createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[14], funcCalls[15]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[14], funcCalls[15]}, "Update": {funcCalls[10], funcCalls[15]}, "List": {listmockCall[0], listmockCall[0]}}
 
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -142,7 +154,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	}
 
 	// Create namespace scoped secret
-	secret, err := ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -160,7 +172,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true, secret)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandaloneWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -182,7 +194,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}

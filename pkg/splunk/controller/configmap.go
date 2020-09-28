@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
@@ -38,12 +39,12 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap")
 			current.Data = configMap.Data
-			err = UpdateResource(client, &current)
+			err = splutil.UpdateResource(client, &current)
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
 	} else {
-		err = CreateResource(client, configMap)
+		err = splutil.CreateResource(client, configMap)
 	}
 
 	return err

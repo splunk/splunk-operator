@@ -24,6 +24,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func init() {
@@ -52,10 +53,11 @@ func enterpriseObjectCopier(dst, src runtime.Object) bool {
 func TestApplySplunkConfig(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[2]}}
 	searchHeadCR := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -73,11 +75,11 @@ func TestApplySplunkConfig(t *testing.T) {
 		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
 	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
-	spltest.ReconcileTester(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license master
 	indexerCR := enterprisev1.IndexerCluster{
@@ -100,9 +102,10 @@ func TestApplySplunkConfig(t *testing.T) {
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-	spltest.ReconcileTester(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
+
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestCreateSmartStoreConfigMap(t *testing.T) {
@@ -129,7 +132,7 @@ func TestCreateSmartStoreConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}

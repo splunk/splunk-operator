@@ -23,13 +23,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
 func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
 	// Invalid secret object
 	if secret == nil {
-		return nil, errors.New(invalidSecretObjectError)
+		return nil, errors.New(splcommon.InvalidSecretObjectError)
 	}
 
 	scopedLog := log.WithName("ApplySecret").WithValues(
@@ -44,14 +45,14 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 		scopedLog.Info("Found existing Secret, update if needed")
 		if !reflect.DeepEqual(&result, secret) {
 			result = *secret
-			err = UpdateResource(client, &result)
+			err = splutil.UpdateResource(client, &result)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
 		scopedLog.Info("Didn't find secret, creating one")
-		err = CreateResource(client, secret)
+		err = splutil.CreateResource(client, secret)
 		if err != nil {
 			return nil, err
 		}

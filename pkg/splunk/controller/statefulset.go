@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
@@ -61,7 +62,7 @@ func ApplyStatefulSet(c splcommon.ControllerClient, revised *appsv1.StatefulSet)
 	err := c.Get(context.TODO(), namespacedName, &current)
 	if err != nil {
 		// no StatefulSet exists -> just create a new one
-		err = CreateResource(c, revised)
+		err = splutil.CreateResource(c, revised)
 		return splcommon.PhasePending, err
 	}
 
@@ -76,7 +77,7 @@ func ApplyStatefulSet(c splcommon.ControllerClient, revised *appsv1.StatefulSet)
 		// this updates the desired state template, but doesn't actually modify any pods
 		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods
-		return splcommon.PhaseUpdating, UpdateResource(c, revised)
+		return splcommon.PhaseUpdating, splutil.UpdateResource(c, revised)
 	}
 
 	// scaling and pod updates are handled by UpdateStatefulSetPods
@@ -85,7 +86,6 @@ func ApplyStatefulSet(c splcommon.ControllerClient, revised *appsv1.StatefulSet)
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
 func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, mgr splcommon.StatefulSetPodManager, desiredReplicas int32) (splcommon.Phase, error) {
-
 	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
@@ -111,7 +111,7 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 		// scale up StatefulSet to match desiredReplicas
 		scopedLog.Info("Scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
-		return splcommon.PhaseScalingUp, UpdateResource(c, statefulSet)
+		return splcommon.PhaseScalingUp, splutil.UpdateResource(c, statefulSet)
 	}
 
 	// check for scaling down
@@ -132,7 +132,7 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 		// scale down statefulset to terminate pod
 		scopedLog.Info("Scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
-		err = UpdateResource(c, statefulSet)
+		err = splutil.UpdateResource(c, statefulSet)
 		if err != nil {
 			scopedLog.Error(err, "Scale down update failed for StatefulSet")
 			return splcommon.PhaseError, err
@@ -218,6 +218,12 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 			// return and wait until next reconcile to let things settle down
 			return splcommon.PhaseUpdating, nil
 		}
+	}
+
+	// Remove unwanted owner references
+	err := splutil.RemoveUnwantedSecrets(c, statefulSet.GetName(), statefulSet.GetNamespace())
+	if err != nil {
+		return splcommon.PhaseReady, err
 	}
 
 	// all is good!

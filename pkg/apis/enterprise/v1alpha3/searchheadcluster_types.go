@@ -97,6 +97,12 @@ type SearchHeadClusterStatus struct {
 	// true if the search head cluster is in maintenance mode
 	MaintenanceMode bool `json:"maintenanceMode"`
 
+	// Indicates when the shc_secret has been changed for a peer
+	ShcSecretChanged []bool `json:"shcSecretChangedFlag"`
+
+	// Indicates resource version of namespace scoped secret
+	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
+
 	// status of each search head cluster member
 	Members []SearchHeadClusterMemberStatus `json:"members"`
 }

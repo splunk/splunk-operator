@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -70,7 +71,7 @@ func TestApplySecret(t *testing.T) {
 
 	// Negative testing
 	_, err = ApplySecret(c, nil)
-	if err.Error() != invalidSecretObjectError {
+	if err.Error() != splcommon.InvalidSecretObjectError {
 		t.Errorf("Didn't catch invalid secret object")
 	}
 }

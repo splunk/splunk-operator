@@ -36,26 +36,31 @@ func TestAsOwner(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	got := AsOwner(&cr)
 
-	if got.APIVersion != cr.TypeMeta.APIVersion {
-		t.Errorf("AsOwner().APIVersion = %s; want %s", got.APIVersion, cr.TypeMeta.APIVersion)
-	}
+	boolValues := [2]bool{true, false}
 
-	if got.Kind != cr.TypeMeta.Kind {
-		t.Errorf("AsOwner().Kind = %s; want %s", got.Kind, cr.TypeMeta.Kind)
-	}
+	for b := range boolValues {
+		got := AsOwner(&cr, boolValues[b])
 
-	if got.Name != cr.Name {
-		t.Errorf("AsOwner().Name = %s; want %s", got.Name, cr.Name)
-	}
+		if got.APIVersion != cr.TypeMeta.APIVersion {
+			t.Errorf("AsOwner().APIVersion = %s; want %s", got.APIVersion, cr.TypeMeta.APIVersion)
+		}
 
-	if got.UID != cr.UID {
-		t.Errorf("AsOwner().UID = %s; want %s", got.UID, cr.UID)
-	}
+		if got.Kind != cr.TypeMeta.Kind {
+			t.Errorf("AsOwner().Kind = %s; want %s", got.Kind, cr.TypeMeta.Kind)
+		}
 
-	if !*got.Controller {
-		t.Errorf("AsOwner().Controller = %t; want %t", *got.Controller, true)
+		if got.Name != cr.Name {
+			t.Errorf("AsOwner().Name = %s; want %s", got.Name, cr.Name)
+		}
+
+		if got.UID != cr.UID {
+			t.Errorf("AsOwner().UID = %s; want %s", got.UID, cr.UID)
+		}
+
+		if *got.Controller != boolValues[b] {
+			t.Errorf("AsOwner().Controller = %t; want %t", *got.Controller, true)
+		}
 	}
 }
 
@@ -146,29 +151,29 @@ func TestGetServiceFQDN(t *testing.T) {
 }
 
 func TestGenerateSecret(t *testing.T) {
-	test := func(secretBytes string, n int) {
+	test := func(SecretBytes string, n int) {
 		results := [][]byte{}
 
 		// get 10 results
 		for i := 0; i < 10; i++ {
-			results = append(results, GenerateSecret(secretBytes, n))
+			results = append(results, GenerateSecret(SecretBytes, n))
 
 			// ensure its length is correct
 			if len(results[i]) != n {
-				t.Errorf("GenerateSecret(\"%s\",%d) len = %d; want %d", secretBytes, 10, len(results[i]), n)
+				t.Errorf("GenerateSecret(\"%s\",%d) len = %d; want %d", SecretBytes, 10, len(results[i]), n)
 			}
 
 			// ensure it only includes allowed bytes
 			for _, c := range results[i] {
-				if bytes.IndexByte([]byte(secretBytes), c) == -1 {
-					t.Errorf("GenerateSecret(\"%s\",%d) returned invalid byte: %c", secretBytes, 10, c)
+				if bytes.IndexByte([]byte(SecretBytes), c) == -1 {
+					t.Errorf("GenerateSecret(\"%s\",%d) returned invalid byte: %c", SecretBytes, 10, c)
 				}
 			}
 
 			// ensure each result is unique
 			for x := i; x > 0; x-- {
 				if bytes.Compare(results[x-1], results[i]) == 0 {
-					t.Errorf("GenerateSecret(\"%s\",%d) returned two identical values: %s", secretBytes, n, string(results[i]))
+					t.Errorf("GenerateSecret(\"%s\",%d) returned two identical values: %s", SecretBytes, n, string(results[i]))
 				}
 			}
 		}
@@ -561,7 +566,7 @@ func TestGetIstioAnnotations(t *testing.T) {
 
 func TestGetLabels(t *testing.T) {
 	test := func(component, name, instanceIdentifier string, partOfIdentifier string, want map[string]string) {
-		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier)
+		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier, make([]string, 0))
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
 		}
@@ -591,6 +596,35 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/part-of":    "splunk-cluster1-indexer",
 		"app.kubernetes.io/instance":   "splunk-site1-indexer",
 	})
+
+	testNew := func(component, name, instanceIdentifier string, partOfIdentifier string, selectFew []string, want map[string]string) {
+		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier, selectFew)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
+		}
+	}
+
+	// Test all labels using selectFew option
+	selectAll := []string{"manager", "component", "name", "partof", "instance"}
+	testNew("indexer", "cluster-master", "t1", "t1", selectAll, map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+	})
+
+	// Test a few labels using selectFew option
+	selectFewPartial := []string{"manager", "component"}
+	testNew("indexer", "cluster-master", "t1", "t1", selectFewPartial, map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+	})
+
+	// Test incorrect label
+	selectFewIncorrect := []string{"randomvalue"}
+	testNew("indexer", "cluster-master", "t1", "t1", selectFewIncorrect, map[string]string{})
+
 }
 
 func TestAppendPodAffinity(t *testing.T) {

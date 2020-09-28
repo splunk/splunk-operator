@@ -29,6 +29,8 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+
 	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
@@ -54,6 +56,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())
 	if cr.Status.Members == nil {
 		cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
+	}
+	if cr.Status.ShcSecretChanged == nil {
+		cr.Status.ShcSecretChanged = []bool{}
 	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
@@ -120,7 +125,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	if err != nil {
 		return result, err
 	}
-	mgr := searchHeadClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	mgr := searchHeadClusterPodManager{c: client, log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -130,22 +135,120 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
 		result.Requeue = false
+
+		// Reset shc secret changed and namespace secret revision
+		cr.Status.ShcSecretChanged = []bool{}
+		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 	}
 	return result, nil
 }
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
 type searchHeadClusterPodManager struct {
+	c               splcommon.ControllerClient
 	log             logr.Logger
 	cr              *enterprisev1.SearchHeadCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
+// ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
+func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool) error {
+	// Get namespace scoped secret
+	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(mgr.c, mgr.cr.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	scopedLog := log.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
+
+	// If namespace scoped secret revision is the same ignore
+	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
+		// First time, set resource version in CR
+		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
+		return nil
+	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
+		// If resource version hasn't changed don't return
+		return nil
+	}
+
+	scopedLog.Info("Namespaced scoped secret revision has changed")
+
+	// Retrieve shc_secret password from secret data
+	nsShcSecret := string(namespaceSecret.Data["shc_secret"])
+
+	// Loop over all sh pods and get individual pod's shc_secret
+	for i := int32(0); i <= replicas-1; i++ {
+		// Get search head pod's name
+		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
+
+		// Retrieve shc_secret password from Pod
+		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
+		if err != nil {
+			return fmt.Errorf("Couldn't retrieve shc_secret from secret data %s", err.Error())
+		}
+
+		// Retrieve admin password from Pod
+		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
+		if err != nil {
+			return fmt.Errorf("Couldn't retrieve admin password from secret data %s", err.Error())
+		}
+
+		// If shc secret is different from namespace scoped secret change it
+		if shcSecret != nsShcSecret {
+			scopedLog.Info("shcSecret different from namespace scoped secret, changing shc secret")
+			// If shc secret already changed, ignore
+			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
+				if mgr.cr.Status.ShcSecretChanged[i] {
+					continue
+				}
+			}
+
+			// Change shc secret key
+			command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
+			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+			if err != nil {
+				if !mock {
+					return err
+				}
+			}
+			scopedLog.Info("shcSecret changed")
+
+			// Get client for indexer Pod and restart splunk instance on pod
+			shClient := mgr.getClient(i)
+			err = shClient.RestartSplunk()
+			if err != nil {
+				return err
+			}
+			scopedLog.Info("Restarted Splunk")
+
+			// Set the shc_secret changed flag to true
+			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
+				mgr.cr.Status.ShcSecretChanged[i] = true
+			} else {
+				mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
+			}
+		}
+	}
+
+	return nil
+}
+
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
+	// Assign client
+	if mgr.c == nil {
+		mgr.c = c
+	}
+
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(c, statefulSet)
+	_, err := splctrl.ApplyStatefulSet(mgr.c, statefulSet)
+	if err != nil {
+		return splcommon.PhaseError, err
+	}
+
+	// Check if a recycle of shc pods is necessary(due to shc_secret mismatch with namespace scoped secret)
+	err = ApplyShcSecret(mgr, desiredReplicas, false)
 	if err != nil {
 		return splcommon.PhaseError, err
 	}
@@ -158,7 +261,7 @@ func (mgr *searchHeadClusterPodManager) Update(c splcommon.ControllerClient, sta
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
+	return splctrl.UpdateStatefulSetPods(mgr.c, statefulSet, mgr, desiredReplicas)
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
@@ -234,10 +337,20 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(n int32) (bool, error) {
 
 // getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
 func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClient {
+	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+
+	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+
+	// Retrieve admin password from Pod
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		fmt.Errorf("Couldn't retrieve the admin password from Pod %s", err.Error())
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource

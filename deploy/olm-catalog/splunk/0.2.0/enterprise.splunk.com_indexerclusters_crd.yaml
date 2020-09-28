@@ -2244,6 +2244,11 @@ spec:
               - Terminating
               - Error
               type: string
+            indexer_secret_changed_flag:
+              description: Indicates when the idxc_secret has been changed for a peer
+              items:
+                type: boolean
+              type: array
             indexing_ready_flag:
               description: Indicates if the cluster is ready for indexing.
               type: boolean
@@ -2253,6 +2258,9 @@ spec:
             maintenance_mode:
               description: Indicates if the cluster is in maintenance mode.
               type: boolean
+            namespace_scoped_secret_resource_version:
+              description: Indicates resource version of namespace scoped secret
+              type: string
             peers:
               description: status of each indexer cluster peer
               items:

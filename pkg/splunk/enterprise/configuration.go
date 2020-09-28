@@ -25,6 +25,7 @@ import (
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -38,7 +39,7 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 	if instanceType != SplunkIndexer || len(partOfIdentifier) == 0 {
 		partOfIdentifier = instanceIdentifier
 	}
-	return splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), instanceIdentifier, partOfIdentifier)
+	return splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), instanceIdentifier, partOfIdentifier, make([]string, 0))
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
@@ -161,7 +162,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
-	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	return service
 }
@@ -238,22 +239,6 @@ func getSplunkSmartstoreConfigMap(identifier, namespace string, crKind string, s
 			"indexes.conf": smartstoreConf,
 		},
 	}
-}
-
-// generateSplunkSecret returns a randomly generated Splunk secret.
-func generateSplunkSecret() []byte {
-	return splcommon.GenerateSecret(secretBytes, 24)
-}
-
-// generateHECToken returns a randomly generated HEC token formatted like a UUID.
-// Note that it is not strictly a UUID, but rather just looks like one.
-func generateHECToken() []byte {
-	hecToken := splcommon.GenerateSecret(hexBytes, 36)
-	hecToken[8] = '-'
-	hecToken[13] = '-'
-	hecToken[18] = '-'
-	hecToken[23] = '-'
-	return hecToken
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
@@ -433,8 +418,8 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
-	// retreive the secret to upload to the statefulSet pod
-	statefulSetSecret, err := GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(instanceType, cr.GetName()))
+	// retrieve the secret to upload to the statefulSet pod
+	statefulSetSecret, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), statefulSet.GetName())
 	if err != nil || statefulSetSecret == nil {
 		return statefulSet, err
 	}
@@ -443,13 +428,13 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
 	// make Splunk Enterprise object the owner
-	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	return statefulSet, nil
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
+func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
@@ -482,7 +467,7 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
 	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
-			SecretName:  statefulSetSecretName,
+			SecretName:  secretToMount,
 			DefaultMode: &secretVolDefaultMode,
 		},
 	})

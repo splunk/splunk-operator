@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package common
 
 const (
-	invalidSecretObjectError = "Invalid secret object"
+	// InvalidSecretObjectError represents an invalid secret object error
+	InvalidSecretObjectError = "Invalid secret object"
+
+	// PodNotFoundError indicates Pod is not found
+	PodNotFoundError = "Couldn't find pod"
+
+	// SecretNotFoundError indicates Pod is not found
+	SecretNotFoundError = "Couldn't find secret"
 )

@@ -15,58 +15,12 @@
 package controller
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
-
-func TestCreateResource(t *testing.T) {
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{"one": []byte("value1")},
-	}
-
-	c := spltest.NewMockClient()
-	err := CreateResource(c, &secret)
-	if err != nil {
-		t.Errorf("CreateResource() returned %v; want nil", err)
-	}
-	c.CheckCalls(t, "TestCreateResource", map[string][]spltest.MockFuncCall{
-		"Create": {
-			{CTX: context.TODO(), Obj: &secret},
-		},
-	})
-}
-
-func TestUpdateResource(t *testing.T) {
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{"one": []byte("value1")},
-	}
-
-	c := spltest.NewMockClient()
-	err := UpdateResource(c, &secret)
-	if err != nil {
-		t.Errorf("UpdateResource() returned %v; want nil", err)
-	}
-	c.CheckCalls(t, "TestUpdateResource", map[string][]spltest.MockFuncCall{
-		"Update": {
-			{CTX: context.TODO(), Obj: &secret},
-		},
-	})
-}
 
 func TestMergePodUpdates(t *testing.T) {
 	var current, revised corev1.PodTemplateSpec

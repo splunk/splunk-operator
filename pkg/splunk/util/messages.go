@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package util
 
 const (
 	// Less than zero version error
@@ -26,4 +26,10 @@ const (
 
 	// Missing Token error
 	missingTokenError = "Couldn't convert to splunk readable format, %s token missing"
+
+	// nilSecretDataError indicates nil secret data
+	invalidSecretDataError = "Invalid secret data"
+
+	// emptySecretTokenError indicates empty secret token
+	emptySecretTokenError = "Empty secret token"
 )
