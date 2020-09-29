@@ -27,7 +27,7 @@ import (
 
 // getSparkLabels returns a map of labels to use for Spark components.
 func getSparkLabels(identifier string, instanceType InstanceType) map[string]string {
-	return splcommon.GetLabels("spark", instanceType.ToString(), identifier, identifier)
+	return splcommon.GetLabels("spark", instanceType.ToString(), identifier, identifier, make([]string, 0))
 }
 
 // getSparkMasterPorts returns a map of ports to use for Spark master instances.
@@ -204,7 +204,7 @@ func GetSparkDeployment(cr *enterprisev1.Spark, instanceType InstanceType) (*app
 	splcommon.AppendParentMeta(deployment.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// make Spark object the owner
-	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	// update with common spark pod config
 	err := updateSparkPodTemplateWithConfig(&deployment.Spec.Template, cr, instanceType)
@@ -259,7 +259,7 @@ func GetSparkService(cr *enterprisev1.Spark, instanceType InstanceType, isHeadle
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(service.GetObjectMeta(), cr.GetObjectMeta())
 
-	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	return service
 }

@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyService creates or updates a Kubernetes Service
@@ -34,7 +35,7 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err != nil {
-		return CreateResource(client, revised)
+		return splutil.CreateResource(client, revised)
 	}
 
 	// check for changes in service template
@@ -44,7 +45,7 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
 		scopedLog.Info("Updating existing Service")
-		return UpdateResource(client, revised)
+		return splutil.UpdateResource(client, revised)
 	}
 
 	// all is good!

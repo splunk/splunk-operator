@@ -28,6 +28,7 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	var secrets *corev1.Secret
 	var err error
 
-	secrets, err = GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkMonitoringConsoleDeploymentName(SplunkMonitoringConsole, cr.GetNamespace()))
+	secrets, err = splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkMonitoringConsoleDeploymentName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
 	}
@@ -191,7 +192,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		}
 		if !reflect.DeepEqual(revised.Data, current.Data) {
 			current.Data = revised.Data
-			err = splctrl.UpdateResource(client, &current)
+			err = splutil.UpdateResource(client, &current)
 			if err != nil {
 				return nil, err
 			}
@@ -220,7 +221,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		Namespace: namespace,
 	}
 
-	err = splctrl.CreateResource(client, &current)
+	err = splutil.CreateResource(client, &current)
 	if err != nil {
 		return nil, err
 	}

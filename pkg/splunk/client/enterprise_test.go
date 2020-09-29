@@ -15,6 +15,7 @@
 package client
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -342,4 +343,23 @@ func TestDecommissionIndexerClusterPeer(t *testing.T) {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
 	splunkClientTester(t, "TestDecommissionIndexerClusterPeer", 200, "", wantRequest, test)
+}
+
+func TestSetIdxcSecret(t *testing.T) {
+	endpoint := fmt.Sprintf("https://localhost:8089/services/cluster/config/config?secret=%s", "changeme")
+	wantRequest, _ := http.NewRequest("POST", endpoint, nil)
+	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	test := func(c SplunkClient) error {
+		return c.SetIdxcSecret("changeme")
+	}
+	splunkClientTester(t, "TestSetIdxcSecret", 200, "", wantRequest, test)
+}
+
+func TestRestartSplunk(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/server/control/restart", nil)
+	test := func(c SplunkClient) error {
+		return c.RestartSplunk()
+	}
+	splunkClientTester(t, "TestRestartSplunk", 200, "", wantRequest, test)
 }

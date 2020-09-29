@@ -45,7 +45,6 @@ type SplunkController interface {
 // AddToManager adds a specific Splunk Controller to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func AddToManager(mgr manager.Manager, splctrl SplunkController, c client.Client) error {
-
 	// Create a new controller
 	instance := splctrl.GetInstance()
 	kind := instance.GetObjectKind().GroupVersionKind().Kind
@@ -69,7 +68,7 @@ func AddToManager(mgr manager.Manager, splctrl SplunkController, c client.Client
 	// Watch for changes to secondary resources
 	for _, t := range splctrl.GetWatchTypes() {
 		err = ctrl.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
-			IsController: true,
+			IsController: false,
 			OwnerType:    instance,
 		})
 		if err != nil {

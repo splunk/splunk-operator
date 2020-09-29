@@ -360,6 +360,7 @@ spec:
           - configmaps
           - secrets
           - pods
+          - pods/exec
           verbs:
           - create
           - delete
