@@ -531,10 +531,24 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	// test all pods ready
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
 	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
+
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels(labels),
+	}
+	listmockCall := []MockFuncCall{
+		{ListOpts: listOpts}}
+
+	getPodCalls["List"] = []MockFuncCall{listmockCall[0]}
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, getPodCalls, nil, current, pod)
 
 	// test pod not ready
 	pod.Status.Phase = corev1.PodPending
+	delete(getPodCalls, "List")
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, getPodCalls, nil, current, pod)
 }

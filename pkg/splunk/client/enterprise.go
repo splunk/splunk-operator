@@ -22,7 +22,12 @@ import (
 	"net/http"
 	"regexp"
 	"time"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// kubernetes logger used by splunk.enterprise package
+var log = logf.Log.WithName("splunk.client")
 
 // SplunkHTTPClient defines the interface used by SplunkClient.
 // It is used to mock alternative implementations used for testing.
@@ -602,6 +607,32 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 		enforceCountsAsInt = 1
 	}
 	endpoint := fmt.Sprintf("%s/services/cluster/slave/control/control/decommission?enforce_counts=%d", c.ManagementURI, enforceCountsAsInt)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	return c.Do(request, 200, nil)
+}
+
+// SetIdxcSecret sets idxc_secret for a Splunk Instance
+// Can be used on any peer in an indexer cluster as long as the idxc_secret matches the cluster master
+// See https://docs.splunk.com/Documentation/Splunk/7.0.0/RESTREF/RESTcluster#cluster.2Fconfig.2Fconfig
+func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
+	endpoint := fmt.Sprintf("%s/services/cluster/config/config?secret=%s", c.ManagementURI, idxcSecret)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	return c.Do(request, 200, nil)
+}
+
+// RestartSplunk restarts specific Splunk instance
+// Can be used for any Splunk Instance
+// See https://docs.splunk.com/Documentation/Splunk/8.0.5/RESTREF/RESTsystem#server.2Fcontrol.2Frestart
+func (c *SplunkClient) RestartSplunk() error {
+	endpoint := fmt.Sprintf("%s/services/server/control/restart", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func init() {
@@ -35,16 +36,17 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// AsOwner returns an object to use for Kubernetes resource ownership references.
-func AsOwner(cr MetaObject) metav1.OwnerReference {
-	trueVar := true
+// kubernetes logger used by splunk.reconcile package
+var log = logf.Log.WithName("splunk.reconcile")
 
+// AsOwner returns an object to use for Kubernetes resource ownership references.
+func AsOwner(cr MetaObject, isController bool) metav1.OwnerReference {
 	return metav1.OwnerReference{
 		APIVersion: cr.GetObjectKind().GroupVersionKind().GroupVersion().String(),
 		Kind:       cr.GetObjectKind().GroupVersionKind().Kind,
 		Name:       cr.GetObjectMeta().GetName(),
 		UID:        cr.GetObjectMeta().GetUID(),
-		Controller: &trueVar,
+		Controller: &isController,
 	}
 }
 
@@ -100,10 +102,10 @@ func GetServiceFQDN(namespace string, name string) string {
 }
 
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
-func GenerateSecret(secretBytes string, n int) []byte {
+func GenerateSecret(SecretBytes string, n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = secretBytes[rand.Int63()%int64(len(secretBytes))]
+		b[i] = SecretBytes[rand.Int63()%int64(len(SecretBytes))]
 	}
 	return b
 }
@@ -233,17 +235,40 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 }
 
 // GetLabels returns a map of labels to use for managed components.
-func GetLabels(component, name, instanceIdentifier string, partOfIdentifier string) map[string]string {
-	// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
-	labels := map[string]string{
-		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/component":  component,
-		"app.kubernetes.io/name":       name,
-		"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-%s", partOfIdentifier, component),
+func GetLabels(component, name, instanceIdentifier string, partOfIdentifier string, selectFew []string) map[string]string {
+	labels := make(map[string]string)
+	labelTypeMap := GetLabelTypes()
+	if len(selectFew) == 0 {
+		// see https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels
+		labels[labelTypeMap["manager"]] = "splunk-operator"
+		labels[labelTypeMap["component"]] = component
+		labels[labelTypeMap["name"]] = name
+		labels[labelTypeMap["partof"]] = fmt.Sprintf("splunk-%s-%s", partOfIdentifier, component)
+
+		if len(instanceIdentifier) > 0 {
+			labels[labelTypeMap["instance"]] = fmt.Sprintf("splunk-%s-%s", instanceIdentifier, name)
+		}
+	} else {
+		for _, s := range selectFew {
+			switch s {
+			case "manager":
+				labels[labelTypeMap["manager"]] = "splunk-operator"
+			case "component":
+				labels[labelTypeMap["component"]] = component
+			case "name":
+				labels[labelTypeMap["name"]] = name
+			case "partof":
+				labels[labelTypeMap["partof"]] = fmt.Sprintf("splunk-%s-%s", partOfIdentifier, component)
+			case "instance":
+				if len(instanceIdentifier) > 0 {
+					labels[labelTypeMap["instance"]] = fmt.Sprintf("splunk-%s-%s", instanceIdentifier, name)
+				}
+			default:
+				fmt.Printf("Incorrect label type %s", s)
+			}
+		}
 	}
-	if len(instanceIdentifier) > 0 {
-		labels["app.kubernetes.io/instance"] = fmt.Sprintf("splunk-%s-%s", instanceIdentifier, name)
-	}
+
 	return labels
 }
 

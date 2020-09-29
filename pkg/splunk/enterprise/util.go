@@ -25,6 +25,7 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // kubernetes logger used by splunk.enterprise package
@@ -35,7 +36,13 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	var err error
 
 	// Creates/updates the namespace scoped "splunk-secrets" K8S secret object
-	namespaceScopedSecret, err := ApplyNamespaceScopedSecretObject(client, cr.GetNamespace())
+	namespaceScopedSecret, err := splutil.ApplyNamespaceScopedSecretObject(client, cr.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	// Set secret owner references
+	err = splutil.SetSecretOwnerRef(client, namespaceScopedSecret, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +50,7 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	// create splunk defaults (for inline config)
 	if spec.Defaults != "" {
 		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
-		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
+		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 		if err = splctrl.ApplyConfigMap(client, defaultsMap); err != nil {
 			return nil, err
 		}
@@ -68,7 +75,7 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 // 2. default secret object
 // volume name other than default, look for the specific secret object, else fetch from defaults
 func GetSmartstoreSecrets(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, error) {
-	namespaceScopedSecret, err := GetNamespaceScopedSecret(client, cr.GetNamespace())
+	namespaceScopedSecret, err := splutil.GetNamespaceScopedSecret(client, cr.GetNamespace())
 	if err != nil {
 		return "", "", err
 	}
@@ -119,7 +126,7 @@ func CreateSmartStoreConfigMap(client splcommon.ControllerClient, cr splcommon.M
 
 	// Create smartstore config consisting indexes.conf
 	smartstoreConfigMap := getSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, iniSmartstoreConf)
-	smartstoreConfigMap.SetOwnerReferences(append(smartstoreConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr)))
+	smartstoreConfigMap.SetOwnerReferences(append(smartstoreConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	if err := splctrl.ApplyConfigMap(client, smartstoreConfigMap); err != nil {
 		return nil, err
 	}

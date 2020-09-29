@@ -30,10 +30,12 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplySearchHeadCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
@@ -51,15 +53,21 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+	}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
+		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[15], funcCalls[16]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7], funcCalls[13], funcCalls[16]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[13], funcCalls[14], funcCalls[16], funcCalls[17]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[14], funcCalls[15], funcCalls[16], funcCalls[17], funcCalls[18]}, "Update": {funcCalls[8], funcCalls[14], funcCalls[17]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}}
 	statefulSet := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -69,13 +77,19 @@ func TestApplySearchHeadCluster(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
+	// Set shc changed to true for testing
+	searchHeads := 3
+	for i := 0; i < searchHeads; i++ {
+		statefulSet.Status.ShcSecretChanged = append(statefulSet.Status.ShcSecretChanged, true)
+	}
 	revised := statefulSet.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplySearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -102,6 +116,12 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 			Name:      "stack1",
 			Namespace: "test",
 		},
+	}
+
+	// Set shc changed to true for testing
+	searchHeads := 3
+	for i := 0; i < searchHeads; i++ {
+		cr.Status.ShcSecretChanged = append(cr.Status.ShcSecretChanged, true)
 	}
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,9 +180,24 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	}
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
-	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0]}}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels(labels),
+	}
+	listmockCall := []spltest.MockFuncCall{
+		{ListOpts: listOpts}}
+
+	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}, "Create": {funcCalls[1]}}
 
 	// test API failure
 	method := "searchHeadClusterPodManager.Update(API failure)"
@@ -184,7 +219,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 			Body:   `{"links":{},"origin":"https://localhost:8089/services/shcluster/captain/info","updated":"2020-03-15T16:36:42+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"captain","id":"https://localhost:8089/services/shcluster/captain/info/captain","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/shcluster/captain/info/captain","list":"/services/shcluster/captain/info/captain"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"eai:acl":null,"elected_captain":1584139352,"id":"A9D5FCCF-EB93-4E0A-93E1-45B56483EA7A","initialized_flag":true,"label":"splunk-s2-search-head-0","maintenance_mode":false,"mgmt_uri":"https://splunk-s2-search-head-0.splunk-s2-search-head-headless.splunk.svc.cluster.local:8089","min_peers_joined_flag":true,"peer_scheme_host_port":"https://splunk-s2-search-head-0.splunk-s2-search-head-headless.splunk.svc.cluster.local:8089","rolling_restart_flag":false,"service_ready_flag":true,"start_time":1584139291}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
 		},
 	}
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
@@ -201,6 +236,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
@@ -213,6 +249,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	})
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
@@ -220,16 +257,16 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"status":"Up"`, `"status":"ManualDetention"`, 1)
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Delete": {funcCalls[1]}}
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
@@ -239,6 +276,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
@@ -260,8 +298,13 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
-	funcCalls[1] = spltest.MockFuncCall{MetaName: "*v1.Pod-test-splunk-stack1-0"}
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0]}, "Delete": pvcCalls, "Update": {funcCalls[0]}}
+	extraCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+	}
+	//funcCalls[1] = spltest.MockFuncCall{MetaName: "*v1.Pod-test-splunk-stack1-0"}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
+	wantCalls["Get"] = append(wantCalls["Get"], extraCalls...)
 	wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
@@ -276,6 +319,128 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
 }
 
+func TestApplyShcSecret(t *testing.T) {
+	method := "ApplyShcSecret"
+	scopedLog := log.WithName(method)
+	var initObjectList []runtime.Object
+
+	c := spltest.NewMockClient()
+
+	// Get namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	if err != nil {
+		t.Errorf("Apply namespace scoped secret failed")
+	}
+
+	// Create pod
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							MountPath: "/mnt/splunk-secrets",
+							Name:      "mnt-splunk-secrets",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "stack1-secrets",
+						},
+					},
+				},
+			},
+		},
+	}
+	initObjectList = append(initObjectList, pod)
+
+	secrets := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password":   {'1', '2', '3'},
+			"shc_secret": {'a'},
+		},
+	}
+	initObjectList = append(initObjectList, secrets)
+
+	c.AddObjects(initObjectList)
+
+	mockHandlers := []spltest.MockHTTPHandler{
+		{
+			Method: "POST",
+			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
+			Status: 200,
+			Err:    nil,
+		},
+	}
+
+	cr := enterprisev1.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandlers(mockHandlers...)
+	mgr := &searchHeadClusterPodManager{
+		c:       c,
+		log:     scopedLog,
+		cr:      &cr,
+		secrets: secrets,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			c := splclient.NewSplunkClient(managementURI, username, password)
+			c.Client = mockSplunkClient
+			return c
+		},
+	}
+
+	// Set resource version as that of NS secret
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	// Change resource version and test
+	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+	mockSplunkClient.CheckRequests(t, method)
+
+	// Don't set as it is set already
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	mgr.cr.Status.ShcSecretChanged[0] = false
+	// Test set again
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+}
+
 func TestGetSearchHeadStatefulSet(t *testing.T) {
 	cr := enterprisev1.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -285,7 +450,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
@@ -329,7 +494,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}

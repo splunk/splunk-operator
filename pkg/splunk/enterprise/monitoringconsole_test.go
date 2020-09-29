@@ -23,6 +23,7 @@ import (
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplyMonitoringConsole(t *testing.T) {
@@ -45,8 +46,13 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
 	}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
+		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
@@ -56,7 +62,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(c, "test")
+	namespacescopedsecret, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}

@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
@@ -35,7 +36,7 @@ func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (
 
 	err := c.Get(context.TODO(), namespacedName, &current)
 	if err != nil {
-		return splcommon.PhasePending, CreateResource(c, revised)
+		return splcommon.PhasePending, splutil.CreateResource(c, revised)
 	}
 
 	// found an existing Deployment
@@ -50,17 +51,17 @@ func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (
 		if *revised.Spec.Replicas < desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingUp, UpdateResource(c, revised)
+			return splcommon.PhaseScalingUp, splutil.UpdateResource(c, revised)
 		} else if *revised.Spec.Replicas > desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingDown, UpdateResource(c, revised)
+			return splcommon.PhaseScalingDown, splutil.UpdateResource(c, revised)
 		}
 	}
 
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
-		return splcommon.PhaseUpdating, UpdateResource(c, revised)
+		return splcommon.PhaseUpdating, splutil.UpdateResource(c, revised)
 	}
 
 	// check if updates are in progress

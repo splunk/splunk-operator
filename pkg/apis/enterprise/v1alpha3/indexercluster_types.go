@@ -83,6 +83,12 @@ type IndexerClusterStatus struct {
 	// Indicates whether the master is ready to begin servicing, based on whether it is initialized.
 	ServiceReady bool `json:"service_ready_flag"`
 
+	// Indicates when the idxc_secret has been changed for a peer
+	IndexerSecretChanged []bool `json:"indexer_secret_changed_flag"`
+
+	// Indicates resource version of namespace scoped secret
+	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
+
 	// Indicates if the cluster is in maintenance mode.
 	MaintenanceMode bool `json:"maintenance_mode"`
 

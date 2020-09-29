@@ -15,11 +15,9 @@
 package controller
 
 import (
-	"context"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -34,41 +32,6 @@ var log = logf.Log.WithName("splunk.reconcile")
 
 // simple stdout logger, used for debugging
 //var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
-
-// CreateResource creates a new Kubernetes resource using the REST API.
-func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("CreateResource").WithValues(
-		"name", obj.GetObjectMeta().GetName(),
-		"namespace", obj.GetObjectMeta().GetNamespace())
-
-	err := client.Create(context.TODO(), obj)
-
-	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to create resource")
-		return err
-	}
-
-	scopedLog.Info("Created resource")
-
-	return nil
-}
-
-// UpdateResource updates an existing Kubernetes resource using the REST API.
-func UpdateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("UpdateResource").WithValues(
-		"name", obj.GetObjectMeta().GetName(),
-		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Update(context.TODO(), obj)
-
-	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to update resource")
-		return err
-	}
-
-	scopedLog.Info("Updated resource")
-
-	return nil
-}
 
 // MergePodUpdates looks for material differences between a Pod's current
 // config and a revised config. It merges material changes from revised to

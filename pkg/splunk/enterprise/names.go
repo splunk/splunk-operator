@@ -44,21 +44,6 @@ const (
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
-	// bytes used to generate random hexadecimal strings (e.g. HEC tokens)
-	hexBytes = "ABCDEF01234567890"
-
-	// bytes used to generate Splunk secrets
-	secretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-	// namespace scoped secret name
-	namespaceScopedSecretName = "splunk-%s-secret"
-
-	// versionedSecretIdentifier based secret name
-	versionedSecretName = "%s-secret-v%s"
-
-	// firstVersion secret
-	firstVersion = "1"
-
 	// identifier used for S3 access key
 	s3AccessKey = "s3_access_key"
 
@@ -153,19 +138,4 @@ func GetSplunkImage(specImage string) string {
 	}
 
 	return name
-}
-
-// GetVersionedSecretName returns a versioned secret name
-func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {
-	return fmt.Sprintf(versionedSecretName, versionedSecretIdentifier, version)
-}
-
-// GetNamespaceScopedSecretName gets namespace scoped secret name
-func GetNamespaceScopedSecretName(namespace string) string {
-	return fmt.Sprintf(namespaceScopedSecretName, namespace)
-}
-
-// GetSplunkSecretTokenTypes returns all types of Splunk secret tokens
-func GetSplunkSecretTokenTypes() []string {
-	return []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
 }
