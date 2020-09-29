@@ -87,8 +87,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-				{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -96,7 +95,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-				{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 			}
 		} else if component == "indexer" {
 			mockCalls["Delete"] = []spltest.MockFuncCall{

@@ -42,8 +42,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-		{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -51,8 +50,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[6]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
