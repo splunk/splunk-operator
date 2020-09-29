@@ -440,7 +440,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	}
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr)))
@@ -449,7 +449,8 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
+//func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
+func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
 
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
@@ -598,6 +599,17 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
 			Value: clusterMasterURL,
 		})
+	}
+
+	if instanceType == SplunkMonitoringConsole {
+		var monitoringConsoleConfigMap *corev1.ConfigMap
+		if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+			monitoringConsoleConfigMap, _ = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, false)
+		} else {
+			monitoringConsoleConfigMap, _ = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, true)
+		}
+
+		podTemplateSpec.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 	}
 
 	// append any extra variables

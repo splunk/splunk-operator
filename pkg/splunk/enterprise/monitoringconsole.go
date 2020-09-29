@@ -63,25 +63,27 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		addNewURLs = false
 	}
 
-	configMap, err := ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	_, err = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
 	if err != nil {
 		return err
 	}
 
-	configMapRevision := configMap.ResourceVersion
-
-	staefulsetMC, err := getMonitoringConsoleStatefulSet(cr, &spec, SplunkMonitoringConsole, configMapRevision, secretName)
+	staefulsetMC, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
 	if err != nil {
 		return err
 	}
 
-	_, err = splctrl.ApplyStatefulSet(client, staefulsetMC)
+	mgr := splctrl.DefaultStatefulSetPodManager{}
+	_, err = mgr.Update(client, staefulsetMC, 1)
+	if err != nil {
+		return err
+	}
 
 	return err
 }
 
 // getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleStatefulSet(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapRevision string, secretName string) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
 	var partOfIdentifier string
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
@@ -112,7 +114,12 @@ func getMonitoringConsoleStatefulSet(cr splcommon.MetaObject, spec *enterprisev1
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectLabels,
 			},
-			Replicas: &replicas,
+			ServiceName:         GetSplunkServiceName(instanceType, cr.GetNamespace(), true),
+			Replicas:            &replicas,
+			PodManagementPolicy: appsv1.ParallelPodManagement,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -144,24 +151,21 @@ func getMonitoringConsoleStatefulSet(cr splcommon.MetaObject, spec *enterprisev1
 		},
 	}
 
-	env := []corev1.EnvVar{
-		{Name: "SPLUNK_CONFIGMAP_REVISION",
-			Value: configMapRevision,
-		},
-	}
+	env := []corev1.EnvVar{}
+
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
+	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
 
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr)))
 
 	return statefulSet, nil
 }
 
-//ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+//getMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
+func getMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)

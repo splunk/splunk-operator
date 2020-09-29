@@ -42,6 +42,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	listOpts := []client.ListOption{
@@ -50,8 +51,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
@@ -74,7 +75,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret)
 }
 
-func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
+func TestGetMonitoringConsoleEnvConfigMap(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 	}
@@ -85,7 +86,7 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 
 	newURLsAdded := true
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyMonitoringConsoleEnvConfigMap(c, "test", "test", env, newURLsAdded)
+		_, err := getMonitoringConsoleEnvConfigMap(c, "test", "test", env, newURLsAdded)
 		return err
 	}
 

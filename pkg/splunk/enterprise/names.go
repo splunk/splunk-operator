@@ -64,6 +64,9 @@ const (
 
 	// identifier used for S3 secret key
 	s3SecretKey = "s3_secret_key"
+
+	//identifier for monitoring console configMap revision
+	monitoringConsoleConfigRev = "monitoringConsoleConfigRev"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
