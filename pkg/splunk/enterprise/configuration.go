@@ -15,12 +15,14 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
@@ -440,7 +442,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	}
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(&statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr)))
@@ -448,8 +450,25 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
+// updateDefaultConfigMapAnnotations checks and gets the default config map and updates the annotation
+// for the resource version of the ConfigMap in the pod template spec for the CR.
+func updateDefaultConfigMapAnnotations(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, podTemplateSpec *corev1.PodTemplateSpec) error {
+	configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	var current corev1.ConfigMap
+
+	err := client.Get(context.TODO(), namespacedName, &current)
+	if err != nil {
+		return err
+	}
+
+	podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = current.ObjectMeta.ResourceVersion
+	return nil
+}
+
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
+func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, statefulSetSecretName string) {
 
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
@@ -500,6 +519,14 @@ func updateSplunkPodTemplateWithConfig(podTemplateSpec *corev1.PodTemplateSpec, 
 				DefaultMode: &configMapVolDefaultMode,
 			},
 		})
+
+		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+		// We will update the annotation for resource version in the pod template spec
+		// so that any change in the ConfigMap will lead to recycle of the pod.
+		err := updateDefaultConfigMapAnnotations(client, cr, instanceType, podTemplateSpec)
+		if err != nil {
+			scopedLog.Error(err, "Default configMap annotation failed")
+		}
 	}
 
 	// update security context
