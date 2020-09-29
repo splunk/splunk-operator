@@ -36,14 +36,6 @@ func TestGetSplunkStatefulsetName(t *testing.T) {
 	}
 }
 
-func TestGetSplunkMonitoringConsoleStatefulSetName(t *testing.T) {
-	got := GetSplunkMonitoringConsoleStatefulseName(SplunkMonitoringConsole, "t2")
-	want := "splunk-t2-monitoring-console"
-	if got != want {
-		t.Errorf("GetSplunkMonitoringConsoleStatefulseName(\"%s\",\"%s\") = %s; want %s", SplunkMonitoringConsole.ToString(), "t2", got, want)
-	}
-}
-
 func TestGetSplunkStatefulsetPodName(t *testing.T) {
 	got := GetSplunkStatefulsetPodName(SplunkSearchHead, "t3", 2)
 	want := "splunk-t3-search-head-2"

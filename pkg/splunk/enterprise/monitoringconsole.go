@@ -34,7 +34,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	var secrets *corev1.Secret
 	var err error
 
-	secrets, err = GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkMonitoringConsoleStatefulseName(SplunkMonitoringConsole, cr.GetNamespace()))
+	secrets, err = GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func getMonitoringConsoleStatefulSet(cr splcommon.MetaObject, spec *enterprisev1
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkMonitoringConsoleStatefulseName(instanceType, cr.GetNamespace()),
+			Name:      GetSplunkStatefulsetName(instanceType, cr.GetNamespace()),
 			Namespace: cr.GetNamespace(),
 		},
 		Spec: appsv1.StatefulSetSpec{
