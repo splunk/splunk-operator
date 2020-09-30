@@ -43,7 +43,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-		{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
