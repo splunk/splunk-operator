@@ -435,21 +435,23 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
-// updateDefaultConfigMapAnnotations checks and gets the default config map and updates the annotation
-// for the resource version of the ConfigMap in the pod template spec for the CR.
-func updateDefaultConfigMapAnnotations(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, podTemplateSpec *corev1.PodTemplateSpec) error {
-	configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-
-	var current corev1.ConfigMap
-
-	err := client.Get(context.TODO(), namespacedName, &current)
+// getConfigMap gets the ConfigMap resource in a given namespace
+func getConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (corev1.ConfigMap, error) {
+	var configMap corev1.ConfigMap
+	err := client.Get(context.TODO(), namespacedName, &configMap)
 	if err != nil {
-		return err
+		return configMap, err
 	}
+	return configMap, nil
+}
 
-	podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = current.ObjectMeta.ResourceVersion
-	return nil
+// getConfigMapResourceVersion gets the Resource version of a configMap
+func getConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
+	configMap, err := getConfigMap(client, namespacedName)
+	if err != nil {
+		return "", err
+	}
+	return configMap.ResourceVersion, nil
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
@@ -496,21 +498,26 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
 	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: GetSplunkDefaultsName(cr.GetName(), instanceType),
+					Name: configMapName,
 				},
 				DefaultMode: &configMapVolDefaultMode,
 			},
 		})
 
 		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
 		// We will update the annotation for resource version in the pod template spec
 		// so that any change in the ConfigMap will lead to recycle of the pod.
-		err := updateDefaultConfigMapAnnotations(client, cr, instanceType, podTemplateSpec)
-		if err != nil {
-			scopedLog.Error(err, "Default configMap annotation failed")
+		configMapResourceVersion, err := getConfigMapResourceVersion(client, namespacedName)
+		if err == nil {
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
+		} else {
+			scopedLog.Error(err, "Updation of default configMap annotation failed")
 		}
 	}
 
