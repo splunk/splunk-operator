@@ -337,6 +337,8 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(n int32) (bool, error) {
 
 // getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
 func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClient {
+	scopedLog := log.WithName("searchHeadClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
@@ -347,7 +349,7 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		fmt.Errorf("Couldn't retrieve the admin password from Pod %s", err.Error())
+		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
