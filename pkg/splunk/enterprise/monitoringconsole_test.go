@@ -81,7 +81,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret)
 }
 
-func TestGetMonitoringConsoleEnvConfigMap(t *testing.T) {
+func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 	}
@@ -92,7 +92,7 @@ func TestGetMonitoringConsoleEnvConfigMap(t *testing.T) {
 
 	newURLsAdded := true
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := getMonitoringConsoleEnvConfigMap(c, "test", "test", env, newURLsAdded)
+		_, err := ApplyMonitoringConsoleEnvConfigMap(c, "test", "test", env, newURLsAdded)
 		return err
 	}
 

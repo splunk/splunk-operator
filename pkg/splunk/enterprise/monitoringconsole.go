@@ -32,10 +32,7 @@ import (
 
 // ApplyMonitoringConsole creates the statefulset for monitoring console statefulset of Splunk Enterprise.
 func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
-	var secrets *corev1.Secret
-	var err error
-
-	secrets, err = splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
+	secrets, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
 	}
@@ -64,18 +61,18 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		addNewURLs = false
 	}
 
-	_, err = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
 	if err != nil {
 		return err
 	}
 
-	staefulsetMC, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
+	statefulsetMC, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
 	if err != nil {
 		return err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	_, err = mgr.Update(client, staefulsetMC, 1)
+	_, err = mgr.Update(client, statefulsetMC, 1)
 	if err != nil {
 		return err
 	}
@@ -160,13 +157,22 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 	// update statefulset's pod template with common splunk pod config
 	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
 
-	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+	//update podTemplate annotation with configMap resource version
+	var monitoringConsoleConfigMap *corev1.ConfigMap
+	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, false)
+	} else {
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, true)
+	}
+	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+
+	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	return statefulSet, nil
 }
 
-//getMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func getMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+//ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
+func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)

@@ -585,17 +585,6 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 
-	if instanceType == SplunkMonitoringConsole {
-		var monitoringConsoleConfigMap *corev1.ConfigMap
-		if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
-			monitoringConsoleConfigMap, _ = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, false)
-		} else {
-			monitoringConsoleConfigMap, _ = getMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, true)
-		}
-
-		podTemplateSpec.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
-	}
-
 	// append any extra variables
 	env = append(env, extraEnv...)
 
