@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,6 +26,7 @@ import (
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -435,25 +435,6 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
-// getConfigMap gets the ConfigMap resource in a given namespace
-func getConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (corev1.ConfigMap, error) {
-	var configMap corev1.ConfigMap
-	err := client.Get(context.TODO(), namespacedName, &configMap)
-	if err != nil {
-		return configMap, err
-	}
-	return configMap, nil
-}
-
-// getConfigMapResourceVersion gets the Resource version of a configMap
-func getConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
-	configMap, err := getConfigMap(client, namespacedName)
-	if err != nil {
-		return "", err
-	}
-	return configMap.ResourceVersion, nil
-}
-
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
@@ -513,7 +494,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 		// We will update the annotation for resource version in the pod template spec
 		// so that any change in the ConfigMap will lead to recycle of the pod.
-		configMapResourceVersion, err := getConfigMapResourceVersion(client, namespacedName)
+		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(client, namespacedName)
 		if err == nil {
 			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
 		} else {
