@@ -60,7 +60,7 @@ func getConfigMap(client splcommon.ControllerClient, namespacedName types.Namesp
 	return configMap, nil
 }
 
-// getConfigMapResourceVersion gets the Resource version of a configMap
+// GetConfigMapResourceVersion gets the Resource version of a configMap
 func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
 	configMap, err := getConfigMap(client, namespacedName)
 	if err != nil {
