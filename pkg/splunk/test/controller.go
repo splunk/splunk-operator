@@ -372,6 +372,51 @@ func ReconcileTester(t *testing.T, method string,
 	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
 }
 
+/* ReconcileTesterWithMockHandler is used to test create and update reconcile operations
+func ReconcileTesterWithMockHandler(t *testing.T, method string,
+	mockHandlers []MockHTTPHandler, current, revised interface{},
+	createCalls, updateCalls map[string][]MockFuncCall,
+	reconcile func(*MockClient, interface{}) error,
+	listInvolved bool,
+	initObjects ...runtime.Object) {
+
+	mockSplunkClient := &MockHTTPClient{}
+	mockSplunkClient.AddHandlers(mockHandlers...)
+
+	mgr := &searchHeadClusterPodManager{
+		log:     scopedLog,
+		cr:      &cr,
+		secrets: secrets,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			c := splclient.NewSplunkClient(managementURI, username, password)
+			c.Client = mockSplunkClient
+			return c
+		},
+	}
+
+	// initialize client
+	c := NewMockClient()
+	c.AddObjects(initObjects)
+
+	// test create new
+	methodPlus := fmt.Sprintf("%s(create)", method)
+	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
+
+	// test no updates required for current
+	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
+	var updateNoChangecalls map[string][]MockFuncCall
+	if listInvolved {
+		updateNoChangecalls = map[string][]MockFuncCall{"Get": createCalls["Get"], "List": createCalls["List"]}
+	} else {
+		updateNoChangecalls = map[string][]MockFuncCall{"Get": createCalls["Get"]}
+	}
+	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
+
+	// test updates required
+	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
+	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
+}*/
+
 // ReconcileTesterWithoutRedundantCheck is used to test create and update reconcile operations
 func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 	current, revised interface{},

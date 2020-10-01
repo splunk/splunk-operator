@@ -54,13 +54,12 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		return result, err
 	}
 
-	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
-	if err != nil {
-		return result, err
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -90,6 +89,10 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		result.Requeue = false
 	}
 	return result, nil

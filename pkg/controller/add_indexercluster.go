@@ -55,5 +55,5 @@ func (ctrl IndexerClusterController) GetWatchTypes() []runtime.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl IndexerClusterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterprisev1.IndexerCluster)
-	return enterprise.ApplyIndexerCluster(client, instance, false)
+	return enterprise.ApplyIndexerCluster(client, instance)
 }

@@ -68,13 +68,12 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		return result, err
 	}
 
-	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
-	if err != nil {
-		return result, err
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -129,6 +128,10 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+		if err != nil {
+			return result, err
+		}
 		result.Requeue = false
 	}
 	return result, nil

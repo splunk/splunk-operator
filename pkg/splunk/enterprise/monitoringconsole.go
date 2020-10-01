@@ -49,15 +49,22 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	if secrets != nil {
 		secretName = secrets.GetName()
 	}
+
+	//for any custom resource standalone/search head we don't need to provide this info
+	MultiSite := "false"
+
+	scopedLog := log.WithName("Multisite info monitoring console").WithValues("MULTISITE", MultiSite)
+
 	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
 		c := mgr.getMonitoringConsoleClient(cr)
-		err := c.ConfigurePeers(false)
+		err := c.ConfigurePeers(spec.Mock)
 		if err != nil {
 			return err
 		}
 		return err
 	}
+
 	// create or update a regular monitoring console service
 	err = splctrl.ApplyService(client, getSplunkService(cr, &spec, SplunkMonitoringConsole, false))
 	if err != nil {
@@ -77,10 +84,11 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		addNewURLs = false
 	}
 
-	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	configMap, err := ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
 	if err != nil {
 		return err
 	}
+	configMapRevision := configMap.ResourceVersion
 
 	//configMapHash to trigger the configMap change in monitoring console deployment
 	configMapHash, err := getConfigMapHash(client, cr.GetNamespace())
@@ -93,7 +101,23 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
-	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, configMapHash, secretName)
+	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
+		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		c := mgr.getClusterMasterClient(cr)
+		scopedLog = log.WithName("Multisite info monitoring console").WithValues("MULTISITE", MultiSite)
+		scopedLog.Info("GET CALL TOOO multisite Infos")
+		multisiteInfo, err := c.GetMultiSiteInfo(spec.Mock)
+		if err != nil {
+			scopedLog.Info("ERROR in multisiteInfo, err := c.GetMultiSiteInfo()")
+			return err
+		}
+		MultiSite = multisiteInfo.MultiSite
+		scopedLog = log.WithName("Multisite info AFTER CALL monitoring console").WithValues("MULTISITE", MultiSite)
+		scopedLog.Info("Updating multisite Infos")
+	}
+	scopedLog.Info("outside IFFFF")
+
+	deploymentMC, err := getMonitoringConsoleDeployment(cr, &spec, SplunkMonitoringConsole, configMapRevision, secretName, MultiSite)
 	if err != nil {
 		return err
 	}
@@ -109,6 +133,12 @@ func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
+// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
+func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+}
+
 // monitoringConsolePodManager is used to manage the monitoring console pod
 type monitoringConsolePodManager struct {
 	cr              *splcommon.MetaObject
@@ -118,10 +148,12 @@ type monitoringConsolePodManager struct {
 }
 
 // GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapHash string, secretName string) (*appsv1.Deployment, error) {
+func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapRevision string, secretName string, multisite string) (*appsv1.Deployment, error) {
+	//func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapRevision string, secretName string) (*appsv1.Deployment, error) {
 	var partOfIdentifier string
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
+	revisionHistoryLimit := int32(0)
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
 	annotations := splcommon.GetIstioAnnotations(ports)
 	//using Namespace here so that with every CR the name should remain same Ex- splunk-<namespace>-monitoring-console
@@ -149,7 +181,8 @@ func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectLabels,
 			},
-			Replicas: &replicas,
+			Replicas:             &replicas,
+			RevisionHistoryLimit: &revisionHistoryLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -182,10 +215,15 @@ func getMonitoringConsoleDeployment(cr splcommon.MetaObject, spec *enterprisev1.
 	}
 
 	env := []corev1.EnvVar{
-		{Name: "SPLUNK_CONFIGMAP_HASH",
-			Value: configMapHash,
+		{Name: "SPLUNK_CONFIGMAP_REVISION",
+			Value: configMapRevision,
 		},
 	}
+
+	if multisite == "true" {
+		env = append(env, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+	}
+
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(deploymentMC.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 

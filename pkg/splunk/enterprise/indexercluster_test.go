@@ -64,14 +64,14 @@ func TestApplyIndexerCluster(t *testing.T) {
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: "master1",
 				},
+				Mock: true,
 			},
 		},
 	}
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
-	mockCalls := true
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster), mockCalls)
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyIndexerCluster", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -81,7 +81,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster), mockCalls)
+		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)

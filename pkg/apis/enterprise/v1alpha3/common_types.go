@@ -66,6 +66,9 @@ type CommonSplunkSpec struct {
 
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
+
+	// Mock to differentiate between UTs and actual reconcile
+	Mock bool `json:"Mock"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration

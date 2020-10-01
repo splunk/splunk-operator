@@ -643,6 +643,9 @@ type UISettings struct {
 
 //ConfigurePeers change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
 func (c *SplunkClient) ConfigurePeers(mock bool) error {
+	if mock {
+		return nil
+	}
 	var configuredPeers, indexerMemberList, licenseMasterMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
 	if err != nil {
@@ -661,31 +664,29 @@ func (c *SplunkClient) ConfigurePeers(mock bool) error {
 		return err
 	}
 
-	if !mock {
-		for _, e := range apiResponseDistributedPeers.Entry {
-			if configuredPeers == "" {
-				configuredPeers = e.Name
-			} else {
-				str := []string{configuredPeers, e.Name}
-				configuredPeers = strings.Join(str, ",")
+	for _, e := range apiResponseDistributedPeers.Entry {
+		if configuredPeers == "" {
+			configuredPeers = e.Name
+		} else {
+			str := []string{configuredPeers, e.Name}
+			configuredPeers = strings.Join(str, ",")
+		}
+		for _, s := range e.Content.ServerRoles {
+			if s == "indexer" {
+				indexerMemberList = indexerMemberList + "&member=" + e.Name
 			}
-			for _, s := range e.Content.ServerRoles {
-				if s == "indexer" {
-					indexerMemberList = indexerMemberList + "&member=" + e.Name
-				}
-				if s == "license_master" {
-					licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
-				}
+			if s == "license_master" {
+				licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
 			}
 		}
+	}
 
-		for _, e := range apiResponseServerRoles.ServerRoles {
-			if e == "indexer" {
-				indexerMemberList = "&member=localhost:localhost" + indexerMemberList
-			}
-			if e == "license_master" {
-				licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
-			}
+	for _, e := range apiResponseServerRoles.ServerRoles {
+		if e == "indexer" {
+			indexerMemberList = "&member=localhost:localhost" + indexerMemberList
+		}
+		if e == "license_master" {
+			licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
 		}
 	}
 	reqBodyIndexer := indexerMemberList + "&default=true"
@@ -870,4 +871,30 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 		return err
 	}
 	return err
+}
+
+//MultiSiteInfo is the struct for checking MultiSiteInfo
+type MultiSiteInfo struct {
+	MultiSite string `json:"multisite"`
+}
+
+// GetMultiSiteInfo queries the info about cluster.
+func (c *SplunkClient) GetMultiSiteInfo(mockCall bool) (*MultiSiteInfo, error) {
+	if mockCall {
+		return nil, nil
+	}
+	apiResponse := struct {
+		Entry []struct {
+			Content MultiSiteInfo `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/cluster/config"
+	err := c.Get(path, &apiResponse)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponse.Entry) < 1 {
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+	}
+	return &apiResponse.Entry[0].Content, nil
 }

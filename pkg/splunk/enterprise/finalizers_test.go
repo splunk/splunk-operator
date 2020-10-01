@@ -98,18 +98,22 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
 			}
-		} else {
+		} else if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
 			mockCalls["Get"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 			}
 			mockCalls["Delete"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 			}
 			mockCalls["List"] = []spltest.MockFuncCall{
+				{ListOpts: listOptsA},
 				{ListOpts: listOptsB},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 			}
 		}
 	}
