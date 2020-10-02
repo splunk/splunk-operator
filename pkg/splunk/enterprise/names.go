@@ -49,6 +49,9 @@ const (
 
 	// identifier used for S3 secret key
 	s3SecretKey = "s3_secret_key"
+
+	//identifier for monitoring console configMap revision
+	monitoringConsoleConfigRev = "monitoringConsoleConfigRev"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -59,11 +62,6 @@ func GetSplunkDeploymentName(instanceType InstanceType, identifier string) strin
 // GetSplunkStatefulsetName uses a template to name a Kubernetes StatefulSet for Splunk instances.
 func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) string {
 	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType)
-}
-
-// GetSplunkMonitoringConsoleDeploymentName uses a template to name a Kubernetes Deployment for Splunk MC instance.
-func GetSplunkMonitoringConsoleDeploymentName(instanceType InstanceType, identifier string) string {
-	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType)
 }
 
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
@@ -91,7 +89,7 @@ func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string 
 
 // GetSplunkMonitoringconsoleConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType InstanceType) string {
-	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType.ToKind())
+	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
