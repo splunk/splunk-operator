@@ -21,10 +21,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -477,14 +479,27 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
 	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: GetSplunkDefaultsName(cr.GetName(), instanceType),
+					Name: configMapName,
 				},
 				DefaultMode: &configMapVolDefaultMode,
 			},
 		})
+
+		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+		// We will update the annotation for resource version in the pod template spec
+		// so that any change in the ConfigMap will lead to recycle of the pod.
+		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(client, namespacedName)
+		if err == nil {
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
+		} else {
+			scopedLog.Error(err, "Updation of default configMap annotation failed")
+		}
 	}
 
 	// update security context

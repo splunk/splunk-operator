@@ -49,3 +49,22 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 
 	return err
 }
+
+// getConfigMap gets the ConfigMap resource in a given namespace
+func getConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (corev1.ConfigMap, error) {
+	var configMap corev1.ConfigMap
+	err := client.Get(context.TODO(), namespacedName, &configMap)
+	if err != nil {
+		return configMap, err
+	}
+	return configMap, nil
+}
+
+// GetConfigMapResourceVersion gets the Resource version of a configMap
+func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
+	configMap, err := getConfigMap(client, namespacedName)
+	if err != nil {
+		return "", err
+	}
+	return configMap.ResourceVersion, nil
+}
