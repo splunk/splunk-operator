@@ -15,12 +15,7 @@
 package enterprise
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
-	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -35,12 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// ApplyMonitoringConsole creates the deployment for monitoring console deployment of Splunk Enterprise.
+// ApplyMonitoringConsole creates the statefulset for monitoring console statefulset of Splunk Enterprise.
 func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
-	var secrets *corev1.Secret
-	var err error
-
-	secrets, err = splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkMonitoringConsoleDeploymentName(SplunkMonitoringConsole, cr.GetNamespace()))
+	secrets, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
 	}
@@ -74,29 +66,22 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
-	//configMapHash to trigger the configMap change in monitoring console deployment
-	configMapHash, err := getConfigMapHash(client, cr.GetNamespace())
+	statefulsetMC, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
 	if err != nil {
 		return err
 	}
 
-	//configMapHash should never be nil, just adding extra check
-	if configMapHash == "" {
-		return err
-	}
-
-	deploymentMC, err := getMonitoringConsoleDeployment(client, cr, &spec, SplunkMonitoringConsole, configMapHash, secretName)
+	mgr := splctrl.DefaultStatefulSetPodManager{}
+	_, err = mgr.Update(client, statefulsetMC, 1)
 	if err != nil {
 		return err
 	}
-
-	_, err = splctrl.ApplyDeployment(client, deploymentMC)
 
 	return err
 }
 
-// GetMonitoringConsoleDeployment returns a Kubernetes Deployment object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleDeployment(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, configMapHash string, secretName string) (*appsv1.Deployment, error) {
+// getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
 	var partOfIdentifier string
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
@@ -113,21 +98,26 @@ func getMonitoringConsoleDeployment(client splcommon.ControllerClient, cr splcom
 		labels[k] = v
 	}
 
-	//create deployment configuration
-	deploymentMC := &appsv1.Deployment{
+	//create statefulset configuration
+	statefulSet := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
+			Kind:       "StatefulSet",
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkMonitoringConsoleDeploymentName(instanceType, cr.GetNamespace()),
+			Name:      GetSplunkStatefulsetName(instanceType, cr.GetNamespace()),
 			Namespace: cr.GetNamespace(),
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectLabels,
 			},
-			Replicas: &replicas,
+			ServiceName:         GetSplunkServiceName(instanceType, cr.GetNamespace(), true),
+			Replicas:            &replicas,
+			PodManagementPolicy: appsv1.ParallelPodManagement,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -159,18 +149,26 @@ func getMonitoringConsoleDeployment(client splcommon.ControllerClient, cr splcom
 		},
 	}
 
-	env := []corev1.EnvVar{
-		{Name: "SPLUNK_CONFIGMAP_HASH",
-			Value: configMapHash,
-		},
-	}
+	env := []corev1.EnvVar{}
+
 	// append labels and annotations from parent
-	splcommon.AppendParentMeta(deploymentMC.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(client, &deploymentMC.Spec.Template, cr, spec, instanceType, env, secretName)
+	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
 
-	return deploymentMC, nil
+	//update podTemplate annotation with configMap resource version
+	var monitoringConsoleConfigMap *corev1.ConfigMap
+	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, false)
+	} else {
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, true)
+	}
+	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+
+	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	return statefulSet, nil
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
@@ -297,44 +295,4 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
-}
-
-func getConfigMapHash(client splcommon.ControllerClient, namespace string) (string, error) {
-
-	namespacedName := types.NamespacedName{Namespace: namespace, Name: GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)}
-	var current corev1.ConfigMap
-
-	err := client.Get(context.TODO(), namespacedName, &current)
-	// if configMap doens't exist and we try to get configMap hash just return with empty string
-	if err != nil {
-		return "", err
-	}
-
-	contents := current.Data
-
-	hash := md5.New()
-	b := new(bytes.Buffer)
-
-	//check key sorting. Collect keys in array and sort. Then use that sorted keys to append
-	var keys []string
-
-	for k := range contents {
-		keys = append(keys, k)
-	}
-
-	//sort keys here
-	sort.Strings(keys)
-
-	//now iterate through the map in sorted order
-	for _, k := range keys {
-		fmt.Fprintf(b, "%s=\"%s\"\n", k, contents[k])
-	}
-
-	if _, err := io.Copy(hash, b); err != nil {
-		return "", err
-	}
-
-	hashInBytes := hash.Sum(nil)[:16]
-	returnMD5String := hex.EncodeToString(hashInBytes)
-	return returnMD5String, nil
 }

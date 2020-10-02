@@ -44,7 +44,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-		{MetaName: "*v1.Deployment-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -57,7 +57,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[6]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
 	c := spltest.NewMockClient()
 
