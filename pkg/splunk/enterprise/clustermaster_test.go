@@ -61,6 +61,11 @@ func TestApplyClusterMaster(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
 	}
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
@@ -160,6 +165,9 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
 					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
 				},
+			},
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Mock: true,
 			},
 		},
 	}

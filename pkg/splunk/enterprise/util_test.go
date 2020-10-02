@@ -17,6 +17,7 @@ package enterprise
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -106,6 +107,44 @@ func TestApplySplunkConfig(t *testing.T) {
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
+}
+
+func TestGetLicenseMasterURL(t *testing.T) {
+	cr := enterprisev1.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	cr.Spec.LicenseMasterRef.Name = "stack1"
+	got := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	want := []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Value: "splunk-stack1-license-master-service",
+		},
+	}
+	result := splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+	}
+
+	cr.Spec.LicenseMasterRef.Namespace = "test"
+	got = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	want = []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Value: "splunk-stack1-license-master-service.test.svc.cluster.local",
+		},
+	}
+
+	result = splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+	}
 }
 
 func TestCreateSmartStoreConfigMap(t *testing.T) {

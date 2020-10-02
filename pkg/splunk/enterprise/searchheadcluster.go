@@ -73,13 +73,12 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		return result, err
 	}
 
-	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
-	if err != nil {
-		return result, err
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -134,6 +133,10 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+		if err != nil {
+			return result, err
+		}
 		result.Requeue = false
 
 		// Reset shc secret changed and namespace secret revision
@@ -428,18 +431,6 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 	return ss, nil
 }
 
-func getSearchHeadEnv(cr *enterprisev1.SearchHeadCluster) []corev1.EnvVar {
-
-	// get search head env variables with deployer
-	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
-	env = append(env, corev1.EnvVar{
-		Name:  "SPLUNK_DEPLOYER_URL",
-		Value: GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
-	})
-
-	return env
-}
-
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
@@ -452,19 +443,6 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 	}
 	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
-}
-
-// getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_SEARCH_HEAD_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), replicas, false),
-		}, {
-			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
-			Value: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
-		},
-	}
 }
 
 // addDFCToPodTemplate modifies the podTemplateSpec object to incorporate support for DFS.

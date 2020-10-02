@@ -77,7 +77,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		mockCalls["Update"] = []spltest.MockFuncCall{
 			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 		}
-		if component != "indexer" {
+		if cr.GetObjectKind().GroupVersionKind().Kind != "IndexerCluster" {
 			mockCalls["Update"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
@@ -110,13 +110,25 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			}
 		} else {
 			mockCalls["Update"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 			}
 			mockCalls["Delete"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 			}
 			mockCalls["List"] = []spltest.MockFuncCall{
+				{ListOpts: listOptsA},
 				{ListOpts: listOptsB},
+			}
+			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
+			}
+			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 			}
 		}
 	}
@@ -130,6 +142,61 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
 }
 
+func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {
+	var component string
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		component = "standalone"
+	case "LicenseMaster":
+		component = "license-master"
+	case "SearchHeadCluster":
+		component = "search-head"
+	case "IndexerCluster", "ClusterMaster":
+		component = "indexer"
+	}
+
+	labels := map[string]string{
+		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+	}
+	listOpts := []client.ListOption{
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels(labels),
+	}
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+
+	mockCalls := make(map[string][]spltest.MockFuncCall)
+	wantDeleted := false
+	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+		wantDeleted = true
+		apiVersion, _ := schema.ParseGroupVersion(enterprisev1.APIVersion)
+		mockCalls["Update"] = []spltest.MockFuncCall{
+			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+		}
+		mockCalls["Delete"] = []spltest.MockFuncCall{
+			{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+		}
+		mockCalls["List"] = []spltest.MockFuncCall{
+			{ListOpts: listOpts},
+		}
+	}
+
+	c := spltest.NewMockClient()
+	c.ListObj = &pvclist
+	deleted, err := delete(cr, c)
+	if deleted != wantDeleted || err != nil {
+		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
+	}
+	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
+}
 func TestDeleteSplunkPvc(t *testing.T) {
 	cr := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -140,13 +207,13 @@ func TestDeleteSplunkPvc(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
 
 	now := time.Now().Add(time.Second * 100)
 	currentTime := metav1.NewTime(now)
 	cr.ObjectMeta.DeletionTimestamp = &currentTime
 	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
 
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()
@@ -167,13 +234,13 @@ func TestDeleteSplunkClusterMasterPvc(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
 
 	now := time.Now().Add(time.Second * 100)
 	currentTime := metav1.NewTime(now)
 	cr.ObjectMeta.DeletionTimestamp = &currentTime
 	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	splunkDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
 
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()

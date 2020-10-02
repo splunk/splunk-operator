@@ -69,6 +69,86 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 	}
 }
 
+// getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
+func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.ClusterMasterRef.Name != "" {
+		clusterMasterURL := GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_CLUSTER_MASTER_URL",
+				Value: clusterMasterURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+		},
+	}
+}
+
+// getStandaloneExtraEnv returns extra environment variables used by monitoring console
+func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_STANDALONE_URL",
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkStandalone, cr.GetName(), replicas, false),
+		},
+	}
+}
+
+// getLicenseMasterURL returns URL of license master
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Value: licenseMasterURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
+		},
+	}
+}
+
+// getSearchHeadExtraEnv returns extra environment variables used by search head clusters
+func getSearchHeadEnv(cr *enterprisev1.SearchHeadCluster) []corev1.EnvVar {
+
+	// get search head env variables with deployer
+	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
+	env = append(env, corev1.EnvVar{
+		Name:  "SPLUNK_DEPLOYER_URL",
+		Value: GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
+	})
+
+	return env
+}
+
+// getSearchHeadExtraEnv returns extra environment variables used by search head clusters
+func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_SEARCH_HEAD_URL",
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), replicas, false),
+		}, {
+			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
+			Value: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
+		},
+	}
+}
+
 // GetSmartstoreSecrets is used to retrieve S3 access key and secrete keys.
 // To do: sgontla:
 // 1. Support multiple secret objects
