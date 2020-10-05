@@ -54,13 +54,12 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		return result, err
 	}
 
-	err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
-	if err != nil {
-		return result, err
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -90,6 +89,10 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		result.Requeue = false
 	}
 	return result, nil
@@ -103,26 +106,4 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
-}
-
-// getLicenseMasterURL returns URL of license master
-func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
-		}
-		return []corev1.EnvVar{
-			{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseMasterURL,
-			},
-		}
-	}
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
-		},
-	}
 }

@@ -16,11 +16,13 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -40,6 +42,14 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	secretName := ""
 	if secrets != nil {
 		secretName = secrets.GetName()
+	}
+
+	//For IndexerCluster custom resource click "Apply changes" on MC and return
+	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
+		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		c := mgr.getMonitoringConsoleClient(cr)
+		err := c.AutomateMCApplyChanges(spec.Mock)
+		return err
 	}
 
 	// create or update a regular monitoring console service
@@ -66,23 +76,56 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
-	statefulsetMC, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
+	//by default set multisite to false
+	multiSite := "false"
+
+	//get cluster info from cluster master
+	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
+		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		c := mgr.getClusterMasterClient(cr)
+		clusterInfo, err := c.GetClusterInfo(spec.Mock)
+		if err != nil {
+			return err
+		}
+		multiSite = clusterInfo.MultiSite
+	}
+
+	statefulset, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName, multiSite)
 	if err != nil {
 		return err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	_, err = mgr.Update(client, statefulsetMC, 1)
-	if err != nil {
-		return err
-	}
+	_, err = mgr.Update(client, statefulset, 1)
 
 	return err
 }
 
+// getMonitoringConsoleClient for monitoringConsolePodManager returns a SplunkClient for monitoring console
+func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+}
+
+// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
+func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+}
+
+// monitoringConsolePodManager is used to manage the monitoring console pod
+type monitoringConsolePodManager struct {
+	cr              *splcommon.MetaObject
+	spec            *enterprisev1.CommonSplunkSpec
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
 // getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string, MultiSite string) (*appsv1.StatefulSet, error) {
 	var partOfIdentifier string
+	var monitoringConsoleConfigMap *corev1.ConfigMap
+	var emptyEnv []corev1.EnvVar
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
@@ -151,6 +194,10 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 
 	env := []corev1.EnvVar{}
 
+	if MultiSite == "true" {
+		env = append(env, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+	}
+
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
@@ -158,11 +205,12 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
 
 	//update podTemplate annotation with configMap resource version
-	var monitoringConsoleConfigMap *corev1.ConfigMap
+	//use emptyEnv here to avoid adding site amd multisite_master info in configMap
+	//TODO: Update this configMap retrieval by API from PR #134
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
-		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, false)
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), emptyEnv, false)
 	} else {
-		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), env, true)
+		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), emptyEnv, true)
 	}
 	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 

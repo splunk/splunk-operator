@@ -67,8 +67,18 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		}
 	}()
 
+	// create or update general config resources
+	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -78,13 +88,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		}
 		return result, err
 	}
-
-	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
-	if err != nil {
-		return result, err
-	}
-
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
@@ -123,6 +126,10 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+		if err != nil {
+			return result, err
+		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(client, cr, false, false)

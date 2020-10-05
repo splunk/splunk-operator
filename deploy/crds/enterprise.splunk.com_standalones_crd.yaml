@@ -53,6 +53,9 @@ spec:
           description: StandaloneSpec defines the desired state of a Splunk Enterprise
             standalone instances.
           properties:
+            Mock:
+              description: Mock to differentiate between UTs and actual reconcile
+              type: boolean
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
                 to particular nodes.

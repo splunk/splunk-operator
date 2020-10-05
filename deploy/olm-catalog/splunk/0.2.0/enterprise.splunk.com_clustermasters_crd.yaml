@@ -38,6 +38,9 @@ spec:
         spec:
           description: ClusterMasterSpec defines the desired state of ClusterMaster
           properties:
+            Mock:
+              description: Mock to differentiate between UTs and actual reconcile
+              type: boolean
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
                 to particular nodes.
