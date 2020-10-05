@@ -49,9 +49,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
 		c := mgr.getMonitoringConsoleClient(cr)
 		err := c.AutomateMCApplyChanges(spec.Mock)
-		if err != nil {
-			return err
-		}
 		return err
 	}
 
@@ -100,9 +97,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	_, err = mgr.Update(client, statefulset, 1)
-	if err != nil {
-		return err
-	}
 
 	return err
 }

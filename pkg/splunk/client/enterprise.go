@@ -68,15 +68,23 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 }
 
 // Do processes a Splunk REST API request and unmarshals response into obj, if not nil.
-func (c *SplunkClient) Do(request *http.Request, expectedStatus string, obj interface{}) error {
+func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj interface{}) error {
 	// send HTTP response and check status
 	request.SetBasicAuth(c.Username, c.Password)
 	response, err := c.Client.Do(request)
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(expectedStatus, strconv.Itoa(response.StatusCode)) {
-		return fmt.Errorf("Response code=%d from %s; want %s", response.StatusCode, request.URL, expectedStatus)
+	//default set flag to false and the check response code
+	expectedStatusFlag := false
+	for i := 0; i < len(expectedStatus); i++ {
+		if expectedStatus[i] == response.StatusCode {
+			expectedStatusFlag = true
+			break
+		}
+	}
+	if expectedStatusFlag == false {
+		return fmt.Errorf("Response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
 	}
 	if obj == nil {
 		return nil
@@ -97,7 +105,8 @@ func (c *SplunkClient) Get(path string, obj interface{}) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, "200", obj)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, obj)
 }
 
 // SearchHeadCaptainInfo represents the status of the search head cluster.
@@ -293,7 +302,8 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, "200", nil)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
 
 // RemoveSearchHeadClusterMember removes a search head cluster member.
@@ -597,7 +607,8 @@ func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, "200", nil)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
 
 // DecommissionIndexerClusterPeer takes an indexer cluster peer offline using the decommission endpoint.
@@ -613,7 +624,8 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if err != nil {
 		return err
 	}
-	return c.Do(request, "200", nil)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
 
 //MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
@@ -754,7 +766,7 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 		return nil, err
 	}
 	if len(apiResponseServerRoles.Entry) < 1 {
-		return nil, err
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseServerRoles.Entry[0].Content, nil
 }
@@ -763,10 +775,8 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/%s/edit", c.ManagementURI, dmcGroupName)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
-	err = c.Do(request, "200, 201, 409", nil)
-	if err != nil {
-		return err
-	}
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -775,10 +785,8 @@ func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMemb
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/dmc_indexerclustergroup_%s/edit", c.ManagementURI, groupName)
 	reqBodyClusterGroup := groupMembers + "&default=false"
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyClusterGroup))
-	err = c.Do(request, "200, 201, 409", nil)
-	if err != nil {
-		return err
-	}
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -801,7 +809,7 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, err
 		return nil, err
 	}
 	if len(apiResponseMCAssetTableBuild.Entry) < 1 {
-		return nil, err
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseMCAssetTableBuild.Entry[0].Content, nil
 }
@@ -812,10 +820,8 @@ func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBu
 	endpoint := fmt.Sprintf("%s", c.ManagementURI) + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyAssetTable))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	err = c.Do(request, "201", nil)
-	if err != nil {
-		return err
-	}
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -841,7 +847,7 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 		return nil, err
 	}
 	if len(apiResponseUISettings.Entry) < 1 {
-		return nil, err
+		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseUISettings.Entry[0].Content, nil
 }
@@ -852,10 +858,8 @@ func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiRespons
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyMCLookups))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	err = c.Do(request, "200", nil)
-	if err != nil {
-		return err
-	}
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -866,10 +870,8 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	if err != nil {
 		return err
 	}
-	err = c.Do(request, "200", nil)
-	if err != nil {
-		return err
-	}
+	expectedStatus := []int{200, 201}
+	err = c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -910,8 +912,8 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	return c.Do(request, "200", nil)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
 
 // RestartSplunk restarts specific Splunk instance
@@ -923,5 +925,6 @@ func (c *SplunkClient) RestartSplunk() error {
 	if err != nil {
 		return err
 	}
-	return c.Do(request, "200", nil)
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
