@@ -71,18 +71,6 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.ClusterMasterRef.Name != "" {
-		clusterMasterURL := GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
-		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
-		}
-		return []corev1.EnvVar{
-			{
-				Name:  "SPLUNK_CLUSTER_MASTER_URL",
-				Value: clusterMasterURL,
-			},
-		}
-	}
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
