@@ -374,6 +374,8 @@ func (mgr *indexerClusterPodManager) decommission(n int32, enforceCounts bool) (
 
 // getClient for indexerClusterPodManager returns a SplunkClient for the member n
 func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient {
+	scopedLog := log.WithName("indexerClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 
@@ -384,7 +386,7 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		fmt.Errorf("Couldn't Retrieve the admin password from secret data %s", err.Error())
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
@@ -392,6 +394,8 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
 func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
+	scopedLog := log.WithName("indexerClusterPodManager.getClusterMasterClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
 	// Retrieve admin password from Pod
 	var masterIdxcName string
 	if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
@@ -407,7 +411,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, podName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		fmt.Errorf("Couldn't retrieve the admin password from pod %s", err.Error())
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
