@@ -76,20 +76,24 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 	}()
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	if err != nil {
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
-		return result, err
-	}
-
-	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
-	if err != nil {
 		return result, err
 	}
 
@@ -119,6 +123,10 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
+		if err != nil {
+			return result, err
+		}
 		result.Requeue = false
 	}
 	return result, nil

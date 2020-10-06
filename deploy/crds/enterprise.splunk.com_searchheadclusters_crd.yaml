@@ -60,6 +60,9 @@ spec:
           description: SearchHeadClusterSpec defines the desired state of a Splunk
             Enterprise search head cluster
           properties:
+            Mock:
+              description: Mock to differentiate between UTs and actual reconcile
+              type: boolean
             affinity:
               description: Kubernetes Affinity rules that control how pods are assigned
                 to particular nodes.
