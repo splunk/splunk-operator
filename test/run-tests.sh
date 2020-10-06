@@ -77,4 +77,4 @@ fi
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 # run Ginkgo
-ginkgo -v -progress -r -stream -nodes=${NUM_NODES} -skipPackage=example ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v -progress -r -stream -nodes=${NUM_NODES} -skipPackage=example,monitoringconsoletest ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

@@ -1,4 +1,4 @@
-package basic
+package smoke
 
 import (
 	"encoding/json"
@@ -63,6 +63,9 @@ var _ = Describe("Smoke test", func() {
 				_ = deployment.GetInstance(deployment.GetName(), standalone)
 				return standalone.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -119,7 +122,7 @@ var _ = Describe("Smoke test", func() {
 				if err != nil {
 					return splcommon.PhaseError
 				}
-				testenvInstance.Log.Info("Waiting for search head cluster instance status to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+				testenvInstance.Log.Info("Waiting for search head cluster STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 				dumpGetPods(testenvInstance.GetName())
 				return shc.Status.Phase
 			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
@@ -129,6 +132,9 @@ var _ = Describe("Smoke test", func() {
 				_ = deployment.GetInstance(deployment.GetName(), shc)
 				return shc.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -214,7 +220,7 @@ var _ = Describe("Smoke test", func() {
 				if err != nil {
 					return splcommon.PhaseError
 				}
-				testenvInstance.Log.Info("Waiting for search head cluster instance status to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+				testenvInstance.Log.Info("Waiting for search head cluster STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 				return shc.Status.Phase
 			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
 
@@ -223,6 +229,9 @@ var _ = Describe("Smoke test", func() {
 				_ = deployment.GetInstance(deployment.GetName(), shc)
 				return shc.Status.Phase
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
