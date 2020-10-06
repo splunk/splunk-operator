@@ -21,6 +21,7 @@ func dumpGetPods(ns string) {
 	}
 }
 
+// Smoke test
 var _ = Describe("Smoke test", func() {
 
 	var deployment *testenv.Deployment
