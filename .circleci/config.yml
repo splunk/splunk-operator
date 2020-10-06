@@ -62,7 +62,7 @@ executors:
       IMAGE_FILENAME: splunk-operator
     machine:
       image: ubuntu-1604:202004-01
-    resource_class: xlarge
+    resource_class: large
   golang-builder:
     environment:
       IMAGE_NAME: splunk/splunk-operator
