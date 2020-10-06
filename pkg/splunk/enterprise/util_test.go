@@ -58,7 +58,7 @@ func TestApplySplunkConfig(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[2]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}}
 	searchHeadCR := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -104,7 +104,7 @@ func TestApplySplunkConfig(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
 	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
@@ -147,7 +147,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 }
 
-func TestCreateSmartStoreConfigMap(t *testing.T) {
+func TestApplySmartstoreConfigMap(t *testing.T) {
 	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -156,13 +156,22 @@ func TestCreateSmartStoreConfigMap(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata1", RemotePath: "remotepath1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "remotepath2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata3", RemotePath: "remotepath3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
 				},
 			},
 		},
@@ -185,10 +194,70 @@ func TestCreateSmartStoreConfigMap(t *testing.T) {
 
 	test := func(client *spltest.MockClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec, want string) {
 		f := func() (interface{}, error) {
-			return CreateSmartStoreConfigMap(client, cr, smartstore)
+			configMap, _, err := ApplySmartstoreConfigMap(client, cr, smartstore)
+			configMap.Data["conftoken"] = "1601945361"
+			return configMap, err
 		}
-		configTester(t, "CreateSmartStoreConfigMap()", f, want)
+		configTester(t, "ApplySmartstoreConfigMap()", f, want)
 	}
 
-	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"idxCluster","uid":"","controller":true}]},"data":{"indexes.conf":"\n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n \n[salesdata1]\nremotePath = volume:$_index_name\n\n[salesdata2]\nremotePath = volume:salesdata2\n\n[salesdata3]\nremotePath = volume:$_index_name\n"}}`)
+	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null},"data":{"conftoken":"1601945361","indexes.conf":"[default]\nrepFactor = auto\nmaxDataSize = auto\nhomePath = $SPLUNK_DB/$_index_name/db\ncoldPath = $SPLUNK_DB/$_index_name/colddb\nthawedPath = $SPLUNK_DB/$_index_name/thaweddb\n \n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n \n[salesdata1]\nremotePath = volume:msos_s2s3_vol/remotepath1\n\n[salesdata2]\nremotePath = volume:msos_s2s3_vol/remotepath2\n\n[salesdata3]\nremotePath = volume:msos_s2s3_vol/remotepath3\n","server.conf":""}}`)
+}
+
+func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxCluster",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			SmartStore: enterprisev1.SmartStoreSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+				},
+
+				IndexList: []enterprisev1.IndexSpec{
+					{Name: "salesdata1", RemotePath: "remotepath1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "remotepath2",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata3", RemotePath: "remotepath3",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
+	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
+	_, err = splctrl.ApplySecret(client, secret)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// Test existing secret
+	err = splutil.SetSecretOwnerRef(client, secret.GetName(), &cr)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for secret %s", secret.GetName())
+	}
+
+	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+
+	if err != nil {
+		t.Errorf("Couldn't Remove S3 Secret object references %v", err)
+	}
 }

@@ -174,6 +174,16 @@ func TestSetSearchHeadDetention(t *testing.T) {
 	splunkClientTester(t, "TestSetSearchHeadDetention", 200, "", wantRequest, test)
 }
 
+func TestBundlePush(t *testing.T) {
+	body := strings.NewReader("&ignore_identical_bundle=true")
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/default/apply", body)
+
+	test := func(c SplunkClient) error {
+		return c.BundlePush(true, false)
+	}
+	splunkClientTester(t, "TestBundlePush", 200, "", wantRequest, test)
+}
+
 func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	// test for 200 response first (sent on first removal request)
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/shcluster/member/consensus/default/remove_server?output_mode=json", nil)

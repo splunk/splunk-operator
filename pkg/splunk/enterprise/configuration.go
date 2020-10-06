@@ -230,17 +230,17 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 	}
 }
 
-// getSplunkSmartstoreConfigMap returns a Kubernetes ConfigMap containing Splunk smartstore cofig in INI format
-func getSplunkSmartstoreConfigMap(identifier, namespace string, crKind string, smartstoreConf string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
+// prepareSplunkSmartstoreConfigMap returns a K8 ConfigMap containing Splunk smartstore config in INI format
+func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind string, dataIniMap map[string]string) *corev1.ConfigMap {
+	configMapIni := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetSplunkSmartstoreConfigMapName(identifier, crKind),
 			Namespace: namespace,
 		},
-		Data: map[string]string{
-			"indexes.conf": smartstoreConf,
-		},
 	}
+	configMapIni.Data = dataIniMap
+
+	return configMapIni
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
@@ -299,19 +299,18 @@ func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	return l
 }
 
-// addSplunkVolumeToTemplate modifies the podTemplateSpec object to incorporates an additional VolumeSource.
-func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name string, volumeSource corev1.VolumeSource) {
-
+// addSplunkVolumeToTemplate modifies the podTemplateSpec object to incorporate an additional VolumeSource.
+func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name string, mountPath string, volumeSource corev1.VolumeSource) {
 	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
-		Name:         "mnt-splunk-" + name,
+		Name:         name,
 		VolumeSource: volumeSource,
 	})
 
 	for idx := range podTemplateSpec.Spec.Containers {
 		containerSpec := &podTemplateSpec.Spec.Containers[idx]
 		containerSpec.VolumeMounts = append(containerSpec.VolumeMounts, corev1.VolumeMount{
-			Name:      "mnt-splunk-" + name,
-			MountPath: "/mnt/splunk-" + name,
+			Name:      name,
+			MountPath: mountPath,
 		})
 	}
 }
@@ -435,6 +434,28 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
+// getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
+func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (*corev1.ConfigMap, bool) {
+	var smartStoreConfigMapName string
+	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
+		smartStoreConfigMapName = GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
+	}
+
+	if smartStoreConfigMapName != "" {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
+		configMap, err := splctrl.GetConfigMap(client, namespacedName)
+		if err != nil {
+			// Do not return configMap name, unless the configMap really exists
+			return nil, false
+		}
+
+		return configMap, true
+	}
+
+	// Do not return configMap name, unless the configMap really exists
+	return nil, false
+}
+
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
@@ -467,7 +488,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
-	addSplunkVolumeToTemplate(podTemplateSpec, "secrets", corev1.VolumeSource{
+	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
 			SecretName:  secretToMount,
 			DefaultMode: &secretVolDefaultMode,
@@ -480,7 +501,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
 	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
 		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
-		addSplunkVolumeToTemplate(podTemplateSpec, "defaults", corev1.VolumeSource{
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: configMapName,
@@ -500,6 +521,32 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		} else {
 			scopedLog.Error(err, "Updation of default configMap annotation failed")
 		}
+	}
+
+	smartstoreConfigMap, exists := getSmartstoreConfigMap(client, cr, instanceType)
+	if exists {
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: smartstoreConfigMap.GetName(),
+				},
+				DefaultMode: &configMapVolDefaultMode,
+				Items: []corev1.KeyToPath{
+					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
+					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
+					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
+				},
+			},
+		})
+
+		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
+		// propagated through the CM master apps bundle push
+		// 2. In case of Standalone, reset the Pod, by updating the latest Resource version of the
+		// smartstore config map.
+		if instanceType == SplunkStandalone {
+			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = smartstoreConfigMap.ResourceVersion
+		}
+
 	}
 
 	// update security context
@@ -635,83 +682,154 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 		return false
 	}
 
-	return !(smartstore.IndexList == nil && smartstore.VolList == nil)
+	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
+}
+
+func checkIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
+	for i, volume := range volumeList {
+		if volume.Name == volName {
+			return i, nil
+		}
+	}
+
+	return -1, fmt.Errorf("Volume: %s, doesn't exist", volName)
+}
+
+// AreRemoteVolumeKeysChanged discovers if the S3 keys changed
+func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterprisev1.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
+	// No need to proceed if the smartstore is not configured
+	if isSmartstoreConfigured(smartstore) == false {
+		return false
+	}
+
+	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	volList := smartstore.VolList
+	for _, volume := range volList {
+		namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
+		// Ideally, this should have been detected in Spec validation time
+		if err != nil {
+			*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+			return false
+		}
+
+		// Check if the secret version is already tracked, and if there is a change in it
+		if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
+			if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
+				scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
+				ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+				return true
+			}
+			return false
+		}
+
+		// First time adding to track the secret resource version
+		ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+	}
+
+	return false
 }
 
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
 func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+	var err error
+
 	// Smartstore is an optional config (at least) for now
 	if !isSmartstoreConfigured(smartstore) {
 		return nil
 	}
 
 	numVolumes := len(smartstore.VolList)
-	if numVolumes <= 0 {
-		return fmt.Errorf("Smartstore volume configuration is missing")
-		// For now, only one volume is allowed.
-	} else if numVolumes > 1 {
-		return fmt.Errorf("Only one smartstore configuration allowed. Configured Volume count = %d", numVolumes)
+	numIndexes := len(smartstore.IndexList)
+	if numIndexes > 0 && numVolumes == 0 {
+		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
-	volume := smartstore.VolList[0]
-	// Make sure that the smartstore volume info is correct
-	if volume.Name == "" {
-		// To Do: cspl-348 sgontla: Once multiple volumes are supported, we can relax this by introducing default volume concept
-		return fmt.Errorf("Volume name is missing")
+	duplicateChecker := make(map[string]bool)
+
+	volList := smartstore.VolList
+	// Make sure that all the Volumes are provided with the mandatory config values.
+	for i, volume := range volList {
+		if _, ok := duplicateChecker[volume.Name]; ok {
+			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
+		}
+		duplicateChecker[volume.Name] = true
+
+		// Make sure that the smartstore volume info is correct
+		if volume.Name == "" {
+			return fmt.Errorf("Volume name is missing for volume at : %d", i)
+		}
+
+		if volume.Endpoint == "" {
+			return fmt.Errorf("Volume Endpoint URI is missing")
+		}
+
+		if volume.Path == "" {
+			return fmt.Errorf("Volume Path is missing")
+		}
+
+		if volume.SecretRef == "" {
+			return fmt.Errorf("Volume SecretRef is missing")
+		}
 	}
 
-	if volume.Endpoint == "" {
-		return fmt.Errorf("Volume Endpoint URI is missing")
+	defaults := smartstore.Defaults
+	// When volName is configured, bucket remote path should also be configured
+	if defaults.VolName != "" {
+		_, err = checkIfVolumeExists(volList, defaults.VolName)
+		if err != nil {
+			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
+		}
 	}
 
-	if volume.Path == "" {
-		return fmt.Errorf("Volume Path is missing")
-	}
-
+	duplicateChecker = make(map[string]bool)
 	indexList := smartstore.IndexList
 	// Make sure that all the indexes are provided with the mandatory config values.
-	// Placeholder to support any default volume.
 	for i, index := range indexList {
+		if _, ok := duplicateChecker[index.Name]; ok {
+			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
+		}
+		duplicateChecker[index.Name] = true
+
 		if index.Name == "" {
 			return fmt.Errorf("Index name is missing for index at: %d", i)
 		}
 
-		if index.VolName == "" {
+		if index.VolName == "" && defaults.VolName == "" {
 			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
 		}
 
-		if index.VolName != volume.Name {
-			return fmt.Errorf("Unknown volume %s configured for index: %s", index.VolName, index.Name)
+		if index.VolName != "" {
+			_, err = checkIfVolumeExists(volList, index.VolName)
+			if err != nil {
+				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
+			}
 		}
+
 	}
 
-	// To do: sgontla: Just for logging purpose for CSPL-320, remove it later
-	LogSmartStoreVolumes(smartstore.VolList)
-	LogSmartStoreIndexes(indexList)
 	return nil
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, error) {
-	var (
-		volumesConf                   = ""
-		s3AccessKey, s3SecretKey, err = GetSmartstoreSecrets(client, cr, smartstore)
-	)
-
-	if err != nil {
-		return "", err
-	}
+func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec, mapData map[string]string) (string, error) {
+	var volumesConf string
 
 	volumes := smartstore.VolList
-	for i := len(volumes) - 1; i >= 0; i-- {
-		volumesConf = fmt.Sprintf(`
+	for i := 0; i < len(volumes); i++ {
+		s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
+		if err != nil {
+			return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+		}
+
+		volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
 path = s3://%s
 remote.s3.access_key = %s
 remote.s3.secret_key = %s
 remote.s3.endpoint = %s
-%s`, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumesConf)
+`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint)
 	}
 
 	return volumesConf, nil
@@ -720,26 +838,139 @@ remote.s3.endpoint = %s
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
 func GetSmartstoreIndexesConfig(indexes []enterprisev1.IndexSpec) string {
 
-	var (
-		indexesConf = ""
-		remotePath  string
+	var indexesConf string
 
-		//To Do: sgontla: Do we need to enforce $_index_name?
-		defaultRemotePath = "$_index_name"
-	)
+	defaultRemotePath := "$_index_name"
 
-	for i := len(indexes) - 1; i >= 0; i-- {
-		if indexes[i].RemotePath != "" {
-			remotePath = indexes[i].RemotePath
-		} else {
-			remotePath = defaultRemotePath
+	for i := 0; i < len(indexes); i++ {
+		// Write the index stanza name
+		indexesConf = fmt.Sprintf(`%s
+[%s]`, indexesConf, indexes[i].Name)
+
+		if indexes[i].RemotePath != "" && indexes[i].VolName != "" {
+			indexesConf = fmt.Sprintf(`%s
+remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, indexes[i].RemotePath)
+		} else if indexes[i].VolName != "" {
+			indexesConf = fmt.Sprintf(`%s
+remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, defaultRemotePath)
 		}
 
-		indexesConf = fmt.Sprintf(`
-[%s]
-remotePath = volume:%s
-%s`, indexes[i].Name, remotePath, indexesConf)
+		if indexes[i].HotlistBloomFilterRecencyHours != 0 {
+			indexesConf = fmt.Sprintf(`%s
+hotlist_bloom_filter_recency_hours = %d`, indexesConf, indexes[i].HotlistBloomFilterRecencyHours)
+		}
+
+		if indexes[i].HotlistRecencySecs != 0 {
+			indexesConf = fmt.Sprintf(`%s
+hotlist_recency_secs = %d`, indexesConf, indexes[i].HotlistRecencySecs)
+		}
+
+		if indexes[i].MaxGlobalDataSizeMB != 0 {
+			indexesConf = fmt.Sprintf(`%s
+maxGlobalDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalDataSizeMB)
+		}
+
+		if indexes[i].MaxGlobalRawDataSizeMB != 0 {
+			indexesConf = fmt.Sprintf(`%s
+maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
+		}
+
+		// Add a new line in betwen index stanzas
+		// Do not add config beyond here
+		indexesConf = fmt.Sprintf(`%s
+`, indexesConf)
 	}
 
 	return indexesConf
+}
+
+//GetServerConfigEntries prepares the server.conf entries, and returns as a string
+func GetServerConfigEntries(cacheManagerConf *enterprisev1.CacheManagerSpec) string {
+	if cacheManagerConf == nil {
+		return ""
+	}
+
+	var serverConfIni string
+	serverConfIni = fmt.Sprintf(`[cachemanager]`)
+
+	emptyStanza := serverConfIni
+
+	if cacheManagerConf.EvictionPaddingSizeMB != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+eviction_padding = %d`, serverConfIni, cacheManagerConf.EvictionPaddingSizeMB)
+	}
+
+	if cacheManagerConf.EvictionPolicy != "" {
+		serverConfIni = fmt.Sprintf(`%s
+eviction_policy = %s`, serverConfIni, cacheManagerConf.EvictionPolicy)
+	}
+
+	if cacheManagerConf.HotlistBloomFilterRecencyHours != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+hotlist_bloom_filter_recency_hours = %d`, serverConfIni, cacheManagerConf.HotlistBloomFilterRecencyHours)
+	}
+
+	if cacheManagerConf.HotlistRecencySecs != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+hotlist_recency_secs = %d`, serverConfIni, cacheManagerConf.HotlistRecencySecs)
+	}
+
+	if cacheManagerConf.MaxCacheSizeMB != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+max_cache_size = %d`, serverConfIni, cacheManagerConf.MaxCacheSizeMB)
+	}
+
+	if cacheManagerConf.MaxConcurrentDownloads != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+max_concurrent_downloads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentDownloads)
+	}
+
+	if cacheManagerConf.MaxConcurrentUploads != 0 {
+		serverConfIni = fmt.Sprintf(`%s
+max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploads)
+	}
+
+	if emptyStanza == serverConfIni {
+		return ""
+	}
+
+	serverConfIni = fmt.Sprintf(`%s
+`, serverConfIni)
+
+	return serverConfIni
+}
+
+// GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
+func GetSmartstoreIndexesDefaults(defaults enterprisev1.IndexConfDefaultsSpec) string {
+
+	remotePath := "$_index_name"
+
+	indexDefaults := fmt.Sprintf(`[default]
+repFactor = auto
+maxDataSize = auto
+homePath = $SPLUNK_DB/%s/db
+coldPath = $SPLUNK_DB/%s/colddb
+thawedPath = $SPLUNK_DB/%s/thaweddb`,
+		remotePath, remotePath, remotePath)
+
+	// Do not change any of the following Sprintf formats(Intentionally indented)
+	if defaults.VolName != "" {
+		//if defaults.VolName != "" && defaults.RemotePath != "" {
+		indexDefaults = fmt.Sprintf(`%s
+remotePath = volume:%s/%s`, indexDefaults, defaults.VolName, remotePath)
+	}
+
+	if defaults.MaxGlobalDataSizeMB != 0 {
+		indexDefaults = fmt.Sprintf(`%s
+maxGlobalDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalDataSizeMB)
+	}
+
+	if defaults.MaxGlobalRawDataSizeMB != 0 {
+		indexDefaults = fmt.Sprintf(`%s
+maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
+	}
+
+	indexDefaults = fmt.Sprintf(`%s
+`, indexDefaults)
+	return indexDefaults
 }

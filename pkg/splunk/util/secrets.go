@@ -106,21 +106,20 @@ func GetSecretLabels() map[string]string {
 }
 
 // SetSecretOwnerRef sets owner references for object
-func SetSecretOwnerRef(client splcommon.ControllerClient, secret *corev1.Secret, cr splcommon.MetaObject) error {
+func SetSecretOwnerRef(client splcommon.ControllerClient, secretObjectName string, cr splcommon.MetaObject) error {
 	var err error
-	currentOwnerRef := secret.GetOwnerReferences()
 
+	secret, err := GetSecretByName(client, cr, secretObjectName)
+	if err != nil {
+		return err
+	}
+
+	currentOwnerRef := secret.GetOwnerReferences()
 	// Check if owner ref exists
-	for i := range currentOwnerRef {
+	for i := 0; i < len(currentOwnerRef); i++ {
 		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
 			return nil
 		}
-	}
-
-	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
-	err = client.Get(context.TODO(), namespacedName, secret)
-	if err != nil {
-		return err
 	}
 
 	// Owner ref doesn't exist, update secret with owner references
@@ -133,6 +132,36 @@ func SetSecretOwnerRef(client splcommon.ControllerClient, secret *corev1.Secret,
 	}
 
 	return nil
+}
+
+// RemoveSecretOwnerRef removes the owner references for an object
+func RemoveSecretOwnerRef(client splcommon.ControllerClient, secretObjectName string, cr splcommon.MetaObject) (uint, error) {
+	var err error
+	var refCount uint = 0
+
+	secret, err := GetSecretByName(client, cr, secretObjectName)
+	if err != nil {
+		return 0, err
+	}
+
+	ownerRef := secret.GetOwnerReferences()
+	for i := 0; i < len(ownerRef); i++ {
+		if reflect.DeepEqual(ownerRef[i], splcommon.AsOwner(cr, false)) {
+			ownerRef = append(ownerRef[:i], ownerRef[i+1:]...)
+			refCount++
+		}
+	}
+
+	// Update the modified owner reference list
+	if refCount > 0 {
+		secret.SetOwnerReferences(ownerRef)
+		err = UpdateResource(client, secret)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return refCount, nil
 }
 
 // RemoveUnwantedSecrets deletes all secrets whose version preceeds (latestVersion - MinimumVersionedSecrets)
@@ -449,4 +478,20 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 	}
 
 	return &current, nil
+}
+
+// GetSecretByName retrieves namespace scoped secret object for a given name
+func GetSecretByName(c splcommon.ControllerClient, cr splcommon.MetaObject, name string) (*corev1.Secret, error) {
+	var namespaceScopedSecret corev1.Secret
+
+	// Check if a namespace scoped secret exists
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
+	err := c.Get(context.TODO(), namespacedName, &namespaceScopedSecret)
+
+	if err != nil {
+		// Didn't find it
+		return nil, err
+	}
+
+	return &namespaceScopedSecret, nil
 }

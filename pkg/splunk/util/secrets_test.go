@@ -239,7 +239,7 @@ func TestSetSecretOwnerRef(t *testing.T) {
 	}
 
 	// Negative testing non-existent secret
-	err := SetSecretOwnerRef(c, &current, &cr)
+	err := SetSecretOwnerRef(c, current.GetName(), &cr)
 	if err.Error() != "NotFound" {
 		t.Errorf("Couldn't detect missing secret %s", current.GetName())
 	}
@@ -251,36 +251,18 @@ func TestSetSecretOwnerRef(t *testing.T) {
 	}
 
 	// Reset secret owner reference
-	current.OwnerReferences = nil
+	//	current.OwnerReferences = nil
 
 	// Test existing secret
-	err = SetSecretOwnerRef(c, &current, &cr)
+	err = SetSecretOwnerRef(c, current.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", current.GetName())
 	}
 
-	falseVal := false
-	// Test secret owner references
-	wantOwnerRef := metav1.OwnerReference{
-		APIVersion: cr.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-		Kind:       cr.GetObjectKind().GroupVersionKind().Kind,
-		Name:       cr.GetObjectMeta().GetName(),
-		UID:        cr.GetObjectMeta().GetUID(),
-		Controller: &falseVal,
-	}
+	removedReferralCount, err := RemoveSecretOwnerRef(c, current.GetName(), &cr)
 
-	if !reflect.DeepEqual(current.GetOwnerReferences()[0].Name, wantOwnerRef.Name) {
-		t.Errorf("Didn't set owner reference properly got %+v want %+v", current.GetOwnerReferences(), wantOwnerRef)
-	}
-
-	// Coverage for already existing case
-	err = SetSecretOwnerRef(c, &current, &cr)
-	if err != nil {
-		t.Errorf("Couldn't avoid duplicate sets of owner reference for secret %s", current.GetName())
-	}
-
-	if !reflect.DeepEqual(current.GetOwnerReferences()[0].Name, wantOwnerRef.Name) || len(current.GetOwnerReferences()) > 1 {
-		t.Errorf("Didn't set owner reference properly got %+v want %+v", current.GetOwnerReferences(), wantOwnerRef)
+	if removedReferralCount == 0 || err != nil {
+		t.Errorf("Didn't remove owner reference properly. %v", err)
 	}
 }
 
@@ -792,4 +774,23 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
+}
+
+func TestGetNamespaceScopedSecretByName(t *testing.T) {
+	cr := TestResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	_, err := ApplyNamespaceScopedSecretObject(c, "test")
+	secretName := splcommon.GetNamespaceScopedSecretName("test")
+
+	secret, err := GetSecretByName(c, &cr, secretName)
+	if secret == nil || err != nil {
+		t.Errorf(err.Error())
+	}
 }
