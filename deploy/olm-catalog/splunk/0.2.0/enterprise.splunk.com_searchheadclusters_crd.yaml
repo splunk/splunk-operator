@@ -2278,6 +2278,11 @@ spec:
           description: SearchHeadClusterStatus defines the observed state of a Splunk
             Enterprise search head cluster
           properties:
+            adminPasswordChangedSecrets:
+              additionalProperties:
+                type: boolean
+              description: Holds secrets whose admin password has changed
+              type: object
             adminSecretChangedFlag:
               description: Indicates when the admin password has been changed for
                 a peer

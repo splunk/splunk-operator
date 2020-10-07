@@ -397,7 +397,7 @@ func TestApplyShcSecret(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	cr.Status.AdminPasswordChangedSecrets = make(map[*corev1.Secret]bool)
+	cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
 	mgr := &searchHeadClusterPodManager{

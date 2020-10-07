@@ -65,7 +65,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		cr.Status.AdminSecretChanged = []bool{}
 	}
 	if cr.Status.AdminPasswordChangedSecrets == nil {
-		cr.Status.AdminPasswordChangedSecrets = make(map[*corev1.Secret]bool)
+		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
@@ -150,7 +150,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		// Reset secrets related status structs
 		cr.Status.ShcSecretChanged = []bool{}
 		cr.Status.AdminSecretChanged = []bool{}
-		cr.Status.AdminPasswordChangedSecrets = make(map[*corev1.Secret]bool)
+		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 	}
 	return result, nil
@@ -289,14 +289,18 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 			if err != nil {
 				return err
 			}
-			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret] = true
+			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
 			scopedLog.Info("Secret mounted on pod(to be changed) added to map")
 		}
 	}
 
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
 		// Change admin password on all secrets mounted on pods to make sure that we want to stay in sync
-		for podSecret := range mgr.cr.Status.AdminPasswordChangedSecrets {
+		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
+			podSecret, err := splutil.GetSecretByName(mgr.c, mgr.cr, podSecretName)
+			if err != nil {
+				return fmt.Errorf("Could not read secret %s, reason - %v", podSecretName, err)
+			}
 			podSecret.Data["password"] = []byte(nsAdminSecret)
 			_, err = splctrl.ApplySecret(mgr.c, podSecret)
 			if err != nil {

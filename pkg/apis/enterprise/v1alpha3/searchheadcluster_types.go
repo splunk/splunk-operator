@@ -104,7 +104,7 @@ type SearchHeadClusterStatus struct {
 	AdminSecretChanged []bool `json:"adminSecretChangedFlag"`
 
 	// Holds secrets whose admin password has changed
-	AdminPasswordChangedSecrets map[*corev1.Secret]bool `json:"adminPasswordChangedSecrets"`
+	AdminPasswordChangedSecrets map[string]bool `json:"adminPasswordChangedSecrets"`
 
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
