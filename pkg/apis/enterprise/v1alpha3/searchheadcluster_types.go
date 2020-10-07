@@ -100,6 +100,12 @@ type SearchHeadClusterStatus struct {
 	// Indicates when the shc_secret has been changed for a peer
 	ShcSecretChanged []bool `json:"shcSecretChangedFlag"`
 
+	// Indicates when the admin password has been changed for a peer
+	AdminSecretChanged []bool `json:"adminSecretChangedFlag"`
+
+	// Holds secrets whose admin password has changed
+	AdminPasswordChangedSecrets map[*corev1.Secret]bool `json:"adminPasswordChangedSecrets"`
+
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
 

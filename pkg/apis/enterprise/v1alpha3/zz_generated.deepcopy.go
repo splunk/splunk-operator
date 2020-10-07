@@ -464,6 +464,11 @@ func (in *SearchHeadClusterStatus) DeepCopyInto(out *SearchHeadClusterStatus) {
 		*out = make([]bool, len(*in))
 		copy(*out, *in)
 	}
+	if in.AdminSecretChanged != nil {
+		in, out := &in.AdminSecretChanged, &out.AdminSecretChanged
+		*out = make([]bool, len(*in))
+		copy(*out, *in)
+	}
 	if in.Members != nil {
 		in, out := &in.Members, &out.Members
 		*out = make([]SearchHeadClusterMemberStatus, len(*in))

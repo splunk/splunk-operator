@@ -32,13 +32,13 @@ import (
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
 func GetSpecificSecretTokenFromPod(c splcommon.ControllerClient, PodName string, namespace string, secretToken string) (string, error) {
 	// Get Pod data
-	secretData, err := GetSecretDataFromPod(c, PodName, namespace)
+	secret, err := GetSecretFromPod(c, PodName, namespace)
 	if err != nil {
 		return "", err
 	}
 
 	// Sanity checks
-	if secretData == nil {
+	if secret.Data == nil {
 		return "", errors.New(invalidSecretDataError)
 	}
 
@@ -46,15 +46,15 @@ func GetSpecificSecretTokenFromPod(c splcommon.ControllerClient, PodName string,
 		return "", errors.New(emptySecretTokenError)
 	}
 
-	if _, ok := secretData[secretToken]; !ok {
+	if _, ok := secret.Data[secretToken]; !ok {
 		return "", errors.New(invalidSecretDataError)
 	}
 
-	return string(secretData[secretToken]), nil
+	return string(secret.Data[secretToken]), nil
 }
 
-// GetSecretDataFromPod retrieves secret data from a pod
-func GetSecretDataFromPod(c splcommon.ControllerClient, PodName string, namespace string) (map[string][]byte, error) {
+// GetSecretFromPod retrieves secret data from a pod
+func GetSecretFromPod(c splcommon.ControllerClient, PodName string, namespace string) (*corev1.Secret, error) {
 	var currentPod corev1.Pod
 	var currentSecret corev1.Secret
 	var secretName string
@@ -95,7 +95,7 @@ func GetSecretDataFromPod(c splcommon.ControllerClient, PodName string, namespac
 		return nil, errors.New(splcommon.SecretNotFoundError)
 	}
 
-	return currentSecret.Data, nil
+	return &currentSecret, nil
 }
 
 // GetSecretLabels gets the labels for a secret

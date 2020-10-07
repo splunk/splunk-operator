@@ -119,10 +119,9 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize nil secret data")
 	}
-
 }
 
-func TestGetSecretDataFromPod(t *testing.T) {
+func TestGetSecretFromPod(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Create secret
@@ -178,18 +177,18 @@ func TestGetSecretDataFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from Pod
-	gotData, err := GetSecretDataFromPod(c, pod.GetName(), "test")
+	gotSecret, err := GetSecretFromPod(c, pod.GetName(), "test")
 	if err != nil {
 		t.Errorf("Couldn't get secret data from pod %s", pod.GetName())
 	}
 
 	// Check data
-	if !reflect.DeepEqual(gotData, current.Data) {
-		t.Errorf("Incorrect secret data from pod %s got %+v want %+v", pod.GetName(), gotData, current.Data)
+	if !reflect.DeepEqual(gotSecret.Data, current.Data) {
+		t.Errorf("Incorrect secret data from pod %s got %+v want %+v", pod.GetName(), gotSecret.Data, current.Data)
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotData, err = GetSecretDataFromPod(c, "random", "test")
+	gotSecret, err = GetSecretFromPod(c, "random", "test")
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Didn't recognize non-existing pod %s", "random")
 	}
@@ -201,7 +200,7 @@ func TestGetSecretDataFromPod(t *testing.T) {
 	}
 
 	// Non-existing secret data from non-existing pod
-	gotData, err = GetSecretDataFromPod(c, pod.GetName(), "test")
+	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
 	if err.Error() != splcommon.SecretNotFoundError {
 		t.Errorf("Didn't recognize non-existing secret %s", "test")
 	}

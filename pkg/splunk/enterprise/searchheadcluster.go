@@ -59,6 +59,13 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	}
 	if cr.Status.ShcSecretChanged == nil {
 		cr.Status.ShcSecretChanged = []bool{}
+
+	}
+	if cr.Status.AdminSecretChanged == nil {
+		cr.Status.AdminSecretChanged = []bool{}
+	}
+	if cr.Status.AdminPasswordChangedSecrets == nil {
+		cr.Status.AdminPasswordChangedSecrets = make(map[*corev1.Secret]bool)
 	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
@@ -139,8 +146,10 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		}
 		result.Requeue = false
 
-		// Reset shc secret changed and namespace secret revision
+		// Reset secrets related status structs
 		cr.Status.ShcSecretChanged = []bool{}
+		cr.Status.AdminSecretChanged = []bool{}
+		cr.Status.AdminPasswordChangedSecrets = make(map[*corev1.Secret]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 	}
 	return result, nil
@@ -163,7 +172,7 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 		return err
 	}
 
-	scopedLog := log.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
+	scopedLog := log.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
@@ -180,10 +189,15 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 	// Retrieve shc_secret password from secret data
 	nsShcSecret := string(namespaceSecret.Data["shc_secret"])
 
+	// Retrieve shc_secret password from secret data
+	nsAdminSecret := string(namespaceSecret.Data["password"])
+
 	// Loop over all sh pods and get individual pod's shc_secret
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get search head pod's name
 		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
+
+		scopedLog := log.WithName("ApplyShcSecretPodLoop").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock, "pod", shPodName)
 
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
@@ -217,7 +231,7 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 			}
 			scopedLog.Info("shcSecret changed")
 
-			// Get client for indexer Pod and restart splunk instance on pod
+			// Get client for Pod and restart splunk instance on pod
 			shClient := mgr.getClient(i)
 			err = shClient.RestartSplunk()
 			if err != nil {
@@ -231,6 +245,63 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 			} else {
 				mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
 			}
+		}
+
+		// If admin secret is different from namespace scoped secret change it
+		if adminPwd != nsAdminSecret {
+			scopedLog.Info("admin password different from namespace scoped secret, changing admin password")
+			// If admin password already changed, ignore
+			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
+				if mgr.cr.Status.AdminSecretChanged[i] {
+					continue
+				}
+			}
+
+			// Change admin password on splunk instance of pod
+			command := fmt.Sprintf("/opt/splunk/bin/splunk cmd splunkd rest --noauth POST /services/admin/users/admin 'password=%s'", nsAdminSecret)
+			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+			if err != nil {
+				if !mock {
+					return err
+				}
+			}
+			scopedLog.Info("admin password changed on the splunk instance of pod")
+
+			// Get client for Pod and restart splunk instance on pod
+			shClient := mgr.getClient(i)
+			err = shClient.RestartSplunk()
+			if err != nil {
+				return err
+			}
+			scopedLog.Info("Restarted Splunk")
+
+			// Set the adminSecretChanged changed flag to true
+			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
+				mgr.cr.Status.AdminSecretChanged[i] = true
+			} else {
+				scopedLog.Info("Appending to AdminSecretChanged")
+				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
+			}
+
+			// Adding to map of secrets to be synced
+			podSecret, err := splutil.GetSecretFromPod(mgr.c, shPodName, mgr.cr.GetNamespace())
+			if err != nil {
+				return err
+			}
+			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret] = true
+			scopedLog.Info("Secret mounted on pod(to be changed) added to map")
+		}
+	}
+
+	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
+		// Change admin password on all secrets mounted on pods to make sure that we want to stay in sync
+		for podSecret := range mgr.cr.Status.AdminPasswordChangedSecrets {
+			podSecret.Data["password"] = []byte(nsAdminSecret)
+			_, err = splctrl.ApplySecret(mgr.c, podSecret)
+			if err != nil {
+				return err
+			}
+			scopedLog.Info("admin password changed on the secret mounted on pod")
 		}
 	}
 
