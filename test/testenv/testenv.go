@@ -34,9 +34,28 @@ const (
 	defaultTestTimeout = 900
 
 	// PollInterval specifies the polling interval
-	PollInterval = 1 * time.Second
+	PollInterval = 5 * time.Second
+
+	// ConsistentPollInterval is the interval to use to consistently check a state is stable
+	ConsistentPollInterval = 200 * time.Millisecond
+
+	// ConsistentDuration is use to check a state is stable
+	ConsistentDuration = 2000 * time.Millisecond
+
 	// DefaultTimeout is the max timeout before we failed.
 	DefaultTimeout = 5 * time.Minute
+
+	// SearchHeadPod Template String for search head pod
+	SearchHeadPod = "splunk-%s-search-head-%d"
+
+	// StandalonePod Template String for standalone pod
+	StandalonePod = "splunk-%s-standalone-%d"
+
+	// MonitoringConsoleSts Montioring Console Statefulset Template
+	MonitoringConsoleSts = "splunk-%s-monitoring-console"
+
+	// MonitoringConsolePod Montioring Console Statefulset Template
+	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 )
 
 var (
@@ -413,7 +432,7 @@ func (testenv *TestEnv) createOperator() error {
 			return false, err
 		}
 
-		dumpGetPods(testenv.namespace)
+		DumpGetPods(testenv.namespace)
 		if deployment.Status.UpdatedReplicas < deployment.Status.Replicas {
 			return false, nil
 		}

@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os/exec"
@@ -343,9 +344,15 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 	return &operator
 }
 
-func dumpGetPods(ns string) {
-	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
+// DumpGetPods prints list of pods in the namespace
+func DumpGetPods(ns string) {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+	} else {
+		for _, line := range strings.Split(string(output), "\n") {
+			logf.Log.Info(line)
+		}
 	}
 }

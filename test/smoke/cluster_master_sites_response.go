@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package basic
+package smoke
 
 // ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
 // Endpoint: /services/cluster/master/sites
