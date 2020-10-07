@@ -47,7 +47,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[4], funcCalls[5]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5]}, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5]}, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 	current := enterprisev1.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",

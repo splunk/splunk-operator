@@ -230,9 +230,11 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 				VolList: []enterprisev1.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 				},
-
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1"},
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
 					{Name: "salesdata2", RemotePath: "salesdata2"},
 					{Name: "salesdata3", RemotePath: ""},
 				},
@@ -257,13 +259,19 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-					{Name: "salesdata3", RemotePath: "", VolName: "msos_s2s3_vol"},
+					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
 				},
 			},
 		},
@@ -282,13 +290,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Valid smartstore config
 	SmartStore := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
 		},
 	}
 
@@ -297,35 +313,37 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		t.Errorf("Valid Smartstore configuration should not cause error: %v", err)
 	}
 
-	// Only one remote volume is allowed
+	// Missing Secret object reference with Volume config should fail
 	SmartStoreMultipleVolumes := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
 			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
-			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret2"},
 		},
-
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
 		},
 	}
 
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreMultipleVolumes)
 	if err == nil {
-		t.Errorf("Multiple Smartstore volume configurations should error out")
+		t.Errorf("Missing Secret Object reference should error out")
 	}
 
-	// Smartstore config with missing endpoint for the volume
+	// Smartstore config with missing endpoint for the volume errors out
 	SmartStoreVolumeWithNoRemoteEndPoint := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
-		},
-
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
 		},
 	}
 
@@ -339,12 +357,6 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		VolList: []enterprisev1.VolumeSpec{
 			{Name: "", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
-
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
-		},
 	}
 
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumeNameMissing)
@@ -357,12 +369,6 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		VolList: []enterprisev1.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: ""},
 		},
-
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
-		},
 	}
 
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumePathMissing)
@@ -373,13 +379,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Smartstore config with missing index name
 	SmartStoreWithMissingIndexName := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
+			{Name: "",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
 		},
 	}
 
@@ -388,27 +402,121 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		t.Errorf("Should not accept an Index with missing indexname ")
 	}
 
-	//Smartstore config with missing remotePath
+	//Smartstore config Index with VolName, but missing RemotePath errors out
 	SmartStoreWithMissingIndexLocation := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-
 		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata2", RemotePath: "salesdata2", VolName: "msos_s2s3_vol"},
-			{Name: "salesdata3", VolName: "msos_s2s3_vol"},
+			{Name: "salesdata1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
 		},
 	}
 
 	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexLocation)
 	if err != nil {
-		t.Errorf("Should accept an Index with missing remotePath location")
+		t.Errorf("An index with missing remotePath should use index name as path, but failed with error: %v", err)
+	}
+
+	// Having defaults volume and remote path should not complain an index missing the volume and remotepath info.
+	SmartStoreConfWithDefaults := enterprisev1.SmartStoreSpec{
+		Defaults: enterprisev1.IndexConfDefaultsSpec{
+			IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				VolName: "msos_s2s3_vol"},
+		},
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1"},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3"},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreConfWithDefaults)
+	if err != nil {
+		t.Errorf("Should accept an Index with missing remotePath location, when defaults are configured. But, got the error: %v", err)
 	}
 
 	// Empty smartstore config
 	err = ValidateSplunkSmartstoreSpec(nil)
 	if err != nil {
-		t.Errorf("Smartstore config is optional, should not cause an error")
+		t.Errorf("Smartstore config is optional, should not cause an error. But, got the error: %v", err)
 	}
+}
+
+func TestValidateSplunkSmartstoreCacheManagerSpec(t *testing.T) {
+
+	SmartStoreCacheManager := enterprisev1.CacheManagerSpec{
+		IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+			HotlistRecencySecs:             24 * 60 * 60,
+			HotlistBloomFilterRecencyHours: 24,
+		},
+		MaxCacheSizeMB:         20 * 1024,
+		EvictionPolicy:         "lru",
+		EvictionPaddingSizeMB:  2 * 1024,
+		MaxConcurrentDownloads: 6,
+		MaxConcurrentUploads:   6,
+	}
+
+	// Do not change the format
+	expectedIniContents := fmt.Sprintf(`[cachemanager]
+eviction_padding = 2048
+eviction_policy = lru
+hotlist_bloom_filter_recency_hours = 24
+hotlist_recency_secs = 86400
+max_cache_size = 20480
+max_concurrent_downloads = 6
+max_concurrent_uploads = 6
+`)
+
+	serverConfForCacheManager := GetServerConfigEntries(&SmartStoreCacheManager)
+
+	if expectedIniContents != serverConfForCacheManager {
+		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, serverConfForCacheManager)
+	}
+}
+
+func TestValidateSplunkSmartstoreDefaultsSpec(t *testing.T) {
+
+	SmartStoreDefaultsConf := enterprisev1.IndexConfDefaultsSpec{
+		IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+			VolName:                "s2s3_vol",
+			MaxGlobalDataSizeMB:    50 * 1024,
+			MaxGlobalRawDataSizeMB: 60 * 1024,
+		},
+	}
+
+	// Do not change the format
+	expectedIniContents := fmt.Sprintf(`[default]
+repFactor = auto
+maxDataSize = auto
+homePath = $SPLUNK_DB/$_index_name/db
+coldPath = $SPLUNK_DB/$_index_name/colddb
+thawedPath = $SPLUNK_DB/$_index_name/thaweddb
+remotePath = volume:s2s3_vol/$_index_name
+maxGlobalDataSizeMB = 51200
+maxGlobalRawDataSizeMB = 61440
+`)
+
+	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(SmartStoreDefaultsConf)
+
+	if expectedIniContents != SmartstoreDefaultIniConfig {
+		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, SmartstoreDefaultIniConfig)
+	}
+
 }

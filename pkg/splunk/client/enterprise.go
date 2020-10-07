@@ -628,6 +628,23 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	return c.Do(request, expectedStatus, nil)
 }
 
+// BundlePush pushes the CM master apps bundle to all the indexer peers
+func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool, mock bool) error {
+	if mock {
+		return nil
+	}
+	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
+	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
+
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200}
+
+	return c.Do(request, expectedStatus, nil)
+}
+
 //MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
 type MCServerRolesInfo struct {
 	ServerRoles []string `json:"server_roles"`

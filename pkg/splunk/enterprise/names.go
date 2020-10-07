@@ -52,6 +52,29 @@ const (
 
 	//identifier for monitoring console configMap revision
 	monitoringConsoleConfigRev = "monitoringConsoleConfigRev"
+	// identifier to track the smartstore config rev. on Pod
+	smartStoreConfigRev = "SmartStoreConfigRev"
+
+	// command merger
+	commandMerger = " && "
+
+	// command for the init container with DFC
+	commandForDfc = "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"
+
+	// command for init container on a standalone without DFC
+	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
+
+	// command for init container with Smartstore enabled and DFC enabled
+	commandForDfcAndSmartstore = commandForDfc + commandMerger + commandForStandaloneSmartstore
+
+	// command for init container on a CM
+	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
+
+	// Used to identify if the configMap Changed
+	//configMapUpdated = "configMapChanged"
+
+	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
+	configToken = "conftoken"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
