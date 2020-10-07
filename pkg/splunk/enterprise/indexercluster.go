@@ -79,6 +79,8 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		if err != nil {
 			return result, err
 		}
+
+		DeleteOwnerReferencesForResources(client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating

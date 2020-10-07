@@ -36,7 +36,8 @@ func TestApplyConfigMap(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Data = map[string]string{"a": "b"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		return ApplyConfigMap(c, cr.(*corev1.ConfigMap))
+		_, err := ApplyConfigMap(c, cr.(*corev1.ConfigMap))
+		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
 }

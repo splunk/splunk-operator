@@ -26,7 +26,7 @@ import (
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
-func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigMap) error {
+func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
 	scopedLog := log.WithName("ApplyConfigMap").WithValues(
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
@@ -35,34 +35,41 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 	var current corev1.ConfigMap
 
 	err := client.Get(context.TODO(), namespacedName, &current)
+	var dataUpdated bool
 	if err == nil {
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap")
 			current.Data = configMap.Data
 			err = splutil.UpdateResource(client, &current)
+			if err == nil {
+				dataUpdated = true
+			}
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
 	} else {
 		err = splutil.CreateResource(client, configMap)
+		if err == nil {
+			dataUpdated = true
+		}
 	}
 
-	return err
+	return dataUpdated, err
 }
 
-// getConfigMap gets the ConfigMap resource in a given namespace
-func getConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (corev1.ConfigMap, error) {
+// GetConfigMap gets the ConfigMap resource in a given namespace
+func GetConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
 	err := client.Get(context.TODO(), namespacedName, &configMap)
 	if err != nil {
-		return configMap, err
+		return nil, err
 	}
-	return configMap, nil
+	return &configMap, nil
 }
 
 // GetConfigMapResourceVersion gets the Resource version of a configMap
 func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
-	configMap, err := getConfigMap(client, namespacedName)
+	configMap, err := GetConfigMap(client, namespacedName)
 	if err != nil {
 		return "", err
 	}

@@ -76,6 +76,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
+		DeleteOwnerReferencesForResources(client, cr, nil)
 		if err != nil {
 			return result, err
 		}
@@ -427,7 +428,7 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 
 	// add spark and java mounts to search head containers
 	if cr.Spec.SparkRef.Name != "" {
-		addDFCToPodTemplate(&ss.Spec.Template, cr.Spec.SparkRef, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, cr.Spec.Replicas > 1)
+		addDFCToPodTemplate(&ss.Spec.Template, cr.Spec.SparkRef, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, cr.Spec.Replicas > 1, false)
 	}
 
 	return ss, nil
@@ -448,17 +449,34 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 }
 
 // addDFCToPodTemplate modifies the podTemplateSpec object to incorporate support for DFS.
-func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev1.ObjectReference, sparkImage string, imagePullPolicy string, slotsEnabled bool) {
+// Also sets the softlinks for Splunk-operator app(if required)
+func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev1.ObjectReference, sparkImage string, imagePullPolicy string, slotsEnabled bool, needToSetupSplunkOperatorApp bool) {
 	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
+	var commands []string
+	var volMounts []corev1.VolumeMount
+
+	// Too greedy to piggyback the Operator App commands? Its Ok, as it saves few seconds on Pod resets
+	if needToSetupSplunkOperatorApp {
+		commands = []string{"bash", "-c", commandForDfcAndSmartstore}
+		volMounts = []corev1.VolumeMount{
+			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
+			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
+			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
+		}
+	} else {
+		commands = []string{"bash", "-c", commandForDfc}
+		volMounts = []corev1.VolumeMount{
+			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
+			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
+		}
+	}
+
 	containerSpec := corev1.Container{
 		Image:           sparkImage,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
 		Name:            "init",
-		Command:         []string{"bash", "-c", "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"},
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
-			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
-		},
+		Command:         commands,
+		VolumeMounts:    volMounts,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("0.25"),
@@ -476,8 +494,8 @@ func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev
 	emptyVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
-	addSplunkVolumeToTemplate(podTemplateSpec, "jdk", emptyVolumeSource)
-	addSplunkVolumeToTemplate(podTemplateSpec, "spark", emptyVolumeSource)
+	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-jdk", "/mnt/splunk-jdk", emptyVolumeSource)
+	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-spark", "/mnt/splunk-spark", emptyVolumeSource)
 
 	// prepare spark master host URL
 	sparkMasterHost := spark.GetSparkServiceName(spark.SparkMaster, sparkRef.Name, false)

@@ -31,8 +31,13 @@ import (
 type ClusterMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
+	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables).
+	// Also used on cluster master for init container to setup the soft links from ../master-apps/splunk-operator/local/ to
+	// /mnt/splunk-operator/local/
+	SparkImage string `json:"sparkImage"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
@@ -43,8 +48,20 @@ type ClusterMasterStatus struct {
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
+	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// Bundle push status tracker
+	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+
+	// Resource Revision tracker
+	ResourceRevMap map[string]string `json:"resourceRevMap"`
+}
+
+// BundlePushInfo Indicates if bundle push required
+type BundlePushInfo struct {
+	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
+	LastCheckInterval    int64 `json:"lastCheckInterval"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -43,7 +43,7 @@ type StandaloneSpec struct {
 	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
 	SparkImage string `json:"sparkImage"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
+	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 }
 
@@ -61,8 +61,11 @@ type StandaloneStatus struct {
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
-	// Splunk Smartstore configuration. Refer to indexes.conf.spec on docs.splunk.com
+	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// Resource Revision tracker
+	ResourceRevMap map[string]string `json:"resourceRevMap"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
