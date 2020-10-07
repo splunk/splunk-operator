@@ -135,6 +135,13 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			Eventually(func() bool {
+				rfSfStatus := testenv.CheckRFSF(testenvInstance.GetName(), deployment.GetName())
+				testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
+				return rfSfStatus
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(true))
 		})
 	})
 
@@ -232,6 +239,13 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			Eventually(func() bool {
+				rfSfStatus := testenv.CheckRFSF(testenvInstance.GetName(), deployment.GetName())
+				testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
+				return rfSfStatus
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(true))
 		})
 	})
 
@@ -309,6 +323,15 @@ var _ = Describe("Smoke test", func() {
 				return siteIndexerStatus
 			}, deployment.GetTimeout(), PollInterval).Should(Equal(siteIndexerMap))
 
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			Eventually(func() bool {
+				rfSfStatus := testenv.CheckRFSF(testenvInstance.GetName(), deployment.GetName())
+				testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
+				return rfSfStatus
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(true))
 		})
 	})
 })
