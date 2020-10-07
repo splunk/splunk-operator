@@ -76,8 +76,6 @@ EOF
 
 #### Deploy the indexer sites
 
-Site / zone mapping must be adapted for each site.
-
 ```yaml
 cat <<EOF | kubectl apply -f -
 ---
@@ -106,6 +104,8 @@ spec:
             - zone-1a
 EOF
 ```
+You can have similar CRs for other sites of IndexerCluster by changing the `site` parameter according to the zone label.
+
 
 ## Connecting a search-head cluster to a multisite indexer-cluster
 
