@@ -100,6 +100,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{

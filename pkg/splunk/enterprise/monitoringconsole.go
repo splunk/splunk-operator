@@ -71,14 +71,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		addNewURLs = false
 	}
 
-	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
-	if err != nil {
-		return err
-	}
-
-	//by default set multisite to false
-	multiSite := "false"
-
 	//get cluster info from cluster master
 	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
@@ -87,10 +79,18 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		if err != nil {
 			return err
 		}
-		multiSite = clusterInfo.MultiSite
+		multiSite := clusterInfo.MultiSite
+		if multiSite == "true" {
+			extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+		}
 	}
 
-	statefulset, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName, multiSite)
+	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	if err != nil {
+		return err
+	}
+
+	statefulset, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
 	if err != nil {
 		return err
 	}
@@ -122,10 +122,9 @@ type monitoringConsolePodManager struct {
 }
 
 // getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string, MultiSite string) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
 	var partOfIdentifier string
 	var monitoringConsoleConfigMap *corev1.ConfigMap
-	var emptyEnv []corev1.EnvVar
 	// there will be always 1 replica of monitoring console
 	replicas := int32(1)
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
@@ -194,10 +193,6 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 
 	env := []corev1.EnvVar{}
 
-	if MultiSite == "true" {
-		env = append(env, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
-	}
-
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
@@ -205,16 +200,13 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
 
 	//update podTemplate annotation with configMap resource version
-	//use emptyEnv here to avoid adding site amd multisite_master info in configMap
-	//TODO: Update this configMap retrieval by API from PR #134
-	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
-		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), emptyEnv, false)
-	} else {
-		monitoringConsoleConfigMap, _ = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), emptyEnv, true)
-	}
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
+	monitoringConsoleConfigMap, _ = splctrl.GetConfigMap(client, namespacedName)
 	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
-	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+	//set owner reference for splunk monitoring console statefulset
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+	_ = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 
 	return statefulSet, nil
 }
@@ -320,6 +312,10 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
 		for _, curr := range currentURLs {
+			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
+			if url.Name == "SPLUNK_MULTISITE_MASTER" {
+				delete(revised.Data, "SPLUNK_SITE")
+			}
 			//scale DOWN
 			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
@@ -344,3 +340,48 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 		}
 	}
 }
+
+/*// SetStatefulSetOwnerRef sets owner references for object
+func SetStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	var err error
+
+	statefulset, err := GetstatefulSetByName(client, cr)
+	if err != nil {
+		return err
+	}
+
+	currentOwnerRef := statefulset.GetOwnerReferences()
+	// Check if owner ref exists
+	for i := 0; i < len(currentOwnerRef); i++ {
+		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}
+	}
+
+	// Owner ref doesn't exist, update secret with owner references
+	statefulset.SetOwnerReferences(append(statefulset.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	// Update secret if needed
+	err = splutil.UpdateResource(client, statefulset)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetstatefulSetByName retrieves namespace scoped secret object for a given name
+func GetstatefulSetByName(c splcommon.ControllerClient, cr splcommon.MetaObject) (*appsv1.StatefulSet, error) {
+	var existsingSTS appsv1.StatefulSet
+
+	// Check if a namespace scoped secret exists
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+	err := c.Get(context.TODO(), namespacedName, &existsingSTS)
+
+	if err != nil {
+		// Didn't find it
+		return nil, err
+	}
+
+	return &existsingSTS, nil
+}*/

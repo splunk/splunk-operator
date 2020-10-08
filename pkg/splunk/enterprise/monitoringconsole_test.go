@@ -45,6 +45,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -58,7 +59,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{ListOpts: listOpts}}
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
@@ -78,7 +79,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		err := ApplyMonitoringConsole(c, obj, obj.Spec.CommonSplunkSpec, env)
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret)
 }
 
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {

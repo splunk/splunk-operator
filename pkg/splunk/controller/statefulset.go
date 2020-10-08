@@ -17,6 +17,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -229,4 +230,46 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 	// all is good!
 	scopedLog.Info("All pods are ready")
 	return splcommon.PhaseReady, nil
+}
+
+// SetStatefulSetOwnerRef sets owner references for statefulset
+func SetStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+
+	statefulset, err := GetstatefulSetByName(client, cr, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	currentOwnerRef := statefulset.GetOwnerReferences()
+	// Check if owner ref exists
+	for i := 0; i < len(currentOwnerRef); i++ {
+		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}
+	}
+
+	// Owner ref doesn't exist, update statefulset with owner references
+	statefulset.SetOwnerReferences(append(statefulset.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	// Update owner reference if needed
+	err = splutil.UpdateResource(client, statefulset)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetstatefulSetByName retrieves current statefulset
+func GetstatefulSetByName(c splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*appsv1.StatefulSet, error) {
+	var currentStatefulset appsv1.StatefulSet
+
+	err := c.Get(context.TODO(), namespacedName, &currentStatefulset)
+
+	if err != nil {
+		// Didn't find it
+		return nil, err
+	}
+
+	return &currentStatefulset, nil
 }
