@@ -78,8 +78,8 @@ peer.
 ```
 $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0         0/1     Running   0          29s
-splunk-example-indexer-0           0/1     Running   0          29s
+splunk-cm-cluster-master-0         1/1     Running   0          29s
+splunk-example-indexer-0           1/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
 ```
 
@@ -120,6 +120,7 @@ indexercluster.enterprise.splunk.com/example patched
 
 For efficiency, note that you can use the following short names with `kubectl`:
 
+* `clustermaster`: `cm-idxc`
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
 * `licensemaster`: `lm`
@@ -176,7 +177,7 @@ EOF
 ```
 
 The important parameter to note here is the `clusterMasterRef` field which points to the cluster master of the indexer cluster.
-Having a separate CR for cluster-master gives us the control to define a size or StorageClass for the PersistentVolumes of the cluster-master
+Having a separate CR for cluster master gives us the control to define a size or StorageClass for the PersistentVolumes of the cluster master
 different from the indexers:
 
 ```yaml
@@ -207,12 +208,12 @@ spec:
 EOF
 ```
 
-In the above environment, cluster-master controls the [applications loaded](#installing-splunk-apps) to all
+In the above environment, cluster master controls the [applications loaded](#installing-splunk-apps) to all
 the parts of the indexer cluster, and the indexer services that it creates select the indexers
 deployed by all the IndexerCluster parts, while the indexer services created by indexer cluster only select the indexers that it manages.
 
 This can also allow to better control
-the upgrade cycle to respect the recommended order: cluster-master, then search-heads,
+the upgrade cycle to respect the recommended order: cluster master, then search heads,
 then indexers, by defining and updating the docker image used by each IndexerCluster part.
 
 This solution can also be used to build a [multisite cluster](MultisiteExamples.md)
@@ -266,13 +267,14 @@ by just patching the `replicas` parameter.
 
 ### Cluster Services
 
-Note that the creation of `SearchHeadCluster` and `IndexerCluster`
+Note that the creation of `SearchHeadCluster`, `ClusterMaster` and `IndexerCluster`
 resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
 NAME                                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
 splunk-cm-cluster-master-service        ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
+splunk-cm-indexer-service               ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
 splunk-example-deployer-service         ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless         ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service          ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m

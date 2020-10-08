@@ -131,6 +131,7 @@ Splunk Operator, run:
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
+kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
 kubectl delete -f http://tiny.cc/splunk-operator-install
