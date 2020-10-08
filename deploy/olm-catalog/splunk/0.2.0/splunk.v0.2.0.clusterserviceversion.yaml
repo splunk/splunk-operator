@@ -4,7 +4,7 @@ metadata:
   annotations:
     alm-examples: |-
       [{
-        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "apiVersion": "enterprise.splunk.com/v1beta1",
         "kind": "IndexerCluster",
         "metadata": {
           "name": "example",
@@ -15,7 +15,7 @@ metadata:
         }
       },
       {
-        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "apiVersion": "enterprise.splunk.com/v1beta1",
         "kind": "LicenseMaster",
         "metadata": {
           "name": "example",
@@ -24,7 +24,7 @@ metadata:
         "spec": {}
       },
       {
-        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "apiVersion": "enterprise.splunk.com/v1beta1",
         "kind": "SearchHeadCluster",
         "metadata": {
           "name": "example",
@@ -35,7 +35,7 @@ metadata:
         }
       },
       {
-        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "apiVersion": "enterprise.splunk.com/v1beta1",
         "kind": "Spark",
         "metadata": {
           "name": "example"
@@ -45,7 +45,7 @@ metadata:
         }
       },
       {
-        "apiVersion": "enterprise.splunk.com/v1alpha2",
+        "apiVersion": "enterprise.splunk.com/v1beta1",
         "kind": "Standalone",
         "metadata": {
           "name": "example",
@@ -72,7 +72,7 @@ spec:
     - description: ClusterMaster is the Schema for the clustermasters API
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -90,7 +90,7 @@ spec:
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -108,7 +108,7 @@ spec:
     - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -127,7 +127,7 @@ spec:
         head cluster
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -145,7 +145,7 @@ spec:
     - description: Spark is the Schema for a Spark cluster
       kind: Spark
       name: sparks.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -163,7 +163,7 @@ spec:
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       kind: Standalone
       name: standalones.enterprise.splunk.com
-      version: v1alpha3
+      version: v1beta1
   description: |
     Splunk Enterprise is a platform for operational intelligence. Our software
     lets you collect, analyze, and act upon the untapped value of big data that
