@@ -104,7 +104,7 @@ spec:
             - zone-1a
 EOF
 ```
-You can have similar CRs for other sites of IndexerCluster by changing the `site` parameter according to the zone label.
+Create IndexerCluster CR for each required site with zone affinity specified as needed
 
 
 ## Connecting a search-head cluster to a multisite indexer-cluster
