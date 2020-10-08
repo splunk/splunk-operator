@@ -294,8 +294,15 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 		}
 	}
 
+	/*
+		When admin password on the secret mounted on SHC pod is different from that on the namespace scoped
+		secret the operator updates the admin password on the Splunk Instance running on the Pod. At this point
+		the admin password on the secret mounted on SHC pod is different from the Splunk Instance running on it.
+		Since the operator utilizes the admin password retrieved from the secret mounted on a SHC pod to make
+		REST API calls to the Splunk instances running on SHC Pods, it results in unsuccessful authentication.
+		Update the admin password on secret mounted on SHC pod to ensure successful authentication.
+	*/
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
-		// Change admin password on all secrets mounted on pods to make sure that we want to stay in sync
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(mgr.c, mgr.cr, podSecretName)
 			if err != nil {
