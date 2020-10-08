@@ -103,7 +103,7 @@ spec:
 
 The following additional configuration parameters may be used for all Splunk
 Enterprise resources, including: `Standalone`, `LicenseMaster`,
-`SearchHeadCluster`, and `IndexerCluster`:
+`SearchHeadCluster`, `ClusterMaster` and `IndexerCluster`:
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
