@@ -235,7 +235,7 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 // SetStatefulSetOwnerRef sets owner references for statefulset
 func SetStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
 
-	statefulset, err := GetstatefulSetByName(client, cr, namespacedName)
+	statefulset, err := GetStatefulSetByName(client, namespacedName)
 	if err != nil {
 		return err
 	}
@@ -260,16 +260,15 @@ func SetStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.Meta
 	return nil
 }
 
-// GetstatefulSetByName retrieves current statefulset
-func GetstatefulSetByName(c splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*appsv1.StatefulSet, error) {
-	var currentStatefulset appsv1.StatefulSet
+// GetStatefulSetByName retrieves current statefulset
+func GetStatefulSetByName(c splcommon.ControllerClient, namespacedName types.NamespacedName) (*appsv1.StatefulSet, error) {
+	var statefulset appsv1.StatefulSet
 
-	err := c.Get(context.TODO(), namespacedName, &currentStatefulset)
-
+	err := c.Get(context.TODO(), namespacedName, &statefulset)
 	if err != nil {
 		// Didn't find it
 		return nil, err
 	}
 
-	return &currentStatefulset, nil
+	return &statefulset, nil
 }

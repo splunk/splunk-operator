@@ -201,12 +201,18 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 
 	//update podTemplate annotation with configMap resource version
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
-	monitoringConsoleConfigMap, _ = splctrl.GetConfigMap(client, namespacedName)
+	monitoringConsoleConfigMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		return nil, err
+	}
 	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
 	//set owner reference for splunk monitoring console statefulset
 	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-	_ = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
+	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
+	if err != nil {
+		return nil, err
+	}
 
 	return statefulSet, nil
 }
@@ -312,15 +318,15 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
 		for _, curr := range currentURLs {
-			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
-			if url.Name == "SPLUNK_MULTISITE_MASTER" {
-				delete(revised.Data, "SPLUNK_SITE")
-			}
 			//scale DOWN
 			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
 			} else if strings.Contains(curr, crName) && deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
+			}
+			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
+			if url.Name == "SPLUNK_SITE" && deleteCR {
+				delete(revised.Data, "SPLUNK_SITE")
 			}
 			if strings.HasPrefix(revised.Data[url.Name], ",") {
 				str := revised.Data[url.Name]

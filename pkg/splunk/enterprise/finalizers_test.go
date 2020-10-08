@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -80,6 +81,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		if cr.GetObjectKind().GroupVersionKind().Kind != "IndexerCluster" {
 			mockCalls["Update"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 			}
@@ -91,6 +94,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{ListOpts: listOptsB},
 			}
 			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -104,12 +108,12 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
 				{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 				{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
-				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 			}
 		} else {
 			mockCalls["Update"] = []spltest.MockFuncCall{
@@ -125,10 +129,12 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{ListOpts: listOptsB},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 			}
 			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -140,6 +146,17 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 
 	c := spltest.NewMockClient()
 	c.ListObj = &pvclist
+	statefulset := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	_, err := splctrl.ApplyStatefulSet(c, &statefulset)
+	if err != nil {
+		return
+	}
+
 	deleted, err := delete(cr, c)
 	if deleted != wantDeleted || err != nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)

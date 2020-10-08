@@ -84,23 +84,21 @@ func TestSetStatefulSetOwnerRef(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
-	//	current.OwnerReferences = nil
 
 	// Test existing owner reference
 	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for owner reference %s", current.GetName())
 	}
+
+	// Try adding same owner again
+	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for owner reference %s", current.GetName())
+	}
 }
 
-func TestGetstatefulSetByName(t *testing.T) {
-	cr := enterprisev1.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-
+func TestGetStatefulSetByName(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	current := appsv1.StatefulSet{
@@ -110,10 +108,13 @@ func TestGetstatefulSetByName(t *testing.T) {
 		},
 	}
 
-	_, _ = ApplyStatefulSet(c, &current)
+	_, err := ApplyStatefulSet(c, &current)
+	if err != nil {
+		return
+	}
 
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
-	_, err := GetstatefulSetByName(c, &cr, namespacedName)
+	_, err = GetStatefulSetByName(c, namespacedName)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
