@@ -232,7 +232,7 @@ var _ = Describe("Montioring Console test", func() {
 		})
 	})
 
-	Context("SearchHeadCluster and Standalone", func() {
+	XContext("SearchHeadCluster and Standalone", func() {
 		It("MC can configure SHC and Standalone instances in a namespace", func() {
 
 			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")

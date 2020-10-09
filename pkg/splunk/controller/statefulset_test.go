@@ -76,7 +76,7 @@ func TestSetStatefulSetOwnerRef(t *testing.T) {
 
 	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
 	if err.Error() != "NotFound" {
-		t.Errorf("Couldn't detect missing owner reference %s", current.GetName())
+		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 
 	// Create statefulset
@@ -88,13 +88,13 @@ func TestSetStatefulSetOwnerRef(t *testing.T) {
 	// Test existing owner reference
 	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
 	if err != nil {
-		t.Errorf("Couldn't set owner ref for owner reference %s", current.GetName())
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
 
 	// Try adding same owner again
 	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
 	if err != nil {
-		t.Errorf("Couldn't set owner ref for owner reference %s", current.GetName())
+		t.Errorf("Couldn't set owner ref for statefulset %s", current.GetName())
 	}
 }
 
