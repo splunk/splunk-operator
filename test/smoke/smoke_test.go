@@ -65,7 +65,7 @@ var _ = Describe("Smoke test", func() {
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -134,7 +134,7 @@ var _ = Describe("Smoke test", func() {
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -231,7 +231,7 @@ var _ = Describe("Smoke test", func() {
 			}, ConsistentDuration, ConsistentPollInterval).Should(Equal(splcommon.PhaseReady))
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 

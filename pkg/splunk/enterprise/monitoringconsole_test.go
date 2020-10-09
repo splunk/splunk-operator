@@ -17,17 +17,18 @@ package enterprise
 import (
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplyMonitoringConsole(t *testing.T) {
-	//create secrets, take dummy URL pass it to my function
 	standaloneCR := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -45,6 +46,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -57,8 +59,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5]}, "Update": {funcCalls[6], funcCalls[6]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[7]}, "List": {listmockCall[0]}}
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
@@ -66,19 +68,30 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	if err != nil {
 		t.Errorf(err.Error())
 	}
-
 	standaloneCR.Spec.Defaults = "defaults-yaml"
 	standaloneRevised := standaloneCR.DeepCopy()
 	standaloneRevised.Spec.Image = "splunk/test"
 	env := []corev1.EnvVar{
 		{Name: "A", Value: "a"},
 	}
+
+	statefulset := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	_, err = splctrl.ApplyStatefulSet(c, &statefulset)
+	if err != nil {
+		return
+	}
+
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterprisev1.Standalone)
 		err := ApplyMonitoringConsole(c, obj, obj.Spec.CommonSplunkSpec, env)
 		return err
 	}
-	spltest.ReconcileTester(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &standaloneCR, standaloneRevised, createCalls, updateCalls, reconcile, true, namespacescopedsecret, &statefulset)
 }
 
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
