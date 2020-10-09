@@ -18,6 +18,11 @@ deployments.
   - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
   - [Using an External License Master](#using-an-external-license-master)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
+  - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
+    - [Creating global kubernetes secret object](#creating-global-kubernetes-secret-object)
+    - [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object)
+    - [Updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
+    - [Deleting global kubernetes secret object](#deleting-global-kubernetes-secret-object)
 
 Please refer to the [Custom Resource Guide](CustomResources.md) for more
 information about the custom resources that you can use with the Splunk
@@ -39,6 +44,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 ```
 
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
 
 ### Indexer Clusters
 
@@ -219,6 +225,8 @@ then indexers, by defining and updating the docker image used by each IndexerClu
 This solution can also be used to build a [multisite cluster](MultisiteExamples.md)
 by defining a different zone affinity and site in each child IndexerCluster resource.
 
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
+
 ### Search Head Clusters
 
 To scale search performance and provide high availability, customers will
@@ -264,6 +272,7 @@ splunk-single-standalone-0         1/1     Running   0          11m
 Similar to indexer clusters, you can easily scale search head clusters
 by just patching the `replicas` parameter.
 
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions
 
 ### Cluster Services
 
@@ -291,16 +300,15 @@ automatically created for your deployment:
 kubectl port-forward service/splunk-example-search-head-service 8000
 ```
 
-Similar to other examples, the default admin password can be obtained
-from the secrets it generated for your deployment:
+Similar to other examples, the default administrator password can be obtained
+from the global kubernetes secrets object as described here:
 
 ```
-kubectl get secret splunk-example-search-head-secrets -o jsonpath='{.data.password}' | base64 --decode
+kubectl get secret splunk-`<namespace`>-secret -o jsonpath='{.data.password}' | base64 --decode
 ```
 
 Please see [Configuring Ingress](Ingress.md) for guidance on making your
 Splunk clusters accessible outside of Kubernetes.
-
 
 ### Creating a Cluster with Data Fabric Search (DFS)
 
@@ -341,6 +349,7 @@ spec:
 EOF
 ```
 
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions
 
 ### Cleaning Up
 
@@ -729,3 +738,78 @@ spec:
         secretName: splunk-cluster-master
   defaultsUrl: /mnt/cluster-master/default.yml
 ```
+## Managing global kubernetes secret object
+
+### Creating global kubernetes secret object
+
+Use the kubectl command to create the global kubernetes secret object:
+
+1. Verify the namespace. You can retrieve the namespace in the current context using `kubectl config view --minify --output 'jsonpath={..namespace}'`. Make a note of the output. If the command doesn't display an output it indicates that we are in the `default` namespace.  **NOTE**: If you already have a desired namespace, you can set current context to the same using the following command: `kubectl config set-context --current --namespace=<desired_namespace>`
+
+2. Gather the password values for the secret tokens you want to configure. To see all available secret tokens defined for the global kubernetes secret object, review [password management](PasswordManagement.md#splunk-secret-tokens-in-the-global-secret-object)
+
+3. Create a kubernetes secret object referencing the namespace. Example: splunk-`<desired_namespace`>-secret.
+In the example below, we are creating the global kubernetes secret object, defining the default administrator and pass4symmkey tokens, and passing in the values.  
+`kubectl create secret generic splunk-<desired_namespace>-secret --from-literal='password=<admin_password_value>' --from-literal='pass4symmkey=<pass4symmkey_value>'`
+
+### Reading global kubernetes secret object
+
+Once created, all secret tokens in the secret object are base64 encoded. To read the global kubernetes secret object you can use the following command:
+
+`kubectl get secret splunk-<desired_namespace>-secret -o yaml`
+
+A sample global kubernetes secret object with base64 encoded values looks like:
+
+```
+kubectl get secret splunk-default-secret -o yaml
+apiVersion: v1
+data:
+  hec_token: RUJFQTE4OTMtMDI4My03RkMzLThEQTAtQ0I1RTFGQzgzMzc1
+  idxc_secret: VUY5dWpHU1I4ZmpoZlJKaWNNT2VMSUNY
+  pass4SymmKey: dkFjelZSUzJjZzFWOHZPaVRGZk9hSnYy
+  password: OHFqcnV5WFhHRFJXU1hveDdZMzY5MGRs
+  shc_secret: ZEdHWG5Ob2dzTDhWNHlocDFiYWpiclo1
+kind: Secret
+metadata:
+  creationTimestamp: "2020-10-07T19:42:07Z"
+  name: splunk-default-secret
+  namespace: default
+  ownerReferences:
+  - apiVersion: enterprise.splunk.com/v1beta1
+    controller: false
+    kind: SearchHeadCluster
+    name: example-shc
+    uid: f7264daf-4a3e-4b44-adb7-af52f45b45fe
+  resourceVersion: "11433590"
+  selfLink: /api/v1/namespaces/default/secrets/splunk-default-secret
+  uid: d6c9a59c-1acf-4482-9990-cdb0eed56e87
+type: Opaque
+```
+
+The kubectl command line tool can be used to decode the splunk secret tokens with the following command:
+
+`kubectl get secret splunk-<desired_namespace>-secret -o go-template=' {{range $k,$v := .data}}{{printf "%s: " $k}}{{if not $v}}{{$v}}{{else}}{{$v | base64decode}}{{end}}{{"\n"}}{{end}}'`
+
+A sample global kubernetes secret object with tokens decoded looks like:
+
+```
+hec_token: EBEA1893-0283-7FC3-8DA0-CB5E1FC83375
+idxc_secret: UF9ujGSR8fjhfRJicMOeLICX
+pass4SymmKey: vAczVRS2cg1V8vOiTFfOaJv2
+password: 8qjruyXXGDRWSXox7Y3690dl
+shc_secret: dGGXnNogsL8V4yhp1bajbrZ5
+```
+
+### Updating global kubernetes secret object
+
+Use the kubectl command to update the global kubernetes secret object:
+
+1. Base64 encode the plain-text value of the secret token using the following command: `echo -n <plain_text_value> | base64`
+2. Obtain the key name for the secret token you are populating. The list of tokens is available in [password management](PasswordManagement.md#splunk-secret-tokens-in-the-global-secret-object). 
+3. Update the global kubernetes secret object using the key and the encoded value: `kubectl patch secret splunk-<desired_namespace>-secret -p='{"data":{"<key_name_for_secret_token>": "<encoded_value>"}}' -v=1`
+
+### Deleting global kubernetes secret object
+
+Use the kubectl command to delete the global kubernetes secret object:
+
+`kubectl delete secret splunk-<desired_namespace>-secret`
