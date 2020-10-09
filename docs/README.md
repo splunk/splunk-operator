@@ -131,6 +131,7 @@ Splunk Operator, run:
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
+kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
 kubectl delete -f http://tiny.cc/splunk-operator-install
@@ -145,7 +146,7 @@ deployment named “s1”:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1beta1
 kind: Standalone
 metadata:
   name: s1

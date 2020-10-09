@@ -123,7 +123,6 @@ If you need help, tag one of the active maintainers of this project in a post or
 ```
 # Active maintainers marked with (*)
 
-(*) Mike Dickey - admin
 (*) Sirish Mohan - admin
 (*) Gaurav Gupta
 (*) Subba Gontla

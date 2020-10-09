@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1alpha3
+package v1beta1
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +22,7 @@ import (
 
 const (
 	// APIVersion is a string representation of this API
-	APIVersion = "enterprise.splunk.com/v1alpha3"
+	APIVersion = "enterprise.splunk.com/v1beta1"
 )
 
 // default all fields to being optional
