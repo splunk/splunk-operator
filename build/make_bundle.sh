@@ -5,7 +5,7 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
-OLD_VERSIONS="v1alpha3"
+OLD_VERSIONS="v1alpha3 v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
