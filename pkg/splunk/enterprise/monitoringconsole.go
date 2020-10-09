@@ -97,6 +97,13 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	_, err = mgr.Update(client, statefulset, 1)
+	if err != nil {
+		return err
+	}
+
+	//set owner reference for splunk monitoring console statefulset
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 
 	return err
 }
@@ -206,13 +213,6 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 		return nil, err
 	}
 	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
-
-	//set owner reference for splunk monitoring console statefulset
-	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
-	if err != nil {
-		return nil, err
-	}
 
 	return statefulSet, nil
 }
