@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -380,6 +380,12 @@ func TestApplyShcSecret(t *testing.T) {
 			Status: 200,
 			Err:    nil,
 		},
+		{
+			Method: "POST",
+			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
+			Status: 200,
+			Err:    nil,
+		},
 	}
 
 	cr := enterprisev1.SearchHeadCluster{
@@ -391,7 +397,7 @@ func TestApplyShcSecret(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-
+	cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
 	mgr := &searchHeadClusterPodManager{

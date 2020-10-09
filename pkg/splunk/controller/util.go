@@ -113,6 +113,15 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 		result = true
 	}
 
+	// Check for changes in Init containers
+	if len(current.InitContainers) != len(revised.InitContainers) {
+		scopedLog.Info("Pod init containers  differ",
+			"current", len(current.InitContainers),
+			"revised", len(revised.InitContainers))
+		current.InitContainers = revised.InitContainers
+		result = true
+	}
+
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Containers) != len(revised.Containers) {
 		scopedLog.Info("Pod Container counts differ",
@@ -137,15 +146,6 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 					"current", current.Containers[idx].Ports,
 					"revised", revised.Containers[idx].Ports)
 				current.Containers[idx].Ports = revised.Containers[idx].Ports
-				result = true
-			}
-
-			// check Env
-			if splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
-				scopedLog.Info("Pod Container Env differ",
-					"current", current.Containers[idx].Env,
-					"revised", revised.Containers[idx].Env)
-				current.Containers[idx].Env = revised.Containers[idx].Env
 				result = true
 			}
 
