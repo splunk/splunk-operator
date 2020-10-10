@@ -77,11 +77,15 @@ peer.
 
 ```
 $ kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0         1/1     Running   0          29s
-splunk-example-indexer-0           1/1     Running   0          29s
-splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
+NAME                                       READY   STATUS    RESTARTS    AGE
+splunk-cm-cluster-master-0                  1/1     Running   0          29s
+splunk-default-monitoring-console-0         1/1     Running   0          15s
+splunk-example-indexer-0                    1/1     Running   0          29s
+splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
+Notes: 
+- The monitoring console pod is automatically created and pre-configured per namespace
+- The name of the monitoring console pod is of the format splunk-`namespace`-monitoring-console-0
 
 If you want more indexers, just update it to include a `replicas` parameter:
 
@@ -103,12 +107,13 @@ EOF
 
 ```
 $ kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0         1/1     Running   0          14m
-splunk-example-indexer-0           1/1     Running   0          14m
-splunk-example-indexer-1           1/1     Running   0          70s
-splunk-example-indexer-2           1/1     Running   0          70s
-splunk-operator-7c5599546c-wt4xl   1/1     Running   0          14h
+NAME                                         READY    STATUS    RESTARTS   AGE
+splunk-cm-cluster-master-0                    1/1     Running   0          14m
+splunk-default-monitoring-console-0           1/1     Running   0          13m
+splunk-example-indexer-0                      1/1     Running   0          14m
+splunk-example-indexer-1                      1/1     Running   0          70s
+splunk-example-indexer-2                      1/1     Running   0          70s
+splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
 You can now easily scale your indexer cluster by just patching `replicas`.
@@ -246,19 +251,20 @@ together (search head clusters require a minimum of 3 members):
 
 ```
 $ kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0         1/1     Running   0          53m
-splunk-example-deployer-0          0/1     Running   0          29s
-splunk-example-indexer-0           1/1     Running   0          53m
-splunk-example-indexer-1           1/1     Running   0          40m
-splunk-example-indexer-2           1/1     Running   0          40m
-splunk-example-indexer-3           1/1     Running   0          37m
-splunk-example-indexer-4           1/1     Running   0          37m
-splunk-example-search-head-0       0/1     Running   0          29s
-splunk-example-search-head-1       0/1     Running   0          29s
-splunk-example-search-head-2       0/1     Running   0          29s
-splunk-operator-7c5599546c-pmbc2   1/1     Running   0          12m
-splunk-single-standalone-0         1/1     Running   0          11m
+NAME                                        READY   STATUS    RESTARTS   AGE
+splunk-cm-cluster-master-0                   1/1     Running   0          53m
+splunk-default-monitoring-console-0          0/1     Running   0          52m
+splunk-example-deployer-0                    0/1     Running   0          29s
+splunk-example-indexer-0                     1/1     Running   0          53m
+splunk-example-indexer-1                     1/1     Running   0          40m
+splunk-example-indexer-2                     1/1     Running   0          40m
+splunk-example-indexer-3                     1/1     Running   0          37m
+splunk-example-indexer-4                     1/1     Running   0          37m
+splunk-example-search-head-0                 0/1     Running   0          29s
+splunk-example-search-head-1                 0/1     Running   0          29s
+splunk-example-search-head-2                 0/1     Running   0          29s
+splunk-operator-7c5599546c-pmbc2             1/1     Running   0          12m
+splunk-single-standalone-0                   1/1     Running   0          11m
 ```
 
 Similar to indexer clusters, you can easily scale search head clusters
@@ -272,15 +278,17 @@ resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
-NAME                                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
-splunk-cm-cluster-master-service        ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
-splunk-cm-indexer-service               ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
-splunk-example-deployer-service         ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
-splunk-example-indexer-headless         ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
-splunk-example-indexer-service          ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
-splunk-example-search-head-headless     ClusterIP   None             <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
-splunk-example-search-head-service      ClusterIP   10.100.37.53     <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
-splunk-operator-metrics                 ClusterIP   10.100.181.146   <none>        8383/TCP,8686/TCP                                11d
+NAME                                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
+splunk-cm-cluster-master-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
+splunk-cm-indexer-service                                   ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
+service/splunk-default-monitoring-console-headless          ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
+service/splunk-default-monitoring-console-service           ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
+splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
+splunk-example-indexer-headless                             ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
+splunk-example-indexer-service                              ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
+splunk-example-search-head-headless                         ClusterIP   None             <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
+splunk-example-search-head-service                          ClusterIP   10.100.37.53     <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
+splunk-operator-metrics                                     ClusterIP   10.100.181.146   <none>        8383/TCP,8686/TCP                                11d
 ```
 
 To login to your new Splunk Enterprise cluster, you can forward port 8000
