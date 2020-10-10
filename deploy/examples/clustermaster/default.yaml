@@ -1,5 +1,5 @@
 apiVersion: enterprise.splunk.com/v1beta1
-kind: IndexerCluster
+kind: ClusterMaster
 metadata:
   name: test
 spec: {}
