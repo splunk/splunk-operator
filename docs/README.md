@@ -39,11 +39,6 @@ and considered to be a "beta" quality release. We expect significant
 modifications will be made prior to its general availability, it is not
 covered by support, and we strongly discourage using it in production.*
 
-We are working to resolve the following in future releases:
-
-* The Deployment Monitoring Console is not currently configured properly
-for new deployments
-
 Please see the [Change Log](ChangeLog.md) for a history of changes made in
 previous releases.
 
@@ -165,9 +160,10 @@ for the first time), you should see a new pod running in your cluster:
 
 ```
 $ kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-operator-7c5599546c-wt4xl   1/1     Running   0          11h
-splunk-s1-standalone-0             0/1     Running   0          45s
+NAME                                   READY   STATUS    RESTARTS   AGE
+splunk-operator-7c5599546c-wt4xl        1/1    Running   0          11h
+splunk-default-monitoring-console-0     1/1    Running   0          30s
+splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
 By default, an admin user password will be automatically generated for your 
