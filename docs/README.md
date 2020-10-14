@@ -70,7 +70,7 @@ The Splunk Operator requires three docker images to be present or available
 to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
-* `splunk/splunk:8.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.0 or later)
+* `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
 * `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
@@ -106,7 +106,7 @@ special considerations, including the use of private image registries,
 installation at cluster scope, and installing as a regular user (who is
 not a Kubernetes cluster administrator).
 
-*Note: The `splunk/splunk:8.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),

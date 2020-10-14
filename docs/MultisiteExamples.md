@@ -55,7 +55,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  image: "splunk/splunk:8.0.4"
+  image: "splunk/splunk:8.1.0"
   defaults: |-
     splunk:
       site: site1
@@ -86,7 +86,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 2
-  image: "splunk/splunk:8.0.4"
+  image: "splunk/splunk:8.1.0"
   clusterMasterRef:
     name: example
   defaults: |-
@@ -131,7 +131,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 3
-  image: "splunk/splunk:8.0.4"
+  image: "splunk/splunk:8.1.0"
   clusterMasterRef:
     name: example
   defaults: |-

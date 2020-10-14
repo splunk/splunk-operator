@@ -1,6 +1,7 @@
 # Splunk Operator for Kubernetes Change Log
 
 ## 0.2.0 Beta (2020-10-15)
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later.
 
 * The API has been updated to v1beta1, with one new Custom Resource Definition added: ClusterMaster. Refer the revised [Custom Resources](CustomResources.md) and [Examples](Examples.md) documentation for details on all the changes. This is a major update and is not backward-compatible. You will have to completely remove any older versions, and any resources managed by the operator, before upgrading to this release.
 
