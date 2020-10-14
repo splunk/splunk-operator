@@ -556,3 +556,11 @@ func TestRestartSplunk(t *testing.T) {
 	}
 	splunkClientTester(t, "TestRestartSplunk", 200, "", wantRequest, test)
 }
+
+func TestRemoveSearchPeers(t *testing.T) {
+	wantRequest, _ := http.NewRequest("DELETE", "https://localhost:8089/servicesNS/-/search/search/distributed/peers/a:8089", nil)
+	test := func(c SplunkClient) error {
+		return c.RemoveSearchPeers("a", false)
+	}
+	splunkClientTester(t, "TestRestartSplunk", 200, "", wantRequest, test)
+}

@@ -945,3 +945,17 @@ func (c *SplunkClient) RestartSplunk() error {
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
 }
+
+// RemoveSearchPeers updates etc/system/local/distsearch.conf
+func (c *SplunkClient) RemoveSearchPeers(deletedPeers string, mock bool) error {
+	if mock {
+		return nil
+	}
+	endpoint := fmt.Sprintf("%s/servicesNS/-/search/search/distributed/peers/%s:8089", c.ManagementURI, deletedPeers)
+	request, err := http.NewRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200, 404}
+	return c.Do(request, expectedStatus, nil)
+}

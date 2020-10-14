@@ -93,9 +93,13 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//check what peers are deleted and update distsearch.conf on monitoring console pod
 	if len(deletedPeers) > 0 {
-		err = RemoveSearchPeers(client, cr, spec, deletedPeers)
-		if err != nil {
-			return err
+		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
+		c := mgr.getMonitoringConsoleClient(cr)
+		for i := 0; i < len(deletedPeers); i++ {
+			err = c.RemoveSearchPeers(deletedPeers[i], spec.Mock)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -373,14 +377,18 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
 		for _, curr := range currentURLs {
-			//scale DOWN
-			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
-				deletedPeers = append(deletedPeers, curr)
-			} else if strings.Contains(curr, crName) && deleteCR {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
-				if url.Name != "SPLUNK_MULTISITE_MASTER" {
-					deletedPeers = strings.Split(url.Value, ",")
+			if strings.Contains(curr, crName) {
+				if deleteCR {
+					revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
+					if url.Name != "SPLUNK_MULTISITE_MASTER" && url.Name != "SPLUNK_DEPLOYER_URL" && url.Name != "SPLUNK_SEARCH_HEAD_CAPTAIN_URL" {
+						deletedPeersTemp := strings.Split(url.Value, ",")
+						for i := 0; i < len(deletedPeersTemp); i++ {
+							deletedPeers = append(deletedPeers, deletedPeersTemp[i])
+						}
+					}
+				} else if !strings.Contains(url.Value, curr) {
+					revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
+					deletedPeers = append(deletedPeers, curr)
 				}
 			}
 			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
@@ -404,26 +412,5 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
-
 	return deletedPeers
-}
-
-//RemoveSearchPeers removes deleted search peers and updates etc/system/local/distsearch.conf
-func RemoveSearchPeers(c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, deletedPeers []string) error {
-	cmPodName := fmt.Sprintf("splunk-%s-monitoring-console-0", cr.GetNamespace())
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, cmPodName, cr.GetNamespace(), "password")
-	if err != nil {
-		return err
-	}
-
-	for i := 0; i < len(deletedPeers); i++ {
-		command := fmt.Sprintf("/opt/splunk/bin/splunk remove search-server %s:8089 -auth admin:%s", deletedPeers[i], adminPwd)
-		_, _, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
-		if err != nil {
-			if !spec.Mock {
-				return err
-			}
-		}
-	}
-	return err
 }

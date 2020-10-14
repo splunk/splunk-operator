@@ -205,39 +205,3 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
 }
-
-func TestRemoveSearchPeers(t *testing.T) {
-	deletedPeers := []string{"a", "b"}
-	cr := enterprisev1.Standalone{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Standalone",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-0",
-			Namespace: "test",
-			Labels: map[string]string{
-				"controller-revision-hash": "v1",
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{Ready: true},
-			},
-		},
-	}
-
-	c := spltest.NewMockClient()
-	c.AddObject(pod)
-	err := RemoveSearchPeers(c, &cr, cr.Spec.CommonSplunkSpec, deletedPeers)
-	if err != nil {
-		return
-	}
-}
