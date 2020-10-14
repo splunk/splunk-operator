@@ -34,6 +34,7 @@ import (
 
 // ApplyMonitoringConsole creates the statefulset for monitoring console statefulset of Splunk Enterprise.
 func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
+	var deletedPeers []string
 	secrets, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
@@ -85,9 +86,17 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		}
 	}
 
-	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	_, deletedPeers, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
 	if err != nil {
 		return err
+	}
+
+	//check what peers are deleted and update distsearch.conf on monitoring console pod
+	if len(deletedPeers) > 0 {
+		err = RemoveSearchPeers(client, cr, spec, deletedPeers)
+		if err != nil {
+			return err
+		}
 	}
 
 	statefulset, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
@@ -198,6 +207,50 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 		},
 	}
 
+	// update template to include storage for etc and var volumes
+	if spec.EphemeralStorage {
+		// add ephemeral volumes to the splunk pod for etc and opt
+		emptyVolumeSource := corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{Name: "mnt-splunk-etc", VolumeSource: emptyVolumeSource},
+			{Name: "mnt-splunk-var", VolumeSource: emptyVolumeSource},
+		}
+
+		// add volume mounts to splunk container for the ephemeral volumes
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "mnt-splunk-etc",
+				MountPath: "/opt/splunk/etc",
+			},
+			{
+				Name:      "mnt-splunk-var",
+				MountPath: "/opt/splunk/var",
+			},
+		}
+
+	} else {
+		// prepare and append persistent volume claims if storage is not ephemeral
+		var err error
+		statefulSet.Spec.VolumeClaimTemplates, err = getSplunkVolumeClaims(cr, spec, labels)
+		if err != nil {
+			return nil, err
+		}
+
+		// add volume mounts to splunk container for the PVCs
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "pvc-etc",
+				MountPath: "/opt/splunk/etc",
+			},
+			{
+				Name:      "pvc-var",
+				MountPath: "/opt/splunk/var",
+			},
+		}
+	}
+
 	env := []corev1.EnvVar{}
 
 	// append labels and annotations from parent
@@ -218,9 +271,10 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, []string, error) {
 
 	var current corev1.ConfigMap
+	var deletedPeers []string
 	current.Data = make(map[string]string)
 
 	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
@@ -232,16 +286,16 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		if addNewURLs {
 			AddURLsConfigMap(revised, crName, newURLs)
 		} else {
-			DeleteURLsConfigMap(revised, crName, newURLs, true)
+			deletedPeers = DeleteURLsConfigMap(revised, crName, newURLs, true)
 		}
 		if !reflect.DeepEqual(revised.Data, current.Data) {
 			current.Data = revised.Data
 			err = splutil.UpdateResource(client, &current)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
-		return &current, nil
+		return &current, deletedPeers, nil
 	}
 
 	//If no configMap and deletion of CR is requested then create a empty configMap
@@ -267,10 +321,10 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 
 	err = splutil.CreateResource(client, &current)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &current, nil
+	return &current, deletedPeers, nil
 }
 
 //AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
@@ -313,7 +367,8 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 }
 
 //DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
-func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
+func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) []string {
+	var deletedPeers []string
 	for _, url := range newURLs {
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
@@ -321,8 +376,12 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			//scale DOWN
 			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
+				deletedPeers = append(deletedPeers, curr)
 			} else if strings.Contains(curr, crName) && deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
+				if url.Name != "SPLUNK_MULTISITE_MASTER" {
+					deletedPeers = strings.Split(url.Value, ",")
+				}
 			}
 			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
 			if url.Name == "SPLUNK_SITE" && deleteCR {
@@ -345,4 +404,26 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
+
+	return deletedPeers
+}
+
+//RemoveSearchPeers removes deleted search peers and updates etc/system/local/distsearch.conf
+func RemoveSearchPeers(c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, deletedPeers []string) error {
+	cmPodName := fmt.Sprintf("splunk-%s-monitoring-console-0", cr.GetNamespace())
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, cmPodName, cr.GetNamespace(), "password")
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(deletedPeers); i++ {
+		command := fmt.Sprintf("/opt/splunk/bin/splunk remove search-server %s:8089 -auth admin:%s", deletedPeers[i], adminPwd)
+		_, _, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+		if err != nil {
+			if !spec.Mock {
+				return err
+			}
+		}
+	}
+	return err
 }
