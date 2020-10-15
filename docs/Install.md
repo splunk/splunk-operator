@@ -78,7 +78,7 @@ EOF
 
 ## Private Registries
 
-*Note: The `splunk/splunk:8.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md), and
 following these instructions before creating any large Splunk deployments.*
@@ -92,7 +92,7 @@ it to a private registry, you will need to edit the image parameter in the
 image: splunk/splunk-operator
 ```
 
-If you are using a private registry for the `splunk/splunk:8.0` and
+If you are using a private registry for the `splunk/splunk:8.1.0` and
 `splunk/spark` (used by DFS) images, you should modify the
 `RELATED_IMAGE_SPLUNK_ENTERPRISE` and `RELATED_IMAGE_SPLUNK_SPARK`
 environment variables in `splunk-operator.yaml` to point
@@ -100,7 +100,7 @@ to the appropriate locations.
 
 ```yaml
 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-  value: "splunk/splunk:8.0"
+  value: "splunk/splunk:8.1.0"
 - name: RELATED_IMAGE_SPLUNK_SPARK
   value: "splunk/spark"
 ```
