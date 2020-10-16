@@ -473,8 +473,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	// Add custom volumes to splunk containers
-	if spec.Volumes != nil {
+	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
+	if spec.Volumes != nil && instanceType != SplunkMonitoringConsole {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
 			for v := range spec.Volumes {
