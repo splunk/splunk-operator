@@ -55,7 +55,6 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  image: "splunk/splunk:8.1.0"
   defaults: |-
     splunk:
       site: site1
@@ -71,6 +70,15 @@ spec:
       # Apps defined here are deployed to the indexers of all the sites
       apps_location:
         - "https://example.com/splunk-apps/app3.tgz"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: failure-domain.beta.kubernetes.io/zone
+            operator: In
+            values:
+            - zone-1a
 EOF
 ```
 
@@ -86,7 +94,6 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 2
-  image: "splunk/splunk:8.1.0"
   clusterMasterRef:
     name: example
   defaults: |-
@@ -106,6 +113,7 @@ EOF
 ```
 Create IndexerCluster CR for each required site with zone affinity specified as needed
 
+Note: The value of label for zone i.e. `zone-1a` for label `failure-domain.beta.kubernetes.io/zone` is specific to each cloud provider and should be changed based on the cloud provider you are using.
 
 ## Connecting a search-head cluster to a multisite indexer-cluster
 
