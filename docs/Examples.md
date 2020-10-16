@@ -12,6 +12,7 @@ deployments.
     - [Cluster Services](#cluster-services)
     - [Creating a Cluster with Data Fabric Search (DFS)](#creating-a-cluster-with-data-fabric-search-dfs)
     - [Cleaning Up](#cleaning-up)
+  - [Smartstore Index Management](#smartstore-index-management)
   - [Using Default Settings](#using-default-settings)
   - [Installing Splunk Apps](#installing-splunk-apps)
   - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
@@ -379,6 +380,9 @@ kubectl delete idc example
 kubectl delete clustermaster cm
 ```
 
+## SmartStore Index Management
+
+Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. For further details, see [SmartStore Resource Guide](SmartStore.md).
 
 ## Using Default Settings
 
