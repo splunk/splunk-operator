@@ -6,7 +6,7 @@ deployments.
 
   - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
     - [Indexer Clusters](#indexer-clusters)
-      - [Cluster Master part](#cluster-master-part)
+      - [Cluster Master](#cluster-master)
       - [Indexer part](#indexer-part)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
