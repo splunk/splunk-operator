@@ -95,7 +95,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f http://tiny.cc/splunk-operator-install
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -129,7 +129,7 @@ kubectl delete searchheadclusters --all
 kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
-kubectl delete -f http://tiny.cc/splunk-operator-install
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 
