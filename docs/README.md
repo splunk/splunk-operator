@@ -166,12 +166,7 @@ splunk-default-monitoring-console-0     1/1    Running   0          30s
 splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
-By default, an admin user password will be automatically generated for your 
-deployment. You can get the password by running:
-
-```
-kubectl get secret splunk-s1-standalone-secrets -o jsonpath='{.data.password}' | base64 --decode
-```
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
 
 *Note: if your shell prints a `%` at the end, leave that out when you
 copy the output.*
