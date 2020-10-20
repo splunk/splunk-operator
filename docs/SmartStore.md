@@ -35,10 +35,10 @@ spec:
   replicas: 1
   smartstore:
     volumes:
-    - name: <remote_volume_name>
-         path: <remote_volume_path>
-         endpoint: https://s3-<region>.amazonaws.com
-         secretRef: <secret_store_obj>
+      - name: <remote_volume_name>
+        path: <remote_volume_path>
+        endpoint: https://s3-<region>.amazonaws.com
+        secretRef: <secret_store_obj>
     indexes:
       - name: <index_name_1>
         remotePath: $_index_name
@@ -78,10 +78,10 @@ metadata:
 spec:
   smartstore:
     volumes:
-    - name: <remote_volume_name>
-         path: <remote_volume_path>
-         endpoint: https://s3-<region>.amazonaws.com
-         secretRef: <secret_store_obj>
+      - name: <remote_volume_name>
+        path: <remote_volume_path>
+        endpoint: https://s3-<region>.amazonaws.com
+        secretRef: <secret_store_obj>
     indexes:
       - name: <index_name_1>
         remotePath: $_index_name
