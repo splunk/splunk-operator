@@ -31,19 +31,24 @@ func init() {
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
 func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) error {
-	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind,
+	var objectKind string
+	objectKind = cr.GetObjectKind().GroupVersionKind().Kind
+
+	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var component string
-	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	switch objectKind {
 	case "Standalone":
 		component = "standalone"
 	case "LicenseMaster":
 		component = "license-master"
 	case "SearchHeadCluster":
 		component = "search-head"
-	case "IndexerCluster", "ClusterMaster":
+	case "IndexerCluster":
 		component = "indexer"
+	case "ClusterMaster":
+		component = "cluster-master"
 	default:
 		scopedLog.Info("Skipping PVC removal")
 		return nil
@@ -51,7 +56,7 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 
 	// get list of PVCs for this cluster
 	labels := map[string]string{
-		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),
