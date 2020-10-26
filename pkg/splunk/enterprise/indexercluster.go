@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -73,6 +75,15 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
+	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	// Check if we have configured enough number(<= RF) of replicas
+	if !mgr.cr.Spec.Mock {
+		err = mgr.verifyRFPeers(client)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		DeleteOwnerReferencesForResources(client, cr, nil)
@@ -114,7 +125,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	if err != nil {
 		return result, err
 	}
-	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -412,6 +423,40 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+}
+
+func getSiteRepFactor(siteRepFactor string) int32 {
+	//re := regexp.MustCompile(".*total:(?P<rf>.*) }")
+	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
+	match := re.FindStringSubmatch(siteRepFactor)
+	siteRF, _ := strconv.Atoi(match[1])
+	return int32(siteRF)
+}
+
+// verifyRFPeers verifies the number of peers specified in the replicas section
+// of IndexerClsuster CR. If it is less than RF, than we se it to RF.
+func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient) error {
+	if mgr.c == nil {
+		mgr.c = c
+	}
+	cm := mgr.getClusterMasterClient()
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return fmt.Errorf("Could not get cluster info from cluster master")
+	}
+	var replicationFactor int32
+	// if it is a multisite indexer cluster, check site_replication_factor
+	if clusterInfo.MultiSite == "true" {
+		replicationFactor = getSiteRepFactor(clusterInfo.SiteReplicationFactor)
+	} else { // for single site, check replication factor
+		replicationFactor = clusterInfo.ReplicationFactor
+	}
+
+	if mgr.cr.Spec.Replicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
+		mgr.cr.Spec.Replicas = replicationFactor
+	}
+	return nil
 }
 
 // updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
