@@ -11,7 +11,7 @@ Splunk Operator (as described below), please download a local copy of
 the installation YAML and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-install
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 
@@ -23,14 +23,14 @@ installed by regular users within their own namespaces. If you are not an
 administrator, you can have someone else create these objects for you by running
 
 ```
-kubectl apply -f http://tiny.cc/splunk-operator-crds
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-crds.yaml
 ```
 
 You should then be able download and use the following YAML to install the
 operator within your own namespace:
 
 ```
-wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-noadmin
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-noadmin.yaml
 kubectl config set-context --current --namespace=<NAMESPACE>
 kubectl apply -f splunk-operator.yaml
 ```
@@ -43,7 +43,7 @@ objects for all the namespaces of your cluster, you can use the alternative
 cluster scope installation YAML:
 
 ```
-wget -O splunk-operator.yaml http://tiny.cc/splunk-operator-cluster
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-cluster.yaml
 ```
 
 When running at cluster scope, you will need to bind the
@@ -78,7 +78,7 @@ EOF
 
 ## Private Registries
 
-*Note: The `splunk/splunk:8.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md), and
 following these instructions before creating any large Splunk deployments.*
@@ -92,7 +92,7 @@ it to a private registry, you will need to edit the image parameter in the
 image: splunk/splunk-operator
 ```
 
-If you are using a private registry for the `splunk/splunk:8.0` and
+If you are using a private registry for the `splunk/splunk:8.1.0` and
 `splunk/spark` (used by DFS) images, you should modify the
 `RELATED_IMAGE_SPLUNK_ENTERPRISE` and `RELATED_IMAGE_SPLUNK_SPARK`
 environment variables in `splunk-operator.yaml` to point
@@ -100,7 +100,7 @@ to the appropriate locations.
 
 ```yaml
 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-  value: "splunk/splunk:8.0"
+  value: "splunk/splunk:8.1.0"
 - name: RELATED_IMAGE_SPLUNK_SPARK
   value: "splunk/spark"
 ```
@@ -144,6 +144,7 @@ Splunk Operator, run:
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
+kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
 kubectl delete -f splunk-operator.yaml

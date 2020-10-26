@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -232,7 +232,7 @@ var _ = Describe("Montioring Console test", func() {
 		})
 	})
 
-	Context("SearchHeadCluster and Standalone", func() {
+	XContext("SearchHeadCluster and Standalone", func() {
 		It("MC can configure SHC and Standalone instances in a namespace", func() {
 
 			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")

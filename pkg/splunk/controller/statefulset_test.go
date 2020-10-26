@@ -19,8 +19,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 )
 
 func TestApplyStatefulSet(t *testing.T) {
@@ -51,4 +55,67 @@ func TestDefaultStatefulSetPodManager(t *testing.T) {
 	mgr := DefaultStatefulSetPodManager{}
 	method := "DefaultStatefulSetPodManager.Update"
 	spltest.PodManagerTester(t, method, &mgr)
+}
+
+func TestSetStatefulSetOwnerRef(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+
+	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err.Error() != "NotFound" {
+		t.Errorf("Couldn't detect resource %s", current.GetName())
+	}
+
+	// Create statefulset
+	err = splutil.CreateResource(c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	// Test existing owner reference
+	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	// Try adding same owner again
+	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for statefulset %s", current.GetName())
+	}
+}
+
+func TestGetStatefulSetByName(t *testing.T) {
+	c := spltest.NewMockClient()
+
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+
+	_, err := ApplyStatefulSet(c, &current)
+	if err != nil {
+		return
+	}
+
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+	_, err = GetStatefulSetByName(c, namespacedName)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
 }

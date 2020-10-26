@@ -16,7 +16,7 @@ architectures is currently only available from the
 
 For other architectures, we recommend that you try out the
 [Splunk Operator for Kubernetes](https://splunk.github.io/splunk-operator/).
-This open source project is currently an “alpha,” and we welcome any
+This open source project is currently a “beta,” and we welcome any
 [feedback](https://github.com/splunk/splunk-operator/issues)
 on your requirements.
 

@@ -27,7 +27,7 @@ You can use the `storageClassName` parameter to specify the Storage Class you
 would like to use:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1beta1
 kind: Standalone
 metadata:
   name: example

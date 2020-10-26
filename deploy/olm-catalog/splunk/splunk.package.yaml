@@ -1,5 +1,5 @@
 channels:
 - currentCSV: splunk.v0.2.0
-  name: alpha
-defaultChannel: alpha
+  name: beta
+defaultChannel: beta
 packageName: splunk

@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1beta1
 kind: Spark
 metadata:
   name: test
