@@ -54,7 +54,7 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 		return nil
 	}
 
-	// get list of PVCs for this cluster
+	// get list of PVCs associated with this CR
 	labels := map[string]string{
 		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
 	}
