@@ -426,7 +426,6 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 }
 
 func getSiteRepFactor(siteRepFactor string) int32 {
-	//re := regexp.MustCompile(".*total:(?P<rf>.*) }")
 	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
 	match := re.FindStringSubmatch(siteRepFactor)
 	siteRF, _ := strconv.Atoi(match[1])
