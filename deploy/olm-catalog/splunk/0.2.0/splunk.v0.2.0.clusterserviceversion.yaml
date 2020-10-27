@@ -341,7 +341,7 @@ spec:
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:8.0.3-20200415
+                  value: docker.io/splunk/splunk:8.1.0
                 - name: RELATED_IMAGE_SPLUNK_SPARK
                   value: docker.io/splunk/spark:0.0.2
                 image: docker.io/splunk/splunk-operator:0.2.0
