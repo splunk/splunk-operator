@@ -79,8 +79,11 @@ spec:
 EOF
 ```
 
-This will automatically configure a cluster master with a single indexer
-peer.
+This will automatically configure a cluster with RF(replication_factor) number of indexer peers.
+
+NOTE: Whenever we try to specify `replicas` on IndexerCluster CR less than RF(as set on ClusterMaster),
+the operator will always scale the number of peers to either `replication_factor`(in case of single site indexer cluster)
+or to `origin` count in `site_replication_factor`(in case of multi-site indexer cluster).
 
 ```
 $ kubectl get pods
@@ -88,6 +91,8 @@ NAME                                       READY   STATUS    RESTARTS    AGE
 splunk-cm-cluster-master-0                  1/1     Running   0          29s
 splunk-default-monitoring-console-0         1/1     Running   0          15s
 splunk-example-indexer-0                    1/1     Running   0          29s
+splunk-example-indexer-1                    1/1     Running   0          29s
+splunk-example-indexer-2                    1/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
 Notes: 

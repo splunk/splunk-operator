@@ -425,7 +425,8 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
-func getSiteRepFactor(siteRepFactor string) int32 {
+// getSiteRepFactorOriginCount gets the origin count of the site_replication_factor
+func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
 	match := re.FindStringSubmatch(siteRepFactor)
 	siteRF, _ := strconv.Atoi(match[1])
@@ -446,7 +447,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient)
 	var replicationFactor int32
 	// if it is a multisite indexer cluster, check site_replication_factor
 	if clusterInfo.MultiSite == "true" {
-		replicationFactor = getSiteRepFactor(clusterInfo.SiteReplicationFactor)
+		replicationFactor = getSiteRepFactorOriginCount(clusterInfo.SiteReplicationFactor)
 	} else { // for single site, check replication factor
 		replicationFactor = clusterInfo.ReplicationFactor
 	}
