@@ -309,6 +309,8 @@ var _ = Describe("Smoke test", func() {
 				return siteIndexerStatus
 			}, deployment.GetTimeout(), PollInterval).Should(Equal(siteIndexerMap))
 
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 })
