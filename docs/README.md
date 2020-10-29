@@ -70,7 +70,7 @@ The Splunk Operator requires three docker images to be present or available
 to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
-* `splunk/splunk:8.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.0 or later)
+* `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
 * `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
@@ -95,7 +95,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f http://tiny.cc/splunk-operator-install
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -106,7 +106,7 @@ special considerations, including the use of private image registries,
 installation at cluster scope, and installing as a regular user (who is
 not a Kubernetes cluster administrator).
 
-*Note: The `splunk/splunk:8.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),
@@ -129,7 +129,7 @@ kubectl delete searchheadclusters --all
 kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
-kubectl delete -f http://tiny.cc/splunk-operator-install
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 
@@ -166,12 +166,7 @@ splunk-default-monitoring-console-0     1/1    Running   0          30s
 splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
-By default, an admin user password will be automatically generated for your 
-deployment. You can get the password by running:
-
-```
-kubectl get secret splunk-s1-standalone-secrets -o jsonpath='{.data.password}' | base64 --decode
-```
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
 
 *Note: if your shell prints a `%` at the end, leave that out when you
 copy the output.*
