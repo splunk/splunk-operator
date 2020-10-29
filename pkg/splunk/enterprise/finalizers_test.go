@@ -40,8 +40,10 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "license-master"
 	case "SearchHeadCluster":
 		component = "search-head"
-	case "IndexerCluster", "ClusterMaster":
+	case "IndexerCluster":
 		component = "indexer"
+	case "ClusterMaster":
+		component = "cluster-master"
 	}
 
 	labelsA := map[string]string{
@@ -49,7 +51,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
 	labelsB := map[string]string{
-		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
 	}
 	listOptsA := []client.ListOption{
 		client.InNamespace("test"),
@@ -127,20 +129,16 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 			}
 			mockCalls["List"] = []spltest.MockFuncCall{
-				{ListOpts: listOptsA},
 				{ListOpts: listOptsB},
 			}
 			mockCalls["Create"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 			}
 			mockCalls["Get"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 		}
@@ -175,12 +173,14 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 		component = "license-master"
 	case "SearchHeadCluster":
 		component = "search-head"
-	case "IndexerCluster", "ClusterMaster":
+	case "IndexerCluster":
 		component = "indexer"
+	case "ClusterMaster":
+		component = "cluster-master"
 	}
 
 	labels := map[string]string{
-		"app.kubernetes.io/part-of": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
 	}
 	listOpts := []client.ListOption{
 		client.InNamespace(cr.GetNamespace()),

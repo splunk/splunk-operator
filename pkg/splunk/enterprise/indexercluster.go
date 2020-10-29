@@ -75,11 +75,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
-		if err != nil {
-			return result, err
-		}
-
 		DeleteOwnerReferencesForResources(client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
