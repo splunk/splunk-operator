@@ -91,6 +91,13 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		return err
 	}
 
+	//set owner reference for splunk monitoring console configMap
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkMonitoringconsoleConfigMapName(cr.GetNamespace(), SplunkMonitoringConsole)}
+	err = splctrl.SetConfigMapOwnerRef(client, cr, namespacedName)
+	if err != nil {
+		return err
+	}
+
 	//check what peers are deleted and update distsearch.conf on monitoring console pod
 	if len(deletedPeers) > 0 {
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
@@ -115,7 +122,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	}
 
 	//set owner reference for splunk monitoring console statefulset
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 
 	return err
@@ -211,48 +218,23 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 		},
 	}
 
-	// update template to include storage for etc and var volumes
-	if spec.EphemeralStorage {
-		// add ephemeral volumes to the splunk pod for etc and opt
-		emptyVolumeSource := corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}
-		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{
-			{Name: "mnt-splunk-etc", VolumeSource: emptyVolumeSource},
-			{Name: "mnt-splunk-var", VolumeSource: emptyVolumeSource},
-		}
+	// prepare and append persistent volume claims if storage is not ephemeral
+	var err error
+	statefulSet.Spec.VolumeClaimTemplates, err = getSplunkVolumeClaims(cr, spec, labels)
+	if err != nil {
+		return nil, err
+	}
 
-		// add volume mounts to splunk container for the ephemeral volumes
-		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
-			{
-				Name:      "mnt-splunk-etc",
-				MountPath: "/opt/splunk/etc",
-			},
-			{
-				Name:      "mnt-splunk-var",
-				MountPath: "/opt/splunk/var",
-			},
-		}
-
-	} else {
-		// prepare and append persistent volume claims if storage is not ephemeral
-		var err error
-		statefulSet.Spec.VolumeClaimTemplates, err = getSplunkVolumeClaims(cr, spec, labels)
-		if err != nil {
-			return nil, err
-		}
-
-		// add volume mounts to splunk container for the PVCs
-		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
-			{
-				Name:      "pvc-etc",
-				MountPath: "/opt/splunk/etc",
-			},
-			{
-				Name:      "pvc-var",
-				MountPath: "/opt/splunk/var",
-			},
-		}
+	// add volume mounts to splunk container for the PVCs
+	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{
+			Name:      "pvc-etc",
+			MountPath: "/opt/splunk/etc",
+		},
+		{
+			Name:      "pvc-var",
+			MountPath: "/opt/splunk/var",
+		},
 	}
 
 	env := []corev1.EnvVar{}
@@ -265,7 +247,7 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 
 	//update podTemplate annotation with configMap resource version
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
-	monitoringConsoleConfigMap, err := splctrl.GetConfigMap(client, namespacedName)
+	monitoringConsoleConfigMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
 		return nil, err
 	}

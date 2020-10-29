@@ -19,8 +19,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplyConfigMap(t *testing.T) {
@@ -40,4 +43,70 @@ func TestApplyConfigMap(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
+}
+
+func TestSetConfigMapOwnerRef(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	current := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+
+	err := SetConfigMapOwnerRef(c, &cr, namespacedName)
+	if err.Error() != "NotFound" {
+		t.Errorf("Couldn't detect resource %s", current.GetName())
+	}
+
+	// Create configMap
+	err = splutil.CreateResource(c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	// Test existing owner reference
+	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	// Try adding same owner again
+	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for statefulset %s", current.GetName())
+	}
+}
+
+func TestGetConfigMap(t *testing.T) {
+	c := spltest.NewMockClient()
+
+	current := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	_, err := ApplyConfigMap(c, &current)
+	if err != nil {
+		return
+	}
+
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+	_, err = GetConfigMap(c, namespacedName)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
 }

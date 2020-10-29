@@ -57,6 +57,33 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 	return dataUpdated, err
 }
 
+// SetConfigMapOwnerRef sets owner references for configMap
+func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+	configMap, err := GetConfigMap(client, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	currentOwnerRef := configMap.GetOwnerReferences()
+	// Check if owner ref exists
+	for i := 0; i < len(currentOwnerRef); i++ {
+		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}
+	}
+
+	// Owner ref doesn't exist, update statefulset with owner references
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	// Update owner reference if needed
+	err = splutil.UpdateResource(client, configMap)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetConfigMap gets the ConfigMap resource in a given namespace
 func GetConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
