@@ -75,9 +75,20 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterMasterRef.Name,
+	}
+	masterIdxCluster := &enterprisev1.ClusterMaster{}
+	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
+	if err == nil {
+		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
+	} else {
+		cr.Status.ClusterMasterPhase = splcommon.PhaseError
+	}
 	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	// Check if we have configured enough number(<= RF) of replicas
-	if !mgr.cr.Spec.Mock {
+	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
 		err = mgr.verifyRFPeers(client)
 		if err != nil {
 			return result, err
@@ -106,18 +117,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		return result, err
-	}
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.ClusterMasterRef.Name,
-	}
-	masterIdxCluster := &enterprisev1.ClusterMaster{}
-	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
-	if err == nil {
-		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
-	} else {
-		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
 
 	// create or update statefulset for the indexers
