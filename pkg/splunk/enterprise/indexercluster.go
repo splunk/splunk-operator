@@ -433,7 +433,7 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 }
 
 // verifyRFPeers verifies the number of peers specified in the replicas section
-// of IndexerClsuster CR. If it is less than RF, than we se it to RF.
+// of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient) error {
 	if mgr.c == nil {
 		mgr.c = c
