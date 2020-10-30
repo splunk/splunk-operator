@@ -362,7 +362,7 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			if strings.Contains(curr, crName) {
 				if deleteCR {
 					revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
-					if url.Name != "SPLUNK_MULTISITE_MASTER" && url.Name != "SPLUNK_DEPLOYER_URL" && url.Name != "SPLUNK_SEARCH_HEAD_CAPTAIN_URL" {
+					if url.Name != "SPLUNK_MULTISITE_MASTER" && url.Name != "SPLUNK_DEPLOYER_URL" && url.Name != "SPLUNK_SEARCH_HEAD_CAPTAIN_URL" && url.Name != "SPLUNK_SITE" {
 						deletedPeersTemp := strings.Split(url.Value, ",")
 						for i := 0; i < len(deletedPeersTemp); i++ {
 							deletedPeers = append(deletedPeers, deletedPeersTemp[i])
