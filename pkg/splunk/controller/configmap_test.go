@@ -66,19 +66,19 @@ func TestSetConfigMapOwnerRef(t *testing.T) {
 
 	err := SetConfigMapOwnerRef(c, &cr, namespacedName)
 	if err.Error() != "NotFound" {
-		t.Errorf("Couldn't detect resource %s", current.GetName())
+		t.Errorf("Found resource before creating it %s", current.GetName())
 	}
 
 	// Create configMap
 	err = splutil.CreateResource(c, &current)
 	if err != nil {
-		t.Errorf("Failed to create owner reference  %s", current.GetName())
+		t.Errorf("Failed to create resource %s", current.GetName())
 	}
 
 	// Test existing owner reference
 	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
 	if err != nil {
-		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+		t.Errorf("Couldn't set owner ref for configMap %s", current.GetName())
 	}
 
 	// Try adding same owner again
@@ -101,7 +101,7 @@ func TestGetConfigMap(t *testing.T) {
 
 	_, err := ApplyConfigMap(c, &current)
 	if err != nil {
-		return
+		t.Errorf(err.Error())
 	}
 
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}

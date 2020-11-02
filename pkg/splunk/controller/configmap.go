@@ -75,13 +75,7 @@ func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaOb
 	// Owner ref doesn't exist, update statefulset with owner references
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
-	// Update owner reference if needed
-	err = splutil.UpdateResource(client, configMap)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return splutil.UpdateResource(client, configMap)
 }
 
 // GetConfigMap gets the ConfigMap resource in a given namespace
