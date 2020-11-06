@@ -428,7 +428,7 @@ func TestGetVersionedSecretVersion(t *testing.T) {
 
 	// Negative testing with non-integer version
 	for testVersion := 0; testVersion < 10; testVersion++ {
-		testSecretName = splcommon.GetVersionedSecretName(versionedSecretIdentifier, string('A'-1+testVersion))
+		testSecretName = splcommon.GetVersionedSecretName(versionedSecretIdentifier, string(rune('A'-1+testVersion)))
 		_, err := GetVersionedSecretVersion(testSecretName, versionedSecretIdentifier)
 		if err.Error() != nonIntegerVersionError {
 			t.Errorf("Failed to detect incorrect versioning")
