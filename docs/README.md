@@ -45,20 +45,11 @@ previous releases.
 
 ## Prerequisites for the Splunk Operator
 
-We have tested basic functionality of the Splunk Operator with the following:
-
-* [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/) (EKS)
-* [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine/) (GKE)
-* [Azure Kubernetes Service](https://azure.microsoft.com/en-us/services/kubernetes-service/) (AKS)
-* [Red Hat OpenShift](https://www.openshift.com/) (4.1)
-* [Docker Enterprise Edition](https://docs.docker.com/ee/) (3.1)
-* [Open Source Kubernetes](https://kubernetes.io/) (1.15.1)
-
 While we are only able to test and support a small subset of configurations,
 the Splunk Operator should work with any CNCF certified distribution of
 Kubernetes, version 1.12 or later. Setting up, configuring and managing
 Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
-of support. For evaluation, we recommend using EKS or GKE.
+of support. Please submit bugs to https://github.com/splunk/splunk-operator/issues.
 
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
