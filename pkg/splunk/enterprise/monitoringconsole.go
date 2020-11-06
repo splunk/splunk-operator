@@ -66,9 +66,14 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//by default assume we are adding new instances in the monitoring console configMap
 	addNewURLs := true
-
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
 		addNewURLs = false
+		//explicit removal of owners for MC
+		_, err = splctrl.RemoveStatefulSetOwnerRef(client, cr, namespacedName)
+		if err != nil {
+			return err
+		}
 	}
 
 	//get cluster info from cluster master
@@ -102,7 +107,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	}
 
 	//set owner reference for splunk monitoring console statefulset
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 
 	return err

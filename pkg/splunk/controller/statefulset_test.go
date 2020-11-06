@@ -119,3 +119,39 @@ func TestGetStatefulSetByName(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 }
+
+func TestRemoveStatefulSetOwnerRef(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+
+	// Create statefulset
+	err := splutil.CreateResource(c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	// Test existing owner reference
+	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	removedReferralCount, err := RemoveStatefulSetOwnerRef(c, &cr, namespacedName)
+
+	if removedReferralCount == 0 || err != nil {
+		t.Errorf("Didn't remove owner reference properly. %v", err)
+	}
+}

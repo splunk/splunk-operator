@@ -272,3 +272,33 @@ func GetStatefulSetByName(c splcommon.ControllerClient, namespacedName types.Nam
 
 	return &statefulset, nil
 }
+
+// RemoveStatefulSetOwnerRef removes the owner references for the statefulset 
+func RemoveStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (uint, error) {
+	var err error
+	var refCount uint = 0
+
+	statefulset, err := GetStatefulSetByName(client, namespacedName)
+	if err != nil {
+		return 0, err
+	}
+
+	ownerRef := statefulset.GetOwnerReferences()
+	for i := 0; i < len(ownerRef); i++ {
+		if reflect.DeepEqual(ownerRef[i], splcommon.AsOwner(cr, false)) {
+			ownerRef = append(ownerRef[:i], ownerRef[i+1:]...)
+			refCount++
+		}
+	}
+
+	// Update the modified owner reference list
+	if refCount > 0 {
+		statefulset.SetOwnerReferences(ownerRef)
+		err = splutil.UpdateResource(client, statefulset)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return refCount, nil
+}
