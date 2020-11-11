@@ -894,7 +894,9 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 
 //ClusterInfo is the struct for checking ClusterInfo
 type ClusterInfo struct {
-	MultiSite string `json:"multisite"`
+	MultiSite             string `json:"multisite"`
+	ReplicationFactor     int32  `json:"replication_factor"`
+	SiteReplicationFactor string `json:"site_replication_factor,omitempty"`
 }
 
 // GetClusterInfo queries the cluster about multi-site or single-site.

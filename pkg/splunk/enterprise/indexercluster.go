@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -73,6 +75,26 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterMasterRef.Name,
+	}
+	masterIdxCluster := &enterprisev1.ClusterMaster{}
+	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
+	if err == nil {
+		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
+	} else {
+		cr.Status.ClusterMasterPhase = splcommon.PhaseError
+	}
+	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	// Check if we have configured enough number(<= RF) of replicas
+	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
+		err = mgr.verifyRFPeers(client)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		DeleteOwnerReferencesForResources(client, cr, nil)
@@ -97,24 +119,12 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		return result, err
 	}
 
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.ClusterMasterRef.Name,
-	}
-	masterIdxCluster := &enterprisev1.ClusterMaster{}
-	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
-	if err == nil {
-		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
-	} else {
-		cr.Status.ClusterMasterPhase = splcommon.PhaseError
-	}
-
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(client, cr)
 	if err != nil {
 		return result, err
 	}
-	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -278,12 +288,20 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 
 // Update for indexerClusterPodManager handles all updates for a statefulset of indexers
 func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
+
+	var err error
+	//Don't even try to create a statefulset and secret if CM is not ready yet.
+	if mgr.cr.Status.ClusterMasterPhase != splcommon.PhaseReady {
+		mgr.log.Error(err, "Cluster Master is not ready yet")
+		return splcommon.PhaseError, err
+	}
+
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
 	}
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(mgr.c, statefulSet)
+	_, err = splctrl.ApplyStatefulSet(mgr.c, statefulSet)
 	if err != nil {
 		return splcommon.PhaseError, err
 	}
@@ -412,6 +430,40 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+}
+
+// getSiteRepFactorOriginCount gets the origin count of the site_replication_factor
+func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
+	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
+	match := re.FindStringSubmatch(siteRepFactor)
+	siteRF, _ := strconv.Atoi(match[1])
+	return int32(siteRF)
+}
+
+// verifyRFPeers verifies the number of peers specified in the replicas section
+// of IndexerClsuster CR. If it is less than RF, than we set it to RF.
+func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient) error {
+	if mgr.c == nil {
+		mgr.c = c
+	}
+	cm := mgr.getClusterMasterClient()
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return fmt.Errorf("Could not get cluster info from cluster master")
+	}
+	var replicationFactor int32
+	// if it is a multisite indexer cluster, check site_replication_factor
+	if clusterInfo.MultiSite == "true" {
+		replicationFactor = getSiteRepFactorOriginCount(clusterInfo.SiteReplicationFactor)
+	} else { // for single site, check replication factor
+		replicationFactor = clusterInfo.ReplicationFactor
+	}
+
+	if mgr.cr.Spec.Replicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
+		mgr.cr.Spec.Replicas = replicationFactor
+	}
+	return nil
 }
 
 // updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
