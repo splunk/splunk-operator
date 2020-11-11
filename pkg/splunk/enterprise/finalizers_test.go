@@ -139,6 +139,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1beta1.ClusterMaster-test-master1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 		}
