@@ -19,7 +19,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -29,26 +28,6 @@ import (
 )
 
 func init() {
-	spltest.MockObjectCopiers = append(spltest.MockObjectCopiers, enterpriseObjectCopier)
-}
-
-// enterpriseObjectCopier is used to copy enterprise runtime.Objects
-func enterpriseObjectCopier(dst, src runtime.Object) bool {
-	switch src.(type) {
-	case *enterprisev1.IndexerCluster:
-		*dst.(*enterprisev1.IndexerCluster) = *src.(*enterprisev1.IndexerCluster)
-	case *enterprisev1.LicenseMaster:
-		*dst.(*enterprisev1.LicenseMaster) = *src.(*enterprisev1.LicenseMaster)
-	case *enterprisev1.SearchHeadCluster:
-		*dst.(*enterprisev1.SearchHeadCluster) = *src.(*enterprisev1.SearchHeadCluster)
-	case *enterprisev1.Spark:
-		*dst.(*enterprisev1.Spark) = *src.(*enterprisev1.Spark)
-	case *enterprisev1.Standalone:
-		*dst.(*enterprisev1.Standalone) = *src.(*enterprisev1.Standalone)
-	default:
-		return false
-	}
-	return true
 }
 
 func TestApplySplunkConfig(t *testing.T) {

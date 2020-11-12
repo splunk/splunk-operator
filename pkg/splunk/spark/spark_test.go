@@ -34,10 +34,12 @@ func init() {
 }
 
 // sparkObjectCopier is used to copy enterprisev1.Spark runtime.Objects
-func sparkObjectCopier(dst, src runtime.Object) bool {
-	switch src.(type) {
+func sparkObjectCopier(dst, src *runtime.Object) bool {
+	dstP := *dst
+	srcP := *src
+	switch srcP.(type) {
 	case *enterprisev1.Spark:
-		*dst.(*enterprisev1.Spark) = *src.(*enterprisev1.Spark)
+		*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
 	default:
 		return false
 	}
