@@ -3,7 +3,7 @@ package testenv
 import (
 	gomega "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -44,4 +44,13 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		_ = deployment.GetInstance(deployment.GetName(), shc)
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+}
+
+// VerifyRFSFMet verify RF SF is met on cluster masterr
+func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() bool {
+		rfSfStatus := CheckRFSF(deployment)
+		testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
+		return rfSfStatus
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }

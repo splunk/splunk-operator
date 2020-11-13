@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 	defaultSparkImage    = "splunk/spark"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 900
+	defaultTestTimeout = 1500
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second

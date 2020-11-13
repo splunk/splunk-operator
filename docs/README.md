@@ -35,14 +35,9 @@ be more successful and move at a rapid pace.
 ## Known Issues for the Splunk Operator
 
 *Please note that the Splunk Operator is undergoing active development
-and considered to be an "alpha" quality release. We expect significant
+and considered to be a "beta" quality release. We expect significant
 modifications will be made prior to its general availability, it is not
 covered by support, and we strongly discourage using it in production.*
-
-We are working to resolve the following in future releases:
-
-* The Deployment Monitoring Console is not currently configured properly
-for new deployments
 
 Please see the [Change Log](ChangeLog.md) for a history of changes made in
 previous releases.
@@ -50,20 +45,11 @@ previous releases.
 
 ## Prerequisites for the Splunk Operator
 
-We have tested basic functionality of the Splunk Operator with the following:
-
-* [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/) (EKS)
-* [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine/) (GKE)
-* [Azure Kubernetes Service](https://azure.microsoft.com/en-us/services/kubernetes-service/) (AKS)
-* [Red Hat OpenShift](https://www.openshift.com/) (4.1)
-* [Docker Enterprise Edition](https://docs.docker.com/ee/) (3.1)
-* [Open Source Kubernetes](https://kubernetes.io/) (1.15.1)
-
 While we are only able to test and support a small subset of configurations,
 the Splunk Operator should work with any CNCF certified distribution of
 Kubernetes, version 1.12 or later. Setting up, configuring and managing
 Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
-of support. For evaluation, we recommend using EKS or GKE.
+of support. Please submit bugs to https://github.com/splunk/splunk-operator/issues.
 
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
@@ -75,7 +61,7 @@ The Splunk Operator requires three docker images to be present or available
 to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
-* `splunk/splunk:8.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.0 or later)
+* `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
 * `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
@@ -100,7 +86,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f http://tiny.cc/splunk-operator-install
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -111,7 +97,7 @@ special considerations, including the use of private image registries,
 installation at cluster scope, and installing as a regular user (who is
 not a Kubernetes cluster administrator).
 
-*Note: The `splunk/splunk:8.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),
@@ -131,9 +117,10 @@ Splunk Operator, run:
 kubectl delete standalones --all
 kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
+kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
-kubectl delete -f http://tiny.cc/splunk-operator-install
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
 ```
 
 
@@ -145,7 +132,7 @@ deployment named “s1”:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1alpha2
+apiVersion: enterprise.splunk.com/v1beta1
 kind: Standalone
 metadata:
   name: s1
@@ -164,17 +151,13 @@ for the first time), you should see a new pod running in your cluster:
 
 ```
 $ kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-operator-7c5599546c-wt4xl   1/1     Running   0          11h
-splunk-s1-standalone-0             0/1     Running   0          45s
+NAME                                   READY   STATUS    RESTARTS   AGE
+splunk-operator-7c5599546c-wt4xl        1/1    Running   0          11h
+splunk-default-monitoring-console-0     1/1    Running   0          30s
+splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
-By default, an admin user password will be automatically generated for your 
-deployment. You can get the password by running:
-
-```
-kubectl get secret splunk-s1-standalone-secrets -o jsonpath='{.data.password}' | base64 --decode
-```
+The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
 
 *Note: if your shell prints a `%` at the end, leave that out when you
 copy the output.*

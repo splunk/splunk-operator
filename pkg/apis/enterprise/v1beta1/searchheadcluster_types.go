@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1alpha3
+package v1beta1
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -99,6 +99,12 @@ type SearchHeadClusterStatus struct {
 
 	// Indicates when the shc_secret has been changed for a peer
 	ShcSecretChanged []bool `json:"shcSecretChangedFlag"`
+
+	// Indicates when the admin password has been changed for a peer
+	AdminSecretChanged []bool `json:"adminSecretChangedFlag"`
+
+	// Holds secrets whose admin password has changed
+	AdminPasswordChangedSecrets map[string]bool `json:"adminPasswordChangedSecrets"`
 
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`

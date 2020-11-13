@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1alpha3"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -473,8 +473,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	// Add custom volumes to splunk containers
-	if spec.Volumes != nil {
+	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
+	if spec.Volumes != nil && instanceType != SplunkMonitoringConsole {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
 			for v := range spec.Volumes {
