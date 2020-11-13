@@ -32,4 +32,10 @@ const (
 
 	// emptySecretTokenError indicates empty secret token
 	emptySecretTokenError = "Empty secret token"
+
+	// nonExistingSecret indicates a non-existing secret
+	emptyPodSpecVolumes = "Empty pod spec volumes"
+
+	// emptySecretVolumeSource indicates an empty
+	emptySecretVolumeSource = "Didn't find secret volume source in any pod volume"
 )

@@ -234,7 +234,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 		// Retrieve idxc_secret password from Pod
 		indIdxcSecret, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, indexerPodName, mgr.cr.GetNamespace(), "idxc_secret")
 		if err != nil {
-			return fmt.Errorf("Couldn't Retrieve idxc_secret from secret data %s", err.Error())
+			return fmt.Errorf("Couldn't retrieve idxc_secret from secret data")
 		}
 
 		// If idxc secret is different from namespace scoped secret change it

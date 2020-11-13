@@ -455,6 +455,13 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
+
+	// Empty clusterMaster reference
+	cr.Spec.ClusterMasterRef.Name = ""
+	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	if err.Error() != splcommon.EmptyClusterMasterRef {
+		t.Errorf("Couldn't detect empty Cluster Master reference %s", err.Error())
+	}
 }
 
 func TestApplyIdxcSecret(t *testing.T) {
@@ -613,6 +620,50 @@ func TestApplyIdxcSecret(t *testing.T) {
 
 	mgr.cr.Status.IndexerSecretChanged[0] = false
 	// Test set again
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Test the setCmMode failure
+	mgr.cr.Status.NamespaceSecretResourceVersion = "2"
+	mgr.cr.Spec.ClusterMasterRef.Name = ""
+	mgr.cr.Status.MaintenanceMode = false
+	mgr.cr.Status.IndexerSecretChanged = []bool{}
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != splcommon.EmptyClusterMasterRef {
+		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Remove idxc secret
+	secrets = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": {'1', '2', '3'},
+		},
+	}
+
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "idxc_secret") {
+		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
+	}
+
+	// Test scenario with same namespace secret and cr status resource version
+	nsSecret.ResourceVersion = "1"
+	mgr.cr.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
