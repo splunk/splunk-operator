@@ -575,7 +575,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-
+	cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 	cr.Spec.ClusterMasterRef.Name = cr.GetName()
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
