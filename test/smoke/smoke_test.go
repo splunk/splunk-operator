@@ -135,6 +135,9 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 		})
 	})
 
@@ -232,6 +235,9 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 		})
 	})
 
@@ -311,6 +317,9 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 		})
 	})
 })

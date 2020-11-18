@@ -341,6 +341,13 @@ func (in *IndexerClusterStatus) DeepCopyInto(out *IndexerClusterStatus) {
 		*out = make([]bool, len(*in))
 		copy(*out, *in)
 	}
+	if in.IdxcPasswordChangedSecrets != nil {
+		in, out := &in.IdxcPasswordChangedSecrets, &out.IdxcPasswordChangedSecrets
+		*out = make(map[string]bool, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Peers != nil {
 		in, out := &in.Peers, &out.Peers
 		*out = make([]IndexerClusterMemberStatus, len(*in))
