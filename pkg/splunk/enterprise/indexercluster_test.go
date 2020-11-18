@@ -731,10 +731,11 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
 
+	podName := "splunk-stack1-indexer-0"
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-indexer-0",
+			Name:      podName,
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -867,12 +868,22 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
+	secrets.Data["idxc_secret"] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	mgr.cr.Status.IndexerSecretChanged[0] = false
+	secrets.Data["idxc_secret"] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
 	// Test set again
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
@@ -880,6 +891,12 @@ func TestApplyIdxcSecret(t *testing.T) {
 	}
 
 	// Test the setCmMode failure
+	secrets.Data["idxc_secret"] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
 	mgr.cr.Status.NamespaceSecretResourceVersion = "2"
 	mgr.cr.Spec.ClusterMasterRef.Name = ""
 	mgr.cr.Status.MaintenanceMode = false
@@ -921,6 +938,18 @@ func TestApplyIdxcSecret(t *testing.T) {
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Test missing secret from pod
+	mgr.cr.Status.NamespaceSecretResourceVersion = "10"
+	err = splutil.DeleteResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.PodSecretNotFoundError, podName) {
+		t.Errorf("Couldn't recognize missing secret from Pod, error: %s", err.Error())
 	}
 }
 
