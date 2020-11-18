@@ -19,6 +19,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -40,4 +41,63 @@ func TestApplyConfigMap(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
+}
+
+func TestGetConfigMap(t *testing.T) {
+	current := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "defaults",
+			Namespace: "test",
+		},
+	}
+
+	client := spltest.NewMockClient()
+	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
+
+	_, err := GetConfigMap(client, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error, when the configMap doesn't exist")
+	}
+
+	_, err = ApplyConfigMap(client, &current)
+	if err != nil {
+		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
+	}
+
+	_, err = GetConfigMap(client, namespacedName)
+	if err != nil {
+		t.Errorf("Should not return an error, when the configMap exists")
+	}
+}
+
+func TestGetConfigMapResourceVersion(t *testing.T) {
+	current := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "defaults",
+			Namespace: "test",
+		},
+	}
+
+	client := spltest.NewMockClient()
+	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
+
+	_, err := GetConfigMap(client, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error, when the configMap doesn't exist")
+	}
+
+	_, err = GetConfigMapResourceVersion(client, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error, when the configMap doesn't exist")
+	}
+
+	_, err = ApplyConfigMap(client, &current)
+	if err != nil {
+		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
+	}
+
+	_, err = GetConfigMapResourceVersion(client, namespacedName)
+	if err != nil {
+		t.Errorf("Should not return an error, when the configMap exists")
+	}
 }
