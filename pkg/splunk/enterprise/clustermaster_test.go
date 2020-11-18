@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,6 +244,13 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
+	// When the secret object is not present, should return an error
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
+	err := PerformCmBundlePush(client, &current)
+	if err == nil {
+		t.Errorf("Should return error, when the secret object is not present")
+	}
+
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
@@ -261,23 +269,36 @@ func TestPerformCmBundlePush(t *testing.T) {
 		Data: map[string]string{configToken: ""},
 	}
 
-	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 100
-
 	_, err = splctrl.ApplyConfigMap(client, &smartstoreConfigMap)
-
-	err = PerformCmBundlePush(client, &current)
 	if err != nil {
-		t.Errorf("Bundle Push failed")
+		t.Errorf(err.Error())
 	}
 
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
+
+	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
+	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
+	err = PerformCmBundlePush(client, &current)
+	if err == nil {
+		t.Errorf("Bundle Push Should fail, if attempted to push within 5 seconds interval")
+	}
+
+	//Re-attempting to push the CM bundle after 5 seconds passed, should not return an error
+	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
+	err = PerformCmBundlePush(client, &current)
+	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
+		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
+	}
+
+	// When the CM Bundle push is not pending, should not return an error
+	current.Status.BundlePushTracker.NeedToPushMasterApps = false
 	err = PerformCmBundlePush(client, &current)
 	if err != nil {
-		t.Errorf("Bundle Push failed")
+		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
 	}
 }
 
-func TestPushMasterAppsBundlePush(t *testing.T) {
+func TestPushMasterAppsBundle(t *testing.T) {
 
 	current := enterprisev1.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -296,6 +317,12 @@ func TestPushMasterAppsBundlePush(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
+	//Without global secret object, should return an error
+	err := PushMasterAppsBundle(client, &current)
+	if err == nil {
+		t.Errorf("Bundle push should fail, when the secret object is not found")
+	}
+
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
@@ -306,8 +333,10 @@ func TestPushMasterAppsBundlePush(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
+	//Without password, should return an error
+	delete(secret.Data, "password")
 	err = PushMasterAppsBundle(client, &current)
-	if err != nil {
-		t.Errorf("Bundle Push failed")
+	if err == nil {
+		t.Errorf("Bundle push should fail, when the password is not found")
 	}
 }
