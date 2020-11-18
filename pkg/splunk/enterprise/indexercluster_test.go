@@ -118,7 +118,6 @@ func TestGetClusterMasterClient(t *testing.T) {
 			ClusterMasterPhase: splcommon.PhaseReady,
 		},
 	}
-	cr.Status.IndexerSecretChanged = append(cr.Status.IndexerSecretChanged, true)
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-master1-indexer-secrets",
@@ -890,11 +889,6 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "master1",
 			Namespace: "test",
-		},
-		Spec: enterprisev1.ClusterMasterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-				Mock: true,
-			},
 		},
 	}
 
