@@ -342,20 +342,19 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
 
 	var err error
-	//Don't even try to create a statefulset and secret if CM is not ready yet.
-	if mgr.cr.Status.ClusterMasterPhase != splcommon.PhaseReady {
-		mgr.log.Error(err, "Cluster Master is not ready yet")
-		return splcommon.PhaseError, err
-	}
 
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
 	}
 	// update statefulset, if necessary
-	_, err = splctrl.ApplyStatefulSet(mgr.c, statefulSet)
-	if err != nil {
-		return splcommon.PhaseError, err
+	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
+		_, err = splctrl.ApplyStatefulSet(mgr.c, statefulSet)
+		if err != nil {
+			return splcommon.PhaseError, err
+		}
+	} else {
+		mgr.log.Error(err, "Cluster Master is not ready yet")
 	}
 
 	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
