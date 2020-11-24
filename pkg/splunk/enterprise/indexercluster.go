@@ -229,7 +229,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 	scopedLog.Info("Namespaced scoped secret revision has changed")
 
 	// Retrieve idxc_secret password from secret data
-	nsIdxcSecret := string(namespaceSecret.Data["idxc_secret"])
+	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
 	for i := int32(0); i <= replicas-1; i++ {
@@ -239,14 +239,14 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 		// Retrieve secret from pod
 		podSecret, err := splutil.GetSecretFromPod(mgr.c, indexerPodName, mgr.cr.GetNamespace())
 		if err != nil {
-			return fmt.Errorf("Couldn't find secret in Pod %s", indexerPodName)
+			return fmt.Errorf(fmt.Sprintf(splcommon.PodSecretNotFoundError, indexerPodName))
 		}
 
 		// Retrieve idxc_secret token
-		if indIdxcSecretByte, ok := podSecret.Data["idxc_secret"]; ok {
+		if indIdxcSecretByte, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
 			indIdxcSecret = string(indIdxcSecretByte)
 		} else {
-			return fmt.Errorf("Couldn't retrieve idxc_secret from secret data")
+			return fmt.Errorf(fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret))
 		}
 
 		// If idxc secret is different from namespace scoped secret change it
@@ -320,7 +320,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 					return err
 				}
 
-				podSecret.Data["idxc_secret"] = splunkReadableData["idxc_secret"]
+				podSecret.Data[splcommon.IdxcSecret] = splunkReadableData[splcommon.IdxcSecret]
 				podSecret.Data["default.yml"] = splunkReadableData["default.yml"]
 
 				_, err = splctrl.ApplySecret(mgr.c, podSecret)

@@ -805,8 +805,8 @@ func TestApplyIdxcSecret(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password":    {'1', '2', '3'},
-			"idxc_secret": {'a'},
+			"password":           {'1', '2', '3'},
+			splcommon.IdxcSecret: {'a'},
 		},
 	}
 	initObjectList = append(initObjectList, secrets)
@@ -816,7 +816,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "POST",
-			URL:    fmt.Sprintf("https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/config/config?secret=%s", string(nsSecret.Data["idxc_secret"])),
+			URL:    fmt.Sprintf("https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/config/config?secret=%s", string(nsSecret.Data[splcommon.IdxcSecret])),
 			Status: 200,
 			Err:    nil,
 		},
@@ -868,7 +868,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
-	secrets.Data["idxc_secret"] = []byte{'a'}
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
 	err = splutil.UpdateResource(c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
@@ -879,7 +879,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	}
 
 	mgr.cr.Status.IndexerSecretChanged[0] = false
-	secrets.Data["idxc_secret"] = []byte{'a'}
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
 	err = splutil.UpdateResource(c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
@@ -891,7 +891,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	}
 
 	// Test the setCmMode failure
-	secrets.Data["idxc_secret"] = []byte{'a'}
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
 	err = splutil.UpdateResource(c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
@@ -923,7 +923,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	}
 
 	err = ApplyIdxcSecret(mgr, 1, true)
-	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "idxc_secret") {
+	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret) {
 		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
 	}
 
