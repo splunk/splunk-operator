@@ -74,7 +74,7 @@ func GetSecretFromPod(c splcommon.ControllerClient, PodName string, namespace st
 
 	var found bool = false
 	for i := range podSpecVolumes {
-		if podSpecVolumes[i].Name == "mnt-splunk-secrets" {
+		if podSpecVolumes[i].Name == "mnt-splunk-secrets" && podSpecVolumes[i].VolumeSource.Size() > 0 {
 			secretName = podSpecVolumes[i].VolumeSource.Secret.SecretName
 			if len(secretName) > 0 {
 				found = true
@@ -85,7 +85,7 @@ func GetSecretFromPod(c splcommon.ControllerClient, PodName string, namespace st
 
 	// Check if we find the secret
 	if !found {
-		return nil, errors.New("Didn't find secret in any pod volume")
+		return nil, errors.New("Didn't find secret volume source in any pod volume")
 	}
 
 	// Retrieve the secret
@@ -175,13 +175,7 @@ func RemoveUnwantedSecrets(c splcommon.ControllerClient, versionedSecretIdentifi
 		}
 
 		// Atleast one exists
-		for _, secret := range list {
-			// Get version from name
-			version, err := GetVersionedSecretVersion(secret.GetName(), versionedSecretIdentifier)
-			if err != nil {
-				return err
-			}
-
+		for version, secret := range list {
 			if (latestVersion - version) >= splcommon.MinimumVersionedSecrets {
 				// Delete secret
 				err := DeleteResource(c, &secret)
@@ -236,7 +230,7 @@ func GetVersionedSecretVersion(secretName string, versionedSecretIdentifier stri
 }
 
 // GetExistingLatestVersionedSecret retrieves latest EXISTING versionedSecretIdentifier based secret existing currently in the namespace
-func GetExistingLatestVersionedSecret(c splcommon.ControllerClient, namespace string, versionedSecretIdentifier string, list bool) (*corev1.Secret, int, []corev1.Secret) {
+func GetExistingLatestVersionedSecret(c splcommon.ControllerClient, namespace string, versionedSecretIdentifier string, list bool) (*corev1.Secret, int, map[int]corev1.Secret) {
 	scopedLog := log.WithName("GetExistingLatestVersionedSecret").WithValues(
 		"versionedSecretIdentifier", versionedSecretIdentifier,
 		"namespace", namespace)
@@ -265,8 +259,8 @@ func GetExistingLatestVersionedSecret(c splcommon.ControllerClient, namespace st
 	// existingLatestVersionedSecret holds the latest versionedSecretIdentifier based secret, if atleast one exists
 	var existingLatestVersionedSecret corev1.Secret
 
-	// List of versionedSecretIdentifier based secrets
-	var secretListRetr []corev1.Secret
+	// map of versionedSecretIdentifier based secrets
+	secretListRetr := make(map[int]corev1.Secret)
 
 	// Loop through all secrets in K8S cluster
 	for _, secret := range secretList.Items {
@@ -279,7 +273,7 @@ func GetExistingLatestVersionedSecret(c splcommon.ControllerClient, namespace st
 
 		// Append to list of secrets if required
 		if list {
-			secretListRetr = append(secretListRetr, secret)
+			secretListRetr[version] = secret
 		}
 
 		// Version extracted successfully, checking for latest version
