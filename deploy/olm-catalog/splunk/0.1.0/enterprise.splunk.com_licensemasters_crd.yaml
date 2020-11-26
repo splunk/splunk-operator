@@ -676,6 +676,13 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+            initContainers:
+              description: Custom init container spec to run before standard Splunk image
+              type: array
+              nullable: true
+              items:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true              
             licenseMasterRef:
               description: LicenseMasterRef refers to a Splunk Enterprise license
                 master managed by the operator within Kubernetes

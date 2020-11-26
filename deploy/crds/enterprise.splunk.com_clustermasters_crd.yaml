@@ -671,6 +671,13 @@ spec:
               description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
               type: string
+            initContainers:
+              description: Custom init container spec to run before standard Splunk image
+              type: array
+              nullable: true
+              items:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true              
             imagePullPolicy:
               description: 'Sets pull policy for all images (either “Always” or the
                 default: “IfNotPresent”)'

@@ -58,6 +58,9 @@ type CommonSplunkSpec struct {
 	// Full path or URL for one or more default.yml files, separated by commas
 	DefaultsURL string `json:"defaultsUrl"`
 
+	// initContainers spec for one or more containers
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
 

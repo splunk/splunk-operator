@@ -700,6 +700,13 @@ spec:
               - Always
               - IfNotPresent
               type: string
+            initContainers:
+              description: Custom init container spec to run before standard Splunk image
+              type: array
+              nullable: true
+              items:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true              
             licenseMasterRef:
               description: LicenseMasterRef refers to a Splunk Enterprise license
                 master managed by the operator within Kubernetes
