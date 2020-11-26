@@ -45,3 +45,12 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
+
+// VerifyRFSFMet verify RF SF is met on cluster masterr
+func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() bool {
+		rfSfStatus := CheckRFSF(deployment)
+		testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
+		return rfSfStatus
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}

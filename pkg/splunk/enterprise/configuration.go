@@ -660,23 +660,6 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 }
 
-// LogSmartStoreVolumes logs smartstore volumes
-func LogSmartStoreVolumes(volumeList []enterprisev1.VolumeSpec) {
-	scopedLog := logC.WithName("LogSmartStoreVolumes")
-	//var temp string
-	for _, volume := range volumeList {
-		scopedLog.Info("Volume: ", "name: ", volume.Name, "endpoint: ", volume.Endpoint, "path: ", volume.Path)
-	}
-}
-
-// LogSmartStoreIndexes logs smartstore indexes
-func LogSmartStoreIndexes(indexList []enterprisev1.IndexSpec) {
-	scopedLog := logC.WithName("LogSmartStoreIndexes")
-	for _, index := range indexList {
-		scopedLog.Info("Index: ", "name: ", index.Name, "remotePath: ", index.RemotePath, "volumeName", index.VolName)
-	}
-}
-
 // isSmartstoreEnabled checks and returns true if smartstore is configured
 func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 	if smartstore == nil {

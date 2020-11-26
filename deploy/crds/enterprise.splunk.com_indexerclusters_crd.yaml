@@ -2243,6 +2243,11 @@ spec:
           description: IndexerClusterStatus defines the observed state of a Splunk
             Enterprise indexer cluster
           properties:
+            IdxcPasswordChangedSecrets:
+              additionalProperties:
+                type: boolean
+              description: Holds secrets whose IDXC password has changed
+              type: object
             clusterMasterPhase:
               description: current phase of the cluster master
               enum:

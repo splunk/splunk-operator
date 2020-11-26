@@ -21,6 +21,9 @@ import (
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -457,9 +460,199 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	if err != nil {
 		t.Errorf("Smartstore config is optional, should not cause an error. But, got the error: %v", err)
 	}
+
+	// Configuring indexes without volume config should return error
+	SmartStoreWithoutVolumes := enterprisev1.SmartStoreSpec{
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithoutVolumes)
+	if err == nil {
+		t.Errorf("Smartstore config without volume details should return error")
+	}
+
+	// Duplicate volume names should be rejected
+	SmartStoreWithDuplicateVolumes := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol-2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateVolumes)
+	if err == nil {
+		t.Errorf("Duplicate volume configuration should return an error")
+	}
+
+	// Defaults with invalid volume reference should return error
+	SmartStoreDefaultsWithNonExistingVolume := enterprisev1.SmartStoreSpec{
+		Defaults: enterprisev1.IndexConfDefaultsSpec{
+			IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				VolName: "msos_s2s3_vol-2"},
+		},
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreDefaultsWithNonExistingVolume)
+	if err == nil {
+		t.Errorf("Volume referred in the indexes defaults should be a valid volume")
+	}
+
+	//Duplicate index names should return an error
+	SmartStoreWithDuplicateIndexes := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata1", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateIndexes)
+	if err == nil {
+		t.Errorf("Duplicate index names should return an error")
+	}
+
+	// If the default volume is not configured, then each index should be configured
+	// with an explicit volume info. If not, should return an error
+	SmartStoreVolumeMissingBothFromDefaultsAndIndex := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1"},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreVolumeMissingBothFromDefaultsAndIndex)
+	if err == nil {
+		t.Errorf("If no default volume, index with missing volume info should return an error")
+	}
+
+	// Volume referenced from an index must be a valid volume
+	SmartStoreIndexesWithInvalidVolumeName := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol-2"},
+			},
+		},
+	}
+
+	err = ValidateSplunkSmartstoreSpec(&SmartStoreIndexesWithInvalidVolumeName)
+	if err == nil {
+		t.Errorf("Index with an invalid volume name should return error")
+	}
 }
 
-func TestValidateSplunkSmartstoreCacheManagerSpec(t *testing.T) {
+func TestGetSmartstoreIndexesConfig(t *testing.T) {
+	SmartStoreIndexes := enterprisev1.SmartStoreSpec{
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					MaxGlobalDataSizeMB:    6000,
+					MaxGlobalRawDataSizeMB: 7000,
+					VolName:                "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", // Missing RemotePath should be filled with the default "$_index_name"
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					MaxGlobalDataSizeMB:    2000,
+					MaxGlobalRawDataSizeMB: 3000,
+					VolName:                "msos_s2s3_vol"},
+				IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+					HotlistBloomFilterRecencyHours: 48,
+					HotlistRecencySecs:             48 * 60 * 60},
+			},
+			{Name: "salesdata4", // Missing RemotePath should be filled with the default "$_index_name"
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					MaxGlobalDataSizeMB:    4000,
+					MaxGlobalRawDataSizeMB: 5000,
+					VolName:                "msos_s2s3_vol"},
+				IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+					HotlistBloomFilterRecencyHours: 24,
+					HotlistRecencySecs:             24 * 60 * 60},
+			},
+		},
+	}
+
+	expectedINIFormatString := fmt.Sprintf(`
+[salesdata1]
+remotePath = volume:msos_s2s3_vol/remotepath1
+maxGlobalDataSizeMB = 6000
+maxGlobalRawDataSizeMB = 7000
+
+[salesdata2]
+remotePath = volume:msos_s2s3_vol/remotepath2
+
+[salesdata3]
+remotePath = volume:msos_s2s3_vol/$_index_name
+hotlist_bloom_filter_recency_hours = 48
+hotlist_recency_secs = 172800
+maxGlobalDataSizeMB = 2000
+maxGlobalRawDataSizeMB = 3000
+
+[salesdata4]
+remotePath = volume:msos_s2s3_vol/$_index_name
+hotlist_bloom_filter_recency_hours = 24
+hotlist_recency_secs = 86400
+maxGlobalDataSizeMB = 4000
+maxGlobalRawDataSizeMB = 5000
+`)
+
+	indexesConfIni := GetSmartstoreIndexesConfig(SmartStoreIndexes.IndexList)
+	if indexesConfIni != expectedINIFormatString {
+		t.Errorf("expected: %s, returned: %s", expectedINIFormatString, indexesConfIni)
+	}
+}
+func TestGetServerConfigEntries(t *testing.T) {
 
 	SmartStoreCacheManager := enterprisev1.CacheManagerSpec{
 		IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
@@ -489,9 +682,16 @@ max_concurrent_uploads = 6
 	if expectedIniContents != serverConfForCacheManager {
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, serverConfForCacheManager)
 	}
+
+	// Empty config should return empty string
+	serverConfForCacheManager = GetServerConfigEntries(nil)
+	if serverConfForCacheManager != "" {
+		t.Errorf("Expected empty string, but received: %s", serverConfForCacheManager)
+	}
+
 }
 
-func TestValidateSplunkSmartstoreDefaultsSpec(t *testing.T) {
+func TestGetSmartstoreIndexesDefaults(t *testing.T) {
 
 	SmartStoreDefaultsConf := enterprisev1.IndexConfDefaultsSpec{
 		IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
@@ -519,4 +719,129 @@ maxGlobalRawDataSizeMB = 61440
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, SmartstoreDefaultIniConfig)
 	}
 
+}
+
+func TestCheckIfVolumeExists(t *testing.T) {
+	SmartStoreConfig := enterprisev1.SmartStoreSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		IndexList: []enterprisev1.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	// Volume that doesn't should error out
+	_, err := checkIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
+
+	if err == nil {
+		t.Errorf("if the volume doesn't exists, error should be reported")
+	}
+
+	// Volume that exists should not error out
+	index := len(SmartStoreConfig.VolList) - 1
+	returnedIndex, err := checkIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
+
+	if err != nil {
+		t.Errorf("existing volume should not error out. index id: %d, error: %s", index, err.Error())
+	} else if index != returnedIndex {
+		t.Errorf("Expected index: %d, but returned index id: %d", index, returnedIndex)
+	}
+}
+
+func TestAreRemoteVolumeKeysChanged(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			SmartStore: enterprisev1.SmartStoreSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+				},
+
+				IndexList: []enterprisev1.IndexSpec{
+					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+	var err error
+	ResourceRev := map[string]string{
+		"secret1": "12345",
+		"secret2": "67890",
+	}
+
+	// Missing secret object should return an error
+	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	if err == nil {
+		t.Errorf("Missing secret object should return an error. keyChangedFlag: %t", keysChanged)
+	} else if keysChanged {
+		t.Errorf("When the S3 secret object is not present, Key change should not be reported")
+	}
+
+	// First time secret version reference should be updated
+	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-scret
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	_, err = splctrl.ApplySecret(client, secret)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+
+	_, ok := ResourceRev["splunk-test-secret"]
+	if !ok {
+		t.Errorf("Failed to update the Resource Version for first time")
+	}
+
+	// Change the Resource Version, and see if that is being detected
+	resourceVersion := "3434"
+	secret.SetResourceVersion(resourceVersion)
+
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	resourceVersionUpdated, ok := ResourceRev["splunk-test-secret"]
+	if !keysChanged || resourceVersion != resourceVersionUpdated {
+		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
+	}
+
+	// No change on the secret object should return false
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
+	if keysChanged {
+		t.Errorf("If there is no change on secret object, should return false")
+	}
+
+	// Empty volume list should return false
+	cr.Spec.SmartStore.VolList = nil
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	if keysChanged {
+		t.Errorf("Empty volume should not report a key change")
+	}
 }
