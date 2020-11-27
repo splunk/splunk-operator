@@ -454,8 +454,14 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
+	var mgmtScheme string
+	if mgr.cr.Spec.ManagementSchemeInsecure {
+		mgmtScheme = "http"
+	} else {
+		mgmtScheme = "https"
+	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
 }
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
@@ -479,8 +485,15 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
+	//Get the scheme per spec
+	var mgmtScheme string
+	if mgr.cr.Spec.ManagementSchemeInsecure {
+		mgmtScheme = "http"
+	} else {
+		mgmtScheme = "https"
+	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
 }
 
 // getSiteRepFactorOriginCount gets the origin count of the site_replication_factor

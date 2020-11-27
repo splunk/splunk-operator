@@ -715,6 +715,8 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+            managementSchemeSecure:
+              description: 
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string

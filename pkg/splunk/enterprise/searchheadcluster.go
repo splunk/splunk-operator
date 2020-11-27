@@ -438,7 +438,15 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	var mgmtScheme string
+	if mgr.cr.Spec.ManagementSchemeInsecure {
+		mgmtScheme = "http"
+	} else {
+		mgmtScheme = "https"
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
+
 }
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource

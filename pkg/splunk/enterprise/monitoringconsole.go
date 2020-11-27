@@ -111,13 +111,29 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 // getMonitoringConsoleClient for monitoringConsolePodManager returns a SplunkClient for monitoring console
 func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+
+	var mgmtScheme string
+	if mgr.cr.Spec.ManagementSchemeInsecure {
+		mgmtScheme = "http"
+	} else {
+		mgmtScheme = "https"
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
 func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	var mgmtScheme string
+	if mgr.cr.Spec.ManagementSchemeInsecure {
+		mgmtScheme = "http"
+	} else {
+		mgmtScheme = "https"
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", string(mgr.secrets.Data["password"]))
+
 }
 
 // monitoringConsolePodManager is used to manage the monitoring console pod
