@@ -455,7 +455,7 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf(uri, "admin", adminPwd)
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
 }
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
@@ -479,7 +479,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
-	
+
 	return mgr.newSplunkClient(uri, "admin", adminPwd)
 }
 
