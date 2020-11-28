@@ -160,7 +160,7 @@ func TestGetServiceURI(t *testing.T) {
 
 	test("test", "t1", false, "https://t1.test.svc.cluster.local")
 
-	test("test", "t2", true, "http://t2.test.svc.example.com")
+	test("test", "t2", true, "http://t2.test.svc.cluster.local")
 }
 
 func TestGenerateSecret(t *testing.T) {
