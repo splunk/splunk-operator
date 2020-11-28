@@ -445,23 +445,17 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
+	// Get uri
+	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)), mgr.cr.Spec.ManagementSchemeInsecure)
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
-	var mgmtScheme string
-	if mgr.cr.Spec.ManagementSchemeInsecure {
-		mgmtScheme = "http"
-	} else {
-		mgmtScheme = "https"
-	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf(uri, "admin", adminPwd)
 }
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
@@ -477,7 +471,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
+	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false), mgr.cr.Spec.ManagementSchemeInsecure)
 
 	// Retrieve admin password for Pod
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
@@ -485,15 +479,8 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
-	//Get the scheme per spec
-	var mgmtScheme string
-	if mgr.cr.Spec.ManagementSchemeInsecure {
-		mgmtScheme = "http"
-	} else {
-		mgmtScheme = "https"
-	}
-
-	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
+	
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
 }
 
 // getSiteRepFactorOriginCount gets the origin count of the site_replication_factor

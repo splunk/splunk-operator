@@ -101,6 +101,17 @@ func GetServiceFQDN(namespace string, name string) string {
 	)
 }
 
+// GetServiceURI returns the fully qualified domain name for a Kubernetes service as URI.
+func GetServiceURI(namespace string, name string, insecure bool) string {
+	var scheme string = "https"
+	if insecure {
+		scheme = "http"
+	}
+	return fmt.Sprintf(
+		"%s://%s", scheme, GetServiceFQDN(namespace, name),
+	)
+}
+
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
 func GenerateSecret(SecretBytes string, n int) []byte {
 	b := make([]byte, n)

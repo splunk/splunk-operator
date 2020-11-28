@@ -150,6 +150,19 @@ func TestGetServiceFQDN(t *testing.T) {
 	test("test", "t2", "t2.test.svc.example.com")
 }
 
+func TestGetServiceURI(t *testing.T) {
+	test := func(namespace string, name string, insecure bool, want string) {
+		got := GetServiceURI(namespace, name, insecure)
+		if got != want {
+			t.Errorf("GetServiceURI() = %s; want %s", got, want)
+		}
+	}
+
+	test("test", "t1", false, "https://t1.test.svc.cluster.local")
+
+	test("test", "t2", true, "http://t2.test.svc.example.com")
+}
+
 func TestGenerateSecret(t *testing.T) {
 	test := func(SecretBytes string, n int) {
 		results := [][]byte{}
