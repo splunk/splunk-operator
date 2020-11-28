@@ -117,7 +117,7 @@ func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.
 // getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
 func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
 	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false), mgr.spec.ManagementSchemeInsecure)
-	
+
 	return mgr.newSplunkClient(uri, "admin", string(mgr.secrets.Data["password"]))
 
 }
