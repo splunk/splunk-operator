@@ -160,10 +160,10 @@ func TestGetServiceURI(t *testing.T) {
 	}
 
 	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
-	test("test", "t1", false, "https://t1.test.svc.cluster.local:8089")
+	test("test", "t1", true, "https://t1.test.svc.cluster.local:8089")
 
 	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
-	test("test", "t2", true, "http://t2.test.svc.cluster.local:8089")
+	test("test", "t2", false, "http://t2.test.svc.cluster.local:8089")
 }
 
 func TestGenerateSecret(t *testing.T) {

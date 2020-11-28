@@ -447,7 +447,7 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 
 	// Get uri
 	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)), mgr.cr.Spec.ManagementSchemeInsecure)
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)), mgr.cr.Spec.ManagementSchemeSecure)
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -471,7 +471,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	}
 
 	// Get Fully Qualified Domain Name
-	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false), mgr.cr.Spec.ManagementSchemeInsecure)
+	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false), mgr.cr.Spec.ManagementSchemeSecure)
 
 	// Retrieve admin password for Pod
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
