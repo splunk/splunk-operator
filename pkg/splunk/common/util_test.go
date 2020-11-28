@@ -144,6 +144,7 @@ func TestGetServiceFQDN(t *testing.T) {
 		}
 	}
 
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
 	test("test", "t1", "t1.test.svc.cluster.local")
 
 	os.Setenv("CLUSTER_DOMAIN", "example.com")
@@ -158,8 +159,10 @@ func TestGetServiceURI(t *testing.T) {
 		}
 	}
 
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
 	test("test", "t1", false, "https://t1.test.svc.cluster.local")
 
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
 	test("test", "t2", true, "http://t2.test.svc.cluster.local")
 }
 
