@@ -108,7 +108,7 @@ func GetServiceURI(namespace string, name string, insecure bool) string {
 		scheme = "http"
 	}
 	return fmt.Sprintf(
-		"%s://%s", scheme, GetServiceFQDN(namespace, name),
+		"%s://%s:8089", scheme, GetServiceFQDN(namespace, name),
 	)
 }
 
