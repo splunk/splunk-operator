@@ -620,14 +620,15 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
 		licenseMasterName := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		var namespace string
 		if spec.LicenseMasterRef.Namespace == "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(cr.GetNamespace(), licenseMasterName)
+			namespace = cr.GetNamespace()
 		} else {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterName)
+			namespace = spec.LicenseMasterRef.Namespace
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: splcommon.GetServiceFQDN(namespace, licenseMasterName),
 		})
 	}
 
