@@ -157,6 +157,13 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.InitContainers != nil {
+		in, out := &in.InitContainers, &out.InitContainers
+		*out = make([]v1.Container, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	out.LicenseMasterRef = in.LicenseMasterRef
 	out.ClusterMasterRef = in.ClusterMasterRef
 	return
