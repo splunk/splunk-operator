@@ -429,8 +429,11 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
+	uri := splcommon.GetServiceURI(
+		mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)),
+		mgr.cr.Spec.ManagementSchemeInsecure,
+	)
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -438,14 +441,7 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
-	var mgmtScheme string
-	if mgr.cr.Spec.ManagementSchemeInsecure {
-		mgmtScheme = "http"
-	} else {
-		mgmtScheme = "https"
-	}
-
-	return mgr.newSplunkClient(fmt.Sprintf("%s://%s:8089", mgmtScheme, fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
 
 }
 

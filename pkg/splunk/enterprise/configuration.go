@@ -628,7 +628,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.GetServiceFQDN(namespace, licenseMasterName),
+			Value: splcommon.GetServiceURI(namespace, licenseMasterName, spec.ManagementSchemeInsecure),
 		})
 	}
 
@@ -640,7 +640,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterMasterURL = splcommon.GetServiceURI(spec.ClusterMasterRef.Namespace, clusterMasterURL, spec.ManagementSchemeInsecure)
 		}
 	}
 	if clusterMasterURL != "" {
