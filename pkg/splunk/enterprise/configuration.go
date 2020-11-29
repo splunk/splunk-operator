@@ -610,7 +610,6 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: "SPLUNK_CERT_PREFIX", Value: "http"},
-
 	}
 
 	// update variables for licensing, if configured
