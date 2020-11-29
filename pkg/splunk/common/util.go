@@ -102,10 +102,10 @@ func GetServiceFQDN(namespace string, name string) string {
 }
 
 // GetServiceURI returns the fully qualified domain name for a Kubernetes service as URI.
-func GetServiceURI(namespace string, name string, secure bool) string {
-	var scheme string = "http"
-	if secure {
-		scheme = "https"
+func GetServiceURI(namespace string, name string, insecure bool) string {
+	var scheme string = "https"
+	if insecure {
+		scheme = "http"
 	}
 	return fmt.Sprintf(
 		"%s://%s:8089", scheme, GetServiceFQDN(namespace, name),

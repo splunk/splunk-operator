@@ -439,7 +439,7 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 	}
 
 	var mgmtScheme string
-	if mgr.cr.Spec.ManagementSchemeSecure {
+	if mgr.cr.Spec.ManagementSchemeInsecure {
 		mgmtScheme = "http"
 	} else {
 		mgmtScheme = "https"
