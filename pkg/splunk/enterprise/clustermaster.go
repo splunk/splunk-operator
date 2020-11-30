@@ -186,9 +186,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
 	if err != nil || stdErr != "" {
-		if cr.Spec.Mock == false {
-			return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
-		}
+		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
 	configMap, exists := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
@@ -267,5 +265,5 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-	return splunkClient.BundlePush(true, cr.Spec.Mock)
+	return splunkClient.BundlePush(true)
 }

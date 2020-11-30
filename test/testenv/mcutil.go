@@ -116,6 +116,14 @@ func MCPodReady(ns string, deployment *Deployment) {
 		DumpGetPods(ns)
 		return check
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+
+	// Verify MC Pod Stays in ready state
+	gomega.Consistently(func() bool {
+		logf.Log.Info("Checking status of Monitoring Console Pod")
+		check := CheckMCPodReady(ns)
+		DumpGetPods(ns)
+		return check
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // GetSearchHeadPeersOnMC GET Search head configured on MC
