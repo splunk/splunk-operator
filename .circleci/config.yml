@@ -15,7 +15,7 @@ workflows:
       - integration-tests:
           requires:
             - build-image
-            - unit-tests
+            # - unit-tests
       - vulnerability-scan:
           requires:
             - build-image
