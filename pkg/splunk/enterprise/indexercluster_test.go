@@ -709,6 +709,13 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
+
+	// Empty clusterMaster reference
+	cr.Spec.ClusterMasterRef.Name = ""
+	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	if err.Error() != splcommon.EmptyClusterMasterRef {
+		t.Errorf("Couldn't detect empty Cluster Master reference %s", err.Error())
+	}
 }
 
 func TestApplyIdxcSecret(t *testing.T) {
@@ -724,10 +731,11 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
 
+	podName := "splunk-stack1-indexer-0"
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-indexer-0",
+			Name:      podName,
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -797,8 +805,8 @@ func TestApplyIdxcSecret(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password":    {'1', '2', '3'},
-			"idxc_secret": {'a'},
+			"password":           {'1', '2', '3'},
+			splcommon.IdxcSecret: {'a'},
 		},
 	}
 	initObjectList = append(initObjectList, secrets)
@@ -808,7 +816,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "POST",
-			URL:    fmt.Sprintf("https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/config/config?secret=%s", string(nsSecret.Data["idxc_secret"])),
+			URL:    fmt.Sprintf("https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/config/config?secret=%s", string(nsSecret.Data[splcommon.IdxcSecret])),
 			Status: 200,
 			Err:    nil,
 		},
@@ -860,16 +868,88 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	mgr.cr.Status.IndexerSecretChanged[0] = false
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
 	// Test set again
 	err = ApplyIdxcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Test the setCmMode failure
+	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	mgr.cr.Status.NamespaceSecretResourceVersion = "2"
+	mgr.cr.Spec.ClusterMasterRef.Name = ""
+	mgr.cr.Status.MaintenanceMode = false
+	mgr.cr.Status.IndexerSecretChanged = []bool{}
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != splcommon.EmptyClusterMasterRef {
+		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Remove idxc secret
+	secrets = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": {'1', '2', '3'},
+		},
+	}
+
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret) {
+		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
+	}
+
+	// Test scenario with same namespace secret and cr status resource version
+	nsSecret.ResourceVersion = "1"
+	mgr.cr.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Test missing secret from pod
+	mgr.cr.Status.NamespaceSecretResourceVersion = "10"
+	err = splutil.DeleteResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyIdxcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.PodSecretNotFoundError, podName) {
+		t.Errorf("Couldn't recognize missing secret from Pod, error: %s", err.Error())
 	}
 }
 

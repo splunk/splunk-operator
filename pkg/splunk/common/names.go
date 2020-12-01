@@ -34,6 +34,9 @@ const (
 
 	// MinimumVersionedSecrets holds the minimum number of secrets to be held per version
 	MinimumVersionedSecrets = 3
+
+	// IdxcSecret represents indexer cluster pass4Symmkey secret token
+	IdxcSecret = "idxc_secret"
 )
 
 // GetVersionedSecretName returns a versioned secret name
