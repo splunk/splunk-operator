@@ -109,6 +109,9 @@ type SearchHeadClusterStatus struct {
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
 
+	// Indicates if we need to recheck the revision update on pods
+	SkipRecheckUpdate bool `json:"skip_recheck_update"`
+
 	// status of each search head cluster member
 	Members []SearchHeadClusterMemberStatus `json:"members"`
 }

@@ -451,8 +451,11 @@ func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulS
 // PodManagerTester is used to test StatefulSetPodManager reconcile operations
 func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodManager) {
 	// test create
-	funcCalls := []MockFuncCall{{MetaName: "*v1.StatefulSet-test-splunk-stack1"}}
-	createCalls := map[string][]MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	funcCalls := []MockFuncCall{
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
+	}
+	createCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Create": {funcCalls[0]}}
 	var replicas int32 = 1
 	current := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -473,73 +476,6 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 			UpdateRevision:  "v1",
 		},
 	}
-	PodManagerUpdateTester(t, method, mgr, 1, splcommon.PhasePending, current, createCalls, nil)
-
-	// test update
-	revised := current.DeepCopy()
-	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
-	updateCalls := map[string][]MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
-
-	// test scale up (zero ready so far; wait for ready)
-	revised = current.DeepCopy()
-	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": funcCalls}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhasePending, revised, scaleUpCalls, nil, current)
-
-	// test scale up (1 ready scaling to 2; wait for ready)
-	replicas = 2
-	current.Status.Replicas = 2
-	current.Status.ReadyReplicas = 1
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current)
-
-	// test scale up (1 ready scaling to 2)
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 1
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current)
-
-	// test scale down (2 ready, 1 desired)
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 2
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleUpCalls, nil, current)
-
-	// test scale down (2 ready scaling down to 1)
-	pvcCalls := []MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
-	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
-		"Update": {funcCalls[0]},
-		"Delete": pvcCalls,
-	}
-	pvcList := []*corev1.PersistentVolumeClaim{
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
-	}
-	replicas = 2
-	current.Status.Replicas = 2
-	current.Status.ReadyReplicas = 2
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Update Replicas 2=>1")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleDownCalls, nil, current, pvcList[0], pvcList[1])
-
-	// test pod not found
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 1
-	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
-	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, errors.New("NotFound"), current)
-
-	// test pod updated
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
@@ -555,13 +491,76 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 			},
 		},
 	}
-	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": {podCalls[1]}}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updatePodCalls, nil, current, pod)
 
-	// test all pods ready
-	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
-	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
+	PodManagerUpdateTester(t, method, mgr, 1, splcommon.PhasePending, current, createCalls, nil)
+
+	// test update
+	revised := current.DeepCopy()
+	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
+	updateCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
+	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
+
+	// test scale up (zero ready so far; wait for ready)
+	revised = current.DeepCopy()
+	current.Status.ReadyReplicas = 0
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhasePending, revised, scaleUpCalls, nil, current)
+
+	// test scale up (1 ready scaling to 2; wait for ready)
+	replicas = 2
+	current.Status.Replicas = 2
+	current.Status.ReadyReplicas = 1
+	scaleUpCalls["Get"] = append(scaleUpCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
+	scaleUpCalls["Update"] = append(scaleUpCalls["Update"], funcCalls[1])
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
+
+	// test scale up (1 ready scaling to 2)
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 1
+	updateCalls["Get"] = append(updateCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
+
+	// test scale down (2 ready, 1 desired)
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 2
+	delete(scaleUpCalls, "Update")
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+
+	// test scale down (2 ready scaling down to 1)
+	pvcCalls := []MockFuncCall{
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+	}
+	scaleDownCalls := map[string][]MockFuncCall{
+		"Get":    {funcCalls[0], funcCalls[0], funcCalls[0], funcCalls[1], pvcCalls[0], pvcCalls[1]},
+		"Update": {funcCalls[0]},
+		"Delete": pvcCalls,
+	}
+	pvcList := []*corev1.PersistentVolumeClaim{
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
+	}
+	replicas = 2
+	current.Status.Replicas = 2
+	current.Status.ReadyReplicas = 2
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Update Replicas 2=>1")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleDownCalls, nil, current, pod, pvcList[0], pvcList[1])
+
+	// test pod not found
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 1
+	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
+	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, errors.New("NotFound"), current)
 
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -573,6 +572,14 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	}
 	listmockCall := []MockFuncCall{
 		{ListOpts: listOpts}}
+
+	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": {}, "List": {listmockCall[0]}}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, updatePodCalls, nil, current, pod)
+
+	// test all pods ready
+	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
+	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
 
 	getPodCalls["List"] = []MockFuncCall{listmockCall[0]}
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, getPodCalls, nil, current, pod)

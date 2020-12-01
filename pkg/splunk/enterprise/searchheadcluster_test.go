@@ -294,8 +294,11 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	extraCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
-	//funcCalls[1] = spltest.MockFuncCall{MetaName: "*v1.Pod-test-splunk-stack1-0"}
+
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
 	wantCalls["Get"] = append(wantCalls["Get"], extraCalls...)
 	wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
@@ -303,7 +306,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
 	}
-	pod.ObjectMeta.Name = "splunk-stack1-2"
+	pod.ObjectMeta.Name = "splunk-stack1-0"
 	replicas = 2
 	statefulSet.Status.Replicas = 2
 	statefulSet.Status.ReadyReplicas = 2

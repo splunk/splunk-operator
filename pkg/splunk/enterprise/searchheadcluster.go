@@ -347,7 +347,7 @@ func (mgr *searchHeadClusterPodManager) Update(c splcommon.ControllerClient, sta
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(mgr.c, statefulSet, mgr, desiredReplicas)
+	return splctrl.UpdateStatefulSetPods(mgr.c, statefulSet, mgr, desiredReplicas, &mgr.cr.Status.SkipRecheckUpdate)
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
