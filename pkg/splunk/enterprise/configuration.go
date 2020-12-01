@@ -246,28 +246,47 @@ func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind strin
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
+	var scheme string
+	scheme = "https"
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		scheme = "http"
+	}
+
+	var webScheme string
+	webScheme = "http"
+	if os.Getenv("SPLUNK_HTTP_ENABLESSL") == "true" {
+		webScheme = "https"
+	}
 	result := map[string]int{
-		"splunkweb": 8000,
-		"splunkd":   8089,
+		fmt.Sprintf("splunkweb-%s", webScheme): 8000,
+		fmt.Sprintf("splunkd-%s", scheme):      8089,
+	}
+
+	var hecScheme string
+	hecScheme = "https"
+	if os.Getenv("SPLUNK_HEC_SSL") == "false" {
+		hecScheme = "http"
 	}
 
 	switch instanceType {
 	case SplunkMonitoringConsole:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["s2s-tcp"] = 9997
 	case SplunkStandalone:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["s2s-tcp"] = 9997
 	case SplunkSearchHead:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
 	case SplunkIndexer:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["replication-tcp"] = 9887
+		result["s2s-tcp"] = 9997
+
 	}
 
 	return result
@@ -290,12 +309,15 @@ func getSplunkContainerPorts(instanceType InstanceType) []corev1.ContainerPort {
 func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSplunkPorts(instanceType) {
-		l = append(l, corev1.ServicePort{
-			Name:       key,
-			Port:       int32(value),
-			TargetPort: intstr.FromInt(value),
-			Protocol:   corev1.ProtocolTCP,
-		})
+		if key != "replication-tcp" {
+			l = append(l, corev1.ServicePort{
+				Name:       key,
+				Port:       int32(value),
+				TargetPort: intstr.FromInt(value),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
+
 	}
 	return l
 }
@@ -603,30 +625,41 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	if instanceType == SplunkStandalone && len(spec.ClusterMasterRef.Name) > 0 {
 		role = SplunkSearchHead.ToRole()
 	}
-	var env []corev1.EnvVar
-	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
-		env = []corev1.EnvVar{
-			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
-			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
-			{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
-			{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-			{Name: "SPLUNK_ROLE", Value: role},
-			{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
-			{Name: "SPLUNK_CERT_PREFIX", Value: "http"},
-			{Name: "SPLUNKD_SSL_ENABLE", Value: "false"},
-			{Name: "NO_HEALTHCHECK", Value: "true"},
-		}
-	} else {
-		env = []corev1.EnvVar{
-			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
-			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
-			{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
-			{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-			{Name: "SPLUNK_ROLE", Value: role},
-			{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
-		}
+	env := []corev1.EnvVar{
+		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+		{Name: "SPLUNK_ROLE", Value: role},
+		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+	}
+	if os.Getenv("SPLUNK_HTTP_ENABLESSL") == "true" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_HTTP_ENABLESSL",
+			Value: "true",
+		})
 	}
 
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_CERT_PREFIX",
+			Value: "http",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "NO_HEALTHCHECK",
+			Value: "true",
+		})
+	}
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+	}
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {
 		env = append(env, corev1.EnvVar{

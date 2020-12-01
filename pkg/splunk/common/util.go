@@ -213,7 +213,7 @@ func CompareSortedStrings(a []string, b []string) bool {
 // GetIstioAnnotations returns a map of istio annotations for a pod template
 func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	// list of ports within the deployments that we want istio to leave alone
-	excludeOutboundPorts := []int32{8089, 8191, 9997, 7777, 9000, 17000, 17500, 19000}
+	excludeOutboundPorts := []int32{8191, 7777, 9000, 17000, 17500, 19000}
 
 	// calculate outbound port exclusions
 	excludeOutboundPortsLookup := make(map[int32]bool)
@@ -232,10 +232,14 @@ func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	for idx := range sortedPorts {
 		_, skip := excludeOutboundPortsLookup[sortedPorts[idx].ContainerPort]
 		if !skip {
-			if includeInboundPortsBuf.Len() > 0 {
-				fmt.Fprint(includeInboundPortsBuf, ",")
+
+			if (strings.Contains(sortedPorts[idx].Name, "-") || strings.Contains(sortedPorts[idx].Name, "spark") || strings.Contains(sortedPorts[idx].Name, "workerwebui")) && !strings.Contains(sortedPorts[idx].Name, "replication-") {
+				if includeInboundPortsBuf.Len() > 0 {
+					fmt.Fprint(includeInboundPortsBuf, ",")
+				}
+				fmt.Fprintf(includeInboundPortsBuf, "%d", sortedPorts[idx].ContainerPort)
 			}
-			fmt.Fprintf(includeInboundPortsBuf, "%d", sortedPorts[idx].ContainerPort)
+
 		}
 	}
 
