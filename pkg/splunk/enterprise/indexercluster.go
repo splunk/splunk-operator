@@ -500,7 +500,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient)
 	cm := mgr.getClusterMasterClient()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return fmt.Errorf("Could not get cluster info from cluster master: %s",err)
+		return fmt.Errorf("Could not get cluster info from cluster master: %s", err)
 	}
 	var replicationFactor int32
 	// if it is a multisite indexer cluster, check site_replication_factor
