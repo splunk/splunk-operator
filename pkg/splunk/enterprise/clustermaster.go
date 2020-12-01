@@ -72,6 +72,11 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
+	// This is to take care of case where AreRemoteVolumeKeysChanged returns an error if it returns false.
+	if err != nil {
+		return result, err
+	}
+
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
