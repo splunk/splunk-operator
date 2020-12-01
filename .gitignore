@@ -91,3 +91,4 @@ clair-scanner-logs
 release-*
 deploy/olm-certified
 *junit.xml
+*.lic

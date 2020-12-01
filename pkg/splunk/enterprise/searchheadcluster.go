@@ -432,7 +432,6 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 	uri := splcommon.GetServiceURI(
 		mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)),
-		mgr.cr.Spec.ManagementSchemeInsecure,
 	)
 
 	// Retrieve admin password from Pod

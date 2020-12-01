@@ -97,7 +97,7 @@ func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplun
 	if spec.LicenseMasterRef.Name != "" {
 		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceURI(spec.LicenseMasterRef.Namespace, licenseMasterURL, spec.ManagementSchemeInsecure)
+			licenseMasterURL = splcommon.GetServiceURI(spec.LicenseMasterRef.Namespace, licenseMasterURL)
 		}
 		return []corev1.EnvVar{
 			{

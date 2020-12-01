@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -603,7 +604,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		role = SplunkSearchHead.ToRole()
 	}
 	var env []corev1.EnvVar
-	if spec.ManagementSchemeInsecure {
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
 		env = []corev1.EnvVar{
 			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
@@ -643,7 +644,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.GetServiceURI(namespace, licenseMasterName, spec.ManagementSchemeInsecure),
+			Value: splcommon.GetServiceURI(namespace, licenseMasterName),
 		})
 	}
 
@@ -655,7 +656,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceURI(spec.ClusterMasterRef.Namespace, clusterMasterURL, spec.ManagementSchemeInsecure)
+			clusterMasterURL = splcommon.GetServiceURI(spec.ClusterMasterRef.Namespace, clusterMasterURL)
 		}
 	}
 	if clusterMasterURL != "" {

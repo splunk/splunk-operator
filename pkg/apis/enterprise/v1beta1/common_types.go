@@ -37,10 +37,6 @@ const (
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
 
-	// Determines the protocol - https when false (default) or http when true used to communicate with the management rest endpoint on port 8089
-	// insecure mode is commonly used when combined with a service mesh component such as istio
-	ManagementSchemeInsecure bool `json:"managementSchemeInsecure,optional" defaults:"false"`
-
 	// Name of StorageClass to use for persistent volume claims
 	StorageClassName string `json:"storageClassName"`
 

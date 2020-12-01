@@ -466,9 +466,6 @@ spec:
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string
-            managementSchemeInsecure:
-              description: Determines the protocol - https when false (default) or http when true used to communicate with the management rest endpoint on port 8089 insecure mode is commonly used when combined with a service mesh component such as istio
-              type: boolean
             replicas:
               description: Number of standalone pods
               format: int32

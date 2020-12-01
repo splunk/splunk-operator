@@ -109,14 +109,14 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 
 // getMonitoringConsoleClient for monitoringConsolePodManager returns a SplunkClient for monitoring console
 func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
-	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false), mgr.spec.ManagementSchemeInsecure)
+	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
 
 	return mgr.newSplunkClient(uri, "admin", string(mgr.secrets.Data["password"]))
 }
 
 // getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
 func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
-	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false), mgr.spec.ManagementSchemeInsecure)
+	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
 
 	return mgr.newSplunkClient(uri, "admin", string(mgr.secrets.Data["password"]))
 
