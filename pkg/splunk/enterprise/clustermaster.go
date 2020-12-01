@@ -260,10 +260,9 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 	scopedLog.Info("Issueing REST call to push master aps bundle")
 
 	masterIdxcName := cr.GetName()
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
+	uri := splcommon.GetServiceURI(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
 
-	// Get a Splunk client to execute the REST call
-	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+	splunkClient := splclient.NewSplunkClient(uri, "admin", string(adminPwd))
 
 	return splunkClient.BundlePush(true)
 }
