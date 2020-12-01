@@ -602,16 +602,28 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	if instanceType == SplunkStandalone && len(spec.ClusterMasterRef.Name) > 0 {
 		role = SplunkSearchHead.ToRole()
 	}
-	env := []corev1.EnvVar{
-		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
-		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
-		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
-		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: role},
-		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
-		{Name: "SPLUNK_CERT_PREFIX", Value: "http"},
-		{Name: "SPLUNKD_SSL_ENABLE", Value: "false"},
-		{Name: "NO_HEALTHCHECK", Value: "true"},
+	var env []corev1.EnvVar
+	if spec.ManagementSchemeInsecure {
+		env = []corev1.EnvVar{
+			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+			{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+			{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+			{Name: "SPLUNK_ROLE", Value: role},
+			{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+			{Name: "SPLUNK_CERT_PREFIX", Value: "http"},
+			{Name: "SPLUNKD_SSL_ENABLE", Value: "false"},
+			{Name: "NO_HEALTHCHECK", Value: "true"},
+		}
+	} else {
+		env = []corev1.EnvVar{
+			{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+			{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+			{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+			{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+			{Name: "SPLUNK_ROLE", Value: role},
+			{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		}
 	}
 
 	// update variables for licensing, if configured
