@@ -179,7 +179,7 @@ func TestBundlePush(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/default/apply", body)
 
 	test := func(c SplunkClient) error {
-		return c.BundlePush(true, false)
+		return c.BundlePush(true)
 	}
 	splunkClientTester(t, "TestBundlePush", 200, "", wantRequest, test)
 }

@@ -62,6 +62,9 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	if cr.Status.IndexerSecretChanged == nil {
 		cr.Status.IndexerSecretChanged = []bool{}
 	}
+	if cr.Status.IdxcPasswordChangedSecrets == nil {
+		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
+	}
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
@@ -148,6 +151,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		// Reset idxc secret changed and namespace secret revision
 		cr.Status.IndexerSecretChanged = []bool{}
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
+		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 
 		result.Requeue = false
 	}
@@ -203,6 +207,7 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterprisev1.In
 
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) error {
+	var indIdxcSecret string
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -224,17 +229,24 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 	scopedLog.Info("Namespaced scoped secret revision has changed")
 
 	// Retrieve idxc_secret password from secret data
-	nsIdxcSecret := string(namespaceSecret.Data["idxc_secret"])
+	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
 
-		// Retrieve idxc_secret password from Pod
-		indIdxcSecret, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, indexerPodName, mgr.cr.GetNamespace(), "idxc_secret")
+		// Retrieve secret from pod
+		podSecret, err := splutil.GetSecretFromPod(mgr.c, indexerPodName, mgr.cr.GetNamespace())
 		if err != nil {
-			return fmt.Errorf("Couldn't Retrieve idxc_secret from secret data %s", err.Error())
+			return fmt.Errorf(fmt.Sprintf(splcommon.PodSecretNotFoundError, indexerPodName))
+		}
+
+		// Retrieve idxc_secret token
+		if indIdxcSecretByte, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
+			indIdxcSecret = string(indIdxcSecretByte)
+		} else {
+			return fmt.Errorf(fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret))
 		}
 
 		// If idxc secret is different from namespace scoped secret change it
@@ -274,11 +286,51 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 			}
 			scopedLog.Info("Restarted splunk")
 
+			// Keep a track of all the secrets on pods to change their idxc secret below
+			mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
+
 			// Set the idxc_secret changed flag to true
 			if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
 				mgr.cr.Status.IndexerSecretChanged[i] = true
 			} else {
 				mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
+			}
+		}
+	}
+
+	/*
+		During the recycle of indexer pods due to an idxc secret change, if there is a container
+		restart(for example if the splunkd process dies) before the operator
+		deletes the pod, the container restart fails due to mismatch of idxc password between Cluster
+		master and that particular indexer.
+
+		Changing the idxc passwords on the secrets mounted on the indexer pods to avoid the above.
+	*/
+	if len(mgr.cr.Status.IdxcPasswordChangedSecrets) > 0 {
+		for podSecretName := range mgr.cr.Status.IdxcPasswordChangedSecrets {
+			if mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] {
+				podSecret, err := splutil.GetSecretByName(mgr.c, mgr.cr, podSecretName)
+				if err != nil {
+					return fmt.Errorf("Could not read secret %s, reason - %v", podSecretName, err)
+				}
+
+				// Retrieve namespaced scoped secret data in splunk readable format
+				splunkReadableData, err := splutil.GetSplunkReadableNamespaceScopedSecretData(mgr.c, mgr.cr.GetNamespace())
+				if err != nil {
+					return err
+				}
+
+				podSecret.Data[splcommon.IdxcSecret] = splunkReadableData[splcommon.IdxcSecret]
+				podSecret.Data["default.yml"] = splunkReadableData["default.yml"]
+
+				_, err = splctrl.ApplySecret(mgr.c, podSecret)
+				if err != nil {
+					return err
+				}
+				scopedLog.Info("idxc password changed on the secret mounted on pod", "Secret on Pod:", podSecretName)
+
+				// Set to false marking the idxc password change in the secret
+				mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] = false
 			}
 		}
 	}
@@ -290,20 +342,19 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
 
 	var err error
-	//Don't even try to create a statefulset and secret if CM is not ready yet.
-	if mgr.cr.Status.ClusterMasterPhase != splcommon.PhaseReady {
-		mgr.log.Error(err, "Cluster Master is not ready yet")
-		return splcommon.PhaseError, err
-	}
 
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
 	}
 	// update statefulset, if necessary
-	_, err = splctrl.ApplyStatefulSet(mgr.c, statefulSet)
-	if err != nil {
-		return splcommon.PhaseError, err
+	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
+		_, err = splctrl.ApplyStatefulSet(mgr.c, statefulSet)
+		if err != nil {
+			return splcommon.PhaseError, err
+		}
+	} else {
+		mgr.log.Error(err, "Cluster Master is not ready yet")
 	}
 
 	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)

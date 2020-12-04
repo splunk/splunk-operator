@@ -629,10 +629,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 }
 
 // BundlePush pushes the CM master apps bundle to all the indexer peers
-func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool, mock bool) error {
-	if mock {
-		return nil
-	}
+func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
 	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
 

@@ -114,10 +114,34 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	if err != nil {
 		t.Errorf("Couldn't update secret %s", current.GetName())
 	}
+
 	// Retrieve secret data from non-existing pod
 	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "key1")
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize nil secret data")
+	}
+
+	// Update pod to remove pod spec volumes
+	pod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Update pod spec to remove the volume mount
+	err = UpdateResource(c, pod)
+	if err != nil {
+		t.Errorf("Failed to update pod %s", pod.GetName())
+	}
+
+	// Retrieve secret data from non-existing pod
+	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "key1")
+	if err.Error() != emptyPodSpecVolumes {
+		t.Errorf("Didn't recognize empty pod spec volumes")
 	}
 }
 
@@ -204,6 +228,70 @@ func TestGetSecretFromPod(t *testing.T) {
 	if err.Error() != splcommon.SecretNotFoundError {
 		t.Errorf("Didn't recognize non-existing secret %s", "test")
 	}
+
+	// Update pod to remove pod spec volumes
+	pod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Update pod spec to remove the volume mount
+	err = UpdateResource(c, pod)
+	if err != nil {
+		t.Errorf("Failed to update pod %s", pod.GetName())
+	}
+
+	// Retrieve secret data from Pod
+	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
+	if err.Error() != emptyPodSpecVolumes {
+		t.Errorf("Couldn't recognize empty pod spec volumes")
+	}
+
+	// Update pod spec to add volume mount but not a secret
+	pod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							MountPath: "/mnt/splunk-secrets",
+							Name:      "mnt-splunk-secrets",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+				},
+			},
+		},
+	}
+
+	// Update pod spec to remove the volume mount
+	err = UpdateResource(c, pod)
+	if err != nil {
+		t.Errorf("Failed to update pod %s", pod.GetName())
+	}
+
+	// Retrieve secret data from Pod
+	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
+	if err.Error() != emptySecretVolumeSource {
+		t.Errorf("Couldn't recognize empty pod spec volumes")
+	}
+
 }
 
 func TestGetSecretLabels(t *testing.T) {
@@ -249,13 +337,16 @@ func TestSetSecretOwnerRef(t *testing.T) {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
 
-	// Reset secret owner reference
-	//	current.OwnerReferences = nil
-
-	// Test existing secret
+	// Test adding secret owner reference
 	err = SetSecretOwnerRef(c, current.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", current.GetName())
+	}
+
+	// Test existing secret owner reference
+	err = SetSecretOwnerRef(c, current.GetName(), &cr)
+	if err != nil {
+		t.Errorf("Couldn't bail out once owner ref for secret %s is already set", current.GetName())
 	}
 
 	removedReferralCount, err := RemoveSecretOwnerRef(c, current.GetName(), &cr)
@@ -265,6 +356,21 @@ func TestSetSecretOwnerRef(t *testing.T) {
 	}
 }
 
+func TestRemoveSecretOwnerRef(t *testing.T) {
+	c := spltest.NewMockClient()
+	cr := TestResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	// Test secret not found error condition
+	_, err := RemoveSecretOwnerRef(c, "testSecretName", &cr)
+	if err.Error() != "NotFound" {
+		t.Errorf("Couldn't find secret not found error")
+	}
+
+}
 func TestRemoveUnwantedSecrets(t *testing.T) {
 	var current corev1.Secret
 	var err error
@@ -327,7 +433,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 	// Add an invalid secret to test error leg
 	current = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "random",
+			Name:      splcommon.GetVersionedSecretName(versionedSecretIdentifier, "-1"),
 			Namespace: "test",
 		},
 		Data: make(map[string][]byte),

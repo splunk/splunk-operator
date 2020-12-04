@@ -320,7 +320,7 @@ func TestApplyShcSecret(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Get namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
 	if err != nil {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
@@ -432,8 +432,84 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
+	// Update admin password in secret again to hit already set scenario
+	secrets.Data["password"] = []byte{'1'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
 	mgr.cr.Status.ShcSecretChanged[0] = false
-	// Test set again
+	// Test set again for shc_secret
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	// Update admin password in secret again to hit already set scenario
+	secrets.Data["password"] = []byte{'1'}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	mgr.cr.Status.ShcSecretChanged[0] = false
+	mgr.cr.Status.AdminSecretChanged[0] = false
+	// Test set again for admin password
+	err = ApplyShcSecret(mgr, 1, true)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	// Missing shc_secret scenario
+	secrets = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": {'1', '2', '3'},
+		},
+	}
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyShcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") {
+		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
+	}
+
+	// Missing admin password scenario
+	secrets = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"shc_secret": {'a'},
+		},
+	}
+
+	err = splutil.UpdateResource(c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
+	err = ApplyShcSecret(mgr, 1, true)
+	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") {
+		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
+	}
+
+	// Make resource version of ns secret and cr the same
+	mgr.cr.Status.NamespaceSecretResourceVersion = "1"
+	nsSecret.ResourceVersion = mgr.cr.Status.NamespaceSecretResourceVersion
+	err = splutil.UpdateResource(c, nsSecret)
+	if err != nil {
+		t.Errorf("Couldn't update resource")
+	}
+
 	err = ApplyShcSecret(mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
