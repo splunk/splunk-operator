@@ -144,10 +144,28 @@ func TestGetServiceFQDN(t *testing.T) {
 		}
 	}
 
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
 	test("test", "t1", "t1.test.svc.cluster.local")
 
 	os.Setenv("CLUSTER_DOMAIN", "example.com")
 	test("test", "t2", "t2.test.svc.example.com")
+}
+
+func TestGetServiceURI(t *testing.T) {
+	test := func(namespace string, name string, want string) {
+		got := GetServiceURI(namespace, name)
+		if got != want {
+			t.Errorf("GetServiceURI() = %s; want %s", got, want)
+		}
+	}
+
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
+	os.Setenv("SPLUNKD_SSL_ENABLE", "true")
+	test("test", "t1", "https://t1.test.svc.cluster.local:8089")
+
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
+	os.Setenv("SPLUNKD_SSL_ENABLE", "false")
+	test("test", "t2", "http://t2.test.svc.cluster.local:8089")
 }
 
 func TestGenerateSecret(t *testing.T) {
