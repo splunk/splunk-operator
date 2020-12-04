@@ -246,28 +246,53 @@ func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind strin
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
+	var scheme string
+	scheme = "https"
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		scheme = "http"
+	}
+
+	var webScheme string
+	webScheme = "http"
+	if os.Getenv("SPLUNK_HTTP_ENABLESSL") == "true" {
+		webScheme = "https"
+	}
 	result := map[string]int{
-		"splunkweb": 8000,
-		"splunkd":   8089,
+		fmt.Sprintf("splunkd-%s", scheme): 8089,
+	}
+
+	var hecScheme string
+	hecScheme = "https"
+	if os.Getenv("SPLUNK_HEC_SSL") == "false" {
+		hecScheme = "http"
 	}
 
 	switch instanceType {
 	case SplunkMonitoringConsole:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
 	case SplunkStandalone:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
+		result["dfccontrol-tcp"] = 17000
+		result["datareceive-tcp"] = 19000
+		result["dfsmaster-tcp"] = 9000
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["s2s-tcp"] = 9997
 	case SplunkSearchHead:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
+		result["dfccontrol-tcp"] = 17000
+		result["datareceive-tcp"] = 19000
+		result["dfsmaster-tcp"] = 9000
+	case SplunkDeployer:
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
+	case SplunkClusterMaster:
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
 	case SplunkIndexer:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["replication-tcp"] = 9887
+		result["s2s-tcp"] = 9997
+	case SplunkLicenseMaster:
+		result[fmt.Sprintf("splunkweb-%s", webScheme)] = 8000
+
 	}
 
 	return result
@@ -290,12 +315,15 @@ func getSplunkContainerPorts(instanceType InstanceType) []corev1.ContainerPort {
 func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSplunkPorts(instanceType) {
-		l = append(l, corev1.ServicePort{
-			Name:       key,
-			Port:       int32(value),
-			TargetPort: intstr.FromInt(value),
-			Protocol:   corev1.ProtocolTCP,
-		})
+		if key != "replication-tcp" {
+			l = append(l, corev1.ServicePort{
+				Name:       key,
+				Port:       int32(value),
+				TargetPort: intstr.FromInt(value),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
+
 	}
 	return l
 }
