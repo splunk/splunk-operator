@@ -148,6 +148,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
@@ -161,7 +162,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[15], funcCalls[16], funcCalls[17], funcCalls[18], funcCalls[20]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[20]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[15], funcCalls[16], funcCalls[17], funcCalls[18], funcCalls[21]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[20], funcCalls[21]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[11], funcCalls[12]}, "Update": {funcCalls[10], funcCalls[12]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.ClusterMaster{
