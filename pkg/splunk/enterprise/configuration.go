@@ -589,32 +589,40 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	// use script provided by enterprise container to check if pod is alive
 	livenessProbe := &corev1.Probe{
 		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/sbin/checkstate.sh",
-				},
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.IntOrString{IntVal: 9000},
 			},
 		},
-		InitialDelaySeconds: 300,
-		TimeoutSeconds:      30,
-		PeriodSeconds:       30,
+		FailureThreshold:    5,
+		InitialDelaySeconds: 30,
+		PeriodSeconds:       10,
 	}
 
 	// pod is ready if container artifact file is created with contents of "started".
 	// this indicates that all the the ansible plays executed at startup have completed.
-	readinessProbe := &corev1.Probe{
+	startupProbe := &corev1.Probe{
 		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/bin/grep",
-					"started",
-					"/opt/container_artifact/splunk-container.state",
-				},
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.IntOrString{IntVal: 9000},
 			},
 		},
+		FailureThreshold:    60,
 		InitialDelaySeconds: 10,
-		TimeoutSeconds:      5,
-		PeriodSeconds:       5,
+		PeriodSeconds:       10,
+	}
+
+	readinessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.IntOrString{IntVal: 9000},
+			},
+		},
+		FailureThreshold:    6,
+		InitialDelaySeconds: 30,
+		PeriodSeconds:       10,
 	}
 
 	// prepare defaults variable
@@ -654,10 +662,6 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNKD_SSL_ENABLE",
 			Value: "false",
-		})
-		env = append(env, corev1.EnvVar{
-			Name:  "NO_HEALTHCHECK",
-			Value: "true",
 		})
 	}
 	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
@@ -711,6 +715,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
+		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
