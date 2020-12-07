@@ -58,9 +58,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
-		if err != nil {
-			return result, err
-		}
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -73,6 +70,11 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 
 		cr.Status.SmartStore = cr.Spec.SmartStore
+	}
+
+	// This is to take care of case where AreRemoteVolumeKeysChanged returns an error if it returns false.
+	if err != nil {
+		return result, err
 	}
 
 	defer func() {
@@ -167,6 +169,9 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	var extraEnvVar []corev1.EnvVar
 
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
+	if err != nil {
+		return ss, err
+	}
 	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
 	if exists {
@@ -257,7 +262,7 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 		return fmt.Errorf("Could not find admin password while trying to push the master apps bundle")
 	}
 
-	scopedLog.Info("Issueing REST call to push master aps bundle")
+	scopedLog.Info("Issuing REST call to push master aps bundle")
 
 	masterIdxcName := cr.GetName()
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
