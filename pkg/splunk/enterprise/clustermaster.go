@@ -262,7 +262,7 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 		return fmt.Errorf("Could not find admin password while trying to push the master apps bundle")
 	}
 
-	scopedLog.Info("Issueing REST call to push master aps bundle")
+	scopedLog.Info("Issuing REST call to push master aps bundle")
 
 	masterIdxcName := cr.GetName()
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
