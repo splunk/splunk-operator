@@ -135,6 +135,7 @@ func UpdatePodRevisionHash(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 	return nil
 }
 
+// isRevisionUpdateSuccessful checks if current revision is different from updated revision
 func isRevisionUpdateSuccessful(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) bool {
 	scopedLog := log.WithName("isUpdateSuccessful").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
@@ -158,6 +159,7 @@ func isRevisionUpdateSuccessful(c splcommon.ControllerClient, statefulSet *appsv
 	return true
 }
 
+// checkAndUpdatePodRevision updates the pod revision hash labels on pods if statefulset update was successful
 func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, readyReplicas int32, skipRecheckUpdate *bool) (bool, error) {
 	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
