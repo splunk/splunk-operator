@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
@@ -140,6 +141,15 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-master-0"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
+		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
+		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -151,7 +161,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[12]}, "List": {listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[15], funcCalls[16], funcCalls[17], funcCalls[18], funcCalls[20]}, "List": {listmockCall[0], listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[20]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[11], funcCalls[12]}, "Update": {funcCalls[10], funcCalls[12]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.ClusterMaster{
@@ -189,10 +199,11 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		},
 	}
 	client := spltest.NewMockClient()
-	// Without S3 keys, ApplyStandalone should fail
+
+	// Without S3 keys, ApplyClusterMaster should fail
 	_, err := ApplyClusterMaster(client, &current)
 	if err == nil {
-		t.Errorf("ApplyIndexerCluster should fail without S3 secrets configured")
+		t.Errorf("ApplyClusterMaster should fail without S3 secrets configured")
 	}
 
 	// Create namespace scoped secret
@@ -222,7 +233,59 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		_, err := ApplyClusterMaster(c, cr.(*enterprisev1.ClusterMaster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap)
+
+	client.AddObject(&smartstoreConfigMap)
+	ss, _ := getClusterMasterStatefulSet(client, &current)
+	ss.Status.ReadyReplicas = 1
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-cluster-master-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v1",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
+
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
+	if _, err = ApplyClusterMaster(client, &current); err != nil {
+		t.Errorf("ApplyClusterMaster() should not have returned error")
+	}
+
+	current.Spec.CommonSplunkSpec.EtcStorage = "-abcd"
+	if _, err := ApplyClusterMaster(client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
+	}
+
+	var replicas int32 = 3
+	current.Spec.CommonSplunkSpec.EtcStorage = ""
+	ss.Status.ReadyReplicas = 3
+	ss.Spec.Replicas = &replicas
+	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
+	client.AddObject(ss)
+	if _, err := ApplyClusterMaster(client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
+	}
+
+	ss.Status.ReadyReplicas = 1
+	*ss.Spec.Replicas = ss.Status.ReadyReplicas
+	objects := []runtime.Object{ss, pod}
+	client.AddObjects(objects)
+	current.Spec.CommonSplunkSpec.Mock = false
+
+	// This should fail at ApplyMonitoringConsole
+	if _, err := ApplyClusterMaster(client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
+	}
 }
 
 func TestPerformCmBundlePush(t *testing.T) {
@@ -331,6 +394,11 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	_, err = splctrl.ApplySecret(client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
+	}
+
+	err = PushMasterAppsBundle(client, &current)
+	if err == nil {
+		t.Errorf("Bundle push should fail, when the password is not found")
 	}
 
 	//Without password, should return an error
