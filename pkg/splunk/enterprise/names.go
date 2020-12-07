@@ -52,6 +52,7 @@ const (
 
 	//identifier for monitoring console configMap revision
 	monitoringConsoleConfigRev = "monitoringConsoleConfigRev"
+
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
@@ -69,9 +70,6 @@ const (
 
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
-
-	// Used to identify if the configMap Changed
-	//configMapUpdated = "configMapChanged"
 
 	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"

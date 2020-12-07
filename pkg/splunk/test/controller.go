@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +32,7 @@ import (
 )
 
 func init() {
-	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier)
+	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, enterpriseObjCopier)
 }
 
 // MockObjectCopiers is a slice of MockObjectCopier methods that MockClient uses to copy runtime.Objects
@@ -39,26 +40,51 @@ var MockObjectCopiers []MockObjectCopier
 
 // MockObjectCopier is a method used to perform the typed copy of a runtime.Object from src to dst.
 // It returns true if the runtime.Object was copied, or false if the type is unknown.
-type MockObjectCopier func(dst, src runtime.Object) bool
+type MockObjectCopier func(dst, src *runtime.Object) bool
+
+// enterpriseObjCopier is used to copy enterprise runtime.Objects
+func enterpriseObjCopier(dst, src *runtime.Object) bool {
+	dstP := *dst
+	srcP := *src
+	switch srcP.(type) {
+	case *enterprisev1.ClusterMaster:
+		*dstP.(*enterprisev1.ClusterMaster) = *srcP.(*enterprisev1.ClusterMaster)
+	case *enterprisev1.IndexerCluster:
+		*dstP.(*enterprisev1.IndexerCluster) = *srcP.(*enterprisev1.IndexerCluster)
+	case *enterprisev1.LicenseMaster:
+		*dstP.(*enterprisev1.LicenseMaster) = *srcP.(*enterprisev1.LicenseMaster)
+	case *enterprisev1.SearchHeadCluster:
+		*dstP.(*enterprisev1.SearchHeadCluster) = *srcP.(*enterprisev1.SearchHeadCluster)
+	case *enterprisev1.Spark:
+		*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
+	case *enterprisev1.Standalone:
+		*dstP.(*enterprisev1.Standalone) = *srcP.(*enterprisev1.Standalone)
+	default:
+		return false
+	}
+	return true
+}
 
 // coreObjectCopier is used to copy corev1 runtime.Objects
-func coreObjectCopier(dst, src runtime.Object) bool {
-	if reflect.TypeOf(dst).String() == reflect.TypeOf(src.(runtime.Object)).String() {
-		switch src.(type) {
+func coreObjectCopier(dst, src *runtime.Object) bool {
+	dstP := *dst
+	srcP := *src
+	if reflect.TypeOf(dstP).String() == reflect.TypeOf((*src).(runtime.Object)).String() {
+		switch (srcP).(type) {
 		case *corev1.ConfigMap:
-			*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
+			*dstP.(*corev1.ConfigMap) = *srcP.(*corev1.ConfigMap)
 		case *corev1.Secret:
-			*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+			*dstP.(*corev1.Secret) = *srcP.(*corev1.Secret)
 		case *corev1.SecretList:
-			*dst.(*corev1.SecretList) = *src.(*corev1.SecretList)
+			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
 		case *corev1.PersistentVolumeClaim:
-			*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
+			*dstP.(*corev1.PersistentVolumeClaim) = *srcP.(*corev1.PersistentVolumeClaim)
 		case *corev1.PersistentVolumeClaimList:
-			*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
+			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
 		case *corev1.Service:
-			*dst.(*corev1.Service) = *src.(*corev1.Service)
+			*dstP.(*corev1.Service) = *srcP.(*corev1.Service)
 		case *corev1.Pod:
-			*dst.(*corev1.Pod) = *src.(*corev1.Pod)
+			*dstP.(*corev1.Pod) = *srcP.(*corev1.Pod)
 		default:
 			return false
 		}
@@ -67,12 +93,14 @@ func coreObjectCopier(dst, src runtime.Object) bool {
 }
 
 // appsObjectCopier is used to copy appsv1 runtime.Objects
-func appsObjectCopier(dst, src runtime.Object) bool {
-	switch src.(type) {
+func appsObjectCopier(dst, src *runtime.Object) bool {
+	srcP := *src
+	dstP := *dst
+	switch srcP.(type) {
 	case *appsv1.Deployment:
-		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
+		*dstP.(*appsv1.Deployment) = *srcP.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
-		*dst.(*appsv1.StatefulSet) = *src.(*appsv1.StatefulSet)
+		*dstP.(*appsv1.StatefulSet) = *srcP.(*appsv1.StatefulSet)
 	default:
 		return false
 	}
@@ -80,15 +108,15 @@ func appsObjectCopier(dst, src runtime.Object) bool {
 }
 
 // copyMockObject uses the global MockObjectCopiers to perform the typed copy of a runtime.Object from src to dst
-func copyMockObject(dst, src runtime.Object) {
+func copyMockObject(dst, src *runtime.Object) {
 	for n := range MockObjectCopiers {
 		if MockObjectCopiers[n](dst, src) {
 			return
 		}
 	}
-
+	srcP := *src
 	// default if no types match
-	dst = src.DeepCopyObject()
+	*dst = srcP.DeepCopyObject()
 }
 
 // MockFuncCall is used to record a function call to MockClient methods
@@ -156,8 +184,10 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 		Obj: obj,
 	})
 	getObj := c.State[getStateKeyWithKey(key, obj)]
+
 	if getObj != nil {
-		copyMockObject(obj, getObj.(runtime.Object))
+		srcObj := getObj.(runtime.Object)
+		copyMockObject(&obj, &srcObj)
 		return nil
 	}
 	return c.NotFoundError
@@ -172,7 +202,8 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		copyMockObject(obj, listObj.(runtime.Object))
+		srcObj := listObj.(runtime.Object)
+		copyMockObject(&obj, &srcObj)
 		return nil
 	}
 	return c.NotFoundError

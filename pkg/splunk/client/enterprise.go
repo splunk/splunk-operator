@@ -629,10 +629,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 }
 
 // BundlePush pushes the CM master apps bundle to all the indexer peers
-func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool, mock bool) error {
-	if mock {
-		return nil
-	}
+func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
 	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
 
@@ -894,7 +891,9 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 
 //ClusterInfo is the struct for checking ClusterInfo
 type ClusterInfo struct {
-	MultiSite string `json:"multisite"`
+	MultiSite             string `json:"multisite"`
+	ReplicationFactor     int32  `json:"replication_factor"`
+	SiteReplicationFactor string `json:"site_replication_factor,omitempty"`
 }
 
 // GetClusterInfo queries the cluster about multi-site or single-site.
