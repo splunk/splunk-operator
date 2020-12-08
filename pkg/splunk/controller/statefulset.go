@@ -98,6 +98,7 @@ func UpdatePodRevisionHash(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 	err := c.Get(context.TODO(), namespacedName, &current)
 	if err != nil {
 		scopedLog.Error(err, "Unable to Get statefulset", "statefulset", statefulSet.GetName())
+		return err
 	}
 
 	for n := readyReplicas - 1; n >= 0; n-- {
@@ -137,7 +138,7 @@ func UpdatePodRevisionHash(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 
 // isRevisionUpdateSuccessful checks if current revision is different from updated revision
 func isRevisionUpdateSuccessful(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) bool {
-	scopedLog := log.WithName("isUpdateSuccessful").WithValues(
+	scopedLog := log.WithName("isRevisionUpdateSuccessful").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
@@ -161,14 +162,14 @@ func isRevisionUpdateSuccessful(c splcommon.ControllerClient, statefulSet *appsv
 
 // checkAndUpdatePodRevision updates the pod revision hash labels on pods if statefulset update was successful
 func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, readyReplicas int32, skipRecheckUpdate *bool) (bool, error) {
-	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
+	scopedLog := log.WithName("checkAndUpdatePodRevision").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 	var err error
 	if !isRevisionUpdateSuccessful(c, statefulSet) {
 		scopedLog.Error(err, "Statefulset not updated yet")
 		*skipRecheckUpdate = false
-		return false, err
+		return *skipRecheckUpdate, err
 	}
 	// update the controller-revision-hash label on pods to
 	// to avoid unnecessary recycle of pods
@@ -176,10 +177,10 @@ func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1
 	if err != nil {
 		scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 		*skipRecheckUpdate = false
-		return false, err
+		return *skipRecheckUpdate, err
 	}
 	*skipRecheckUpdate = true
-	return true, nil
+	return *skipRecheckUpdate, nil
 }
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
