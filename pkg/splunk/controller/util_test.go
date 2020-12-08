@@ -121,6 +121,18 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("Container Resources")
 
+	// check pod env update
+	current.Spec.Containers[0].Env = append(current.Spec.Containers[0].Env, corev1.EnvVar{
+		Name:  "SPLUNK_DEFAULTS_URL",
+		Value: "defaults1.yaml",
+	})
+	revised.Spec.Containers[0].Env = append(revised.Spec.Containers[0].Env, corev1.EnvVar{
+		Name:  "SPLUNK_DEFAULTS_URL",
+		Value: "defaults2.yaml",
+	})
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers[0].Env, revised.Spec.Containers[0].Env) }
+	podUpdateTester("Pod Env changed")
+
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
