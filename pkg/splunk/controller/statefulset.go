@@ -161,7 +161,7 @@ func isRevisionUpdateSuccessful(c splcommon.ControllerClient, statefulSet *appsv
 }
 
 // checkAndUpdatePodRevision updates the pod revision hash labels on pods if statefulset update was successful
-func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, readyReplicas int32, skipRecheckUpdate *bool) (bool, error) {
+func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, readyReplicas int32, skipRecheckUpdate *bool) error {
 	scopedLog := log.WithName("checkAndUpdatePodRevision").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
@@ -169,7 +169,7 @@ func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1
 	if !isRevisionUpdateSuccessful(c, statefulSet) {
 		scopedLog.Error(err, "Statefulset not updated yet")
 		*skipRecheckUpdate = false
-		return *skipRecheckUpdate, err
+		return err
 	}
 	// update the controller-revision-hash label on pods to
 	// to avoid unnecessary recycle of pods
@@ -177,10 +177,10 @@ func checkAndUpdatePodRevision(c splcommon.ControllerClient, statefulSet *appsv1
 	if err != nil {
 		scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 		*skipRecheckUpdate = false
-		return *skipRecheckUpdate, err
+		return err
 	}
 	*skipRecheckUpdate = true
-	return *skipRecheckUpdate, nil
+	return nil
 }
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
@@ -196,8 +196,8 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 		scopedLog.Info("Waiting for pods to become ready")
 		if readyReplicas > 0 {
 			if !*skipRecheckUpdate {
-				ret, err := checkAndUpdatePodRevision(c, statefulSet, readyReplicas, skipRecheckUpdate)
-				if !ret || err != nil {
+				err := checkAndUpdatePodRevision(c, statefulSet, readyReplicas, skipRecheckUpdate)
+				if !*skipRecheckUpdate || err != nil {
 					scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 					return splcommon.PhaseError, err
 				}
@@ -208,8 +208,8 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 	} else if readyReplicas > replicas {
 		scopedLog.Info("Waiting for scale down to complete")
 		if !*skipRecheckUpdate {
-			ret, err := checkAndUpdatePodRevision(c, statefulSet, readyReplicas-1, skipRecheckUpdate)
-			if !ret || err != nil {
+			err := checkAndUpdatePodRevision(c, statefulSet, readyReplicas-1, skipRecheckUpdate)
+			if !*skipRecheckUpdate || err != nil {
 				scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 				return splcommon.PhaseError, err
 			}
@@ -234,9 +234,8 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 		// It so can happen that it may take few seconds for the update to be
 		// reflected in the resource. In that case, just return from here and
 		// check the status back in the next reconcile loop.
-		var ret bool
-		ret, err = checkAndUpdatePodRevision(c, statefulSet, readyReplicas, skipRecheckUpdate)
-		if !ret || err != nil {
+		err = checkAndUpdatePodRevision(c, statefulSet, readyReplicas, skipRecheckUpdate)
+		if !*skipRecheckUpdate || err != nil {
 			scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 			return splcommon.PhaseError, err
 		}
@@ -271,9 +270,8 @@ func UpdateStatefulSetPods(c splcommon.ControllerClient, statefulSet *appsv1.Sta
 		// It so can happen that it may take few seconds for the update to be
 		// reflected in the resource. In that case, just return from here and
 		// check the status back in the next reconcile loop.
-		var ret bool
-		ret, err = checkAndUpdatePodRevision(c, statefulSet, readyReplicas-1, skipRecheckUpdate)
-		if !ret || err != nil {
+		err = checkAndUpdatePodRevision(c, statefulSet, readyReplicas-1, skipRecheckUpdate)
+		if !*skipRecheckUpdate || err != nil {
 			scopedLog.Error(err, "Unable to update pod-revision-hash for the pods")
 			return splcommon.PhaseError, err
 		}
