@@ -434,32 +434,12 @@ installation.
   defaultsUrl: "http://myco.com/splunk/generic.yml,/mnt/defaults/apps.yml"
 ```
 
-Suppose you want to just override the admin password for your deployment
-(instead of using the automatically generated one), you can also specify
-inline overrides using the `defaults` parameter:
-
-```yaml
-apiVersion: enterprise.splunk.com/v1beta1
-kind: Standalone
-metadata:
-  name: example
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  volumes:
-    - name: defaults
-      configMap:
-        name: splunk-defaults
-  defaultsUrl: /mnt/defaults/default.yml
-  defaults: |-
-    splunk:
-      password: helloworld456
-```
-
-*Setting passwords in your CRDs may be OK for testing, but it is discouraged.*
-
 Inline `defaults` are always processed last, after any `defaultsUrl` files.
 
+Any password management related configuration via `defaults` and `defaultsUrl`
+has been disabled. Please review [`PasswordManagement.md`](PasswordManagement.md)
+and [`Managing global kubernetes secret object`](#managing-global-kubernetes-secret-object)
+for more details.
 
 ## Installing Splunk Apps
 
