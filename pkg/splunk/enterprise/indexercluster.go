@@ -154,6 +154,12 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 
 		result.Requeue = false
+		// set indexer cluster CR as owner reference for clustermaster
+		err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
+		if err != nil {
+			result.Requeue = true
+			return result, err
+		}
 	}
 	return result, nil
 }

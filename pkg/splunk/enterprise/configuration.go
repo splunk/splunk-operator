@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -459,6 +460,7 @@ func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Meta
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
+	scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
@@ -510,7 +512,6 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			},
 		})
 
-		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
 		// We will update the annotation for resource version in the pod template spec
@@ -639,7 +640,29 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
 		}
+		//Check if CM is connected to a LicenseMaster
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      spec.ClusterMasterRef.Name,
+		}
+		masterIdxCluster := &enterprisev1.ClusterMaster{}
+		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get ClusterMaster")
+		}
+
+		if masterIdxCluster.Spec.LicenseMasterRef.Name != "" {
+			licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, masterIdxCluster.Spec.LicenseMasterRef.Name, false)
+			if masterIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+				licenseMasterURL = splcommon.GetServiceFQDN(masterIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+			}
+			env = append(env, corev1.EnvVar{
+				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Value: licenseMasterURL,
+			})
+		}
 	}
+
 	if clusterMasterURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",

@@ -50,7 +50,7 @@ func (ctrl IndexerClusterController) GetInstance() splcommon.MetaObject {
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
 func (ctrl IndexerClusterController) GetWatchTypes() []runtime.Object {
-	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
+	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}, &enterprisev1.ClusterMaster{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
