@@ -5,9 +5,9 @@
   - [Splunk Secret Tokens in the global secret object](#splunk-secret-tokens-in-the-global-secret-object)
     - [HEC Token](#hec-token)
     - [Default administrator password](#default-administrator-password)
-    - [Pass4symmkey](#pass4symmkey)
-    - [IDXC Pass4symmkey](#idxc-pass4symmkey)
-    - [SHC Pass4symmkey](#shc-pass4symmkey)
+    - [pass4Symmkey](#pass4Symmkey)
+    - [IDXC pass4Symmkey](#idxc-pass4Symmkey)
+    - [SHC pass4Symmkey](#shc-pass4Symmkey)
 - [Information for Splunk Enterprise administrator](#information-for-splunk-enterprise-administrator)
 - [Secrets on Docker Splunk](#secrets-on-docker-splunk)
 
@@ -42,15 +42,15 @@ The configurable Splunk Secret Tokens include:
 **Key name in global kubernetes secret object**: `password`  
 **Description**: password refers to the default administrator password for Splunk. 
 
-#### Pass4symmkey
-**Key name in global kubernetes secret object**: `pass4symmkey`  
-**Description**: pass4symmkey is an authentication token for inter-communication within Splunk Enterprise.
+#### pass4Symmkey
+**Key name in global kubernetes secret object**: `pass4Symmkey`  
+**Description**: pass4Symmkey is an authentication token for inter-communication within Splunk Enterprise.
 
-#### IDXC Pass4symmkey
+#### IDXC pass4Symmkey
 **Key name in global kubernetes secret object**: `idxc.secret`  
 **Description**: idxc.secret is an authentication token for inter-communication specifically for indexer clustering in Splunk Enterprise.
 
-#### SHC Pass4symmkey
+#### SHC pass4Symmkey
 **Key name in global kubernetes secret object**: `shc.secret`  
 **Description**: shc.secret is an authentication token for inter-communication specifically for search head clustering in Splunk Enterprise.
 
