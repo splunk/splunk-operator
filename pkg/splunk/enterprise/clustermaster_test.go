@@ -272,8 +272,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if _, err := ApplyClusterMaster(client, &current); err == nil {
-		t.Errorf("ApplyClusterMaster() should have returned error")
+	if result, err := ApplyClusterMaster(client, &current); err == nil && !result.Requeue {
+		t.Errorf("ApplyClusterMaster() should have returned error or result.requeue should have been false")
 	}
 
 	ss.Status.ReadyReplicas = 1
