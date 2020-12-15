@@ -1,5 +1,22 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 0.2.1 Beta()
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later
+
+* CSPL-529 - Fixed an issue where deletion of ClusterMaster would result in the deletion of indexer PVCs
+
+* CSPL 466 - Fixed an issue where Indexer Cluster created with peers < SF, RF would result in an infinite reconcile loop of the operator
+
+* CSPL-532 - Fixed a race condition where changing the idxc.secret on the global secret object could result in an infinite loop of container restarts
+
+* Increased code coverage
+
+* CSPL-534 - Fixed unnecessary pod recycles on scale up/down
+
+* CSPL-592 - Initiate a pod recycle on change of environment variables of containers
+
+* CSPL-658 - Fixed an issue where Indexer states go from configured to new in the Monitoring Console
+
 ## 0.2.0 Beta (2020-10-15)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later.
 

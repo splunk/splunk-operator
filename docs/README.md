@@ -97,7 +97,7 @@ special considerations, including the use of private image registries,
 installation at cluster scope, and installing as a regular user (who is
 not a Kubernetes cluster administrator).
 
-*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image (or later) is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),
