@@ -8,6 +8,8 @@
 : "${NUM_NODES:=2}"
 : "${COMMIT_HASH:=}"
 : "${ECR_REGISTRY:=}"
+: "${VPC_PUBLIC_SUBNET_STRING:=}"
+: "${VPC_PRIVATE_SUBNET_STRING:=}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then

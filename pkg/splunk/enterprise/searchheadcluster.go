@@ -203,13 +203,13 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
 		if err != nil {
-			return fmt.Errorf("Couldn't retrieve shc_secret from secret data %s", err.Error())
+			return fmt.Errorf("Couldn't retrieve shc_secret from secret data")
 		}
 
 		// Retrieve admin password from Pod
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
-			return fmt.Errorf("Couldn't retrieve admin password from secret data %s", err.Error())
+			return fmt.Errorf("Couldn't retrieve admin password from secret data")
 		}
 
 		// If shc secret is different from namespace scoped secret change it
@@ -347,7 +347,7 @@ func (mgr *searchHeadClusterPodManager) Update(c splcommon.ControllerClient, sta
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(mgr.c, statefulSet, mgr, desiredReplicas)
+	return splctrl.UpdateStatefulSetPods(mgr.c, statefulSet, mgr, desiredReplicas, &mgr.cr.Status.SkipRecheckUpdate)
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready

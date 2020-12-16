@@ -244,7 +244,8 @@ metadata:
   name: example
 spec:
   replicas: 3
-  clusterMasterRef: example-cm
+  clusterMasterRef: 
+    name: example-cm
 ```
 Note:  `clusterMasterRef` is required field in case of IndexerCluster resource since it will be used to connect the IndexerCluster to ClusterMaster resource.
 

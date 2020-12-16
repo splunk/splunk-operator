@@ -31,7 +31,7 @@ const (
 	defaultSparkImage    = "splunk/spark"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 900
+	defaultTestTimeout = 1500
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second

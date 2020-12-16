@@ -1,48 +1,31 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: indexerclusters.enterprise.splunk.com
+  name: licensemasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
-    description: Status of indexer cluster
+    description: Status of license master
     name: Phase
     type: string
-  - JSONPath: .status.clusterMasterPhase
-    description: Status of cluster master
-    name: Master
-    type: string
-  - JSONPath: .status.replicas
-    description: Desired number of indexer peers
-    name: Desired
-    type: integer
-  - JSONPath: .status.readyReplicas
-    description: Current number of ready indexer peers
-    name: Ready
-    type: integer
   - JSONPath: .metadata.creationTimestamp
-    description: Age of indexer cluster
+    description: Age of license master
     name: Age
     type: date
   group: enterprise.splunk.com
   names:
-    kind: IndexerCluster
-    listKind: IndexerClusterList
-    plural: indexerclusters
+    kind: LicenseMaster
+    listKind: LicenseMasterList
+    plural: licensemasters
     shortNames:
-    - idc
-    - idxc
-    singular: indexercluster
+    - lm
+    singular: licensemaster
   scope: Namespaced
   subresources:
-    scale:
-      labelSelectorPath: .status.selector
-      specReplicasPath: .spec.replicas
-      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      description: LicenseMaster is the Schema for a Splunk Enterprise license master.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -57,8 +40,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: IndexerClusterSpec defines the desired state of a Splunk Enterprise
-            indexer cluster
+          description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
+            license master.
           properties:
             Mock:
               description: Mock to differentiate between UTs and actual reconcile
@@ -740,11 +723,6 @@ spec:
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string
-            replicas:
-              description: Number of search head pods; a search head cluster will
-                be created if > 1
-              format: int32
-              type: integer
             resources:
               description: resource requirements for the pod containers
               properties:
@@ -2233,74 +2211,11 @@ spec:
               type: array
           type: object
         status:
-          description: IndexerClusterStatus defines the observed state of a Splunk
-            Enterprise indexer cluster
+          description: LicenseMasterStatus defines the observed state of a Splunk
+            Enterprise license master.
           properties:
-            IdxcPasswordChangedSecrets:
-              additionalProperties:
-                type: boolean
-              description: Holds secrets whose IDXC password has changed
-              type: object
-            clusterMasterPhase:
-              description: current phase of the cluster master
-              enum:
-              - Pending
-              - Ready
-              - Updating
-              - ScalingUp
-              - ScalingDown
-              - Terminating
-              - Error
-              type: string
-            indexer_secret_changed_flag:
-              description: Indicates when the idxc_secret has been changed for a peer
-              items:
-                type: boolean
-              type: array
-            indexing_ready_flag:
-              description: Indicates if the cluster is ready for indexing.
-              type: boolean
-            initialized_flag:
-              description: Indicates if the cluster is initialized.
-              type: boolean
-            maintenance_mode:
-              description: Indicates if the cluster is in maintenance mode.
-              type: boolean
-            namespace_scoped_secret_resource_version:
-              description: Indicates resource version of namespace scoped secret
-              type: string
-            peers:
-              description: status of each indexer cluster peer
-              items:
-                description: IndexerClusterMemberStatus is used to track the status
-                  of each indexer cluster peer.
-                properties:
-                  active_bundle_id:
-                    description: The ID of the configuration bundle currently being
-                      used by the master.
-                    type: string
-                  bucket_count:
-                    description: Count of the number of buckets on this peer, across
-                      all indexes.
-                    format: int64
-                    type: integer
-                  guid:
-                    description: Unique identifier or GUID for the peer
-                    type: string
-                  is_searchable:
-                    description: Flag indicating if this peer belongs to the current
-                      committed generation and is searchable.
-                    type: boolean
-                  name:
-                    description: Name of the indexer cluster peer
-                    type: string
-                  status:
-                    description: Status of the indexer cluster peer
-                    type: string
-                type: object
-              type: array
             phase:
-              description: current phase of the indexer cluster
+              description: current phase of the license master
               enum:
               - Pending
               - Ready
@@ -2310,21 +2225,6 @@ spec:
               - Terminating
               - Error
               type: string
-            readyReplicas:
-              description: current number of ready indexer peers
-              format: int32
-              type: integer
-            replicas:
-              description: desired number of indexer peers
-              format: int32
-              type: integer
-            selector:
-              description: selector for pods, used by HorizontalPodAutoscaler
-              type: string
-            service_ready_flag:
-              description: Indicates whether the master is ready to begin servicing,
-                based on whether it is initialized.
-              type: boolean
           type: object
       type: object
   version: v1beta1

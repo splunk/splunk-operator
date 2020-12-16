@@ -20,7 +20,7 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${CLUSTER_NAME}")
   if [ -z "${found}" ]; then
-    eksctl create cluster --name=${CLUSTER_NAME} --nodes=${NUM_WORKERS}
+    eksctl create cluster --name=${CLUSTER_NAME} --nodes=${NUM_WORKERS} --vpc-public-subnets=${VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${VPC_PRIVATE_SUBNET_STRING}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${CLUSTER_NAME}"
       return 1

@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +32,7 @@ import (
 )
 
 func init() {
-	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier)
+	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, enterpriseObjCopier)
 }
 
 // MockObjectCopiers is a slice of MockObjectCopier methods that MockClient uses to copy runtime.Objects
@@ -39,26 +40,51 @@ var MockObjectCopiers []MockObjectCopier
 
 // MockObjectCopier is a method used to perform the typed copy of a runtime.Object from src to dst.
 // It returns true if the runtime.Object was copied, or false if the type is unknown.
-type MockObjectCopier func(dst, src runtime.Object) bool
+type MockObjectCopier func(dst, src *runtime.Object) bool
+
+// enterpriseObjCopier is used to copy enterprise runtime.Objects
+func enterpriseObjCopier(dst, src *runtime.Object) bool {
+	dstP := *dst
+	srcP := *src
+	switch srcP.(type) {
+	case *enterprisev1.ClusterMaster:
+		*dstP.(*enterprisev1.ClusterMaster) = *srcP.(*enterprisev1.ClusterMaster)
+	case *enterprisev1.IndexerCluster:
+		*dstP.(*enterprisev1.IndexerCluster) = *srcP.(*enterprisev1.IndexerCluster)
+	case *enterprisev1.LicenseMaster:
+		*dstP.(*enterprisev1.LicenseMaster) = *srcP.(*enterprisev1.LicenseMaster)
+	case *enterprisev1.SearchHeadCluster:
+		*dstP.(*enterprisev1.SearchHeadCluster) = *srcP.(*enterprisev1.SearchHeadCluster)
+	case *enterprisev1.Spark:
+		*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
+	case *enterprisev1.Standalone:
+		*dstP.(*enterprisev1.Standalone) = *srcP.(*enterprisev1.Standalone)
+	default:
+		return false
+	}
+	return true
+}
 
 // coreObjectCopier is used to copy corev1 runtime.Objects
-func coreObjectCopier(dst, src runtime.Object) bool {
-	if reflect.TypeOf(dst).String() == reflect.TypeOf(src.(runtime.Object)).String() {
-		switch src.(type) {
+func coreObjectCopier(dst, src *runtime.Object) bool {
+	dstP := *dst
+	srcP := *src
+	if reflect.TypeOf(dstP).String() == reflect.TypeOf((*src).(runtime.Object)).String() {
+		switch (srcP).(type) {
 		case *corev1.ConfigMap:
-			*dst.(*corev1.ConfigMap) = *src.(*corev1.ConfigMap)
+			*dstP.(*corev1.ConfigMap) = *srcP.(*corev1.ConfigMap)
 		case *corev1.Secret:
-			*dst.(*corev1.Secret) = *src.(*corev1.Secret)
+			*dstP.(*corev1.Secret) = *srcP.(*corev1.Secret)
 		case *corev1.SecretList:
-			*dst.(*corev1.SecretList) = *src.(*corev1.SecretList)
+			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
 		case *corev1.PersistentVolumeClaim:
-			*dst.(*corev1.PersistentVolumeClaim) = *src.(*corev1.PersistentVolumeClaim)
+			*dstP.(*corev1.PersistentVolumeClaim) = *srcP.(*corev1.PersistentVolumeClaim)
 		case *corev1.PersistentVolumeClaimList:
-			*dst.(*corev1.PersistentVolumeClaimList) = *src.(*corev1.PersistentVolumeClaimList)
+			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
 		case *corev1.Service:
-			*dst.(*corev1.Service) = *src.(*corev1.Service)
+			*dstP.(*corev1.Service) = *srcP.(*corev1.Service)
 		case *corev1.Pod:
-			*dst.(*corev1.Pod) = *src.(*corev1.Pod)
+			*dstP.(*corev1.Pod) = *srcP.(*corev1.Pod)
 		default:
 			return false
 		}
@@ -67,12 +93,14 @@ func coreObjectCopier(dst, src runtime.Object) bool {
 }
 
 // appsObjectCopier is used to copy appsv1 runtime.Objects
-func appsObjectCopier(dst, src runtime.Object) bool {
-	switch src.(type) {
+func appsObjectCopier(dst, src *runtime.Object) bool {
+	srcP := *src
+	dstP := *dst
+	switch srcP.(type) {
 	case *appsv1.Deployment:
-		*dst.(*appsv1.Deployment) = *src.(*appsv1.Deployment)
+		*dstP.(*appsv1.Deployment) = *srcP.(*appsv1.Deployment)
 	case *appsv1.StatefulSet:
-		*dst.(*appsv1.StatefulSet) = *src.(*appsv1.StatefulSet)
+		*dstP.(*appsv1.StatefulSet) = *srcP.(*appsv1.StatefulSet)
 	default:
 		return false
 	}
@@ -80,15 +108,15 @@ func appsObjectCopier(dst, src runtime.Object) bool {
 }
 
 // copyMockObject uses the global MockObjectCopiers to perform the typed copy of a runtime.Object from src to dst
-func copyMockObject(dst, src runtime.Object) {
+func copyMockObject(dst, src *runtime.Object) {
 	for n := range MockObjectCopiers {
 		if MockObjectCopiers[n](dst, src) {
 			return
 		}
 	}
-
+	srcP := *src
 	// default if no types match
-	dst = src.DeepCopyObject()
+	*dst = srcP.DeepCopyObject()
 }
 
 // MockFuncCall is used to record a function call to MockClient methods
@@ -156,8 +184,10 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 		Obj: obj,
 	})
 	getObj := c.State[getStateKeyWithKey(key, obj)]
+
 	if getObj != nil {
-		copyMockObject(obj, getObj.(runtime.Object))
+		srcObj := getObj.(runtime.Object)
+		copyMockObject(&obj, &srcObj)
 		return nil
 	}
 	return c.NotFoundError
@@ -172,7 +202,8 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		copyMockObject(obj, listObj.(runtime.Object))
+		srcObj := listObj.(runtime.Object)
+		copyMockObject(&obj, &srcObj)
 		return nil
 	}
 	return c.NotFoundError
@@ -420,8 +451,11 @@ func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulS
 // PodManagerTester is used to test StatefulSetPodManager reconcile operations
 func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodManager) {
 	// test create
-	funcCalls := []MockFuncCall{{MetaName: "*v1.StatefulSet-test-splunk-stack1"}}
-	createCalls := map[string][]MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	funcCalls := []MockFuncCall{
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
+	}
+	createCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Create": {funcCalls[0]}}
 	var replicas int32 = 1
 	current := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -442,73 +476,6 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 			UpdateRevision:  "v1",
 		},
 	}
-	PodManagerUpdateTester(t, method, mgr, 1, splcommon.PhasePending, current, createCalls, nil)
-
-	// test update
-	revised := current.DeepCopy()
-	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
-	updateCalls := map[string][]MockFuncCall{"Get": funcCalls, "Update": funcCalls}
-	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
-
-	// test scale up (zero ready so far; wait for ready)
-	revised = current.DeepCopy()
-	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": funcCalls}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhasePending, revised, scaleUpCalls, nil, current)
-
-	// test scale up (1 ready scaling to 2; wait for ready)
-	replicas = 2
-	current.Status.Replicas = 2
-	current.Status.ReadyReplicas = 1
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current)
-
-	// test scale up (1 ready scaling to 2)
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 1
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current)
-
-	// test scale down (2 ready, 1 desired)
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 2
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleUpCalls, nil, current)
-
-	// test scale down (2 ready scaling down to 1)
-	pvcCalls := []MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
-	}
-	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
-		"Update": {funcCalls[0]},
-		"Delete": pvcCalls,
-	}
-	pvcList := []*corev1.PersistentVolumeClaim{
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
-	}
-	replicas = 2
-	current.Status.Replicas = 2
-	current.Status.ReadyReplicas = 2
-	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Update Replicas 2=>1")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleDownCalls, nil, current, pvcList[0], pvcList[1])
-
-	// test pod not found
-	replicas = 1
-	current.Status.Replicas = 1
-	current.Status.ReadyReplicas = 1
-	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
-	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, errors.New("NotFound"), current)
-
-	// test pod updated
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
@@ -524,13 +491,76 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 			},
 		},
 	}
-	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": {podCalls[1]}}
-	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updatePodCalls, nil, current, pod)
 
-	// test all pods ready
-	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
-	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
+	PodManagerUpdateTester(t, method, mgr, 1, splcommon.PhasePending, current, createCalls, nil)
+
+	// test update
+	revised := current.DeepCopy()
+	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
+	updateCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
+	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
+
+	// test scale up (zero ready so far; wait for ready)
+	revised = current.DeepCopy()
+	current.Status.ReadyReplicas = 0
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhasePending, revised, scaleUpCalls, nil, current)
+
+	// test scale up (1 ready scaling to 2; wait for ready)
+	replicas = 2
+	current.Status.Replicas = 2
+	current.Status.ReadyReplicas = 1
+	scaleUpCalls["Get"] = append(scaleUpCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
+	scaleUpCalls["Update"] = append(scaleUpCalls["Update"], funcCalls[1])
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
+
+	// test scale up (1 ready scaling to 2)
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 1
+	updateCalls["Get"] = append(updateCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
+
+	// test scale down (2 ready, 1 desired)
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 2
+	delete(scaleUpCalls, "Update")
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+
+	// test scale down (2 ready scaling down to 1)
+	pvcCalls := []MockFuncCall{
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+	}
+	scaleDownCalls := map[string][]MockFuncCall{
+		"Get":    {funcCalls[0], funcCalls[0], funcCalls[0], funcCalls[1], pvcCalls[0], pvcCalls[1]},
+		"Update": {funcCalls[0]},
+		"Delete": pvcCalls,
+	}
+	pvcList := []*corev1.PersistentVolumeClaim{
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
+	}
+	replicas = 2
+	current.Status.Replicas = 2
+	current.Status.ReadyReplicas = 2
+	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Update Replicas 2=>1")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleDownCalls, nil, current, pod, pvcList[0], pvcList[1])
+
+	// test pod not found
+	replicas = 1
+	current.Status.Replicas = 1
+	current.Status.ReadyReplicas = 1
+	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
+	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, errors.New("NotFound"), current)
 
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -542,6 +572,14 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	}
 	listmockCall := []MockFuncCall{
 		{ListOpts: listOpts}}
+
+	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": {}, "List": {listmockCall[0]}}
+	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, updatePodCalls, nil, current, pod)
+
+	// test all pods ready
+	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
+	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
 
 	getPodCalls["List"] = []MockFuncCall{listmockCall[0]}
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, getPodCalls, nil, current, pod)

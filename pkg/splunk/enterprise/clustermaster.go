@@ -58,9 +58,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
-		if err != nil {
-			return result, err
-		}
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -73,6 +70,11 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 
 		cr.Status.SmartStore = cr.Spec.SmartStore
+	}
+
+	// This is to take care of case where AreRemoteVolumeKeysChanged returns an error if it returns false.
+	if err != nil {
+		return result, err
 	}
 
 	defer func() {
@@ -167,6 +169,9 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	var extraEnvVar []corev1.EnvVar
 
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
+	if err != nil {
+		return ss, err
+	}
 	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
 	if exists {
@@ -186,9 +191,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
 	if err != nil || stdErr != "" {
-		if cr.Spec.Mock == false {
-			return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
-		}
+		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
 	configMap, exists := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
@@ -259,7 +262,7 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 		return fmt.Errorf("Could not find admin password while trying to push the master apps bundle")
 	}
 
-	scopedLog.Info("Issueing REST call to push master aps bundle")
+	scopedLog.Info("Issuing REST call to push master aps bundle")
 
 	masterIdxcName := cr.GetName()
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
@@ -267,5 +270,5 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.Cluster
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-	return splunkClient.BundlePush(true, cr.Spec.Mock)
+	return splunkClient.BundlePush(true)
 }
