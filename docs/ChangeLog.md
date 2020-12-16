@@ -3,9 +3,9 @@
 ## 0.2.1 Beta()
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later
 
-* CSPL-529 - Fixed an issue where deletion of ClusterMaster would result in the deletion of indexer PVCs
+* CSPL-529 - Fixed incorrect deletion of Indexer PVCs upon deletion of ClusterMaster
 
-* CSPL 466 - Fixed an issue where Indexer Cluster created with peers < SF, RF would result in an infinite reconcile loop of the operator
+* CSPL 466 - Fixed infinite reconcile loop of the Operator when an Indexer Cluster is created with peers < SF, RF
 
 * CSPL-532 - Fixed a race condition where changing the idxc.secret on the global secret object could result in an infinite loop of container restarts
 
@@ -15,7 +15,7 @@
 
 * CSPL-592 - Initiate a pod recycle on change of environment variables of containers
 
-* CSPL-658 - Fixed an issue where Indexer states go from configured to new in the Monitoring Console
+* CSPL-658 - Fixed incorrect change of Indexer state from Configured to New in the Monitoring Console
 
 ## 0.2.0 Beta (2020-10-15)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later.
