@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 0.2.1 Beta()
+## 0.2.1 Beta(2020-12-15)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later
 
 * CSPL-529 - Fixed incorrect deletion of Indexer PVCs upon deletion of ClusterMaster
