@@ -590,6 +590,14 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
+	// Check for apps defaults and add it to only the standalone or deployer/cm instances
+	if spec.DefaultsURLApps != "" &&
+		(instanceType == SplunkDeployer ||
+			instanceType == SplunkStandalone ||
+			instanceType == SplunkClusterMaster ||
+			instanceType == SplunkLicenseMaster) {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
+	}
 	if spec.DefaultsURL != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
 	}

@@ -504,6 +504,32 @@ You can also install apps hosted remotely using URLs:
         - "https://example.com/splunk-apps/app3.tgz"
 ```
 
+Also these application configuration parameters can be placed in a `defaults.yml`
+file and use the `defaultsUrlApps` parameter.  The `defaultsUrlApps` parameter
+is specific for applicastion installation and will install the apps in the
+correct instances as per the deployment.
+
+Unlike `defaultsUrl` which is applied at every instance created by the CR, the
+`defaultsUrlApps` will be applied on instances that will **not** get the application
+installed via a bundle push.  Search head and indexer cluster members will not have
+the `defaultsUrlApps` parameter applied.  This means:
+
+ - For Standalone & License Master, these applications will be installed as normal.
+ - For SearchHeadClusters, these applications will only be installed on the SHC Deployer
+and pushed to the members via SH Bundle push.
+ - For IndexerClusters, these applications will only be installed on the ClusterMaster
+and pushed to the indexers in the cluster via CM Bundle push.
+
+For application installation the preferred method will be through the `defaultsUrlApps`
+while other ansible defaults can be still be installed via `defaultsUrl`.  For backwards
+compatibility applications could be installed via `defaultsUrl` though this is not
+recommended.  Both options can be used in conjunction:
+
+```yaml
+    defaultsUrl : "http://myco.com/splunk/generic.yml"
+    defaultsUrlApps: "/mnt/defaults/apps.yml"
+```
+
 
 ## Using Apps for Splunk Configuration
 
