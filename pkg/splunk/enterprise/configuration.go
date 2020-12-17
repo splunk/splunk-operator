@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -245,28 +246,47 @@ func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind strin
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
+	var scheme string
+	scheme = "https"
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		scheme = "http"
+	}
+
+	var webScheme string
+	webScheme = "http"
+	if os.Getenv("SPLUNK_HTTP_ENABLESSL") == "true" {
+		webScheme = "https"
+	}
 	result := map[string]int{
-		"splunkweb": 8000,
-		"splunkd":   8089,
+		fmt.Sprintf("splunkweb-%s", webScheme): 8000,
+		fmt.Sprintf("splunkd-%s", scheme):      8089,
+	}
+
+	var hecScheme string
+	hecScheme = "https"
+	if os.Getenv("SPLUNK_HEC_SSL") == "false" {
+		hecScheme = "http"
 	}
 
 	switch instanceType {
 	case SplunkMonitoringConsole:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["s2s-tcp"] = 9997
 	case SplunkStandalone:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["s2s-tcp"] = 9997
 	case SplunkSearchHead:
 		result["dfccontrol"] = 17000
 		result["datareceive"] = 19000
 		result["dfsmaster"] = 9000
 	case SplunkIndexer:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[fmt.Sprintf("hec-%s", hecScheme)] = 8088
+		result["replication-tcp"] = 9887
+		result["s2s-tcp"] = 9997
+
 	}
 
 	return result
@@ -289,12 +309,15 @@ func getSplunkContainerPorts(instanceType InstanceType) []corev1.ContainerPort {
 func getSplunkServicePorts(instanceType InstanceType) []corev1.ServicePort {
 	l := []corev1.ServicePort{}
 	for key, value := range getSplunkPorts(instanceType) {
-		l = append(l, corev1.ServicePort{
-			Name:       key,
-			Port:       int32(value),
-			TargetPort: intstr.FromInt(value),
-			Protocol:   corev1.ProtocolTCP,
-		})
+		if key != "replication-tcp" {
+			l = append(l, corev1.ServicePort{
+				Name:       key,
+				Port:       int32(value),
+				TargetPort: intstr.FromInt(value),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
+
 	}
 	return l
 }
@@ -610,7 +633,33 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 	}
+	if os.Getenv("SPLUNK_HTTP_ENABLESSL") == "true" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_HTTP_ENABLESSL",
+			Value: "true",
+		})
+	}
 
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_CERT_PREFIX",
+			Value: "http",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "NO_HEALTHCHECK",
+			Value: "true",
+		})
+	}
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+	}
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {
 		env = append(env, corev1.EnvVar{
@@ -619,13 +668,16 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		licenseMasterName := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		var namespace string
+		if spec.LicenseMasterRef.Namespace == "" {
+			namespace = cr.GetNamespace()
+		} else {
+			namespace = spec.LicenseMasterRef.Namespace
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: splcommon.GetServiceURI(namespace, licenseMasterName),
 		})
 	}
 
@@ -637,7 +689,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterMasterURL = splcommon.GetServiceURI(spec.ClusterMasterRef.Namespace, clusterMasterURL)
 		}
 	}
 	if clusterMasterURL != "" {
