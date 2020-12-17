@@ -429,8 +429,10 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
+	uri := splcommon.GetServiceURI(
+		mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)),
+	)
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -438,7 +440,8 @@ func (mgr *searchHeadClusterPodManager) getClient(n int32) *splclient.SplunkClie
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
+
 }
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
