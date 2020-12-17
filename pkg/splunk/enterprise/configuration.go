@@ -367,6 +367,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 							Ports:           ports,
 						},
 					},
+					InitContainers: spec.InitContainers,
 				},
 			},
 		},

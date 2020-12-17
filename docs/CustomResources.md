@@ -95,6 +95,10 @@ spec:
     - name: licenses
       configMap:
         name: splunk-licenses
+  initContainers:
+    - name: date
+      image: busybox
+      command: [ "/bin/date" ]
   licenseMasterRef:
     name: example
   clusterMasterRef:
@@ -114,6 +118,7 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | volumes            | [[]Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>` |
 | defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
+| initContainers     | array   | init container spec
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
