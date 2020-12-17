@@ -42,6 +42,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
+		{MetaName: "*v1beta1.ClusterMaster-test-master1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
 	labels := map[string]string{
@@ -55,7 +56,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "List": {listmockCall[0]}}
 
 	current := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{

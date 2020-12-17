@@ -154,7 +154,8 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 
 		result.Requeue = false
-		// set indexer cluster CR as owner reference for clustermaster
+		// Set indexer cluster CR as owner reference for clustermaster
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 		if err != nil {
 			result.Requeue = true
