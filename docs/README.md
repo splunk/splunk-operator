@@ -86,7 +86,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.1/splunk-operator-install.yaml
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -97,7 +97,7 @@ special considerations, including the use of private image registries,
 installation at cluster scope, and installing as a regular user (who is
 not a Kubernetes cluster administrator).
 
-*Note: The `splunk/splunk:8.1.0` image is rather large, so we strongly
+*Note: The `splunk/splunk:8.1.0` image (or later) is rather large, so we strongly
 recommend copying this to a private registry or directly onto your
 Kubernetes workers as per the [Required Images Documentation](Images.md),
 and following the [Advanced Installation Instructions](Install.md),
@@ -120,7 +120,7 @@ kubectl delete searchheadclusters --all
 kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
 kubectl delete spark --all
-kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.0/splunk-operator-install.yaml
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.1/splunk-operator-install.yaml
 ```
 
 

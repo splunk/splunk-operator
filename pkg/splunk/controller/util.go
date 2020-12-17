@@ -16,6 +16,7 @@ package controller
 
 import (
 	"reflect"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -164,6 +165,22 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 					"current", current.Containers[idx].Resources,
 					"revised", revised.Containers[idx].Resources)
 				current.Containers[idx].Resources = revised.Containers[idx].Resources
+				result = true
+			}
+
+			// check Env
+			// Skip this check for the Monitoring Console
+			// This is temporary until the MC has it's own CR to control the MC pod env.
+			skipForMC := false
+			if strings.Contains(name, "monitoring-console") {
+				scopedLog.Info("Ignoring Pod Container Envs differences for MC pods", "name", name)
+				skipForMC = true
+			}
+			if !skipForMC && splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
+				scopedLog.Info("Pod Container Envs differ",
+					"current", current.Containers[idx].Env,
+					"revised", revised.Containers[idx].Env)
+				current.Containers[idx].Env = revised.Containers[idx].Env
 				result = true
 			}
 		}
