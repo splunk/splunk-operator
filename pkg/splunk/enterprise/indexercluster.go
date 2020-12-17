@@ -445,8 +445,8 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+	// Get uri
+	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
 
 	// Retrieve admin password from Pod
@@ -455,7 +455,7 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
 }
 
 // getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
@@ -471,7 +471,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
+	uri := splcommon.GetServiceURI(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
 
 	// Retrieve admin password for Pod
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
@@ -480,7 +480,7 @@ func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkC
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(uri, "admin", adminPwd)
 }
 
 // getSiteRepFactorOriginCount gets the origin count of the site_replication_factor
@@ -500,7 +500,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient)
 	cm := mgr.getClusterMasterClient()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return fmt.Errorf("Could not get cluster info from cluster master")
+		return fmt.Errorf("Could not get cluster info from cluster master: %s", err)
 	}
 	var replicationFactor int32
 	// if it is a multisite indexer cluster, check site_replication_factor
