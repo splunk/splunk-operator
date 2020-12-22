@@ -371,7 +371,7 @@ func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statef
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas, &mgr.cr.Status.SkipRecheckUpdate)
+	return splctrl.UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas, &mgr.cr.Status.SkipRecheckUpdate, &mgr.cr.Status.IsScaling)
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready

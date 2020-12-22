@@ -98,6 +98,9 @@ type IndexerClusterStatus struct {
 	// Indicates if we need to recheck the revision update on pods
 	SkipRecheckUpdate bool `json:"skip_recheck_update"`
 
+	// Indicates whether we are scaling up or down
+	IsScaling bool `json:"is_scaling"`
+
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 }

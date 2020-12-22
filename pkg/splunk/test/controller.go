@@ -512,8 +512,6 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
-	scaleUpCalls["Get"] = append(scaleUpCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
-	scaleUpCalls["Update"] = append(scaleUpCalls["Update"], funcCalls[1])
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
 
@@ -522,6 +520,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
 	updateCalls["Get"] = append(updateCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
+	updateCalls["Update"] = append(updateCalls["Update"], funcCalls[1])
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
