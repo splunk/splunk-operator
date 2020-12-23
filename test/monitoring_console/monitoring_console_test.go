@@ -13,7 +13,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Montioring Console test", func() {
+var _ = Describe("Monitoring Console test", func() {
 
 	var deployment *testenv.Deployment
 

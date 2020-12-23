@@ -434,32 +434,12 @@ installation.
   defaultsUrl: "http://myco.com/splunk/generic.yml,/mnt/defaults/apps.yml"
 ```
 
-Suppose you want to just override the admin password for your deployment
-(instead of using the automatically generated one), you can also specify
-inline overrides using the `defaults` parameter:
-
-```yaml
-apiVersion: enterprise.splunk.com/v1beta1
-kind: Standalone
-metadata:
-  name: example
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  volumes:
-    - name: defaults
-      configMap:
-        name: splunk-defaults
-  defaultsUrl: /mnt/defaults/default.yml
-  defaults: |-
-    splunk:
-      password: helloworld456
-```
-
-*Setting passwords in your CRDs may be OK for testing, but it is discouraged.*
-
 Inline `defaults` are always processed last, after any `defaultsUrl` files.
 
+Any password management related configuration via `defaults` and `defaultsUrl`
+has been disabled. Please review [`PasswordManagement.md`](PasswordManagement.md)
+and [`Managing global kubernetes secret object`](#managing-global-kubernetes-secret-object)
+for more details.
 
 ## Installing Splunk Apps
 
@@ -522,6 +502,32 @@ You can also install apps hosted remotely using URLs:
         - "/mnt/apps/app1.tgz"
         - "/mnt/apps/app2.tgz"
         - "https://example.com/splunk-apps/app3.tgz"
+```
+
+Also these application configuration parameters can be placed in a `defaults.yml`
+file and use the `defaultsUrlApps` parameter.  The `defaultsUrlApps` parameter
+is specific for applicastion installation and will install the apps in the
+correct instances as per the deployment.
+
+Unlike `defaultsUrl` which is applied at every instance created by the CR, the
+`defaultsUrlApps` will be applied on instances that will **not** get the application
+installed via a bundle push.  Search head and indexer cluster members will not have
+the `defaultsUrlApps` parameter applied.  This means:
+
+ - For Standalone & License Master, these applications will be installed as normal.
+ - For SearchHeadClusters, these applications will only be installed on the SHC Deployer
+and pushed to the members via SH Bundle push.
+ - For IndexerClusters, these applications will only be installed on the ClusterMaster
+and pushed to the indexers in the cluster via CM Bundle push.
+
+For application installation the preferred method will be through the `defaultsUrlApps`
+while other ansible defaults can be still be installed via `defaultsUrl`.  For backwards
+compatibility applications could be installed via `defaultsUrl` though this is not
+recommended.  Both options can be used in conjunction:
+
+```yaml
+    defaultsUrl : "http://myco.com/splunk/generic.yml"
+    defaultsUrlApps: "/mnt/defaults/apps.yml"
 ```
 
 
@@ -643,7 +649,7 @@ pass4SymmKey for authentication.
 There are two ways to configure `pass4Symmkey` with an External LM:
 
 #### Approach 1
-- Setup the desired plain-text [`pass4Symmkey`](PasswordManagement.md#pass4symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
+- Setup the desired plain-text [`pass4Symmkey`](PasswordManagement.md#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
 - Setup the same plain-text `pass4SymmKey` in the `[general]` section of your LM's `server.conf` file.
 
 #### Approach 2
@@ -662,7 +668,7 @@ There are two ways to configure `pass4Symmkey` with an External LM:
   ```
   $SPLUNK_HOME/bin/splunk show-decrypted --value '$7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U='
   ```
-- Setup the above decrypted plain-text [`pass4Symmkey`](PasswordManagement.md#pass4symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
+- Setup the above decrypted plain-text [`pass4Symmkey`](PasswordManagement.md#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
 
 ### Configuring license_master_url:
 
@@ -712,7 +718,7 @@ operator & the external indexer cluster, and configure the `splunk.cluster_maste
 
 There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Cluster:
 #### Approach 1
-- Setup the desired plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
+- Setup the desired plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
 - Setup the same plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster master's and indexers' `server.conf` file.
 
 #### Approach 2
@@ -731,7 +737,7 @@ There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Clu
   ```
   $SPLUNK_HOME/bin/splunk show-decrypted --value '$7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U='
   ```
-- Setup the above decrypted plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
+- Setup the above decrypted plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
 
 ### Configuring cluster_master_url:
 
@@ -777,8 +783,8 @@ Use the kubectl command to create the global kubernetes secret object:
 2. Gather the password values for the secret tokens you want to configure. To see all available secret tokens defined for the global kubernetes secret object, review [password management](PasswordManagement.md#splunk-secret-tokens-in-the-global-secret-object)
 
 3. Create a kubernetes secret object referencing the namespace. Example: splunk-`<desired_namespace`>-secret.
-In the example below, we are creating the global kubernetes secret object, defining the default administrator and pass4symmkey tokens, and passing in the values.  
-`kubectl create secret generic splunk-<desired_namespace>-secret --from-literal='password=<admin_password_value>' --from-literal='pass4symmkey=<pass4symmkey_value>'`
+In the example below, we are creating the global kubernetes secret object, defining the default administrator and pass4Symmkey tokens, and passing in the values.  
+`kubectl create secret generic splunk-<desired_namespace>-secret --from-literal='password=<admin_password_value>' --from-literal='pass4Symmkey=<pass4Symmkey_value>'`
 
 ### Reading global kubernetes secret object
 

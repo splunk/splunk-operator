@@ -674,10 +674,6 @@ spec:
               description: Full path or URL for one or more default.yml files, separated
                 by commas
               type: string
-            defaultsUrlApps:
-              description: Full path or URL for one or more default.yml files for installing apps, separated
-                by commas
-              type: string
             ephemeralStorage:
               description: If true, ephemeral (emptyDir) storage will be used for
                 /opt/splunk/etc and /opt/splunk/var volumes

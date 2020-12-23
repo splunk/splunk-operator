@@ -681,6 +681,10 @@ spec:
               description: Full path or URL for one or more default.yml files, separated
                 by commas
               type: string
+            defaultsUrlApps:
+              description: Full path or URL for one or more default.yml files for installing apps, separated
+                by commas
+              type: string
             ephemeralStorage:
               description: If true, ephemeral (emptyDir) storage will be used for
                 /opt/splunk/etc and /opt/splunk/var volumes
@@ -2375,6 +2379,10 @@ spec:
               items:
                 type: boolean
               type: array
+            skip_recheck_update:
+              description: Indicates if we need to recheck the revision update on
+                pods
+              type: boolean
           type: object
       type: object
   version: v1beta1
