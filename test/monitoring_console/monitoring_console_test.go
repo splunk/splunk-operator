@@ -36,8 +36,7 @@ var _ = Describe("Monitoring Console test", func() {
 		}
 	})
 
-	// Disabling this test because of failure. The manual test passes.
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 
 			standaloneOneName := deployment.GetName()
@@ -98,7 +97,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Standalone deployment with Scale up", func() {
+	Context("Standalone deployment with Scale up", func() {
 		It("can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
@@ -168,7 +167,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("SearchHeadCluster deployment with Scale Up", func() {
+	Context("SearchHeadCluster deployment with Scale Up", func() {
 		It("MC can configure SHC instances after scale up in a namespace", func() {
 
 			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")
@@ -232,7 +231,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("SearchHeadCluster and Standalone", func() {
+	Context("SearchHeadCluster and Standalone", func() {
 		It("MC can configure SHC and Standalone instances in a namespace", func() {
 
 			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")

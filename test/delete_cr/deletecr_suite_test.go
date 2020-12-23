@@ -1,4 +1,4 @@
-package ingestsearchtest
+package deletecr
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "ingestsearch-" + testenv.RandomDNSName(2)
+	testSuiteName   = "deletecr-" + testenv.RandomDNSName(2)
 )
 
 // TestBasic is the main entry point
