@@ -49,6 +49,7 @@ Note: the image version is defined in these resources as this allows to control 
 ```yaml
 cat <<EOF | kubectl apply -f -
 ---
+apiVersion: enterprise.splunk.com/v1beta1
 kind: ClusterMaster
 metadata:
   name: example
@@ -87,6 +88,7 @@ EOF
 ```yaml
 cat <<EOF | kubectl apply -f -
 ---
+apiVersion: enterprise.splunk.com/v1beta1
 kind: IndexerCluster
 metadata:
   name: example-site1
@@ -132,6 +134,7 @@ Additional ansible default parameters must be set to activate multisite:
 ```yaml
 cat <<EOF | kubectl apply -f -
 ---
+apiVersion: enterprise.splunk.com/v1beta1
 kind: SearchHeadCluster
 metadata:
   name: example
