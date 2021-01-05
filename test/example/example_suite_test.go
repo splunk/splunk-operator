@@ -14,7 +14,7 @@ import (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "example-suite-" + testenv.RandomDNSName(6)
+	testSuiteName   = "example-" + testenv.RandomDNSName(3)
 )
 
 func init() {

@@ -76,6 +76,15 @@ fi
 
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
-# run Ginkgo
-# Running only smoke test cases. To run different test packages add/remove path from skipPackage argument
-ginkgo -v -progress -r -stream -nodes=${NUM_NODES} --skipPackage=example,ingest_search,monitoring_console,delete_cr ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+
+# Check if test foucs is set
+if [[ -z "${TEST_FOCUS}" ]]; then
+  TEST_TO_RUN="smoke:"
+  echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
+else
+  TEST_TO_RUN="${TEST_FOCUS}"
+  echo "Running following test :: ${TEST_TO_RUN}"
+fi
+
+# Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
+ginkgo -v -progress -r -stream -nodes=${NUM_NODES} --focus="${TEST_TO_RUN}" ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
