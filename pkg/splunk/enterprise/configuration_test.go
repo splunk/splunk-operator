@@ -24,6 +24,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -844,4 +845,72 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	if keysChanged {
 		t.Errorf("Empty volume should not report a key change")
 	}
+}
+
+func TestAddStorageVolumes(t *testing.T) {
+	labels := make(map[string]string)
+	var replicas int32 = 1
+
+	// Create CR
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// create statefulset configuration
+	statefulSet := &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StatefulSet",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Image: "test",
+							Name:  "splunk",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Define valid common spec
+	spec := &enterprisev1.CommonSplunkSpec{}
+	err := addStorageVolumes(&cr, spec, statefulSet, labels)
+	if err != nil {
+		t.Errorf("Unable to add storage volumes, error: %s", err.Error())
+	}
+
+	// Define invalid EtcVolumeStorageConfig
+	spec = &enterprisev1.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+			StorageCapacity: "----",
+		},
+	}
+	err = addStorageVolumes(&cr, spec, statefulSet, labels)
+	if err == nil {
+		t.Errorf("Unable to idenitfy incorrect EtcVolumeStorageConfig resource quantity")
+	}
+
+	// Define invalid VarVolumeStorageConfig
+	spec = &enterprisev1.CommonSplunkSpec{
+		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+			StorageCapacity: "----",
+		},
+	}
+	err = addStorageVolumes(&cr, spec, statefulSet, labels)
+	if err == nil {
+		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
+	}
+
 }

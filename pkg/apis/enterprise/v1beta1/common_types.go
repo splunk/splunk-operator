@@ -37,17 +37,11 @@ const (
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
 
-	// Name of StorageClass to use for persistent volume claims
-	StorageClassName string `json:"storageClassName"`
+	// Storage configuration for /opt/splunk/etc volume
+	EtcVolumeStorageConfig StorageClassSpec `json:"etcVolumeStorageConfig"`
 
-	// Storage capacity to request for /opt/splunk/etc persistent volume claims (default=”1Gi”)
-	EtcStorage string `json:"etcStorage"`
-
-	// Storage capacity to request for /opt/splunk/var persistent volume claims (default=”50Gi”)
-	VarStorage string `json:"varStorage"`
-
-	// If true, ephemeral (emptyDir) storage will be used for /opt/splunk/etc and /opt/splunk/var volumes
-	EphemeralStorage bool `json:"ephemeralStorage"`
+	// Storage configuration for /opt/splunk/var volume
+	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
 	Volumes []corev1.Volume `json:"volumes"`
@@ -75,6 +69,18 @@ type CommonSplunkSpec struct {
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
+}
+
+// StorageClassSpec defines storage class configuration
+type StorageClassSpec struct {
+	// Name of StorageClass to use for persistent volume claims
+	StorageClassName string `json:"storageClassName"`
+
+	// Storage capacity to request persistent volume claims (default=”10Gi” for etc and "100Gi" for var)
+	StorageCapacity string `json:"storageCapacity"`
+
+	// If true, ephemeral (emptyDir) storage will be used
+	EphemeralStorage bool `json:"ephemeralStorage"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration

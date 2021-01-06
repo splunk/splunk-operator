@@ -990,7 +990,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	}
 
 	cm.Status.Phase = splcommon.PhaseError
-	cr.Spec.CommonSplunkSpec.EtcStorage = "-abcd"
+	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
 	if _, err := ApplyIndexerCluster(c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
