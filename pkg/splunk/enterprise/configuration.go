@@ -246,27 +246,27 @@ func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind strin
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
 	result := map[string]int{
-		"splunkweb": 8000,
-		"splunkd":   8089,
+		"http-splunkweb": 8000,
+		"https-splunkd":  8089,
 	}
 
 	switch instanceType {
 	case SplunkMonitoringConsole:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result["http-hec"] = 8088
+		result["tcp-s2s"] = 9997
 	case SplunkStandalone:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result["tcp-dfccontrol"] = 17000
+		result["tcp-datareceive"] = 19000
+		result["tcp-dfsmaster"] = 9000
+		result["http-hec"] = 8088
+		result["tcp-s2s"] = 9997
 	case SplunkSearchHead:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
+		result["tcp-dfccontrol"] = 17000
+		result["tcp-datareceive"] = 19000
+		result["tcp-dfsmaster"] = 9000
 	case SplunkIndexer:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result["http-hec"] = 8088
+		result["tcp-s2s"] = 9997
 	}
 
 	return result
