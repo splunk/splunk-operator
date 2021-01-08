@@ -79,7 +79,6 @@ configuration parameters:
 | resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | CPU and memory [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (defaults shown in example above) |
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 
-
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
@@ -99,6 +98,7 @@ spec:
     name: example
   clusterMasterRef:
     name: example
+  serviceAccount: custom-serviceaccount
 ```
 
 The following additional configuration parameters may be used for all Splunk
@@ -117,7 +117,7 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
-
+| serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
 
 ## Spark Resource Spec Parameters
 

@@ -75,6 +75,9 @@ type CommonSplunkSpec struct {
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
+
+	// ServiceAccount is the service account used by the pods deployed by the CRD
+	ServiceAccount string `json:"serviceAccount"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration
