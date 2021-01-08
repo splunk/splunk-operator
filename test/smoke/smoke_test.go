@@ -1,6 +1,7 @@
 package smoke
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -123,6 +124,34 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+		})
+	})
+
+	Context("Standalone deployment (S1) with LM", func() {
+		It("smoke: can deploy a standalone instance and a License Master", func() {
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to downlaod license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
+			// Create standalone Deployment with License Master
+			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
+
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(deployment, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify LM is configured on standalone instance
+			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
 		})
 	})
 })
