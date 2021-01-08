@@ -92,7 +92,7 @@ spec:
     storageClassName: gp2
     storageCapacity: 15Gi
   varVolumeStorageConfig:
-    storageClassName: gp2
+    storageClassName: customStorageClass
     storageCapacity: 25Gi
   volumes:
     - name: licenses
@@ -110,8 +110,8 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
-| etcVolumeStorageConfig   | StorageClassSpec  | Storage class spec for Splunk etc volume as described in [StorageClass](StorageClass.md) |
-| varVolumeStorageConfig         | StorageClassSpec  | Storage class spec for Splunk var volume as described in [StorageClass](StorageClass.md) |
+| etcVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk etc volume as described in [StorageClass](StorageClass.md) |
+| varVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk var volume as described in [StorageClass](StorageClass.md) |
 | volumes            | [[]Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>` |
 | defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |

@@ -29,7 +29,7 @@ spec:
     storageClassName: gp2
     storageCapacity: 15Gi
   varVolumeStorageConfig:
-    storageClassName: gp2
+    storageClassName: customStorageClass
     storageCapacity: 25Gi
 ```
 The following `kubectl` command can be used to see which Storage Classes are available in

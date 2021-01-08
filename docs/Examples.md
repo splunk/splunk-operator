@@ -206,8 +206,12 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  storageClassName: standard
-  varStorage: "4Gi"
+  etcVolumeStorageConfig:
+    storageClassName: gp2
+    storageCapacity: 15Gi
+  varVolumeStorageConfig:
+    storageClassName: customStorageClass
+    storageCapacity: 25Gi
 ---
 apiVersion: enterprise.splunk.com/v1beta1
 kind: IndexerCluster
