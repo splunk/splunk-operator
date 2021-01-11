@@ -22,7 +22,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "mc-" + testenv.RandomDNSName(2)
+	testSuiteName   = "ingestsearch-" + testenv.RandomDNSName(2)
 )
 
 // TestBasic is the main entry point

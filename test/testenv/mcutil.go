@@ -37,7 +37,7 @@ func getMCSts(ns string) string {
 	mcSts := fmt.Sprintf(MonitoringConsoleSts, ns)
 	output, err := exec.Command("kubectl", "get", "sts", "-n", ns, mcSts).Output()
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		cmd := fmt.Sprintf("kubectl get sts -n %s %s", ns, mcSts)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return ""
 	}

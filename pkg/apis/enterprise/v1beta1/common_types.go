@@ -58,6 +58,12 @@ type CommonSplunkSpec struct {
 	// Full path or URL for one or more default.yml files, separated by commas
 	DefaultsURL string `json:"defaultsUrl"`
 
+	// Full path or URL for one or more default.yml files specific to App install, separated by commas
+	// This is meant as a temporary fix until the SHC Deployer has its own CRD.  The defaults listed here will
+	// only be installed on a standalone, or a SHC Deployer or IDC CM to be pushed to SH/IDXs in a cluster.
+	// This parameter is ignored on individual SHs or IDXs within a cluster
+	DefaultsURLApps string `json:"defaultsUrlApps"`
+
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
 
