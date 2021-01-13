@@ -1,6 +1,7 @@
 package smoke
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -38,7 +39,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("can deploy a standalone instance", func() {
+		It("smoke: can deploy a standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -52,7 +53,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("can deploy indexers and search head cluster", func() {
+		It("smoke: can deploy indexers and search head cluster", func() {
 
 			idxCount := 3
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount)
@@ -76,7 +77,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
-		It("can deploy indexers and search head cluster", func() {
+		It("smoke: can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
 			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
@@ -103,7 +104,7 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
-		It("can deploy multisite indexers cluster", func() {
+		It("smoke: can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
 			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
@@ -123,6 +124,34 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+		})
+	})
+
+	Context("Standalone deployment (S1) with LM", func() {
+		It("smoke: can deploy a standalone instance and a License Master", func() {
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to downlaod license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
+			// Create standalone Deployment with License Master
+			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
+
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(deployment, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify LM is configured on standalone instance
+			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
 		})
 	})
 })
