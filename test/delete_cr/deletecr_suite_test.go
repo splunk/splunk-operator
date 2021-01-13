@@ -1,7 +1,6 @@
-package example
+package deletecr
 
 import (
-	"math/rand"
 	"testing"
 	"time"
 
@@ -12,16 +11,22 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var (
-	testenvInstance *testenv.TestEnv
-	testSuiteName   = "example-" + testenv.RandomDNSName(3)
+const (
+	// PollInterval specifies the polling interval
+	PollInterval = 5 * time.Second
+
+	// ConsistentPollInterval is the interval to use to consistently check a state is stable
+	ConsistentPollInterval = 200 * time.Millisecond
+	ConsistentDuration     = 2000 * time.Millisecond
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+var (
+	testenvInstance *testenv.TestEnv
+	testSuiteName   = "deletecr-" + testenv.RandomDNSName(2)
+)
 
-func TestExampleSuite(t *testing.T) {
+// TestBasic is the main entry point
+func TestBasic(t *testing.T) {
 
 	RegisterFailHandler(Fail)
 
@@ -36,5 +41,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	}
 })

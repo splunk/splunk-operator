@@ -58,3 +58,73 @@ func CheckRFSF(deployment *Deployment) bool {
 	}
 	return rfMet && sfMet
 }
+
+// ClusterMasterSearchHeadResponse /services/cluster/master/searchhead response
+type ClusterMasterSearchHeadResponse struct {
+	Entries []ClusterMasterSearchHeadEntry `json:"entry"`
+}
+
+// ClusterMasterSearchHeadEntry represents a single search head
+type ClusterMasterSearchHeadEntry struct {
+	Name    string                         `json:"name"`
+	Content ClusterMasterSearchHeadContent `json:"content"`
+}
+
+// ClusterMasterSearchHeadContent represents detailed information about a search head
+type ClusterMasterSearchHeadContent struct {
+	EaiACL       interface{} `json:"eai:acl"`
+	HostPortPair string      `json:"host_port_pair"`
+	Label        string      `json:"label"`
+	Site         string      `json:"site"`
+	Status       string      `json:"status"`
+}
+
+// CheckSearchHeadRemoved check if search head is removed from Indexer Cluster
+func CheckSearchHeadRemoved(deployment *Deployment) bool {
+	//code to execute
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	restResponse := ClusterMasterSearchHeadResponse{}
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster searchheads")
+		return false
+	}
+	searchHeadRemoved := true
+	for _, entry := range restResponse.Entries {
+		logf.Log.Info("Search Found", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
+		if entry.Content.Status == "Disconnected" {
+			searchHeadRemoved = false
+		}
+	}
+	return searchHeadRemoved
+}
+
+// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
+// Endpoint: /services/cluster/master/sites
+type ClusterMasterSitesResponse struct {
+	Entries []ClusterMasterSitesEntry `json:"entry"`
+}
+
+// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
+type ClusterMasterSitesEntry struct {
+	Name    string                    `json:"name"`
+	Content ClusterMasterSitesContent `json:"content"`
+}
+
+// ClusterMasterSitesContent represents detailed information about a site
+type ClusterMasterSitesContent struct {
+	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
+}
+
+// ClusterMasterSitesPeer reprensents an indexer peer member of a site
+type ClusterMasterSitesPeer struct {
+	ServerName string `json:"server_name"`
+}
