@@ -449,6 +449,14 @@ func (testenv *TestEnv) createOperator() error {
 	return nil
 }
 
+// CreateLicenseConfigMap sets the license file path and create config map.
+// Required if license file path is not present during TestEnv initialization
+func (testenv *TestEnv) CreateLicenseConfigMap(path string) error {
+	testenv.licenseFilePath = path
+	err := testenv.createLicenseConfigMap()
+	return err
+}
+
 func (testenv *TestEnv) createLicenseConfigMap() error {
 	lic, err := newLicenseConfigMap(testenv.licenseCMName, testenv.namespace, testenv.licenseFilePath)
 	if err != nil {
