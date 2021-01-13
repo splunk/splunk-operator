@@ -265,13 +265,13 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		t.Errorf("ApplyClusterMaster() should not have returned error")
 	}
 
-	current.Spec.CommonSplunkSpec.EtcStorage = "-abcd"
+	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
 	if _, err := ApplyClusterMaster(client, &current); err == nil {
 		t.Errorf("ApplyClusterMaster() should have returned error")
 	}
 
 	var replicas int32 = 3
-	current.Spec.CommonSplunkSpec.EtcStorage = ""
+	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = ""
 	ss.Status.ReadyReplicas = 3
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"

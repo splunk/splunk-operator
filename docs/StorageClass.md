@@ -11,20 +11,11 @@ deployments. For each pod, the following two volumes will be mounted:
 | `/opt/splunk/var` | This is used to store all indexed events, logs, and other data |
 
 By default, 10GiB volumes will be created for `/opt/splunk/etc` and 100GiB
-volumes will be created for `/opt/splunk/var`. You can customize this for
-each resource by using the `etcStorage` and `varStorage` parameters.
+volumes will be created for `/opt/splunk/var`. 
 
-The `kubectl` command can be used to see which Storage Classes are available in
-your Kubernetes cluster:
-
-```
-$ kubectl get storageclass
-NAME            PROVISIONER             AGE
-gp2 (default)   kubernetes.io/aws-ebs   176d
-```
-
-You can use the `storageClassName` parameter to specify the Storage Class you
-would like to use:
+You can customize the `storage capacity` and `storage class names` for the `/opt/splunk/etc`
+and `/opt/splunk/var` volumes by using the `storageCapacity` and `storageClassName` fields
+under the `etcVolumeStorageConfig` and `varVolumeStorageConfig` spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1beta1
@@ -34,9 +25,20 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  storageClassName: "gp2"
-  etcStorage: "25Gi"
-  varStorage: "100Gi"
+  etcVolumeStorageConfig:
+    storageClassName: gp2
+    storageCapacity: 15Gi
+  varVolumeStorageConfig:
+    storageClassName: customStorageClass
+    storageCapacity: 25Gi
+```
+The following `kubectl` command can be used to see which Storage Classes are available in
+your Kubernetes cluster:
+
+```
+$ kubectl get storageclass
+NAME            PROVISIONER             AGE
+gp2 (default)   kubernetes.io/aws-ebs   176d
 ```
 
 If no `storageClassName` is provided, the default Storage Class for your
@@ -46,8 +48,24 @@ Kubernetes cluster will be used.
 ## Ephemeral Storage
 
 For testing and demonstration purposes, you may bypass the use of persistent
-storage by setting `ephemeralStorage: true` within any Splunk custom resource
-spec. This will mount local, ephemeral volumes for `/opt/splunk/etc` and
+storage by using the `ephemeralStorage` field under the `etcVolumeStorageConfig`
+and `varVolumeStorageConfig` spec as follows:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1beta1
+kind: Standalone
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+  varVolumeStorageConfig:
+    ephemeralStorage: true
+```
+
+This will mount local, ephemeral volumes for `/opt/splunk/etc` and
 `/opt/splunk/var` using the Kubernetes
 [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) feature.
 
