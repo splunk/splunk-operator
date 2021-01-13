@@ -246,27 +246,27 @@ func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind strin
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
 	result := map[string]int{
-		"splunkweb": 8000,
-		"splunkd":   8089,
+		GetPortName(splunkwebPort, protoHTTP): 8000,
+		GetPortName(splunkdPort, protoHTTPS):  8089,
 	}
 
 	switch instanceType {
 	case SplunkMonitoringConsole:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[GetPortName(hecPort, protoHTTP)] = 8088
+		result[GetPortName(s2sPort, protoTCP)] = 9997
 	case SplunkStandalone:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[GetPortName(dfccontrolPort, protoTCP)] = 17000
+		result[GetPortName(datareceivePort, protoTCP)] = 19000
+		result[GetPortName(dfsmasterPort, protoTCP)] = 9000
+		result[GetPortName(hecPort, protoHTTP)] = 8088
+		result[GetPortName(s2sPort, protoTCP)] = 9997
 	case SplunkSearchHead:
-		result["dfccontrol"] = 17000
-		result["datareceive"] = 19000
-		result["dfsmaster"] = 9000
+		result[GetPortName(dfccontrolPort, protoTCP)] = 17000
+		result[GetPortName(datareceivePort, protoTCP)] = 19000
+		result[GetPortName(dfsmasterPort, protoTCP)] = 9000
 	case SplunkIndexer:
-		result["hec"] = 8088
-		result["s2s"] = 9997
+		result[GetPortName(hecPort, protoHTTP)] = 8088
+		result[GetPortName(s2sPort, protoTCP)] = 9997
 	}
 
 	return result
