@@ -134,7 +134,7 @@ Modify your `ingress-gateway` Service to listen for S2S TCP
 connections on port 9997.
 
 ```shell
-$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-s2s","port":9997,"protocol":"TCP"}]}}'   service/istio-ingressgateway patched
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-s2s","port":9997,"protocol":"TCP"}]}}'
 ```
 
 Use the External-IP from Istio in the Forwarder's outputs.conf.
@@ -151,12 +151,6 @@ endpoints. There are two main configurations supported by Istio. First is the pa
 
 and 
 https://confluence.splunk.com/pages/viewpage.action?pageId=412881933&preview=/412881933/435214423/image2021-1-11_14-6-31.png
-
-
-
-Learn how to manage TLS certificates to secure data from Forwarders:  
-[Securing Splunk Platform](https://docs.splunk.com/Documentation/Splunk/8.1.1/Security/Aboutsecuringdatafromforwarders)
-
 
 
 #### Configuring  Ingress for Splunk (S2S) with End-to-End TLS
@@ -186,7 +180,7 @@ spec:
 Modify your `ingress-gateway` Service to listen for S2S TCP
 connections on the new port created (9998).
 ```shell
-$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-tls","port":9998,"protocol":"TCP"}]}}'   service/istio-ingressgateway patched
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-tls","port":9998,"protocol":"TCP"}]}}'
 ```
 
 Create a Gateway with TLS Passthrough
@@ -242,7 +236,10 @@ traffic, you can optionally replace `splunk.example.com` in the above examples
 with the wildcard `*`. When you use this wildcard, you do not have to set the
 `tlsHostname` parameter in `outputs.conf` on your forwarders.
 
-Configure Forwarder's outputs.conf  for TLS
+Learn how to configure secure forwarding using TLS certificates:  
+[Securing Splunk Platform](https://docs.splunk.com/Documentation/Splunk/8.1.1/Security/Aboutsecuringdatafromforwarders)
+
+Sample Forwarder's outputs.conf  for TLS
 ```
 [tcpout]
 defaultGroup = default-autolb-group
@@ -259,7 +256,7 @@ tlsHostname = splunk.example.com
 ```
 More details: [Outputs.conf Docs](https://docs.splunk.com/Documentation/Splunk/8.1.1/Admin/Outputsconf)
 
-Configure Indexer's Inputs.conf for TLS
+Sample Indexer's Inputs.conf for TLS
 ```
 [splunktcp-ssl:9998]
  
@@ -332,16 +329,66 @@ Configure Indexer's Inputs.conf for TCP
 disabled = 0
 ```
 
+
 #### Configuring Web UI access using Istio 
 
-[In-progress]
+You can configure your Ingress to direcly access Splunk web UI from a pod in the Kubernetes cluster. 
 
+First you need to create a Gateway to receive traffic on port 8000
 
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: splunk-s2s
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 8000
+      name: UI
+      protocol: TCP
+    hosts:
+    - "splunk.example.com"  
+```
 
+Second, create a virtual service to route traffic to your service, in this example we used a standalone.
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: splunk-s2s
+spec:
+  hosts:
+  - "splunk.example.com"
+  gateways:
+  - "splunk-s2s"
+  tcp:
+  - match:
+    - port: 8000 
+    route:
+    - destination:
+        port:
+          number: 8000
+        host: splunk-standalone-standalone-service
+```
 
+Modify your `ingress-gateway` Service to listen for TCP
+connections on the port 8000.
+```shell
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-ui","port":8000,"protocol":"TCP"}]}}'
+```
 
-
-
+On your browser, use the External-IP from Istio along with port 8000. 
+For example:
+```
+http://<LoadBalance-External-IP>:8000
+```
+Remember you can find the External-IP for Istio using the command:
+```shell
+kubectl get svc -n istio-system
+```
 
 
 [To Discuss - Remove section on Let's encrypt or leave it?]
@@ -373,7 +420,6 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
 ```
-
 
 
 Next, you will need to create an Istio Gateway that is associated with your
