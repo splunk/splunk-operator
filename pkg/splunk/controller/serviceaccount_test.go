@@ -66,8 +66,11 @@ func TestGetServiceAccount(t *testing.T) {
 	}
 
 	// Make sure serviceAccount exists
-	_, err = GetServiceAccount(client, namespacedName)
+	got, err := GetServiceAccount(client, namespacedName)
 	if err != nil {
+		if got.GetName() != current.GetName() {
+			t.Errorf("Incorrect service account retrieved got %s want %s", got.GetName(), current.GetName())
+		}
 		t.Errorf("Should not return an error, when the serviceAccount exists")
 	}
 }
