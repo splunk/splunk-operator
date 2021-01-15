@@ -146,7 +146,7 @@ kubectl get svc -n istio-system
 It is highly recommended that you always use TLS encryption for your Splunk
 endpoints. There are two main configurations supported by Istio. First is the passthrough configuration (End-to-End) which  terminates the encryption in the pod level. The second is TLS Termination at Gateway, in which Istio validates and decrypts the data prior to sending it to the pods. 
 
-*[To-DISCUSS]: Are Diagrams a good fit here?
+[To-DISCUSS]: Are Diagrams a good fit here?
 
  https://confluence.splunk.com/pages/viewpage.action?pageId=412881933&preview=/412881933/435214418/image2021-1-11_14-1-46.png
 
@@ -330,10 +330,64 @@ Configure Indexer's Inputs.conf for TCP
 disabled = 0
 ```
 
+[ToDiscuss] Should we add this brief use-case with Service Mesh?
+
+#### Example: Service Mesh with Istio (Intra Cluster Communication)
+Istio can be used to create a service mesh in the Kubernetes cluster. Here we will focus on leveraging Istio to use encryption when communicating between pods. This configuration can be used in addition to TLS with termination at the gateway. For more details on Service mesh chekc Istio documentation [What is Istio](https://istio.io/latest/docs/concepts/what-is-istio)
+
+In a service mesh, Istio will manage certificates, encrypt, and decrypt communication between pods amon others. In this example we will be using mTLS for Intra Cluster communication. 
+
+First, you need to enable Istio sidecar injection in the namespace where the pods will be created. Use the following command:
+```shell
+kubectl label namespace default istio-injection=enabled
+```
+
+Validate the namespace has injection enabled:
+```shell
+kubectl get namespace -L istio-injection
+NAME           STATUS    AGE ISTIO-INJECTION
+default        Active   3d20h enabled
+istio-system   Active   3d4h  disabled
+kube-node-lease Active  3d20h
+kube-public    Active   3d20h
+kube-system    Active   3d20h
+```
+
+Now when you create a new Splunk instance, note that now the pods have a "2/2" on their status which means that there are now two containers, one for Splunk and one for Istio-sidecar on each pod.
+Example: 
+
+```shell
+$ kubectl get pods
+NAME                                  READY   STATUS    RESTARTS   AGE
+splunk-cm-cluster-master-0            2/2     Running   0          22m
+splunk-default-monitoring-console-0   2/2     Running   0          21m
+splunk-example-indexer-0              2/2     Running   0          19m
+splunk-example-indexer-1              2/2     Running   0          19m
+splunk-example-indexer-2              2/2     Running   0          19m
+splunk-operator-78bdc844bf-wpk4v      1/1     Running   0          25h
+```
+
+Create a Peer Authentication rule for mTLS
+```yaml
+apiVersion: "security.istio.io/v1beta1"
+kind: "PeerAuthentication"
+metadata:
+    name: "default"
+    namespace: "istio-system"
+spec:
+    mtls:
+        mode: STRICT
+```
+
+Available modes:
+Disabled:  Do not use mTLS at all.
+Permissive: Enables mTLS, but allows plain-text (non-encrypted) communication as well. 
+Strict: Only allow encrypted communication within the cluster.
+
 
 #### Configuring Web UI access using Istio 
 
-You can configure your Ingress to direcly access Splunk web UI from a pod in the Kubernetes cluster. 
+You can also configure your Ingress to provide direct access to Splunk web UI.
 
 First you need to create a Gateway to receive traffic on port 8000
 
@@ -393,7 +447,7 @@ kubectl get svc -n istio-system
 
 
 
-*[To-DISCUSS]: Leave or Keep Let's encrypt sections?
+[To-DISCUSS]: Leave or Keep Let's encrypt sections?
 
 It is highly recommended that you always use TLS encryption for your Splunk
 -endpoints. To do this, you will need to have one or more Kubernetes TLS
@@ -1437,5 +1491,7 @@ tls:
     secretName: cluster-master.splunk.example.com-tls
 …
 ```
+
+
 
 
