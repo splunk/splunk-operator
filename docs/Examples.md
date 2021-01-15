@@ -206,8 +206,12 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  storageClassName: standard
-  varStorage: "4Gi"
+  etcVolumeStorageConfig:
+    storageClassName: gp2
+    storageCapacity: 15Gi
+  varVolumeStorageConfig:
+    storageClassName: customStorageClass
+    storageCapacity: 25Gi
 ---
 apiVersion: enterprise.splunk.com/v1beta1
 kind: IndexerCluster
@@ -422,13 +426,15 @@ spec:
   defaultsUrl: /mnt/defaults/default.yml
 ```
 
-`volumes` will mount the ConfigMap in all of your pods under the
-`/mnt/licenses` directory.
+In the above example, `volumes` will mount the `splunk-defaults` ConfigMap
+with `default.yml` file under the `/mnt/defaults` directory on all pods of
+the Custom Resource `Standalone`.
 
-`defaultsUrl` may specify one or more local paths or URLs, each separated
-by a comma. For example, you can use a `generic.yml` with common
-settings and an `apps.yml` that provides additional parameters for app
-installation.
+`defaultsUrl` represents the full path to the `default.yml` configuration
+file on the pods. In addition, `defaultsUrl` may specify one or more local
+paths or URLs, each separated by a comma. For example, you can use a `generic.yml`
+with common settings and an `apps.yml` that provides additional parameters for
+app installation.
 
 ```yaml
   defaultsUrl: "http://myco.com/splunk/generic.yml,/mnt/defaults/apps.yml"

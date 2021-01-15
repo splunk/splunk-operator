@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -990,7 +990,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	}
 
 	cm.Status.Phase = splcommon.PhaseError
-	cr.Spec.CommonSplunkSpec.EtcStorage = "-abcd"
+	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
 	if _, err := ApplyIndexerCluster(c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}

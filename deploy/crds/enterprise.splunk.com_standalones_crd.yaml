@@ -677,17 +677,25 @@ spec:
                 by commas
               type: string
             defaultsUrlApps:
-              description: Full path or URL for one or more default.yml files for installing apps, separated
-                by commas
+              description: Full path or URL for one or more defaults.yml files specific
+                to App install, separated by commas.  The defaults listed here will
+                be installed on the CM, standalone, search head deployer or license
+                master instance.
               type: string
-            ephemeralStorage:
-              description: If true, ephemeral (emptyDir) storage will be used for
-                /opt/splunk/etc and /opt/splunk/var volumes
-              type: boolean
-            etcStorage:
-              description: Storage capacity to request for /opt/splunk/etc persistent
-                volume claims (default=”1Gi”)
-              type: string
+            etcVolumeStorageConfig:
+              description: Storage configuration for /opt/splunk/etc volume
+              properties:
+                ephemeralStorage:
+                  description: If true, ephemeral (emptyDir) storage will be used
+                  type: boolean
+                storageCapacity:
+                  description: Storage capacity to request persistent volume claims
+                    (default=”10Gi” for etc and "100Gi" for var)
+                  type: string
+                storageClassName:
+                  description: Name of StorageClass to use for persistent volume claims
+                  type: string
+              type: object
             image:
               description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                 environment variables)
@@ -1148,9 +1156,6 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
-            storageClassName:
-              description: Name of StorageClass to use for persistent volume claims
-              type: string
             tolerations:
               description: Pod's tolerations for Kubernetes node's taint
               items:
@@ -1191,10 +1196,20 @@ spec:
                     type: string
                 type: object
               type: array
-            varStorage:
-              description: Storage capacity to request for /opt/splunk/var persistent
-                volume claims (default=”50Gi”)
-              type: string
+            varVolumeStorageConfig:
+              description: Storage configuration for /opt/splunk/var volume
+              properties:
+                ephemeralStorage:
+                  description: If true, ephemeral (emptyDir) storage will be used
+                  type: boolean
+                storageCapacity:
+                  description: Storage capacity to request persistent volume claims
+                    (default=”10Gi” for etc and "100Gi" for var)
+                  type: string
+                storageClassName:
+                  description: Name of StorageClass to use for persistent volume claims
+                  type: string
+              type: object
             volumes:
               description: List of one or more Kubernetes volumes. These will be mounted
                 in all pod containers as as /mnt/<name>
