@@ -73,4 +73,22 @@ func TestGetServiceAccount(t *testing.T) {
 		}
 		t.Errorf("Should not return an error, when the serviceAccount exists")
 	}
+
+	var dummySaName string = "dummy_sa"
+
+	current.Name = dummySaName
+	// Update serviceAccount
+	err = ApplyServiceAccount(client, &current)
+	if err != nil {
+		t.Errorf("Failed to create the serviceAccount. Error: %s", err.Error())
+	}
+
+	// Make sure serviceAccount is updated
+	got, err = GetServiceAccount(client, namespacedName)
+	if err != nil {
+		if got.GetName() != dummySaName {
+			t.Errorf("Incorrect service account retrieved got %s want %s", got.GetName(), current.GetName())
+		}
+		t.Errorf("Should not return an error, when the serviceAccount exists")
+	}
 }
