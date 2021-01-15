@@ -70,7 +70,9 @@ type CommonSplunkSpec struct {
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
 
-	// ServiceAccount is the service account used by the pods deployed by the CRD
+	// ServiceAccount is the service account used by the pods deployed by the CRD.
+	// If not specified uses the default serviceAccount for the namespace as per
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
 	ServiceAccount string `json:"serviceAccount"`
 }
 

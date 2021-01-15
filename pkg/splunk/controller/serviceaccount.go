@@ -27,12 +27,16 @@ import (
 
 // ApplyServiceAccount creates or updates a Kubernetes serviceAccount
 func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
+	scopedLog := log.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
+		"namespace", serviceAccount.GetNamespace())
+
 	namespacedName := types.NamespacedName{Namespace: serviceAccount.GetNamespace(), Name: serviceAccount.GetName()}
 	var current corev1.ServiceAccount
 
 	err := client.Get(context.TODO(), namespacedName, &current)
 	if err == nil {
 		if !reflect.DeepEqual(serviceAccount, &current) {
+			scopedLog.Info("Updating service account")
 			current = *serviceAccount
 			err = splutil.UpdateResource(client, &current)
 		}
