@@ -49,11 +49,11 @@ func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *core
 
 // GetServiceAccount gets the serviceAccount resource in a given namespace
 func GetServiceAccount(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ServiceAccount, error) {
-	scopedLog := log.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
-		"namespace", namespacedName.Namespace)
 	var serviceAccount corev1.ServiceAccount
 	err := client.Get(context.TODO(), namespacedName, &serviceAccount)
 	if err != nil {
+		scopedLog := log.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
+			"namespace", namespacedName.Namespace, "error", err)
 		scopedLog.Info("ServiceAccount not found")
 		return nil, err
 	}
