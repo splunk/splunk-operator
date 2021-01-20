@@ -292,9 +292,7 @@ Configure your Forwarder and Indexer or Standalone certificates using the docume
 
 ## Configuring Ingress Using NGINX
 
-###  Before We Begin
-
-**NOTE**: There are at least 3 flavors of the Nginx ingress controller.
+**NOTE**: There are at least 3 flavors of the Nginx Ingress controller.
 
 - Kubernetes Ingress Nginx (open source)
 - Nginx Ingress Open Source (F5's open source version)
@@ -302,30 +300,28 @@ Configure your Forwarder and Indexer or Standalone certificates using the docume
 
 [Nginx Comparison Chart](https://github.com/nginxinc/kubernetes-ingress/blob/master/docs/nginx-ingress-controllers.md).
 
-This is very important since they look the same at first, but have *very* different annotations and configurations. For this doc, we are using two flavors, the open source version (option 1) and F5 Opens source version of Nginx Ingress (option 2).
+It is important to confirm which Nginx Ingress controller you intended to implement, as they have *very* different annotations and configurations. For these examples, we are using the Kubernetes Ingress Nginx (option 1) and the Nginx Ingress Open Source (option 2).
 
 
-## Example: Configuring Ingress Using Ingress Nginx
+## Configuring Ingress Using Kubernetes Ingress Nginx
 
-For instructions on how to install and configure the NGINX Ingress Controller
-for your specific infrastructure, please see its
-[GitHub repository](https://github.com/nginxinc/kubernetes-ingress/) and [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/).
+For instructions on how to install and configure the NGINX Ingress Controller, see the 
+[NGINX Ingress Controller GitHub repository](https://github.com/nginxinc/kubernetes-ingress/) and the [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/).
 
-The configurations for creating and managing your certificates, as well as the Forwarder and Indexer's configurations are the same as the example above for Istio End-to-End TLS.
+This Ingress Controller uses a ConfigMap to enable Ingress access to the cluster. Currently there is no support for TCP gateway termination. Requests for this feature are available in [Request 3087](https://github.com/kubernetes/ingress-nginx/issues/3087), and [Ticket 636](https://github.com/kubernetes/ingress-nginx/issues/636) but at this time only HTTPS is supported for gateway termination.
 
-This Ingress Controller uses a ConfigMap to enable Ingress access to the cluster. Currently there is no support for TCP gateway termination. Requests for this feature have been placed such as in  [Request 3087](https://github.com/kubernetes/ingress-nginx/issues/3087) and [Ticket 636](https://github.com/kubernetes/ingress-nginx/issues/636) but at the time of this documentation, only HTTPS is supported for gateway termination.
+For Splunk Forwarder communications over TCP, the only configuration available is End-to-End TLS termination. The details for creating and managing certificates, as well as the Forwarder and Indexer's configurations are the same as the example for Istio End-to-End TLS above.
 
-For Splunk-S2S communication which is based on TCP the only configuration available is End-to-End termination. 
+### Configuring Ingress NGINX for Splunk Forwarders with End-to-End TLS
 
-#### Configuring Ingress-NGINX for Splunk (S2S) with End-to-End TLS
+We started with the Yaml provided in the Installation Guide for AWS to use as a template: 
+[Ingress NGINX AWS Sample Deployment](https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.43.0/deploy/static/provider/aws/deploy.yaml) 
 
-We used this base Yaml provided in the Installation Guide for AWS as a template: 
-[AWS Sample Deployment](https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.43.0/deploy/static/provider/aws/deploy.yaml)
+Note: In this example we used port 9997 for non-encrypted communication, and 9998 for encrypted.
 
-Next we will configure the ports we want to use for Ingress. In the following example we used the ports 9997 for non-encryption and 9998 for encryption.
+Update the default Ingress NGINX configuration to add the ConfigMap and Service ports:
 
-Use the default configuration with the following additions:
-###### 1) Add a configMap to define the port-to-service routing
+###### 1) Use a configMap to define the port-to-service routing
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -377,25 +373,22 @@ spec:
       targetPort: 9998
 ```
 
+## Configuring Ingress Using NGINX Ingress Controller (Nginxinc)
+
+The Nginx Ingress Controller is an open source version of the F5 product. Please review their documentation below for more details.
+
+[NGINX Ingress Controller Github Repo](https://github.com/nginxinc/kubernetes-ingress)
+
+[NGINX Ingress Controller Docs Home](https://docs.nginx.com/nginx-ingress-controller/overview/)
+
+[NGINX Ingress Controller Annotations Page](https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-annotations/)
 
 
-## Example: Configuring Ingress Using NGINX-Ingress-Controller (Nginxinc)
+### Install the Nginx Helm Chart
+We followed the product's Helm Chart installation guide. It requires a cluster with internet access.
+[NGINX Ingress Controller Helm Installation]( https://docs.nginx.com/nginx-ingress-controller/installation/installation-with-helm/)
 
-Nginx Ingress Controller is an open source version supported by F5. Please review the official documentation below for more details.
-
-[Github Repo](https://github.com/nginxinc/kubernetes-ingress)
-
-[Docs Home](https://docs.nginx.com/nginx-ingress-controller/overview/)
-
-[Annotations Page](https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-annotations/)
-
-
-#### Installing the Nginx Helm Chart
-We followed this guide for installing the Helm Chart for the ingress controller. This assumes that the cluster has internet access.
-
-[Helm Installation page]( https://docs.nginx.com/nginx-ingress-controller/installation/installation-with-helm/)
-
-#### Helm Setup
+#### Setup Helm
 
 ```shell
 # clone the repo and check out the current production branch
@@ -411,7 +404,7 @@ $ helm repo update
 $ kubectl create -f crds/
 ```
 
-#### Ingress Install
+#### Install Ingress
 ```shell
 cd deployments/helm-chart
 
@@ -428,11 +421,11 @@ epat-eks-nginx  default     5  2020-10-29 15:03:47.6 EDT    deployed    nginx-in
 helm upgrade epat-eks-nginx  nginx-stable/nginx-ingress
 ```
 
-#### Configuring Ingress
+#### Configure Ingress services
 
-##### Ingress Service
+##### Ingress Service for Splunk Web and HEC
 
-The following ingress example yaml exposes Splunk HEC and UI for an operator installed service. HEC is exposed via ssl and UI is non-ssl.
+The following ingress example yaml configures Splunk Web and HEC as an operator installed service. HEC is exposed via ssl and Splunk Web is non-ssl.
 ```yaml
 apiVersion: extensions/v1beta1
 kind: Ingress
@@ -475,8 +468,8 @@ status:
   loadBalancer: {}
 ```
 
-##### S2S Setup
-In order to expose s2s, we need to enable the global configuration to setup a listener and transport server
+##### Ingress Service for Splunk Forwarders 
+Enable the global configuration to setup a listener and transport server
 
 ```yaml
 apiVersion: k8s.nginx.org/v1alpha1
@@ -505,7 +498,7 @@ spec:
     pass: s2s-app
 ```
 
-We need to edit the service to setup a node-port for the port being setup for the listener
+Edit the service to setup a node-port for the port being setup as the listener
 
 List the service
 ```yaml
@@ -514,7 +507,7 @@ NAME                                         TYPE           CLUSTER-IP       EXT
 epat-eks-nginx-nginx-ingress                 LoadBalancer   172.20.195.54    aa725344587a4443b97c614c6c78419c-1675645062.us-east-2.elb.amazonaws.com   80:31452/TCP,443:30402/TCP,30403:30403/TCP                         7d1h
 ```
 
-Edit the service and add s2s ingress port
+Edit the service and add the Splunk Forwarder ingress port
 ```
 kubectl edit service epat-eks-nginx-nginx-ingress
 ```
@@ -565,9 +558,7 @@ spec:
   type: LoadBalancer
 ```
 
-  
-
-## Example using Let's Encrypt
+## Using Let's Encrypt to manage TLS certificates 
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS
@@ -575,7 +566,7 @@ certificates in Kubernetes, the following example Ingress object can be
 used to enable secure (TLS) access to all Splunk components from outside of
 your Kubernetes cluster:
 
-##### 1) Sample configuration for  Nginx
+##### 1) Example configuration for NGINX
 
 ```yaml
 apiVersion: extensions/v1beta1
@@ -656,7 +647,7 @@ tls:
 …
 ```
 
-##### 2) Sample configuration for Istio
+##### 2) Example configuration for Istio
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS certificates
