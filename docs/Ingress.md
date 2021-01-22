@@ -1,4 +1,14 @@
-# Configuring Ingress
+| Table of contents                                     |
+| ----------------------------------------------------- |
+| [Configuring Ingress](#introduction)                  |
+| [Istio](#Istio)                                       |
+| [Ingress-Nginx](#Ingress-Nginx)                       |
+| [Nginx-Ingress-Controller](#Nginx-Ingress-Controller) |
+| [Let's Encrypt](#letsencrypt)                         |
+
+
+
+# Configuring Ingress <a name="introduction"></a>
 
 Using `port-forward` is great for testing, but you will ultimately want to
 make it easier to access your Splunk cluster outside of Kubernetes. A common 
@@ -22,17 +32,25 @@ We provide some examples below for configuring a few of the most popular Ingress
 
 Before deploying an example, you will need to review the yaml and replace “example.com” with the domain name you would like to use, and replace “example” in the service names with the name of your custom resource object. You will also need to point your DNS for all the desired hostnames to the IP addresses of your ingress load balancer.
 
-#### Note on Indexer Discovery
 
+#### Important Notes on using Splunk on Kubernetes 
+
+#### Splunk default network ports
+When creating a new Splunk instance on Kubernetes, the default network ports will be used for internal communication such as internal logs, replication and others. Any change on how these ports are configured need to be consistent across the cluster. 
+
+For Ingress we recommend to use separate ports for encrypted and non-encrypted traffic. In this documentation we will use port 9998 for encrypted data coming from outside the cluster, while keeping the default 9997 for non-encrypted intra-cluster communication.
+
+#### Indexer Discovery not supported
 Indexer Discovery is not supported on a Kubernetes cluster. Instead the Ingress controllers will be responsible to connect forwarders to peer nodes in Indexer clusters.
 
-## Configuring Ingress Using Istio
+
+## Configuring Ingress Using Istio <a name="Istio"></a>
 
 Istio as an ingress controller allows the cluster to receive requests from external sources and routes them to a desired destination within the cluster. Istio utilizes an Envoy proxy that allows for precise control over how data is routed to services by looking at attributes such as, hostname, uri, and HTTP headers. Through the use of destination rules, it also allows for fine grain control over how data is routed even within services themselves. 
 
 For instructions on how to install and configure Istio for your specific infrastructure, see the Istio [getting started guide](https://istio.io/docs/setup/getting-started/).
 
-### Configuring Ingress for Splunk Web 
+### Configuring Ingress for Splunk Web
 
 You can configure Istio to provide direct access to Splunk Web.
 
@@ -310,8 +328,7 @@ Istio is a popular choice for its Service Mesh capabilities. However, Service Me
 
 It is important to confirm which Nginx Ingress controller you intended to implement, as they have *very* different annotations and configurations. For these examples, we are using the Kubernetes Ingress Nginx (option 1) and the Nginx Ingress Open Source (option 2).
 
-
-## Configuring Ingress Using Kubernetes Ingress Nginx
+## Configuring Ingress Using Kubernetes Ingress Nginx <a name="Ingress-Nginx"></a>
 
 For instructions on how to install and configure the NGINX Ingress Controller, see the 
 [NGINX Ingress Controller GitHub repository](https://github.com/nginxinc/kubernetes-ingress/) and the [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/).
@@ -320,16 +337,61 @@ This Ingress Controller uses a ConfigMap to enable Ingress access to the cluster
 
 For Splunk Forwarder communications over TCP, the only configuration available is End-to-End TLS termination. The details for creating and managing certificates, as well as the Forwarder and Indexer's configurations are the same as the example for Istio End-to-End TLS above.
 
+For all configurations below, we started with the standard yaml provided in the Installation Guide for AWS as a template: 
+[Ingress NGINX AWS Sample Deployment](https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.43.0/deploy/static/provider/aws/deploy.yaml). Then we will add or update those components based on each scenario. 
+
+### Configuring Ingress for Splunk Web 
+
+You can configure Nginx to provide direct access to Splunk Web. In the following example we use a standalone deployment to access Splunk Web.
+
+Update the Service component to route traffic from port 80 to 8000.
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: 'true'
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  labels:
+    helm.sh/chart: ingress-nginx-3.10.1
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/version: 0.41.2
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8000
+```
+
+Create a configMap to route traffic to port 8000
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+data:
+  8000: "default/splunk-standalone-standalone-service:8000"
+```
+
+
 ### Configuring Ingress NGINX for Splunk Forwarders with End-to-End TLS
 
-We started with the Yaml provided in the Installation Guide for AWS to use as a template: 
-[Ingress NGINX AWS Sample Deployment](https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.43.0/deploy/static/provider/aws/deploy.yaml) 
 
 Note: In this example we used port 9997 for non-encrypted communication, and 9998 for encrypted.
 
 Update the default Ingress NGINX configuration to add the ConfigMap and Service ports:
 
-###### 1) Use a configMap to define the port-to-service routing
+###### Use a configMap to define the port-to-service routing
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -341,7 +403,7 @@ data:
   9998: "default/splunk-standalone-standalone-service:9998"
 ```
 
-###### 2) Add the two ports into the Service used to configure the Load Balancer
+###### Add the two ports into the Service used to configure the Load Balancer
 ```yaml
 apiVersion: v1
 kind: Service
@@ -383,7 +445,7 @@ spec:
 
 ##### Documentation tested on Ingress Nginx v1.19.4 and Kubernetes v1.17
 
-## Configuring Ingress Using NGINX Ingress Controller (Nginxinc)
+## Configuring Ingress Using NGINX Ingress Controller (Nginxinc) <a name="Nginx-Ingress-Controller"></a>
 
 The Nginx Ingress Controller is an open source version of the F5 product. Please review their documentation below for more details.
 
@@ -433,9 +495,9 @@ helm upgrade epat-eks-nginx  nginx-stable/nginx-ingress
 
 #### Configure Ingress services
 
-##### Ingress Service for Splunk Web and HEC
+##### Configure Ingress for Splunk Web and HEC
 
-The following ingress example yaml configures Splunk Web and HEC as an operator installed service. HEC is exposed via ssl and Splunk Web is non-ssl.
+The following ingress example yaml configures Splunk Web as well as HEC as an operator installed service. HEC is exposed via ssl and Splunk Web is non-ssl.
 ```yaml
 apiVersion: extensions/v1beta1
 kind: Ingress
@@ -570,7 +632,7 @@ spec:
 
 ##### Documentation tested on Nginx Ingress Controller v1.9.0 and Kubernetes v1.18
 
-## Using Let's Encrypt to manage TLS certificates 
+## Using Let's Encrypt to manage TLS certificates <a name="letsencrypt"></a>
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS
@@ -578,7 +640,7 @@ certificates in Kubernetes, the following example Ingress object can be
 used to enable secure (TLS) access to all Splunk components from outside of
 your Kubernetes cluster:
 
-##### 1) Example configuration for NGINX
+##### Example configuration for NGINX
 
 ```yaml
 apiVersion: extensions/v1beta1
@@ -659,7 +721,7 @@ tls:
 …
 ```
 
-##### 2) Example configuration for Istio
+##### Example configuration for Istio
 
 If you are using [cert-manager](https://docs.cert-manager.io/en/latest/getting-started/)
 with [Let’s Encrypt](https://letsencrypt.org/) to manage your TLS certificates
