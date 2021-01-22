@@ -86,6 +86,24 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 	return &new
 }
 
+// newStandalone creates and initializes CR for Standalone Kind
+func newStandaloneWithGivenSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+
+	new := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &new
+}
+
 func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.LicenseMaster {
 	new := enterprisev1.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -225,7 +243,7 @@ func newRole(name, ns string) *rbacv1.Role {
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "pods"},
+				Resources: []string{"services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "pods", "serviceaccounts", "pods/exec"},
 				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"},
 			},
 			{

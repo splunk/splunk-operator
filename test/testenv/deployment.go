@@ -417,3 +417,13 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 	}
 	return deployed.(*enterprisev1.Standalone), err
 }
+
+// DeployStandalonewithGivenSpec deploys a standalone with given spec
+func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev1.StandaloneSpec) (*enterprisev1.Standalone, error) {
+	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
+}
