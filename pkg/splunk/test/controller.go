@@ -85,6 +85,8 @@ func coreObjectCopier(dst, src *runtime.Object) bool {
 			*dstP.(*corev1.Service) = *srcP.(*corev1.Service)
 		case *corev1.Pod:
 			*dstP.(*corev1.Pod) = *srcP.(*corev1.Pod)
+		case *corev1.ServiceAccount:
+			*dstP.(*corev1.ServiceAccount) = *srcP.(*corev1.ServiceAccount)
 		default:
 			return false
 		}

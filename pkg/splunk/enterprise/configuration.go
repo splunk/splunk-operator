@@ -441,6 +441,16 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 		return statefulSet, err
 	}
 
+	// add serviceaccount if configured
+	if spec.ServiceAccount != "" {
+		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
+		_, err := splctrl.GetServiceAccount(client, namespacedName)
+		if err == nil {
+			// serviceAccount exists
+			statefulSet.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
+		}
+	}
+
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
