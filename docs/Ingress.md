@@ -22,6 +22,9 @@ We provide some examples below for configuring a few of the most popular Ingress
 
 Before deploying an example, you will need to review the yaml and replace “example.com” with the domain name you would like to use, and replace “example” in the service names with the name of your custom resource object. You will also need to point your DNS for all the desired hostnames to the IP addresses of your ingress load balancer.
 
+#### Note on Indexer Discovery
+
+Indexer Discovery is not supported on a Kubernetes cluster. Instead the Ingress controllers will be responsible to connect forwarders to peer nodes in Indexer clusters.
 
 ## Configuring Ingress Using Istio
 
@@ -289,6 +292,11 @@ Note that the Virtual Service no longer handles TLS since it has been terminated
 
 Configure your Forwarder and Indexer or Standalone certificates using the documentation: [Securing data from forwarders](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders). 
 
+##### Documentation tested on Istio v1.8 and Kubernetes v1.17
+
+## Note on Service Mesh and Istio
+
+Istio is a popular choice for its Service Mesh capabilities. However, Service Mesh for Splunk instances are only supported on Istio v1.8 and above, along with Kubernetes v1.19 and above. At the time of this documentation neither Amazon AWS or  Google Cloud have updated their stack to these versions.
 
 ## Configuring Ingress Using NGINX
 
@@ -372,6 +380,8 @@ spec:
       protocol: TCP
       targetPort: 9998
 ```
+
+##### Documentation tested on Ingress Nginx v1.19.4 and Kubernetes v1.17
 
 ## Configuring Ingress Using NGINX Ingress Controller (Nginxinc)
 
@@ -557,6 +567,8 @@ spec:
   sessionAffinity: None
   type: LoadBalancer
 ```
+
+##### Documentation tested on Nginx Ingress Controller v1.9.0 and Kubernetes v1.18
 
 ## Using Let's Encrypt to manage TLS certificates 
 
