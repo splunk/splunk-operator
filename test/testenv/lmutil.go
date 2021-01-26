@@ -16,14 +16,7 @@ package testenv
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"strings"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -61,31 +54,4 @@ func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
 	licenseMaster := restResponse.Entry[0].Content.MasterURI
 	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseMaster)
 	return strings.Contains(licenseMaster, "license-master-service:8089")
-}
-
-// DownloadFromS3Bucket downloads license file from S3
-func DownloadFromS3Bucket() (string, error) {
-	dataBucket := os.Getenv("TEST_BUCKET")
-	location := os.Getenv("ENTERPRISE_LICENSE_LOCATION")
-	fmt.Printf("%s : dataBucket  %s : location\n", os.Getenv("TEST_BUCKET"), os.Getenv("ENTERPRISE_LICENSE_LOCATION"))
-	item := "enterprise.lic"
-	file, err := os.Create(item)
-	if err != nil {
-		logf.Log.Error(err, "Failed to create license file")
-	}
-	defer file.Close()
-
-	sess, _ := session.NewSession(&aws.Config{Region: aws.String("us-west-2")})
-	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(dataBucket),
-			Key:    aws.String(location + "/" + "enterprise.lic"),
-		})
-	if err != nil {
-		logf.Log.Error(err, "Failed to download license file")
-	}
-
-	logf.Log.Info("Downloaded", "filename", file.Name(), "bytes", numBytes)
-	return file.Name(), err
 }

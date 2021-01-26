@@ -91,10 +91,23 @@ if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
   echo "License path not set. Changing to default"
   export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_PATH}"
 fi
+
+# Set env s3 env variables
 if [[ -z "${TEST_BUCKET}" ]]; then
-  echo "Test bucket not set. Changing to default"
+  echo "Data bucket not set. Changing to default"
   export TEST_BUCKET="${TEST_S3_BUCKET}"
 fi
+
+if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+  echo "Test bucket not set. Changing to default"
+  export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+fi
+
+if [[ -z "${S3_REGION}" ]]; then
+  echo "S3 Region not set. Changing to default"
+  export S3_REGION="${AWS_S3_REGION}"
+fi
+
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 ginkgo -v -progress -r -stream -nodes=${NUM_NODES} --focus="${TEST_TO_RUN}" ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

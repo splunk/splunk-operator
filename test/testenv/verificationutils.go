@@ -254,3 +254,21 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 		return strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount)
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
+
+// VerifyIndexFoundOnPod verify index found on a given POD
+func VerifyIndexFoundOnPod(deployment *Deployment, podName string, indexName string) {
+	gomega.Eventually(func() bool {
+		indexFound := GetIndexOnPod(deployment, podName, indexName)
+		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
+		return indexFound
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyIndexExistsOnS3 Verify Index Exists on S3
+func VerifyIndexExistsOnS3(deployment *Deployment, podName string, indexName string) {
+	gomega.Eventually(func() bool {
+		indexFound := CheckPrefixExistsOnS3(indexName)
+		logf.Log.Info("Checking Index on S3", "INDEX NAME", indexName, "STATUS", indexFound)
+		return indexFound
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
