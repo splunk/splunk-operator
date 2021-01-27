@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
@@ -476,6 +490,41 @@ func (testenv *TestEnv) createLicenseConfigMap() error {
 		return nil
 	})
 
+	return nil
+}
+
+// Create a service account config
+func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAccount {
+
+	new := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ServiceAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: ns,
+		},
+	}
+
+	return &new
+}
+
+// CreateServiceAccount Create a service account with given name
+func (testenv *TestEnv) CreateServiceAccount(name string) error {
+	serviceAccountConfig := newServiceAccount(testenv.namespace, name)
+	if err := testenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
+		testenv.Log.Error(err, "Unable to create service account")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete service account")
+			return err
+		}
+		return nil
+	})
 	return nil
 }
 

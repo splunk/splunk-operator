@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -439,6 +439,16 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	err := addStorageVolumes(cr, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
+	}
+
+	// add serviceaccount if configured
+	if spec.ServiceAccount != "" {
+		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
+		_, err := splctrl.GetServiceAccount(client, namespacedName)
+		if err == nil {
+			// serviceAccount exists
+			statefulSet.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
+		}
 	}
 
 	// append labels and annotations from parent

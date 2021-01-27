@@ -1,3 +1,16 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package smoke
 
 import (
@@ -9,6 +22,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
+
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func dumpGetPods(ns string) {
@@ -152,6 +169,38 @@ var _ = Describe("Smoke test", func() {
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
+		})
+	})
+
+	Context("Standalone deployment (S1) with Service Account", func() {
+		It("smoke: can deploy a standalone instance attached to a service account", func() {
+			// Create Service Account
+			serviceAccountName := "smoke-service-account"
+			testenvInstance.CreateServiceAccount(serviceAccountName)
+
+			standaloneSpec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes:        []corev1.Volume{},
+					ServiceAccount: serviceAccountName,
+				},
+			}
+
+			// Create standalone Deployment with License Master
+			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), standaloneSpec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify serviceAccount is configured on Pod
+			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testenvInstance.GetName(), standalonePodName, serviceAccountName)
 		})
 	})
 })

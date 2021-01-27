@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,6 +69,11 @@ type CommonSplunkSpec struct {
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
+
+	// ServiceAccount is the service account used by the pods deployed by the CRD.
+	// If not specified uses the default serviceAccount for the namespace as per
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
+	ServiceAccount string `json:"serviceAccount"`
 }
 
 // StorageClassSpec defines storage class configuration

@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
@@ -69,6 +83,24 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 		},
 	}
 
+	return &new
+}
+
+// newStandalone creates and initializes CR for Standalone Kind
+func newStandaloneWithGivenSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+
+	new := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
 	return &new
 }
 
@@ -211,7 +243,7 @@ func newRole(name, ns string) *rbacv1.Role {
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "pods"},
+				Resources: []string{"services", "endpoints", "persistentvolumeclaims", "configmaps", "secrets", "pods", "serviceaccounts", "pods/exec"},
 				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"},
 			},
 			{
