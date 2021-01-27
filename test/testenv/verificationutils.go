@@ -17,12 +17,23 @@ package testenv
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"strings"
 
 	gomega "github.com/onsi/gomega"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// PodDetailsStruct captures output of kubectl get pods podname -o json
+type PodDetailsStruct struct {
+	Spec struct {
+		ServiceAccount     string `json:"serviceAccount"`
+		ServiceAccountName string `json:"serviceAccountName"`
+	}
+}
 
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
 func StandaloneReady(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
@@ -221,5 +232,25 @@ func VerifyLMConfiguredOnPod(deployment *Deployment, podName string) {
 	gomega.Eventually(func() bool {
 		lmConfigured := CheckLicenseMasterConfigured(deployment, podName)
 		return lmConfigured
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
+func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podName string, serviceAccount string) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse cluster searchheads")
+			return false
+		}
+		logf.Log.Info("Service Account on Pod", "FOUND", restResponse.Spec.ServiceAccount, "EXPECTED", serviceAccount)
+		return strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount)
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }

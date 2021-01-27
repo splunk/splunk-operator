@@ -493,6 +493,41 @@ func (testenv *TestEnv) createLicenseConfigMap() error {
 	return nil
 }
 
+// Create a service account config
+func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAccount {
+
+	new := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ServiceAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: ns,
+		},
+	}
+
+	return &new
+}
+
+// CreateServiceAccount Create a service account with given name
+func (testenv *TestEnv) CreateServiceAccount(name string) error {
+	serviceAccountConfig := newServiceAccount(testenv.namespace, name)
+	if err := testenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
+		testenv.Log.Error(err, "Unable to create service account")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete service account")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
 // NewDeployment creates a new deployment
 func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
