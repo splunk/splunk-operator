@@ -76,11 +76,11 @@ type CommonSplunkSpec struct {
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
 
-	// Application framework config details
+	// ApplicationFrameworkRef refers to the config block for App Framework
 	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
-// ApplicationFrameworkRef defines the application package remote store repository
+// ApplicationFrameworkSpec defines the application package remote store repository
 type ApplicationFrameworkSpec struct {
 	// App Package Remote Store type
 	Type string `json:"type"`

@@ -227,16 +227,16 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 // TODO: This is overloaded with the default_apps.yml (probably the correct place for this) and
 //       installed_app_modtime.csv (maybe the incorrect place for this).  This needs to be evaluated
 //       to make sure this is a) the correct place, and b) at scale this isn't a bottleneck
-func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string, default_apps string, installed_app_modtime string) *corev1.ConfigMap {
+func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string, defaultApps string, installedAppModtime string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetSplunkDefaultsName(identifier, instanceType),
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			"default.yml": defaults,
-			"default_apps.yml": default_apps,  // Add apps from remote store to Ansible for install
-			"installed_app_modtime.csv": installed_app_modtime,  // Watching this forces the recycle for add/updates/deletes
+			"default.yml":               defaults,
+			"default_apps.yml":          defaultApps,         // Add apps from remote store to Ansible for install
+			"installed_app_modtime.csv": installedAppModtime, // Watching this forces the recycle for add/updates/deletes
 		},
 	}
 }
@@ -438,10 +438,10 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 
 		// Setup init container
 		initContainerSpec := corev1.Container{
-			Image:           "init-s3get:1.0",  // Custom image preloaded onto k8 cluster
+			Image:           "init-s3get:1.0", // Custom image preloaded onto k8 cluster
 			ImagePullPolicy: "IfNotPresent",
 			Name:            "inits3",
-			Env: []corev1.EnvVar {
+			Env: []corev1.EnvVar{
 				{
 					Name: "AWS_ACCESS_KEY_ID",
 					ValueFrom: &corev1.EnvVarSource{
@@ -477,14 +477,14 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 		// Add apps mount to init container
 		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = []corev1.VolumeMount{
 			{
-				Name: appVolumeMntName,
+				Name:      appVolumeMntName,
 				MountPath: appBktMnt,
 			},
 		}
 
 		// Add apps mount to Splunk container
-		initVolumeSpec := corev1.VolumeMount {
-			Name: appVolumeMntName,
+		initVolumeSpec := corev1.VolumeMount{
+			Name:      appVolumeMntName,
 			MountPath: appBktMnt,
 		}
 		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
@@ -496,7 +496,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{
 			{
-				Name: appVolumeMntName,
+				Name:         appVolumeMntName,
 				VolumeSource: emptyVolumeSource,
 			},
 		}
@@ -1068,14 +1068,15 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 //                  Update CSV with changes
 //                  Populate in-mem state from CSV only if empty
 var (
-    installedAppModTimeMap = make(map[string]map[string]int64)
+	installedAppModTimeMap = make(map[string]map[string]int64)
 )
 
 //
-// S3 Module code
+// Start of S3 Module code
 //
 // TODO: Move this to a new file
-// Connect to application packages bucket and list the contents.
+
+// GetAppListFromS3Bucket Connect to application packages bucket and list the contents.
 // Create the default_apps.yml based on all app packages in the bucket to be provided to ansible
 // to install apps at Splunk container startup.
 // Return the default_apps.yml and installed_apps_modtime.csv

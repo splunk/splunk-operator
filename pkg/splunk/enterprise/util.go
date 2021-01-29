@@ -51,7 +51,7 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 
 	// create splunk defaults (for inline config)
 	if spec.Defaults != "" || spec.ApplicationFrameworkRef.Type != "" {
-		// TODO JR: Do we need to throttle this call since its in th reconcile loop and gets called every 5 seconds when 
+		// TODO JR: Do we need to throttle this call since its in the reconcile loop and gets called every 5 seconds when
 		//          CR is in NotReady phase
 		defaultsApps, installedApps := GetAppListFromS3Bucket(client, cr, &spec.ApplicationFrameworkRef)
 		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
