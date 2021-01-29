@@ -130,6 +130,13 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 			return result, err
 		}
 		result.Requeue = false
+		// Requeue this if apps are present at the polling interval time and always check
+		// the apps in S3 during Reconcile.
+		// TODO JR: Evaluate if we should do this.  Any ramifications of keeping this in the Reconcile queue.
+		if cr.Spec.ApplicationFrameworkRef.Type != "" {
+			result.Requeue = true
+			result.RequeueAfter = time.Second * time.Duration(cr.Spec.ApplicationFrameworkRef.S3PollInternal)
+		}
 	}
 	return result, nil
 }

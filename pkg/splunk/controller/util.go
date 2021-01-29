@@ -186,6 +186,17 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 		}
 	}
 
+	// This is for the app download init container so it comes up with updated apps config.
+	for idx := range current.InitContainers {
+		if splcommon.CompareEnvs(current.InitContainers[idx].Env, revised.InitContainers[idx].Env) {
+			scopedLog.Info("Pod Init Container Envs differ",
+				"current", current.InitContainers[idx].Env,
+				"revised", revised.InitContainers[idx].Env)
+			current.InitContainers[idx].Env = revised.InitContainers[idx].Env
+			result = true
+		}
+	}
+
 	return result
 }
 

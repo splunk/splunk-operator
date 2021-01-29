@@ -29,6 +29,12 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"context"
+	"strings"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 var logC = logf.Log.WithName("splunk.enterprise.configValidation")
@@ -218,7 +224,10 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
-func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string) *corev1.ConfigMap {
+// TODO: This is overloaded with the default_apps.yml (probably the correct place for this) and
+//       installed_app_modtime.csv (maybe the incorrect place for this).  This needs to be evaluated
+//       to make sure this is a) the correct place, and b) at scale this isn't a bottleneck
+func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, defaults string, default_apps string, installed_app_modtime string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetSplunkDefaultsName(identifier, instanceType),
@@ -226,6 +235,8 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 		},
 		Data: map[string]string{
 			"default.yml": defaults,
+			"default_apps.yml": default_apps,  // Add apps from remote store to Ansible for install
+			"installed_app_modtime.csv": installed_app_modtime,  // Watching this forces the recycle for add/updates/deletes
 		},
 	}
 }
@@ -416,6 +427,81 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 	}
 
+	// If an applications block is present, setup init container and volumes, including mounts
+	// in the Splunk and init containers to perform initial download of application packages
+	if spec.ApplicationFrameworkRef.Type != "" {
+		// Prepare s3 app bucket values
+		appBkt := spec.ApplicationFrameworkRef.S3Bucket
+		appVolumeMntName := "s3-init"
+		appS3Endpoint := spec.ApplicationFrameworkRef.S3Endpoint
+		appSecretRef := spec.ApplicationFrameworkRef.S3SecretRef
+
+		// Setup init container
+		initContainerSpec := corev1.Container{
+			Image:           "init-s3get:1.0",  // Custom image preloaded onto k8 cluster
+			ImagePullPolicy: "IfNotPresent",
+			Name:            "inits3",
+			Env: []corev1.EnvVar {
+				{
+					Name: "AWS_ACCESS_KEY_ID",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: "awsAccessKey",
+						},
+					},
+				},
+				{
+					Name: "AWS_SECRET_ACCESS_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: "awsSecretAccessKey",
+						},
+					},
+				},
+				{Name: "MC_CONFIG_DIR", Value: appBktMnt},
+				{Name: "S3_BUCKET", Value: appBkt},
+				{Name: "MNT_POINT", Value: appBktMnt},
+				{Name: "S3_ENDPOINT", Value: appS3Endpoint},
+				{Name: "S3_EXTRAVARS", Value: ",use_path_request_style,umask=0000"},
+				{Name: "HOME", Value: appBktMnt},
+			},
+		}
+		statefulSet.Spec.Template.Spec.InitContainers = append(statefulSet.Spec.Template.Spec.InitContainers, initContainerSpec)
+
+		// Add apps mount to init container
+		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name: appVolumeMntName,
+				MountPath: appBktMnt,
+			},
+		}
+
+		// Add apps mount to Splunk container
+		initVolumeSpec := corev1.VolumeMount {
+			Name: appVolumeMntName,
+			MountPath: appBktMnt,
+		}
+		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts, initVolumeSpec)
+
+		// Create volume to shared between init and Splunk container to contain downloaded apps
+		emptyVolumeSource := corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+		statefulSet.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{
+				Name: appVolumeMntName,
+				VolumeSource: emptyVolumeSource,
+			},
+		}
+	}
+
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
@@ -499,7 +585,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
-	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+	// Defaults ConfigMap will be created for any config in the defaults block and for application install
+	if (spec.Defaults != "" || spec.ApplicationFrameworkRef.Type != "") && instanceType != SplunkMonitoringConsole {
 		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -603,6 +690,14 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+	// Add apps from application bucket to defaults.yml to be installed by ansible
+	if spec.ApplicationFrameworkRef.Type != "" &&
+		(instanceType == SplunkDeployer ||
+			instanceType == SplunkStandalone ||
+			instanceType == SplunkClusterMaster ||
+			instanceType == SplunkLicenseMaster) {
+		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default_apps.yml", splunkDefaults)
 	}
 
 	// prepare container env variables
@@ -964,4 +1059,130 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 	indexDefaults = fmt.Sprintf(`%s
 `, indexDefaults)
 	return indexDefaults
+}
+
+// Map of installed apps and their last Mod time
+// This is per CR (map of maps): [CR name][app package name]modtime
+// TODO: Make persistent (Stored already in defaults configmap)
+//     Potentially: Store in a ConfigMap in CSV format
+//                  Update CSV with changes
+//                  Populate in-mem state from CSV only if empty
+var (
+    installedAppModTimeMap = make(map[string]map[string]int64)
+)
+
+//
+// S3 Module code
+//
+// TODO: Move this to a new file
+// Connect to application packages bucket and list the contents.
+// Create the default_apps.yml based on all app packages in the bucket to be provided to ansible
+// to install apps at Splunk container startup.
+// Return the default_apps.yml and installed_apps_modtime.csv
+//
+func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, applicationFrameworkRef *enterprisev1.ApplicationFrameworkSpec) (string, string) {
+	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Prepare s3 app bucket values
+	appBkt := applicationFrameworkRef.S3Bucket
+	// For running locally, the remote store needs to be available to both the operator and the splunk pods.
+	// Use port-forward and hack the parameter to achieve this.
+	appS3Endpoint := applicationFrameworkRef.S3Endpoint // For running local with minio in K8 use: "http://127.0.0.1:7000"
+	appSecretRef := applicationFrameworkRef.S3SecretRef
+
+	useSSL := true
+	if strings.HasPrefix(appS3Endpoint, "http://") {
+		useSSL = false
+		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "http://")
+	} else if strings.HasPrefix(appS3Endpoint, "https://") {
+		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "https://")
+	}
+
+	namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
+	if err != nil {
+		return "", ""
+	}
+
+	// Get access keys
+	accessKey := string(namespaceScopedSecret.Data["awsAccessKey"])
+	secretKey := string(namespaceScopedSecret.Data["awsSecretAccessKey"])
+	if accessKey == "" {
+		scopedLog.Info("accessKey missing")
+	}
+	if secretKey == "" {
+		scopedLog.Info("S3 Secret Key is missing")
+	}
+
+	// Requests are always secure (HTTPS) by default. Set secure=false to enable insecure (HTTP) access.
+
+	// New returns an Amazon S3 compatible client object. API compatibility (v2 or v4) is automatically
+	// determined based on the Endpoint value.
+	scopedLog.Info("Connecting to s3 for apps", "appS3Endpoint", appS3Endpoint, "appBkt", appBkt, "appSecretRef", appSecretRef)
+	s3Client, err := minio.New(appS3Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return "", ""
+	}
+
+	// Create a bucket list command for all files in bucket
+	opts := minio.ListObjectsOptions{
+		UseV1:     true,
+		Prefix:    "",
+		Recursive: true,
+	}
+
+	// Create string to build default_apps.yml for ansible from list of apps in bucket
+	var sb strings.Builder
+	sb.WriteString("splunk:\n  apps_location:")
+
+	// last mod of all app packages
+	var lastModString strings.Builder
+	lastModString.WriteString("appPackage,lastModTime\n")
+	writeMapToConfigMap := false
+
+	// If the map doesn't exist, create it
+	if len(installedAppModTimeMap[cr.GetName()]) == 0 {
+		scopedLog.Info("Got an empty map for CR, need to repopulate from ConfigMap?", "cr.GetName()", cr.GetName())
+		installedAppModTimeMap[cr.GetName()] = make(map[string]int64)
+		// Maybe repopulate this running state from persistent state in case of splunk-operator restart (i.e. ConfigMap?)
+	}
+
+	// List all objects from a bucket-name with a matching prefix.
+	for object := range s3Client.ListObjects(context.Background(), appBkt, opts) {
+		if object.Err != nil {
+			scopedLog.Info("Got an object error", "object.Err", object.Err)
+			return "", ""
+		}
+		scopedLog.Info("Got an object", "object.Key", object.Key, "object.LastModified", object.LastModified.Unix())
+		sb.WriteString(fmt.Sprintf("\n    - %s/%s/%s", appBktMnt, appBkt, object.Key))
+		lastModString.WriteString(fmt.Sprintf("%s,%d\n", object.Key, object.LastModified.Unix()))
+
+		// Compare app package with installed app packages and modtime to check for changes
+		// TODO: Delete is unsupported currently.  Only update and add.
+		if value, ok := installedAppModTimeMap[cr.GetName()][object.Key]; ok {
+			if value != object.LastModified.Unix() {
+				scopedLog.Info("Got updated app to install", "object.Key", object.Key, "object.LastModified", object.LastModified.Unix(), "value", value)
+				installedAppModTimeMap[cr.GetName()][object.Key] = object.LastModified.Unix()
+				writeMapToConfigMap = true
+			}
+		} else {
+			scopedLog.Info("Got new app to install, add to map", "object.Key", object.Key, "object.LastModified", object.LastModified.Unix())
+			installedAppModTimeMap[cr.GetName()][object.Key] = object.LastModified.Unix()
+			writeMapToConfigMap = true
+		}
+	}
+
+	// Update Mod time in ConfigMap to force pod recycle and pickup updated apps
+	// TODO: Optimize this.  Right now we always update the ConfigMap since it should be ther same if nothing has changed anyways...
+	if writeMapToConfigMap {
+		scopedLog.Info("We have a change in our app package list")
+	}
+
+	// Return the default_apps.yml string and appModTime csv
+	scopedLog.Info("Here's the list from S3", "defaults with list", sb.String())
+	scopedLog.Info("Here's the reconcile list with mod times for app packages", "lastModString list", lastModString.String())
+	return sb.String(), lastModString.String()
 }

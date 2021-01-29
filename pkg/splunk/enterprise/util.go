@@ -50,8 +50,13 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	}
 
 	// create splunk defaults (for inline config)
-	if spec.Defaults != "" {
-		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
+	if spec.Defaults != "" || spec.ApplicationFrameworkRef.Type != "" {
+		// TODO JR: Do we need to throttle this call since its in th reconcile loop and gets called every 5 seconds when 
+		//          CR is in NotReady phase
+		defaultsApps, installedApps := GetAppListFromS3Bucket(client, cr, &spec.ApplicationFrameworkRef)
+		scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+		scopedLog.Info("Got apps for default", "defaultsApps", defaultsApps)
+		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults, defaultsApps, installedApps)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 		_, err = splctrl.ApplyConfigMap(client, defaultsMap)
 		if err != nil {

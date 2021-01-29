@@ -75,6 +75,27 @@ type CommonSplunkSpec struct {
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
+
+	// Application framework config details
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
+}
+
+// ApplicationFrameworkRef defines the application package remote store repository
+type ApplicationFrameworkSpec struct {
+	// App Package Remote Store type
+	Type string `json:"type"`
+
+	// App Package Remote Store Endpoint
+	S3Endpoint string `json:"s3Endpoint"`
+
+	// App Package Remote Store Bucket
+	S3Bucket string `json:"s3Bucket"`
+
+	// App Package Remote Store Credentials
+	S3SecretRef string `json:"s3SecretRef"`
+
+	// App Package Remote Store Polling interval
+	S3PollInternal uint `json:"s3PollInterval"`
 }
 
 // SmartStoreSpec defines Splunk indexes and remote storage volume configuration

@@ -73,6 +73,9 @@ const (
 
 	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
+
+	// application bucket mount location for init container, sidecar, and Splunk containers
+	appBktMnt = "/init-apps"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
