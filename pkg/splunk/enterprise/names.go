@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,6 +73,21 @@ const (
 
 	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
+
+	// port names and templates and protocols
+	portNameTemplateStr = "%s-%s"
+
+	splunkwebPort   = "splunkweb"
+	splunkdPort     = "splunkd"
+	s2sPort         = "s2s"
+	hecPort         = "hec"
+	dfccontrolPort  = "dfccontrol"
+	datareceivePort = "datareceive"
+	dfsmasterPort   = "dfsmaster"
+
+	protoHTTP  = "http"
+	protoHTTPS = "https"
+	protoTCP   = "tcp"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -157,4 +172,9 @@ func GetSplunkImage(specImage string) string {
 	}
 
 	return name
+}
+
+// GetPortName uses a template to enrich a port name with protocol information for usage with mesh services
+func GetPortName(port string, protocol string) string {
+	return fmt.Sprintf(portNameTemplateStr, protocol, port)
 }

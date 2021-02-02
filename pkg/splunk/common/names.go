@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,6 +37,27 @@ const (
 
 	// IdxcSecret represents indexer cluster pass4Symmkey secret token
 	IdxcSecret = "idxc_secret"
+
+	// PvcNamePrefix is a helper string representing prefix for persistent volume claim names
+	PvcNamePrefix = "pvc-%s"
+
+	// SplunkMountNamePrefix is a helper string representing Splunk Volume mount names
+	SplunkMountNamePrefix = "mnt-splunk-%s"
+
+	// SplunkMountDirecPrefix is a helper string representing Splunk Volume mount directory
+	SplunkMountDirecPrefix = "/opt/splunk/%s"
+
+	// EtcVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
+	EtcVolumeStorage = "etc"
+
+	// VarVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
+	VarVolumeStorage = "var"
+
+	// DefaultEtcVolumeStorageCapacity represents default storage capacity for etc volume
+	DefaultEtcVolumeStorageCapacity = "10Gi"
+
+	// DefaultVarVolumeStorageCapacity represents default storage capacity for var volume
+	DefaultVarVolumeStorageCapacity = "100Gi"
 )
 
 // GetVersionedSecretName returns a versioned secret name

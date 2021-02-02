@@ -1,10 +1,48 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
 	"encoding/json"
 	"fmt"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 )
+
+// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
+// Endpoint: /services/cluster/master/sites
+type ClusterMasterSitesResponse struct {
+	Entries []ClusterMasterSitesEntry `json:"entry"`
+}
+
+// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
+type ClusterMasterSitesEntry struct {
+	Name    string                    `json:"name"`
+	Content ClusterMasterSitesContent `json:"content"`
+}
+
+// ClusterMasterSitesContent represents detailed information about a site
+type ClusterMasterSitesContent struct {
+	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
+}
+
+// ClusterMasterSitesPeer reprensents an indexer peer member of a site
+type ClusterMasterSitesPeer struct {
+	ServerName string `json:"server_name"`
+}
 
 // ClusterMasterHealthResponse is a representation of the health response by a Splunk cluster-master
 // Endpoint: /services/cluster/master/health
@@ -57,4 +95,102 @@ func CheckRFSF(deployment *Deployment) bool {
 		logf.Log.Info("Replicaton Factor not met")
 	}
 	return rfMet && sfMet
+}
+
+// ClusterMasterSearchHeadResponse /services/cluster/master/searchhead response
+type ClusterMasterSearchHeadResponse struct {
+	Entries []ClusterMasterSearchHeadEntry `json:"entry"`
+}
+
+// ClusterMasterSearchHeadEntry represents a single search head
+type ClusterMasterSearchHeadEntry struct {
+	Name    string                         `json:"name"`
+	Content ClusterMasterSearchHeadContent `json:"content"`
+}
+
+// ClusterMasterSearchHeadContent represents detailed information about a search head
+type ClusterMasterSearchHeadContent struct {
+	EaiACL       interface{} `json:"eai:acl"`
+	HostPortPair string      `json:"host_port_pair"`
+	Label        string      `json:"label"`
+	Site         string      `json:"site"`
+	Status       string      `json:"status"`
+}
+
+// CheckSearchHeadRemoved check if search head is removed from Indexer Cluster
+func CheckSearchHeadRemoved(deployment *Deployment) bool {
+	//code to execute
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	restResponse := ClusterMasterSearchHeadResponse{}
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster searchheads")
+		return false
+	}
+	searchHeadRemoved := true
+	for _, entry := range restResponse.Entries {
+		logf.Log.Info("Search Found", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
+		if entry.Content.Status == "Disconnected" {
+			searchHeadRemoved = false
+		}
+	}
+	return searchHeadRemoved
+}
+
+// RollHotBuckets roll hot buckets in cluster
+func RollHotBuckets(deployment *Deployment) bool {
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	if strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.") {
+		return true
+	}
+	return false
+}
+
+// RollingRestartEndpointResponse is represtentation of /services/cluster/master/info endpiont
+type RollingRestartEndpointResponse struct {
+	Entry []struct {
+		Content struct {
+			RollingRestartFlag bool `json:"rolling_restart_flag"`
+		} `json:"content"`
+	} `json:"entry"`
+}
+
+// CheckRollingRestartStatus checks if rolling restart is happening in cluster
+func CheckRollingRestartStatus(deployment *Deployment) bool {
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/info?output_mode=json"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	restResponse := RollingRestartEndpointResponse{}
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster searchheads")
+		return false
+	}
+	rollingRestart := true
+	for _, entry := range restResponse.Entry {
+		rollingRestart = entry.Content.RollingRestartFlag
+	}
+	return rollingRestart
 }

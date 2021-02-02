@@ -1,9 +1,24 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -88,6 +103,7 @@ type TestEnv struct {
 	SkipTeardown       bool
 	licenseFilePath    string
 	licenseCMName      string
+	s3IndexSecret      string
 	kubeClient         client.Client
 	Log                logr.Logger
 	cleanupFuncs       []cleanupFunc
@@ -145,6 +161,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, sparkImage, licens
 		SkipTeardown:       specifiedSkipTeardown,
 		licenseCMName:      envName,
 		licenseFilePath:    licenseFilePath,
+		s3IndexSecret:      "splunk-s3-index-" + envName,
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
@@ -227,6 +244,9 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
+
+	// Create s3 secret object for index test
+	testenv.createIndexSecret()
 
 	if testenv.licenseFilePath != "" {
 		err = testenv.createLicenseConfigMap()
@@ -449,6 +469,14 @@ func (testenv *TestEnv) createOperator() error {
 	return nil
 }
 
+// CreateLicenseConfigMap sets the license file path and create config map.
+// Required if license file path is not present during TestEnv initialization
+func (testenv *TestEnv) CreateLicenseConfigMap(path string) error {
+	testenv.licenseFilePath = path
+	err := testenv.createLicenseConfigMap()
+	return err
+}
+
 func (testenv *TestEnv) createLicenseConfigMap() error {
 	lic, err := newLicenseConfigMap(testenv.licenseCMName, testenv.namespace, testenv.licenseFilePath)
 	if err != nil {
@@ -469,6 +497,68 @@ func (testenv *TestEnv) createLicenseConfigMap() error {
 	})
 
 	return nil
+}
+
+// Create a service account config
+func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAccount {
+	new := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ServiceAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: ns,
+		},
+	}
+
+	return &new
+}
+
+// CreateServiceAccount Create a service account with given name
+func (testenv *TestEnv) CreateServiceAccount(name string) error {
+	serviceAccountConfig := newServiceAccount(testenv.namespace, name)
+	if err := testenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
+		testenv.Log.Error(err, "Unable to create service account")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete service account")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// CreateIndexSecret create secret object
+func (testenv *TestEnv) createIndexSecret() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
+	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_ACCESS_KEY_ID")),
+		"s3_secret_key": []byte(os.Getenv("AWS_SECRET_ACCESS_KEY"))}
+	secret := newSecretSpec(ns, secretName, data)
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create s3 index secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete s3 index secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// GetIndexSecretName return index secret object name
+func (testenv *TestEnv) GetIndexSecretName() string {
+	return testenv.s3IndexSecret
 }
 
 // NewDeployment creates a new deployment

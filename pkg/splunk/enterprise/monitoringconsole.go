@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -147,6 +147,10 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 		labels[k] = v
 	}
 
+	emptyVolumeSource := corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	}
+
 	//create statefulset configuration
 	statefulSet := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -191,7 +195,21 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 									},
 								},
 							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "mnt-splunk-etc",
+									MountPath: "/opt/splunk/etc",
+								},
+								{
+									Name:      "mnt-splunk-var",
+									MountPath: "/opt/splunk/var",
+								},
+							},
 						},
+					},
+					Volumes: []corev1.Volume{
+						{Name: "mnt-splunk-etc", VolumeSource: emptyVolumeSource},
+						{Name: "mnt-splunk-var", VolumeSource: emptyVolumeSource},
 					},
 				},
 			},
