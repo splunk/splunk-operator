@@ -33,6 +33,11 @@ type ClusterMasterSpec struct {
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// App Framework configuration. Refers to the config block for App Framework.
+	// Through this config, apps can be installed in an Indexer Cluster.
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
