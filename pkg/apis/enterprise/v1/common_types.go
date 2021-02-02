@@ -178,36 +178,25 @@ type IndexAndCacheManagerCommonSpec struct {
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
 
-// AppFrameworkSpec defines the application package remote store repository
-type AppFrameworkSpec struct {
+// ApplicationFrameworkSpec defines the application package remote store repository
+type ApplicationFrameworkSpec struct {
 
-	// Flag to Enable/Disable Application Framework Feature.
-	// Default value is False. Implementation of Apps Framework
-	// is still TBD so turning this flag to true will not do any
-	// changes.
-	FeatureEnabled bool `json:"featureEnabled"`
+	// Is Application Framework Feature Enabled.
+	// Default value is False
+	FeatureEnabled string `json:"featureEnabled"`
 
-	// App Package Remote Store type.
-	// The currently supported type is s3 only.
+	// App Package Remote Store type
 	Type string `json:"type"`
 
-	// App Package Remote Store Endpoint.
-	// This is s3 location where you will have
-	// the splunk apps packages placed.
+	// App Package Remote Store Endpoint
 	S3Endpoint string `json:"s3Endpoint"`
 
 	// App Package Remote Store Bucket
-	// Name of the s3 bucket within s3Endpoint
-	// where splunk apps packages can be placed.
 	S3Bucket string `json:"s3Bucket"`
 
 	// App Package Remote Store Credentials
-	// Secret object containing the S3 authentication info.
 	S3SecretRef string `json:"s3SecretRef"`
 
-	// App Package Remote Store Polling interval in minutes.
-	// New or Updated Apps will be pulled from s3 remote location
-	// at every polling interval.
-	// This value can be  >=1. The default value is 60 minutes.
+	// App Package Remote Store Polling interval
 	S3PollInterval uint `json:"s3PollInterval"`
 }

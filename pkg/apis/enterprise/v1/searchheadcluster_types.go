@@ -36,9 +36,9 @@ type SearchHeadClusterSpec struct {
 	Replicas int32 `json:"replicas"`
 
 	// App Framework configuration. Refers to the config block for App Framework.
-	// Through this config, apps can be installed in a standalone splunk CR.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// Through this config, apps can be installed in a SearchHeadCluster CR.
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

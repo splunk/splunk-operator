@@ -17,7 +17,6 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -778,33 +777,20 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
-// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error {
-
-	// In the initial phases of App Framework feature, we are providing
-	// a flag to toggle this feature.
-	if !appFramework.FeatureEnabled {
-		return nil
+// ValidateApplicationFrameworkSpec checks and validates the Apps Frame Work config
+func ValidateApplicationFrameworkSpec(appFramework *enterprisev1.ApplicationFrameworkSpec) error {
+	// Disabled app framework feature by default if we did not explictely
+	// enabled it.
+	if appFramework.FeatureEnabled == "" {
+		appFramework.FeatureEnabled = "FALSE"
 	}
-
-	//log all the inputs for AppFrameworkSpec.
-	//TBD: Future - use logging toggle switch to reduce any excessive logging.
-	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
-		"FeatureEnabled", appFramework.FeatureEnabled,
-		"Type", appFramework.Type,
-		"S3Endpoint", appFramework.S3Endpoint,
-		"S3Bucket", appFramework.S3Bucket,
-		"S3SecretRef", appFramework.S3SecretRef,
-		"S3PollInterval", appFramework.S3PollInterval)
-
-	scopedLog.Info("Validating app framework spec")
 
 	if appFramework.Type == "" {
 		return fmt.Errorf("Apps Remote Storage Type is missing")
 	}
 
-	if strings.ToLower(appFramework.Type) != "s3" {
-		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is s3 only")
+	if appFramework.Type != "S3" {
+		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is S3 only")
 	}
 
 	if appFramework.S3Endpoint == "" {
@@ -819,12 +805,8 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error
 		return fmt.Errorf("Apps Remote Storage S3SecretRef is missing")
 	}
 
-	if appFramework.S3PollInterval == 0 {
-		// this means either the S3PollInterval was not provided
-		// or it was explictely set to 0 - in both cases we will
-		// set the S3PollInterval to default 60 minutes
-		scopedLog.Info("Setting S3PollInterval to default 60 minutes")
-		appFramework.S3PollInterval = 60
+	if appFramework.S3PollInterval < 60 {
+		return fmt.Errorf("Apps Remote Storage S3PollInternal cannot be less than 60 seconds")
 	}
 
 	return nil

@@ -36,8 +36,8 @@ type ClusterMasterSpec struct {
 
 	// App Framework configuration. Refers to the config block for App Framework.
 	// Through this config, apps can be installed in an Indexer Cluster.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster

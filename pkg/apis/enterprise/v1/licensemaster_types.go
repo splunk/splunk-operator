@@ -34,8 +34,8 @@ type LicenseMasterSpec struct {
 
 	// App Framework configuration. Refers to the config block for App Framework.
 	// Through this config, apps can be installed in a LicenseMaster splunk CR.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
