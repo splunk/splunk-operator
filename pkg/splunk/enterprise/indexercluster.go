@@ -371,7 +371,7 @@ func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statef
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas, &mgr.cr.Status.SkipRecheckUpdate)
+	return splctrl.UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -575,7 +575,13 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 
 // getIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
 func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+	// Note: SPLUNK_INDEXER_URL is not used by the indexer pod containers,
+	// hence avoided the call to getIndexerExtraEnv.
+	// If other indexer CR specific env variables are required:
+	// 1. Introduce the new env variables in the function getIndexerExtraEnv
+	// 2. Avoid SPLUNK_INDEXER_URL in getIndexerExtraEnv for idxc CR
+	// 3. Re-introduce the call to getIndexerExtraEnv here.
+	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, make([]corev1.EnvVar, 0))
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
