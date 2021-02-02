@@ -31,6 +31,11 @@ import (
 // LicenseMasterSpec defines the desired state of a Splunk Enterprise license master.
 type LicenseMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
+
+	// App Framework configuration. Refers to the config block for App Framework.
+	// Through this config, apps can be installed in a LicenseMaster splunk CR.
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.

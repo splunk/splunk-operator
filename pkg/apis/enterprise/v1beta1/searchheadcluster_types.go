@@ -42,6 +42,11 @@ type SearchHeadClusterSpec struct {
 
 	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
 	SparkImage string `json:"sparkImage"`
+
+	// App Framework configuration. Refers to the config block for App Framework.
+	// Through this config, apps can be installed in a SearchHeadCluster CR.
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

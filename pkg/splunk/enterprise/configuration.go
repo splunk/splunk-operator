@@ -756,6 +756,41 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
+// ValidateApplicationFrameworkSpec checks and validates the Apps Frame Work config
+func ValidateApplicationFrameworkSpec(appFramework *enterprisev1.ApplicationFrameworkSpec) error {
+	// Disabled app framework feature by default if we did not explictely
+	// enabled it.
+	if appFramework.FeatureEnabled == "" {
+		appFramework.FeatureEnabled = "FALSE"
+	}
+
+	if appFramework.Type == "" {
+		return fmt.Errorf("Apps Remote Storage Type is missing")
+	}
+
+	if appFramework.Type != "S3" {
+		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is S3 only")
+	}
+
+	if appFramework.S3Endpoint == "" {
+		return fmt.Errorf("Apps Remote Storage S3Endpoint is missing")
+	}
+
+	if appFramework.S3Bucket == "" {
+		return fmt.Errorf("Apps Remote Storage S3Bucket is missing")
+	}
+
+	if appFramework.S3SecretRef == "" {
+		return fmt.Errorf("Apps Remote Storage S3SecretRef is missing")
+	}
+
+	if appFramework.S3PollInterval < 60 {
+		return fmt.Errorf("Apps Remote Storage S3PollInternal cannot be less than 60 seconds")
+	}
+	
+	return nil
+}
+
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
 func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
 	var err error

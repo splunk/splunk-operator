@@ -38,6 +38,11 @@ type ClusterMasterSpec struct {
 	// Also used on cluster master for init container to setup the soft links from ../master-apps/splunk-operator/local/ to
 	// /mnt/splunk-operator/local/
 	SparkImage string `json:"sparkImage"`
+
+	// App Framework configuration. Refers to the config block for App Framework.
+	// Through this config, apps can be installed in an Indexer Cluster.
+	// The implementatiom is still TBD.
+	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster

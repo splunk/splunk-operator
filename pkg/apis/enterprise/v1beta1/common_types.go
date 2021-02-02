@@ -177,3 +177,26 @@ type IndexAndCacheManagerCommonSpec struct {
 	// Time period relative to the bucket's age, during which the bloom filter file is protected from cache eviction
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
+
+// ApplicationFrameworkSpec defines the application package remote store repository
+type ApplicationFrameworkSpec struct {
+
+	// Is Application Framework Feature Enabled. 
+	// Default value is False
+	FeatureEnabled string `json:"featureEnabled"`
+
+	// App Package Remote Store type
+	Type string `json:"type"`
+
+	// App Package Remote Store Endpoint
+ 	S3Endpoint string `json:"s3Endpoint"`
+
+	// App Package Remote Store Bucket
+	S3Bucket string `json:"s3Bucket"`
+
+ 	// App Package Remote Store Credentials
+	S3SecretRef string `json:"s3SecretRef"`
+
+ 	// App Package Remote Store Polling interval
+ 	S3PollInterval uint `json:"s3PollInterval"`
+}
