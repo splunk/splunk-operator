@@ -65,6 +65,9 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
+	// IndexerPod Template String for indexer pod
+	IndexerPod = "splunk-%s-idxc-indexer-%d"
+
 	// MonitoringConsoleSts Montioring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
