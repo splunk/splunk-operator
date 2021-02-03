@@ -920,83 +920,113 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 }
 
-
-
-func TestValidateApplicationFrameworkSpec(t *testing.T) {
+func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	// Valid app framework config with proper inputs
 
 	//Test1: missing S3Bucket
-	AppFrameWorkMissingBucket := enterprisev1.ApplicationFrameworkSpec{
-		Type: "S3",
-		S3Endpoint: "http://test_s3_end_point",
-		S3SecretRef: "appSecret",
-		S3PollInterval:	60,
-		}
+	AppFrameWorkMissingBucket := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "S3",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
 
-	var expectedError string =  "Apps Remote Storage S3Bucket is missing"
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingBucket)
+	var expectedError string = "Apps Remote Storage S3Bucket is missing"
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingBucket)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}	
-
+	}
 
 	//Test2: missing S3Endpoint
-	AppFrameWorkMissingS3EndPoint := enterprisev1.ApplicationFrameworkSpec{
-		Type: "S3",
-		S3Bucket: "test_bucket",
-		S3SecretRef: "appSecret",
-		S3PollInterval:	60,
-		}
+	AppFrameWorkMissingS3EndPoint := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "S3",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
 
-	expectedError  =  "Apps Remote Storage S3Bucket is missing"
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
+	expectedError = "Apps Remote Storage S3Bucket is missing"
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}	
+	}
 
 	//Test3: missing Type
-	AppFrameWorkMissingType := enterprisev1.ApplicationFrameworkSpec{
-		S3Bucket: "test_bucket",
-		S3SecretRef: "appSecret",
-		S3Endpoint: "http://test_s3_end_point",
-		S3PollInterval:	60,
-		}
+	AppFrameWorkMissingType := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3PollInterval: 60,
+	}
 
-	expectedError  =  "Apps Remote Storage Type is missing"
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingType)
+	expectedError = "Apps Remote Storage Type is missing"
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingType)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}	
+	}
 
 	//Test4: Type can be "S3" only
-	AppFrameWorkInvalidType := enterprisev1.ApplicationFrameworkSpec{
-		Type: "HTTP",
-		S3Bucket: "test_bucket",
-		S3SecretRef: "appSecret",
-		S3Endpoint: "http://test_s3_end_point",
-		S3PollInterval:	60,
-		}
+	AppFrameWorkInvalidType := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "HTTP",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3PollInterval: 60,
+	}
 
-	expectedError  =  "Currently supported type for Apps Remote Storage Type is S3 only"
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidType)
+	expectedError = "Currently supported type for Apps Remote Storage Type is S3 only"
+	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidType)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}	
+	}
 
-	//Test5: Invalid S3PollInterval 
-	AppFrameWorkInvalidS3PollInterval := enterprisev1.ApplicationFrameworkSpec{
-		Type: "S3",
-		S3Bucket: "test_bucket",
-		S3SecretRef: "appSecret",
-		S3PollInterval:	10,
-		}
+	//Test5: Invalid S3PollInterval
+	AppFrameWorkInvalidS3PollInterval := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "S3",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 10,
+	}
 
-	expectedError  =  "Apps Remote Storage S3PollInternal cannot be less than 60 seconds"
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
+	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 60 seconds"
+	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}	
+	}
+
+	//Test6: FeatureEnabled is false so no validation errors expected
+	AppFrameWorkFeatureDisabled := enterprisev1.AppFrameworkSpec{
+		Type:           "S3",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkFeatureDisabled)
+	if err != nil {
+		t.Errorf("Expected no errors as FeatureEnabled is false but got error: %s", err)
+	}
+
+	//Test7: FeatureEnabled is true, validate no errors when all
+	//       parameters are provided
+	AppFrameWorkAllParamsValid := enterprisev1.AppFrameworkSpec{
+		Type:           "S3",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkAllParamsValid)
+	if err != nil {
+		t.Errorf("Expected no errors as all good params provided but got error: %s", err)
+	}
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
