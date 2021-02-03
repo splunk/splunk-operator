@@ -119,6 +119,19 @@ environment variable to the operator's deployment spec:
   value: "mydomain.com"
 ```
 
+## External TLS for Splunkd and HEC
+
+By default Splunk will enable SSL/TLS for splunkd (8089) and hec (8088). It can be desirable
+to offload encryption between pods to a the network layer using CNI and externally using Ingress
+or Istio. The following environment variables can be added to the operator deployment to disable
+default SSL/TLS
+
+```yaml
+- name: SPLUNKD_SSL_ENABLE
+  value: "false"
+- name: SPLUNK_HEC_SSL
+  value: "false"
+```
 
 ## Installing Splunk Operator
 

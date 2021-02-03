@@ -53,5 +53,5 @@ func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
 	}
 	licenseMaster := restResponse.Entry[0].Content.MasterURI
 	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseMaster)
-	return strings.Contains(licenseMaster, "license-master-service:8089")
+	return strings.Contains(licenseMaster, "license-master-service")
 }
