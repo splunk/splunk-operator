@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -777,20 +778,30 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
-// ValidateApplicationFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateApplicationFrameworkSpec(appFramework *enterprisev1.ApplicationFrameworkSpec) error {
-	// Disabled app framework feature by default if we did not explictely
-	// enabled it.
-	if appFramework.FeatureEnabled == "" {
-		appFramework.FeatureEnabled = "FALSE"
+// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
+func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error {
+
+	//log all the inputs for AppFrameworkSpec
+	//TBD: Future - use logging toggle switch
+
+	log.Info("App Framework Inputs",
+		"FeatureEnabled", appFramework.FeatureEnabled,
+		"Type", appFramework.Type,
+		"S3Endpoint", appFramework.S3Endpoint,
+		"S3Bucket", appFramework.S3Bucket,
+		"S3SecretRef", appFramework.S3SecretRef,
+		"S3PollInterval", appFramework.S3PollInterval)
+
+	if !appFramework.FeatureEnabled {
+		return nil
 	}
 
 	if appFramework.Type == "" {
 		return fmt.Errorf("Apps Remote Storage Type is missing")
 	}
 
-	if appFramework.Type != "S3" {
-		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is S3 only")
+	if strings.ToLower(appFramework.Type) != "s3" {
+		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is s3 only")
 	}
 
 	if appFramework.S3Endpoint == "" {
