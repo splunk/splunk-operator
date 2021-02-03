@@ -778,8 +778,8 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
 func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error {
 
-	//log all the inputs for AppFrameworkSpec
-	//TBD: Future - use logging toggle switch
+	//log all the inputs for AppFrameworkSpec.
+	//TBD: Future - use logging toggle switch to reduce any excessive logging.
 
 	log.Info("App Framework Inputs",
 		"FeatureEnabled", appFramework.FeatureEnabled,
