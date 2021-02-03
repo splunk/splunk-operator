@@ -526,3 +526,11 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
+
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
+	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+}

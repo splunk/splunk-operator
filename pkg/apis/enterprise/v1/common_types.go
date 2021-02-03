@@ -178,12 +178,12 @@ type IndexAndCacheManagerCommonSpec struct {
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
 
-// ApplicationFrameworkSpec defines the application package remote store repository
-type ApplicationFrameworkSpec struct {
+// AppFrameworkSpec defines the application package remote store repository
+type AppFrameworkSpec struct {
 
 	// Is Application Framework Feature Enabled.
 	// Default value is False
-	FeatureEnabled string `json:"featureEnabled"`
+	FeatureEnabled bool `json:"featureEnabled"`
 
 	// App Package Remote Store type
 	Type string `json:"type"`
