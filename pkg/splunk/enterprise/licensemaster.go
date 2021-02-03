@@ -106,5 +106,11 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
+
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

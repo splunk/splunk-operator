@@ -44,9 +44,9 @@ type SearchHeadClusterSpec struct {
 	SparkImage string `json:"sparkImage"`
 
 	// App Framework configuration. Refers to the config block for App Framework.
-	// Through this config, apps can be installed in a SearchHeadCluster CR.
+	// Through this config, apps can be installed in a standalone splunk CR.
 	// The implementatiom is still TBD.
-	ApplicationFrameworkRef ApplicationFrameworkSpec `json:"applications"`
+	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

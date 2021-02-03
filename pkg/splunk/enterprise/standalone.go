@@ -165,6 +165,11 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 		return err
 	}
 
+	err = ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
 	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

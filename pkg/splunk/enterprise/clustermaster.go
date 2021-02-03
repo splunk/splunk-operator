@@ -159,6 +159,11 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 		return err
 	}
 
+	err = ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
 	cr.Spec.SparkImage = spark.GetSparkImage(cr.Spec.SparkImage)
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)

@@ -526,6 +526,12 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 	if spec.Replicas < 3 {
 		spec.Replicas = 3
 	}
+
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
 	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

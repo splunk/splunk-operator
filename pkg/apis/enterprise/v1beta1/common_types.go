@@ -178,25 +178,25 @@ type IndexAndCacheManagerCommonSpec struct {
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
 
-// ApplicationFrameworkSpec defines the application package remote store repository
-type ApplicationFrameworkSpec struct {
+// AppFrameworkSpec defines the application package remote store repository
+type AppFrameworkSpec struct {
 
-	// Is Application Framework Feature Enabled. 
+	// Is Application Framework Feature Enabled.
 	// Default value is False
-	FeatureEnabled string `json:"featureEnabled"`
+	FeatureEnabled bool `json:"featureEnabled"`
 
 	// App Package Remote Store type
 	Type string `json:"type"`
 
 	// App Package Remote Store Endpoint
- 	S3Endpoint string `json:"s3Endpoint"`
+	S3Endpoint string `json:"s3Endpoint"`
 
 	// App Package Remote Store Bucket
 	S3Bucket string `json:"s3Bucket"`
 
- 	// App Package Remote Store Credentials
+	// App Package Remote Store Credentials
 	S3SecretRef string `json:"s3SecretRef"`
 
- 	// App Package Remote Store Polling interval
- 	S3PollInterval uint `json:"s3PollInterval"`
+	// App Package Remote Store Polling interval
+	S3PollInterval uint `json:"s3PollInterval"`
 }
