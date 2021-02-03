@@ -614,7 +614,11 @@ spec:
                       type: array
                   type: object
               type: object
+<<<<<<< HEAD
             applications:
+=======
+            appFrameworkRef:
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
               description: App Framework configuration. Refers to the config block
                 for App Framework. Through this config, apps can be installed in an
                 Indexer Cluster. The implementatiom is still TBD.
@@ -622,7 +626,11 @@ spec:
                 featureEnabled:
                   description: Is Application Framework Feature Enabled. Default value
                     is False
+<<<<<<< HEAD
                   type: string
+=======
+                  type: boolean
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
                 s3Bucket:
                   description: App Package Remote Store Bucket
                   type: string

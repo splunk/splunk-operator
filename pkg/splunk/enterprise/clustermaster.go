@@ -158,6 +158,16 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 		return err
 	}
 
+<<<<<<< HEAD
+=======
+	err = ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
+	cr.Spec.SparkImage = spark.GetSparkImage(cr.Spec.SparkImage)
+
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 

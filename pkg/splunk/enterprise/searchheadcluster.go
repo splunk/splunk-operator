@@ -518,5 +518,15 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 	if spec.Replicas < 3 {
 		spec.Replicas = 3
 	}
+<<<<<<< HEAD
+=======
+
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	if err != nil {
+		return err
+	}
+
+	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

@@ -596,12 +596,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestValidateApplicationFrameworkSpec(t *testing.T) {
+=======
+func TestValidateAppFrameworkSpec(t *testing.T) {
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	var err error
 	// Valid app framework config with proper inputs
 
 	//Test1: missing S3Bucket
+<<<<<<< HEAD
 	AppFrameWorkMissingBucket := enterprisev1.ApplicationFrameworkSpec{
+=======
+	AppFrameWorkMissingBucket := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Endpoint:     "http://test_s3_end_point",
 		S3SecretRef:    "appSecret",
@@ -609,13 +618,22 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 
 	var expectedError string = "Apps Remote Storage S3Bucket is missing"
+<<<<<<< HEAD
 	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingBucket)
+=======
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingBucket)
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test2: missing S3Endpoint
+<<<<<<< HEAD
 	AppFrameWorkMissingS3EndPoint := enterprisev1.ApplicationFrameworkSpec{
+=======
+	AppFrameWorkMissingS3EndPoint := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
@@ -623,13 +641,22 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Apps Remote Storage S3Bucket is missing"
+<<<<<<< HEAD
 	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
+=======
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test3: missing Type
+<<<<<<< HEAD
 	AppFrameWorkMissingType := enterprisev1.ApplicationFrameworkSpec{
+=======
+	AppFrameWorkMissingType := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
 		S3Endpoint:     "http://test_s3_end_point",
@@ -637,13 +664,22 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Apps Remote Storage Type is missing"
+<<<<<<< HEAD
 	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingType)
+=======
+	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingType)
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test4: Type can be "S3" only
+<<<<<<< HEAD
 	AppFrameWorkInvalidType := enterprisev1.ApplicationFrameworkSpec{
+=======
+	AppFrameWorkInvalidType := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "HTTP",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
@@ -652,13 +688,22 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Currently supported type for Apps Remote Storage Type is S3 only"
+<<<<<<< HEAD
 	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidType)
+=======
+	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidType)
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test5: Invalid S3PollInterval
+<<<<<<< HEAD
 	AppFrameWorkInvalidS3PollInterval := enterprisev1.ApplicationFrameworkSpec{
+=======
+	AppFrameWorkInvalidS3PollInterval := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
@@ -666,10 +711,45 @@ func TestValidateApplicationFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 60 seconds"
+<<<<<<< HEAD
 	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
+=======
+	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
+	if err == nil {
+		t.Errorf("expected error: %s but returned: %s", expectedError, err)
+	}
+
+	//Test6: FeatureEnabled is false so no validation errors expected
+	AppFrameWorkFeatureDisabled := enterprisev1.AppFrameworkSpec{
+		Type:           "S3",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkFeatureDisabled)
+	if err != nil {
+		t.Errorf("Expected no errors as FeatureEnabled is false but got error: %s", err)
+	}
+
+	//Test7: FeatureEnabled is true, validate no errors when all
+	//       parameters are provided
+	AppFrameWorkAllParamsValid := enterprisev1.AppFrameworkSpec{
+		Type:           "S3",
+		S3Endpoint:     "http://test_s3_end_point",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3PollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkAllParamsValid)
+	if err != nil {
+		t.Errorf("Expected no errors as all good params provided but got error: %s", err)
+	}
+>>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {

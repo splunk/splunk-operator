@@ -631,6 +631,31 @@ spec:
                       type: array
                   type: object
               type: object
+            appFrameworkRef:
+              description: App Framework configuration. Refers to the config block
+                for App Framework. Through this config, apps can be installed in a
+                standalone splunk CR. The implementatiom is still TBD.
+              properties:
+                featureEnabled:
+                  description: Is Application Framework Feature Enabled. Default value
+                    is False
+                  type: boolean
+                s3Bucket:
+                  description: App Package Remote Store Bucket
+                  type: string
+                s3Endpoint:
+                  description: App Package Remote Store Endpoint
+                  type: string
+                s3PollInterval:
+                  description: App Package Remote Store Polling interval
+                  type: integer
+                s3SecretRef:
+                  description: App Package Remote Store Credentials
+                  type: string
+                type:
+                  description: App Package Remote Store type
+                  type: string
+              type: object
             clusterMasterRef:
               description: ClusterMasterRef refers to a Splunk Enterprise indexer
                 cluster managed by the operator within Kubernetes
