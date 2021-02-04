@@ -58,6 +58,18 @@ const (
 
 	// DefaultVarVolumeStorageCapacity represents default storage capacity for var volume
 	DefaultVarVolumeStorageCapacity = "100Gi"
+
+	// SortFieldContainerPort represents field name ContainerPort for sorting
+	SortFieldContainerPort = "ContainerPort"
+
+	// SortFieldPort represents field name Port for sorting
+	SortFieldPort = "Port"
+
+	// SortFieldName represents field name Name for sorting
+	SortFieldName = "Name"
+
+	// SortFieldKey represents field name Key for sorting
+	SortFieldKey = "Key"
 )
 
 // GetVersionedSecretName returns a versioned secret name

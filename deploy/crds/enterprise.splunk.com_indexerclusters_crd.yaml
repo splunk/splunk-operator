@@ -2349,10 +2349,6 @@ spec:
               description: Indicates whether the master is ready to begin servicing,
                 based on whether it is initialized.
               type: boolean
-            skip_recheck_update:
-              description: Indicates if we need to recheck the revision update on
-                pods
-              type: boolean
           type: object
       type: object
   version: v1beta1

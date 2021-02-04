@@ -2399,10 +2399,6 @@ spec:
               items:
                 type: boolean
               type: array
-            skip_recheck_update:
-              description: Indicates if we need to recheck the revision update on
-                pods
-              type: boolean
           type: object
       type: object
   version: v1beta1

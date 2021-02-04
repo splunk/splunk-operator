@@ -294,9 +294,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	extraCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
 
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
