@@ -130,37 +130,37 @@ func SortServicePorts(ports []corev1.ServicePort) []corev1.ServicePort {
 // It returns true if there are material differences between them, or false otherwise.
 // TODO: could use refactoring; lots of boilerplate copy-pasta here
 func CompareContainerPorts(a []corev1.ContainerPort, b []corev1.ContainerPort) bool {
-	return sortAndCompareSlices(a, b, "ContainerPort")
+	return sortAndCompareSlices(a, b, SortFieldContainerPort)
 }
 
 // CompareServicePorts is a generic comparer of two Kubernetes ServicePorts.
 // It returns true if there are material differences between them, or false otherwise.
 // TODO: could use refactoring; lots of boilerplate copy-pasta here
 func CompareServicePorts(a []corev1.ServicePort, b []corev1.ServicePort) bool {
-	return sortAndCompareSlices(a, b, "Port")
+	return sortAndCompareSlices(a, b, SortFieldPort)
 }
 
 // CompareEnvs is a generic comparer of two Kubernetes Env variables.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareEnvs(a []corev1.EnvVar, b []corev1.EnvVar) bool {
-	return sortAndCompareSlices(a, b, "Name")
+	return sortAndCompareSlices(a, b, SortFieldName)
 }
 
 // CompareTolerations compares the 2 list of tolerations
 func CompareTolerations(a []corev1.Toleration, b []corev1.Toleration) bool {
-	return sortAndCompareSlices(a, b, "Key")
+	return sortAndCompareSlices(a, b, SortFieldKey)
 }
 
 // CompareVolumes is a generic comparer of two Kubernetes Volumes.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {
-	return sortAndCompareSlices(a, b, "Name")
+	return sortAndCompareSlices(a, b, SortFieldName)
 }
 
 // CompareVolumeMounts is a generic comparer of two Kubernetes VolumeMounts.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumeMounts(a []corev1.VolumeMount, b []corev1.VolumeMount) bool {
-	return sortAndCompareSlices(a, b, "Name")
+	return sortAndCompareSlices(a, b, SortFieldName)
 }
 
 // CompareByMarshall compares two Kubernetes objects by marshalling them to JSON.
@@ -424,6 +424,21 @@ func sortAndCompareSlices(a interface{}, b interface{}, keyName string) bool {
 		return true
 	}
 
+	// Sort slices
+	SortSlice(a, keyName)
+	SortSlice(b, keyName)
+
+	return !reflect.DeepEqual(a, b)
+}
+
+// SortSlice sorts a slice of any kind by keyName
+func SortSlice(a interface{}, keyName string) {
+	aType := reflect.TypeOf(a)
+
+	if aType.Kind() != reflect.Slice {
+		panic(fmt.Sprintf("SortSlice can only be used on slices: Kind(a)=%v", aType.Kind()))
+	}
+
 	sortFunc := func(s interface{}, i, j int) bool {
 		sValue := reflect.ValueOf(s)
 
@@ -447,10 +462,4 @@ func sortAndCompareSlices(a interface{}, b interface{}, keyName string) bool {
 	sort.Slice(a, func(i, j int) bool {
 		return sortFunc(a, i, j)
 	})
-
-	sort.Slice(b, func(i, j int) bool {
-		return sortFunc(b, i, j)
-	})
-
-	return !reflect.DeepEqual(a, b)
 }

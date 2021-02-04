@@ -64,8 +64,7 @@ func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManag
 	// initialize client
 	c := spltest.NewMockClient()
 	c.AddObjects(initObjects)
-	skipRecheckUpdate := false
-	phase, err := UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas, &skipRecheckUpdate)
+	phase, err := UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
 	return phase, err
 }
 
@@ -113,35 +112,19 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
-	// Check the scenario where UpdatePodRevisionHash should return error when Pod is not added to client.
-	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 2 /*desiredReplicas*/, statefulSet)
-	if err == nil && phase != splcommon.PhaseError {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
-	}
-
-	replicas = 3
-	statefulSet.Status.ReadyReplicas = 3
-	statefulSet.Spec.Replicas = &replicas
-	// Check the scenario where UpdatePodRevisionHash should return error when Pod is not added to client.
-	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet)
-	if err == nil && phase != splcommon.PhaseError {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
-	}
-
 	// readyReplicas < replicas
 	replicas = 3
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Spec.Replicas = &replicas
-	// Check the scenario where UpdatePodRevisionHash should return error when readyReplicas < replicas and Pod is not found
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseError {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
+	if err != nil && phase != splcommon.PhaseUpdating {
+		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
 	// CurrentRevision = UpdateRevision
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseError {
+	if err == nil && phase != splcommon.PhaseScalingUp {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
 
@@ -150,88 +133,16 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	statefulSet.Status.ReadyReplicas = 3
 	statefulSet.Spec.Replicas = &replicas
 	statefulSet.Status.CurrentRevision = ""
-	// Check the scenario where UpdatePodRevisionHash should return error when readyReplicas > replicas and Pod is not found
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseError {
+	if err == nil && phase != splcommon.PhaseScalingDown {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
 
 	// CurrentRevision = UpdateRevision
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseError {
+	if err == nil && phase != splcommon.PhaseScalingDown {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
-	}
-
-	// Check the scenario where UpdatePodRevisionHash should return error when statefulset is not added to client.
-	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 2 /*desiredReplicas*/, pod)
-	if err == nil && phase != splcommon.PhaseError {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
-	}
-
-}
-
-func updatePodRevisionHashTester(t *testing.T, statefulSet *appsv1.StatefulSet, replicas int32, initObjects ...runtime.Object) error {
-	c := spltest.NewMockClient()
-	c.AddObjects(initObjects)
-	return UpdatePodRevisionHash(c, statefulSet, replicas)
-}
-
-func TestUpdatePodRevisionHash(t *testing.T) {
-	var replicas int32 = 1
-	statefulSet := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1",
-			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
-			},
-		},
-		Status: appsv1.StatefulSetStatus{
-			Replicas:        replicas,
-			ReadyReplicas:   replicas,
-			UpdatedReplicas: replicas,
-			UpdateRevision:  "v1",
-		},
-	}
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-0",
-			Namespace: "test",
-			Labels: map[string]string{
-				"controller-revision-hash": "v0",
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{Ready: true},
-			},
-		},
-	}
-
-	err := updatePodRevisionHashTester(t, statefulSet, replicas, statefulSet, pod)
-	if err != nil {
-		t.Errorf("UpdatePodRevisionHash should not have returned error=%s", err)
-	}
-
-	// Test the negative case where phase != corev1.PodRunning
-	pod.Status.Phase = corev1.PodPending
-	err = updatePodRevisionHashTester(t, statefulSet, replicas, statefulSet, pod)
-	if err != nil {
-		t.Errorf("UpdatePodRevisionHash should not have returned error=%s", err)
-	}
-
-	// Test invalid pod name splunk-stack1-1
-	pod.Status.Phase = corev1.PodRunning
-	replicas = 2
-	err = updatePodRevisionHashTester(t, statefulSet, replicas, statefulSet, pod)
-	if err == nil {
-		t.Errorf("UpdatePodRevisionHash should have returned error")
 	}
 }
 
