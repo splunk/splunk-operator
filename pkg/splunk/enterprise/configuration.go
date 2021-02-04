@@ -781,10 +781,15 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
 func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error {
 
+	// In the initial phases of App Framework feature, we are providing
+	// a flag to toggle this feature.
+	if !appFramework.FeatureEnabled {
+		return nil
+	}
+
 	//log all the inputs for AppFrameworkSpec.
 	//TBD: Future - use logging toggle switch to reduce any excessive logging.
-
-	log.Info("App Framework Inputs",
+	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
 		"FeatureEnabled", appFramework.FeatureEnabled,
 		"Type", appFramework.Type,
 		"S3Endpoint", appFramework.S3Endpoint,
@@ -792,9 +797,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error
 		"S3SecretRef", appFramework.S3SecretRef,
 		"S3PollInterval", appFramework.S3PollInterval)
 
-	if !appFramework.FeatureEnabled {
-		return nil
-	}
+	scopedLog.Info("Validating app framework spec")
 
 	if appFramework.Type == "" {
 		return fmt.Errorf("Apps Remote Storage Type is missing")
