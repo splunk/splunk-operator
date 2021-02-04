@@ -95,9 +95,6 @@ type IndexerClusterStatus struct {
 	// Indicates if the cluster is in maintenance mode.
 	MaintenanceMode bool `json:"maintenance_mode"`
 
-	// Indicates if we need to recheck the revision update on pods
-	SkipRecheckUpdate bool `json:"skip_recheck_update"`
-
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 }
