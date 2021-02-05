@@ -6,9 +6,9 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   clusterMasterRef:
-    name: <cluster master name>
+    name: cm-example
   licenseMasterRef:
-    name: <license master name>
+    name: lm-example
   replicas: <n>
   defaults: |-
     splunk:
