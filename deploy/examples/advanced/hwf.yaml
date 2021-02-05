@@ -1,0 +1,17 @@
+apiVersion: enterprise.splunk.com/v1beta1
+kind: Standalone
+metadata:
+  name: hwf-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  clusterMasterRef:
+    name: <cluster master name>
+  licenseMasterRef:
+    name: <license master name>
+  replicas: <n>
+  defaults: |-
+    splunk:
+      set_search_peers: false 
+ #by default, setting the clusterMasterRef will establish a Search and Forwarding relationship from the Standalone to the Indexer Cluster
+ #use set_search_peers: false to disable the HWF from also searching the Indexer Cluster
