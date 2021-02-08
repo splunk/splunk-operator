@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -105,6 +106,7 @@ type TestEnv struct {
 	SkipTeardown       bool
 	licenseFilePath    string
 	licenseCMName      string
+	s3IndexSecret      string
 	kubeClient         client.Client
 	Log                logr.Logger
 	cleanupFuncs       []cleanupFunc
@@ -162,6 +164,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, sparkImage, licens
 		SkipTeardown:       specifiedSkipTeardown,
 		licenseCMName:      envName,
 		licenseFilePath:    licenseFilePath,
+		s3IndexSecret:      "splunk-s3-index-" + envName,
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
@@ -244,6 +247,9 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
+
+	// Create s3 secret object for index test
+	testenv.createIndexSecret()
 
 	if testenv.licenseFilePath != "" {
 		err = testenv.createLicenseConfigMap()
@@ -498,7 +504,6 @@ func (testenv *TestEnv) createLicenseConfigMap() error {
 
 // Create a service account config
 func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAccount {
-
 	new := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ServiceAccount",
@@ -529,6 +534,34 @@ func (testenv *TestEnv) CreateServiceAccount(name string) error {
 		return nil
 	})
 	return nil
+}
+
+// CreateIndexSecret create secret object
+func (testenv *TestEnv) createIndexSecret() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
+	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_ACCESS_KEY_ID")),
+		"s3_secret_key": []byte(os.Getenv("AWS_SECRET_ACCESS_KEY"))}
+	secret := newSecretSpec(ns, secretName, data)
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create s3 index secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete s3 index secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// GetIndexSecretName return index secret object name
+func (testenv *TestEnv) GetIndexSecretName() string {
+	return testenv.s3IndexSecret
 }
 
 // NewDeployment creates a new deployment

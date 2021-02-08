@@ -222,3 +222,33 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
 func cpMakeTar(srcPath, destPath string, writer io.Writer) error
+
+// IngestFileViaMonitor ingests a file into an instance using the oneshot CLI
+func IngestFileViaMonitor(logFile string, indexName string, podName string, deployment *Deployment) error {
+
+	// Monitor log into specified index
+	var addMonitorCmd strings.Builder
+	splunkBin := "/opt/splunk/bin/splunk"
+	username := "admin"
+	password := "$(cat /mnt/splunk-secrets/password)"
+	splunkCmd := "add monitor"
+
+	fmt.Fprintf(&addMonitorCmd, "%s %s %s -index %s -auth %s:%s", splunkBin, splunkCmd, logFile, indexName, username, password)
+	command := []string{"/bin/bash"}
+	stdin := addMonitorCmd.String()
+	addMonitorResp, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "stdin", stdin, "addMonitorResp", addMonitorResp, "stderr", stderr)
+		return err
+	}
+
+	// Validate the expected CLI response
+	var expectedResp strings.Builder
+	fmt.Fprintf(&expectedResp, "Added monitor of '%s'", logFile)
+	if strings.Compare(addMonitorResp, expectedResp.String()) == 0 {
+		logf.Log.Error(err, "Failed response to add monitor to splunk", "pod", podName, "addMonitorResp", addMonitorResp)
+		return err
+	}
+	logf.Log.Info("File Ingested via add monitor Successfully", "logFile", logFile, "addMonitorResp", addMonitorResp)
+	return nil
+}

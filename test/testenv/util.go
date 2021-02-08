@@ -402,6 +402,41 @@ func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterprisev
 	return &new
 }
 
+// newSecretSpec create spec for smartstore secret object
+func newSecretSpec(ns string, secretName string, data map[string][]byte) *corev1.Secret {
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "apps/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: ns,
+		},
+		Data: data,
+		Type: "Opaque",
+	}
+	return secret
+}
+
+// newStandaloneWithSpec creates and initializes CR for Standalone Kind with given spec
+func newStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+
+	new := enterprisev1.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &new
+}
+
 // DumpGetPods prints list of pods in the namespace
 func DumpGetPods(ns string) {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()

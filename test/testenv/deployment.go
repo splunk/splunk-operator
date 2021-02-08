@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
@@ -416,6 +417,36 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 // DeployStandalonewithGivenSpec deploys a standalone with given spec
 func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev1.StandaloneSpec) (*enterprisev1.Standalone, error) {
 	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
+}
+
+// DeployStandaloneWithIndexes deploys a standalone splunk enterprise instance on the specified testenv
+func (d *Deployment) DeployStandaloneWithIndexes(name string, indexesSecret string, volumeName, string, indexName string) (*enterprisev1.Standalone, error) {
+
+	s3Endpoint := "https://s3-" + s3Region + ".amazonaws.com"
+	volumeSpec := GenerateIndexVolumeSpec(volumeName, s3Endpoint, testIndexesS3Bucket, indexesSecret)
+	indexSpec := GenerateIndexSpec(indexName, volumeName)
+	spec := enterprisev1.StandaloneSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "IfNotPresent",
+			},
+			Volumes: []corev1.Volume{},
+		},
+		SmartStore: enterprisev1.SmartStoreSpec{
+			VolList: []enterprisev1.VolumeSpec{
+				volumeSpec,
+			},
+			IndexList: []enterprisev1.IndexSpec{
+				indexSpec,
+			},
+		},
+	}
+	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err

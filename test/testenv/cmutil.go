@@ -19,7 +19,30 @@ import (
 	"fmt"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 )
+
+// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
+// Endpoint: /services/cluster/master/sites
+type ClusterMasterSitesResponse struct {
+	Entries []ClusterMasterSitesEntry `json:"entry"`
+}
+
+// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
+type ClusterMasterSitesEntry struct {
+	Name    string                    `json:"name"`
+	Content ClusterMasterSitesContent `json:"content"`
+}
+
+// ClusterMasterSitesContent represents detailed information about a site
+type ClusterMasterSitesContent struct {
+	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
+}
+
+// ClusterMasterSitesPeer reprensents an indexer peer member of a site
+type ClusterMasterSitesPeer struct {
+	ServerName string `json:"server_name"`
+}
 
 // ClusterMasterHealthResponse is a representation of the health response by a Splunk cluster-master
 // Endpoint: /services/cluster/master/health
@@ -122,24 +145,52 @@ func CheckSearchHeadRemoved(deployment *Deployment) bool {
 	return searchHeadRemoved
 }
 
-// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
-// Endpoint: /services/cluster/master/sites
-type ClusterMasterSitesResponse struct {
-	Entries []ClusterMasterSitesEntry `json:"entry"`
+// RollHotBuckets roll hot buckets in cluster
+func RollHotBuckets(deployment *Deployment) bool {
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	if strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.") {
+		return true
+	}
+	return false
 }
 
-// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
-type ClusterMasterSitesEntry struct {
-	Name    string                    `json:"name"`
-	Content ClusterMasterSitesContent `json:"content"`
+// RollingRestartEndpointResponse is represtentation of /services/cluster/master/info endpiont
+type RollingRestartEndpointResponse struct {
+	Entry []struct {
+		Content struct {
+			RollingRestartFlag bool `json:"rolling_restart_flag"`
+		} `json:"content"`
+	} `json:"entry"`
 }
 
-// ClusterMasterSitesContent represents detailed information about a site
-type ClusterMasterSitesContent struct {
-	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
-}
-
-// ClusterMasterSitesPeer reprensents an indexer peer member of a site
-type ClusterMasterSitesPeer struct {
-	ServerName string `json:"server_name"`
+// CheckRollingRestartStatus checks if rolling restart is happening in cluster
+func CheckRollingRestartStatus(deployment *Deployment) bool {
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/info?output_mode=json"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	restResponse := RollingRestartEndpointResponse{}
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster searchheads")
+		return false
+	}
+	rollingRestart := true
+	for _, entry := range restResponse.Entry {
+		rollingRestart = entry.Content.RollingRestartFlag
+	}
+	return rollingRestart
 }
