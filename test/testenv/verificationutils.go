@@ -229,7 +229,7 @@ func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
 func VerifyLMConfiguredOnPod(deployment *Deployment, podName string) {
-	gomega.Consistently(func() bool {
+	gomega.Eventually(func() bool {
 		lmConfigured := CheckLicenseMasterConfigured(deployment, podName)
 		return lmConfigured
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
