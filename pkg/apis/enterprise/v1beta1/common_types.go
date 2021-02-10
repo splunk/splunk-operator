@@ -181,22 +181,33 @@ type IndexAndCacheManagerCommonSpec struct {
 // AppFrameworkSpec defines the application package remote store repository
 type AppFrameworkSpec struct {
 
-	// Is Application Framework Feature Enabled.
-	// Default value is False
+	// Flag to Enable/Disable Application Framework Feature.
+	// Default value is False. Implementation of Apps Framework
+	// is still TBD so turning this flag to true will not do any
+	// changes.
 	FeatureEnabled bool `json:"featureEnabled"`
 
-	// App Package Remote Store type
+	// App Package Remote Store type.
+	// The currently supported type is s3 only.
 	Type string `json:"type"`
 
-	// App Package Remote Store Endpoint
+	// App Package Remote Store Endpoint.
+	// This is s3 location where you will have
+	// the splunk apps packages placed.
 	S3Endpoint string `json:"s3Endpoint"`
 
 	// App Package Remote Store Bucket
+	// Name of the s3 bucket within s3Endpoint
+	// where splunk apps packages can be placed.
 	S3Bucket string `json:"s3Bucket"`
 
 	// App Package Remote Store Credentials
+	// Secret object containing the S3 authentication info.
 	S3SecretRef string `json:"s3SecretRef"`
 
-	// App Package Remote Store Polling interval
+	// App Package Remote Store Polling interval in minutes.
+	// New or Updated Apps will be pulled from s3 remote location
+	// at every polling interval.
+	// This value can be  >=1. The default value is 60 minutes.
 	S3PollInterval uint `json:"s3PollInterval"`
 }

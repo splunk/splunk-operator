@@ -798,8 +798,12 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error
 		return fmt.Errorf("Apps Remote Storage S3SecretRef is missing")
 	}
 
-	if appFramework.S3PollInterval < 60 {
-		return fmt.Errorf("Apps Remote Storage S3PollInternal cannot be less than 60 seconds")
+	if appFramework.S3PollInterval == 0 {
+		// this means either the S3PollInterval was not provided
+		// or it was explictely set to 0 - in both cases we will
+		// set the S3PollInterval to default 60 minutes
+		scopedLog.Info("Setting S3PollInterval to default 60 minutes")
+		appFramework.S3PollInterval = 60
 	}
 
 	return nil
