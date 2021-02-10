@@ -991,13 +991,33 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		Type:           "S3",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
-		S3PollInterval: 10,
+		S3PollInterval: 0,
 	}
 
-	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 60 seconds"
+	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 1 minute"
 	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
+	}
+
+	//Test5: No S3PollInterval given- should default to 60 minutes
+	AppFrameWorkDefaultS3PollInterval := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "S3",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3Endpoint:     "http://test_s3_end_point",
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkDefaultS3PollInterval)
+
+	//validate that the S3PollInterval has been set to default value of 60 minutes
+	if AppFrameWorkDefaultS3PollInterval.S3PollInterval != 60 {
+		t.Errorf("The S3PollInterval did not get set to default value")
+	}
+
+	if err != nil {
+		t.Errorf("Expected no errors, the S3PollInterval would have set to default")
 	}
 
 	//Test6: FeatureEnabled is false so no validation errors expected
