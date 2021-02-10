@@ -79,7 +79,6 @@ configuration parameters:
 | resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | CPU and memory [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (defaults shown in example above) |
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 
-
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
@@ -88,9 +87,12 @@ kind: Standalone
 metadata:
   name: example
 spec:
-  storageClassName: gp2
-  etcStorage: "100Gi"
-  varStorage: "500Gi"
+  etcVolumeStorageConfig:
+    storageClassName: gp2
+    storageCapacity: 15Gi
+  varVolumeStorageConfig:
+    storageClassName: customStorageClass
+    storageCapacity: 25Gi
   volumes:
     - name: licenses
       configMap:
@@ -99,6 +101,7 @@ spec:
     name: example
   clusterMasterRef:
     name: example
+  serviceAccount: custom-serviceaccount
 ```
 
 The following additional configuration parameters may be used for all Splunk
@@ -107,17 +110,15 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
-| storageClassName   | string  | Name of [StorageClass](StorageClass.md) to use for persistent volume claims   |
-| etcStorage         | string  | Storage capacity to request for Splunk etc volume claims (default="10Gi")      |
-| varStorage         | string  | Storage capacity to request for Splunk var volume claims (default="100Gi")    |
-| ephemeralStorage   | boolean | If true, ephemeral (emptyDir) storage will be used for etc and var volumes (default=false) |
+| etcVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk etc volume as described in [StorageClass](StorageClass.md) |
+| varVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk var volume as described in [StorageClass](StorageClass.md) |
 | volumes            | [[]Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>` |
 | defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
-
+| serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
 
 ## Spark Resource Spec Parameters
 

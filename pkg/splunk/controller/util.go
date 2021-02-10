@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -187,6 +187,32 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 	}
 
 	return result
+}
+
+// SortStatefulSetSlices sorts required slices in a statefulSet
+func SortStatefulSetSlices(current *corev1.PodSpec, name string) error {
+	scopedLog := log.WithName("SortStatefulSetSlices").WithValues("name", name)
+
+	// Sort tolerations
+	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
+
+	// Sort volumes
+	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)
+
+	// Sort slices inside container specs
+	for idx := range current.Containers {
+		// Sort container ports
+		splcommon.SortSlice(current.Containers[idx].Ports, splcommon.SortFieldContainerPort)
+
+		// Sort VolumeMounts
+		splcommon.SortSlice(current.Containers[idx].VolumeMounts, splcommon.SortFieldName)
+
+		// Sort env variables
+		splcommon.SortSlice(current.Containers[idx].Env, splcommon.SortFieldName)
+	}
+	scopedLog.Info("Successfully sorted slices in statefulSet")
+
+	return nil
 }
 
 // MergeServiceSpecUpdates merges the current and revised spec of the service object

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,9 +108,6 @@ type SearchHeadClusterStatus struct {
 
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
-
-	// Indicates if we need to recheck the revision update on pods
-	SkipRecheckUpdate bool `json:"skip_recheck_update"`
 
 	// status of each search head cluster member
 	Members []SearchHeadClusterMemberStatus `json:"members"`

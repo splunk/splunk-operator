@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -198,4 +198,54 @@ func TestMergeServiceSpecUpdates(t *testing.T) {
 	revised.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
 	matcher = func() bool { return current.ExternalTrafficPolicy == revised.ExternalTrafficPolicy }
 	svcUpdateTester("Service ExternalTrafficPolicy changed")
+}
+
+func TestSortStatefulSetSlices(t *testing.T) {
+	var unsorted, sorted corev1.PodSpec
+	matcher := func() bool { return false }
+
+	sortTester := func(sortSlice string) {
+		SortStatefulSetSlices(&unsorted, sortSlice)
+		if !matcher() {
+			t.Errorf("SortStatefulSetSlices() didn't sort %s", sortSlice)
+		}
+	}
+
+	// Check volume sorting
+	unsorted.Volumes = []corev1.Volume{{Name: "bVolume"}, {Name: "aVolume"}}
+	sorted.Volumes = []corev1.Volume{{Name: "aVolume"}, {Name: "bVolume"}}
+	matcher = func() bool { return reflect.DeepEqual(sorted.Volumes, unsorted.Volumes) }
+	sortTester("Volumes")
+
+	// Check tolerations
+	unsorted.Tolerations = []corev1.Toleration{{Key: "bKey"}, {Key: "aKey"}}
+	sorted.Tolerations = []corev1.Toleration{{Key: "aKey"}, {Key: "bKey"}}
+	matcher = func() bool { return reflect.DeepEqual(sorted.Tolerations, unsorted.Tolerations) }
+	sortTester("Tolerations")
+
+	// Create a container
+	sorted.Containers = make([]corev1.Container, 1)
+	unsorted.Containers = make([]corev1.Container, 1)
+
+	// Check container port sorting
+	unsorted.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: 8080}, {ContainerPort: 8000}}
+	sorted.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: 8000}, {ContainerPort: 8080}}
+	matcher = func() bool { return reflect.DeepEqual(sorted.Containers[0].Ports, unsorted.Containers[0].Ports) }
+	sortTester("Container Ports")
+
+	// Check volume mount sorting
+	unsorted.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "bVolumeMount"}, {Name: "aVolumeMount"}}
+	sorted.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "aVolumeMount"}, {Name: "bVolumeMount"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(sorted.Containers[0].VolumeMounts, unsorted.Containers[0].VolumeMounts)
+	}
+	sortTester("Volume mounts")
+
+	// Check env var sorting
+	unsorted.Containers[0].Env = []corev1.EnvVar{{Name: "SPLUNK_ROLE", Value: "SPLUNK_INDEXER"}, {Name: "DECLARATIVE_ADMIN_PASSWORD", Value: "true"}}
+	sorted.Containers[0].Env = []corev1.EnvVar{{Name: "DECLARATIVE_ADMIN_PASSWORD", Value: "true"}, {Name: "SPLUNK_ROLE", Value: "SPLUNK_INDEXER"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(sorted.Containers[0].Env, unsorted.Containers[0].Env)
+	}
+	sortTester("Env variables")
 }

@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
@@ -37,7 +51,7 @@ func getMCSts(ns string) string {
 	mcSts := fmt.Sprintf(MonitoringConsoleSts, ns)
 	output, err := exec.Command("kubectl", "get", "sts", "-n", ns, mcSts).Output()
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		cmd := fmt.Sprintf("kubectl get sts -n %s %s", ns, mcSts)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return ""
 	}

@@ -10,6 +10,12 @@
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
+# Below env variables required to run license master test cases
+: "${ENTERPRISE_LICENSE_PATH:=}"
+: "${TEST_S3_BUCKET:=}"
+# Below env variables requried to run remote indexes test cases
+: "${INDEXES_S3_BUCKET:=}"
+: "${AWS_S3_REGION:=}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then

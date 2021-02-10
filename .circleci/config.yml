@@ -8,11 +8,29 @@ orbs:
 
 workflows:
   version: 2
-  build-and-push:
+  nightly-integration-test:
+    triggers:
+      - schedule:
+          cron: "0 12 * * *"
+          filters:
+            branches:
+              only:
+                - develop
     jobs:
       - build-image
       - unit-tests
       - integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - vulnerability-scan:
+          requires:
+            - build-image     
+  build-and-push:
+    jobs:
+      - build-image
+      - unit-tests
+      - smoke-tests:
           requires:
             - build-image
             - unit-tests
@@ -23,7 +41,7 @@ workflows:
           requires:
             - build-image
             - unit-tests
-            - integration-tests
+            - smoke-tests
             - vulnerability-scan
           filters:
             branches:
@@ -33,7 +51,7 @@ workflows:
           requires:
             - build-image
             - unit-tests
-            - integration-tests
+            - smoke-tests
             - vulnerability-scan
           filters:
             branches:
@@ -43,7 +61,7 @@ workflows:
           requires:
             - build-image
             - unit-tests
-            - integration-tests
+            - smoke-tests
             - vulnerability-scan
           filters:
             tags:
@@ -154,6 +172,64 @@ jobs:
       - store_artifacts:
           name: Save coverage.out as artifact
           path: coverage.out
+  # Runs smoke tests against a k8s cluster
+  smoke-tests:
+    executor: ubuntu-machine
+    steps:
+      - run: 
+          name: Setup Splunk operator and enterprise image env vars
+          command: |
+            echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
+            echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
+            echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+      - kubernetes/install
+      - aws-cli/install
+      - aws-eks/install-eksctl
+      - run:
+          name: Install kind tool
+          command: |
+            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.7.0/kind-$(uname)-amd64
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      # load the operator image to local registry in the VM
+      - load_image
+      - run:
+          name: Print out version and environment
+          command: |
+            ls -al
+            echo "GO VERSION=`go version`"
+            echo "CIRCLE_SHA1=$CIRCLE_SHA1"
+            echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
+            echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
+            echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
+            echo "CLUSTER_PROVIDER=$CLUSTER_PROVIDER"
+      - run:
+          # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
+          # it will skip. Uses NUM_WORKERS for size of cluster
+          name: Deploy k8s cluster
+          command: |
+            make cluster-up 
+            kubectl version # log the k8s version
+          no_output_timeout: 30m
+      - run:
+          # Run the smoke tests againsts the cluster deployed above.
+          # Test againsts the SPLUNK_OPERATOR_IMAGE and SPLUNK_ENTERPRISE_IMAGE 
+          name: Run smoke tests 
+          command: |
+            make int-test
+            mkdir -p /tmp/test-results
+            find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: smoke
+      - store_test_results:
+          name: Save test results
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
   # Runs integration tests against a k8s cluster
   integration-tests:
     executor: ubuntu-machine
@@ -205,6 +281,8 @@ jobs:
             make int-test
             mkdir -p /tmp/test-results
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: "smoke|ingest_search|monitoring_console|deletecr|smartstore"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results

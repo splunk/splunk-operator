@@ -3,6 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.13
 
 require (
+	github.com/aws/aws-sdk-go v1.17.7
 	github.com/go-logr/logr v0.1.0
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/onsi/ginkgo v1.12.2
@@ -13,6 +14,7 @@ require (
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kubectl v0.0.0
+	k8s.io/kubernetes v1.16.2
 	sigs.k8s.io/controller-runtime v0.4.0
 )
 

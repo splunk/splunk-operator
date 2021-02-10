@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -85,6 +85,8 @@ func coreObjectCopier(dst, src *runtime.Object) bool {
 			*dstP.(*corev1.Service) = *srcP.(*corev1.Service)
 		case *corev1.Pod:
 			*dstP.(*corev1.Pod) = *srcP.(*corev1.Pod)
+		case *corev1.ServiceAccount:
+			*dstP.(*corev1.ServiceAccount) = *srcP.(*corev1.ServiceAccount)
 		default:
 			return false
 		}
@@ -512,8 +514,6 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
-	scaleUpCalls["Get"] = append(scaleUpCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
-	scaleUpCalls["Update"] = append(scaleUpCalls["Update"], funcCalls[1])
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
 
@@ -521,7 +521,6 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
-	updateCalls["Get"] = append(updateCalls["Get"], funcCalls[0], funcCalls[0], funcCalls[1])
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
@@ -539,7 +538,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], funcCalls[0], funcCalls[0], funcCalls[1], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
 		"Update": {funcCalls[0]},
 		"Delete": pvcCalls,
 	}
@@ -573,9 +572,10 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	listmockCall := []MockFuncCall{
 		{ListOpts: listOpts}}
 
-	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": {}, "List": {listmockCall[0]}}
+	delCalls := []MockFuncCall{{MetaName: "*v1.Pod-test-splunk-stack1-0"}}
+	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": delCalls}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, updatePodCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updatePodCalls, nil, current, pod)
 
 	// test all pods ready
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"

@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package testenv
 
 import (
@@ -20,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
@@ -380,4 +395,66 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 	}
 
 	return nil
+}
+
+// DeployStandaloneWithLM deploys a standalone splunk enterprise instance with license master on the specified testenv
+func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalone, error) {
+	var licenseMaster string
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return nil, err
+		}
+		licenseMaster = name
+	}
+
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, licenseMaster)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
+}
+
+// DeployStandalonewithGivenSpec deploys a standalone with given spec
+func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev1.StandaloneSpec) (*enterprisev1.Standalone, error) {
+	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
+}
+
+// DeployStandaloneWithIndexes deploys a standalone splunk enterprise instance on the specified testenv
+func (d *Deployment) DeployStandaloneWithIndexes(name string, indexesSecret string, volumeName, string, indexName string) (*enterprisev1.Standalone, error) {
+
+	s3Endpoint := "https://s3-" + s3Region + ".amazonaws.com"
+	volumeSpec := GenerateIndexVolumeSpec(volumeName, s3Endpoint, testIndexesS3Bucket, indexesSecret)
+	indexSpec := GenerateIndexSpec(indexName, volumeName)
+	spec := enterprisev1.StandaloneSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "IfNotPresent",
+			},
+			Volumes: []corev1.Volume{},
+		},
+		SmartStore: enterprisev1.SmartStoreSpec{
+			VolList: []enterprisev1.VolumeSpec{
+				volumeSpec,
+			},
+			IndexList: []enterprisev1.IndexSpec{
+				indexSpec,
+			},
+		},
+	}
+	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
 }
