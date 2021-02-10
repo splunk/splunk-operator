@@ -596,21 +596,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-func TestValidateApplicationFrameworkSpec(t *testing.T) {
-=======
 func TestValidateAppFrameworkSpec(t *testing.T) {
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	var err error
 	// Valid app framework config with proper inputs
 
 	//Test1: missing S3Bucket
-<<<<<<< HEAD
-	AppFrameWorkMissingBucket := enterprisev1.ApplicationFrameworkSpec{
-=======
 	AppFrameWorkMissingBucket := enterprisev1.AppFrameworkSpec{
 		FeatureEnabled: true,
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Endpoint:     "http://test_s3_end_point",
 		S3SecretRef:    "appSecret",
@@ -618,22 +610,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	var expectedError string = "Apps Remote Storage S3Bucket is missing"
-<<<<<<< HEAD
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingBucket)
-=======
 	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingBucket)
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test2: missing S3Endpoint
-<<<<<<< HEAD
-	AppFrameWorkMissingS3EndPoint := enterprisev1.ApplicationFrameworkSpec{
-=======
 	AppFrameWorkMissingS3EndPoint := enterprisev1.AppFrameworkSpec{
 		FeatureEnabled: true,
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
@@ -641,22 +625,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Apps Remote Storage S3Bucket is missing"
-<<<<<<< HEAD
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
-=======
 	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test3: missing Type
-<<<<<<< HEAD
-	AppFrameWorkMissingType := enterprisev1.ApplicationFrameworkSpec{
-=======
 	AppFrameWorkMissingType := enterprisev1.AppFrameworkSpec{
 		FeatureEnabled: true,
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
 		S3Endpoint:     "http://test_s3_end_point",
@@ -664,22 +640,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Apps Remote Storage Type is missing"
-<<<<<<< HEAD
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkMissingType)
-=======
 	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingType)
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test4: Type can be "S3" only
-<<<<<<< HEAD
-	AppFrameWorkInvalidType := enterprisev1.ApplicationFrameworkSpec{
-=======
 	AppFrameWorkInvalidType := enterprisev1.AppFrameworkSpec{
 		FeatureEnabled: true,
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "HTTP",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
@@ -688,38 +656,44 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	expectedError = "Currently supported type for Apps Remote Storage Type is S3 only"
-<<<<<<< HEAD
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidType)
-=======
 	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidType)
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
 	}
 
 	//Test5: Invalid S3PollInterval
-<<<<<<< HEAD
-	AppFrameWorkInvalidS3PollInterval := enterprisev1.ApplicationFrameworkSpec{
-=======
 	AppFrameWorkInvalidS3PollInterval := enterprisev1.AppFrameworkSpec{
 		FeatureEnabled: true,
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 		Type:           "S3",
 		S3Bucket:       "test_bucket",
 		S3SecretRef:    "appSecret",
-		S3PollInterval: 10,
+		S3PollInterval: 0,
 	}
 
-	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 60 seconds"
-<<<<<<< HEAD
-	err = ValidateApplicationFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-=======
+	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 1 minute"
 	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
 	if err == nil {
 		t.Errorf("expected error: %s but returned: %s", expectedError, err)
+	}
+
+	//Test5: No S3PollInterval given- should default to 60 minutes
+	AppFrameWorkDefaultS3PollInterval := enterprisev1.AppFrameworkSpec{
+		FeatureEnabled: true,
+		Type:           "S3",
+		S3Bucket:       "test_bucket",
+		S3SecretRef:    "appSecret",
+		S3Endpoint:     "http://test_s3_end_point",
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameWorkDefaultS3PollInterval)
+
+	//validate that the S3PollInterval has been set to default value of 60 minutes
+	if AppFrameWorkDefaultS3PollInterval.S3PollInterval != 60 {
+		t.Errorf("The S3PollInterval did not get set to default value")
+	}
+
+	if err != nil {
+		t.Errorf("Expected no errors, the S3PollInterval would have set to default")
 	}
 
 	//Test6: FeatureEnabled is false so no validation errors expected
@@ -749,7 +723,6 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no errors as all good params provided but got error: %s", err)
 	}
->>>>>>> ccdfc8f... CSPL-763 -- address review comments, generate the CRD defintions, extend unit test cases
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {

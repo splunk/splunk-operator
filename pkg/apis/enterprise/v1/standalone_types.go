@@ -40,7 +40,7 @@ type StandaloneSpec struct {
 
 	// App Framework configuration. Refers to the config block for App Framework.
 	// Through this config, apps can be installed in a standalone splunk CR.
-	// The implementatiom is still TBD.
+	// The implementation of this apps framework is still TBD.
 	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
 }
 
