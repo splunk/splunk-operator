@@ -73,7 +73,8 @@ var _ = Describe("Smoke test", func() {
 		It("smoke: can deploy indexers and search head cluster", func() {
 
 			idxCount := 3
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount)
+			shc := true
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount, shc)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -215,7 +216,8 @@ var _ = Describe("Smoke test", func() {
 
 			// Create Cluster Master with LicenseMasterRef, IndexerCluster without LicenseMasterRef
 			idxCount := 3
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount)
+			shc := false
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount, shc)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase

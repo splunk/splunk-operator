@@ -184,9 +184,9 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 }
 
 //DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(name string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
+func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
-	indexer := newIndexerCluster(name, d.testenv.namespace, count, clusterMasterRef, ansibleConfig)
+	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
 	deployed, err := d.deployCR(name, indexer)
 	if err != nil {
 		return nil, err
@@ -252,8 +252,8 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// DeploySingleSiteCluster deploys a lm and indexer cluster
-func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
+// DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, shc bool) error {
 
 	var licenseMaster string
 
@@ -275,9 +275,17 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) e
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(name+"-idxc", indexerReplicas, name, "")
+	_, err = d.DeployIndexerCluster(name+"-idxc", licenseMaster, indexerReplicas, name, "")
 	if err != nil {
 		return err
+	}
+
+	// Deploy the SH cluster
+	if shc == true {
+		_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -324,7 +332,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
   multisite_master: splunk-%s-cluster-master-service
   site: %s
 `, name, siteName)
-		_, err := d.DeployIndexerCluster(name+"-"+siteName, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -383,7 +391,7 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
   multisite_master: splunk-%s-cluster-master-service
   site: %s
 `, name, siteName)
-		_, err := d.DeployIndexerCluster(name+"-"+siteName, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}

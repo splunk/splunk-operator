@@ -171,7 +171,7 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns string, replicas int, clusterMasterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
+func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
 	new := enterprisev1.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",

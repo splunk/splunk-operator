@@ -54,7 +54,8 @@ var _ = Describe("DeleteCR test", func() {
 	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("deletecr: can deploy indexers and search head cluster", func() {
 
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3)
+			shc := true
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, shc)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
