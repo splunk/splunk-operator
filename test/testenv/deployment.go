@@ -281,7 +281,7 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, s
 	}
 
 	// Deploy the SH cluster
-	if shc == true {
+	if shc {
 		_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
 		if err != nil {
 			return err
