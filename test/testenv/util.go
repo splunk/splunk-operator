@@ -188,9 +188,6 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
-				},
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: clusterMasterRef,
 				},

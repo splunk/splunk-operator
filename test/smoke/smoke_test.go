@@ -72,8 +72,7 @@ var _ = Describe("Smoke test", func() {
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke: can deploy indexers and search head cluster", func() {
 
-			idxCount := 3
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), idxCount)
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -201,6 +200,38 @@ var _ = Describe("Smoke test", func() {
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testenvInstance.GetName(), standalonePodName, serviceAccountName)
+		})
+	})
+
+	Context("Clustered deployment (C3 - clustered indexer) with LM", func() {
+		It("smoke: can deploy indexer cluster with LM", func() {
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to downlaod license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
+			// Create Cluster Master with LicenseMasterRef, IndexerCluster without LicenseMasterRef
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			Expect(err).To(Succeed(), "Unable to deploy cluster")
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify LM is configured on indexers
+			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+
 		})
 	})
 })

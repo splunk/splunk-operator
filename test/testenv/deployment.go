@@ -252,8 +252,8 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// DeploySingleSiteCluster deploys a lm, indexer and sh clusters
-func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
+// DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, shc bool) error {
 
 	var licenseMaster string
 
@@ -280,9 +280,12 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) e
 		return err
 	}
 
-	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
-	if err != nil {
-		return err
+	// Deploy the SH cluster
+	if shc {
+		_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
