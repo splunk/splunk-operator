@@ -177,3 +177,33 @@ func CheckStandalonePodOnMC(ns string, podName string) bool {
 	}
 	return found
 }
+
+// CheckMontoringConsoleConfigured checks if mc is configured on given pod
+func CheckMontoringConsoleConfigured(ns string, deployment *Deployment, podName string) bool {
+	output, err := exec.Command("kubectl", "logs", podName, "-n", ns).Output()
+	licenseDownloaded := false
+	nodeLicenced := false
+
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl logs %s -n %s", podName, ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return false
+	}
+
+	for _, line := range strings.Split(string(output), "\n") {
+		// Check for empty lines to prevent an error in logic below
+		if len(line) == 0 {
+			continue
+		}
+		// Check for specifc logs that indicate that MC was configured with LM
+		if strings.Contains(line, "item=/mnt/licenses/enterprise.lic") {
+			licenseDownloaded = true
+		} else if strings.Contains(line, "Set node as license slave") {
+			nodeLicenced = true
+		}
+		if licenseDownloaded && nodeLicenced {
+			return true
+		}
+	}
+	return false
+}

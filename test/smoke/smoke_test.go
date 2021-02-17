@@ -168,6 +168,10 @@ var _ = Describe("Smoke test", func() {
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
+
+			// Verify MC is configured with LM instance
+			standaloneMCPodName := fmt.Sprintf(testenv.MonitoringConsolePod, testenvInstance.GetName(), 0)
+			testenv.VerifyMCConfiguredWithLM(deployment, standaloneMCPodName, testenvInstance.GetName())
 		})
 	})
 
