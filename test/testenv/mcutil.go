@@ -178,8 +178,8 @@ func CheckStandalonePodOnMC(ns string, podName string) bool {
 	return found
 }
 
-// CheckMontoringConsoleConfigured checks if mc is configured on given pod
-func CheckMontoringConsoleConfigured(ns string, deployment *Deployment, podName string) bool {
+// CheckMonitoringConsoleConfigured checks if mc is configured on given pod
+func CheckMonitoringConsoleConfigured(ns string, deployment *Deployment, podName string) bool {
 	output, err := exec.Command("kubectl", "logs", podName, "-n", ns).Output()
 	licenseDownloaded := false
 	nodeLicenced := false
