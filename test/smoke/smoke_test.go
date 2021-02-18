@@ -72,7 +72,14 @@ var _ = Describe("Smoke test", func() {
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke: can deploy indexers and search head cluster", func() {
 
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to download license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -89,14 +96,37 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify LM is configured on indexers
+			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+
+			// Verify LM is configured on SHs
+			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 1)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 2)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 		})
 	})
 
 	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("smoke: can deploy indexers and search head cluster", func() {
 
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to download license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
+			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -116,14 +146,37 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify LM is configured on indexers
+			indexerPodName := fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 1, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 2, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 3, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+
+			// Verify LM is configured on SHs
+			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 1)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 2)
+			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 		})
 	})
 
 	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
 		It("smoke: can deploy multisite indexers cluster", func() {
 
+			// Download License File
+			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			Expect(err).To(Succeed(), "Unable to download license file")
+
+			// Create License Config Map
+			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+
 			siteCount := 3
-			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
+			err = deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -140,14 +193,23 @@ var _ = Describe("Smoke test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify LM is configured on indexers
+			indexerPodName := fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 1, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 2, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 3, 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 		})
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
 		It("smoke: can deploy a standalone instance and a License Master", func() {
+
 			// Download License File
 			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to downlaod license file")
+			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
@@ -205,9 +267,10 @@ var _ = Describe("Smoke test", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer) with LM", func() {
 		It("smoke: can deploy indexer cluster with LM", func() {
+
 			// Download License File
 			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to downlaod license file")
+			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
@@ -231,7 +294,10 @@ var _ = Describe("Smoke test", func() {
 			// Verify LM is configured on indexers
 			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-
+			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
+			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 		})
 	})
 })
