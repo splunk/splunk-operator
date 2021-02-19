@@ -69,7 +69,7 @@ Create a Gateway to receive traffic on port 80
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: splunk-s2s
+  name: splunk-web
 spec:
   selector:
     istio: ingressgateway # use istio default ingress gateway
@@ -87,12 +87,12 @@ Create a virtual service to route traffic to your service, in this example we us
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-s2s
+  name: splunk-web
 spec:
   hosts:
   - "splunk.example.com"
     gateways:
-  - "splunk-s2s"
+  - "splunk-web"
     tcp:
   - match:
     - port: 80
@@ -122,7 +122,7 @@ Create Gateway for multiple hosts
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: splunk-gw
+  name: splunk-web
 spec:
   selector:
     istio: ingressgateway # use istio default ingress gateway
@@ -145,12 +145,12 @@ Create one virtual service for each component
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk
+  name: splunk-web
 spec:
   hosts:
   - "splunk.example.com"
   gateways:
-  - "splunk-gw"
+  - "splunk-web"
   http:
   - match:
     - uri:
@@ -174,7 +174,7 @@ spec:
   hosts:
   - "deployer.splunk.example.com"
   gateways:
-  - "splunk-gw"
+  - "splunk-web"
   http:
   - route:
     - destination:
@@ -190,7 +190,7 @@ spec:
   hosts:
   - "cluster-master.splunk.example.com"
   gateways:
-  - "splunk-gw"
+  - "splunk-web"
   http:
   - route:
     - destination:
@@ -206,7 +206,7 @@ spec:
   hosts:
   - "license-master.splunk.example.com"
   gateways:
-  - "splunk-gw"
+  - "splunk-web"
   http:
   - route:
     - destination:
@@ -293,7 +293,11 @@ It is highly recommended that you always use TLS encryption for your Splunk Ente
 #### Splunk Forwarder data with end-to-end TLS
 In this configuration Istio passes the encrypted traffic to Splunk Enterprise without any termination. Note that you need to configure the TLS certificates on the Forwarder as well as any Splunk Enterprise indexers, cluster peers, or standalone instances.
 
+
+
 <img src="pictures/TLS-End-to-End.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
+
+
 
 When using TLS for Ingress, we recommend you add an additional port for secure communication. By default, port 9997 will be assigned for non-encrypted traffic and you can use any other available port for secure communications. This example shows how to add port 9998 for a standalone instance.
 
@@ -376,7 +380,10 @@ Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the d
 
 In this configuration, Istio is terminating the encryption at the Gateway and forwarding the decrypted traffic to Splunk Enterprise. Note that in this case the Forwarder's outputs.conf should be configured for TLS, while the Indexer's input.conf should be configured to accept non-encrypted traffic.
 
+
+
 <img src="pictures/TLS-Gateway-Termination.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
+
 
 
 Create a TLS secret with the certificates needed to decrypt traffic. These are the same commands used on your Indexer to terminate TLS.
