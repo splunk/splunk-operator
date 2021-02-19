@@ -274,9 +274,9 @@ func VerifyIndexExistsOnS3(deployment *Deployment, podName string, indexName str
 }
 
 //VerifyMCConfiguredWithLM Verify that MC is configured with License Master
-func VerifyMCConfiguredWithLM(deployment *Deployment, podName string, ns string) {
+func VerifyMCConfiguredWithLM(deployment *Deployment, ns string) {
 	gomega.Eventually(func() bool {
-		McConfigured := CheckMonitoringConsoleConfigured(ns, deployment, podName)
+		McConfigured := CheckMonitoringConsoleConfigured(ns, deployment)
 		return McConfigured
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }

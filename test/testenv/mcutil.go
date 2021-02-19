@@ -178,32 +178,66 @@ func CheckStandalonePodOnMC(ns string, podName string) bool {
 	return found
 }
 
-// CheckMonitoringConsoleConfigured checks if mc is configured on given pod
-func CheckMonitoringConsoleConfigured(ns string, deployment *Deployment, podName string) bool {
-	output, err := exec.Command("kubectl", "logs", podName, "-n", ns).Output()
-	licenseDownloaded := false
-	nodeLicenced := false
-
-	if err != nil {
-		cmd := fmt.Sprintf("kubectl logs %s -n %s", podName, ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return false
+// GetAppConfigOnMC get list of app configs on Montioring Console
+func GetAppConfigOnMC(ns string) []string {
+	podName := fmt.Sprintf(MonitoringConsolePod, ns, 0)
+	var confList []string
+	var confString string
+	param := ""
+	if len(podName) > 0 {
+		confFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/app.conf"
+		output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", confFile).Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, confFile)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		}
+		for _, line := range strings.Split(string(output), "\n") {
+			// Check for empty lines to prevent an error in logic below
+			if len(line) == 0 {
+				param = ""
+				continue
+			}
+			// parameters are only available when items are configured.
+			if strings.Contains(line, "[") {
+				param = strings.Trim(line, "[]")
+			}
+			if strings.Contains(line, "=") {
+				// Splitting configs on "="
+				if strings.TrimSpace(strings.Split(line, "=")[1]) == "1" {
+					confString = strings.TrimSpace(strings.Split(line, "=")[0])
+					confList = append(confList, param+" "+confString)
+				}
+			}
+		}
 	}
+	return confList
+}
 
-	for _, line := range strings.Split(string(output), "\n") {
-		// Check for empty lines to prevent an error in logic below
-		if len(line) == 0 {
-			continue
-		}
-		// Check for specifc logs that indicate that MC was configured with LM
-		if strings.Contains(line, "item=/mnt/licenses/enterprise.lic") {
-			licenseDownloaded = true
-		} else if strings.Contains(line, "Set node as license slave") {
-			nodeLicenced = true
-		}
-		if licenseDownloaded && nodeLicenced {
-			return true
+// CheckConfigOnMC Check config on MC
+func CheckConfigOnMC(ns string, config string) bool {
+	// Get config from Monitoring Console
+	confList := GetAppConfigOnMC(ns)
+	logf.Log.Info("Conf List", "instance", confList)
+	found := false
+	for _, conf := range confList {
+		if strings.Contains(conf, config) {
+			logf.Log.Info("Check config matches conf", "Config in conf list", config)
+			found = true
+			break
 		}
 	}
-	return false
+	return found
+}
+
+// CheckMonitoringConsoleConfigured Check if mc is configured on given pod
+func CheckMonitoringConsoleConfigured(ns string, deployment *Deployment) bool {
+	searchConfig := "install is_configured"
+
+	//Check for config on Mmonitoring console
+	configFound := CheckConfigOnMC(ns, searchConfig)
+
+	//Check for LM on MC peer list
+	peerConfigured := CheckStandalonePodOnMC(ns, "license-master-service")
+
+	return configFound && peerConfigured
 }
