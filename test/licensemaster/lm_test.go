@@ -15,21 +15,12 @@ package licensemaster
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
-
-func dumpGetPods(ns string) {
-	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	for _, line := range strings.Split(string(output), "\n") {
-		testenvInstance.Log.Info(line)
-	}
-}
 
 var _ = Describe("Licensemaster test", func() {
 
