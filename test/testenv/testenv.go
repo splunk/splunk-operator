@@ -71,6 +71,12 @@ const (
 
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+
+	// ClusterMasterPod ClusterMaster Pod Template String
+	ClusterMasterPod = "splunk-%s-cluster-master-0"
+
+	// MultiSiteIndexerPod Indexer Pod Template String
+	MultiSiteIndexerPod = "splunk-%s-%s-indexer-%d"
 )
 
 var (

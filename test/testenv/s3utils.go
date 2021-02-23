@@ -20,6 +20,21 @@ var (
 	enterpriseLicenseLocation = os.Getenv("ENTERPRISE_LICENSE_LOCATION")
 )
 
+// GetSmartStoreIndexesBucet returns smartstore test bucket name
+func GetSmartStoreIndexesBucet() string {
+	return testIndexesS3Bucket
+}
+
+// GetDefaultS3Region returns default AWS Region
+func GetDefaultS3Region() string {
+	return s3Region
+}
+
+// GetS3Endpoint return s3 endpoint for smartstore test
+func GetS3Endpoint() string {
+	return "https://s3-" + s3Region + ".amazonaws.com"
+}
+
 // CheckPrefixExistsOnS3 lists object in a bucket
 func CheckPrefixExistsOnS3(prefix string) bool {
 	dataBucket := testIndexesS3Bucket
