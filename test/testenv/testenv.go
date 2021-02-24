@@ -63,11 +63,17 @@ const (
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-search-head-%d"
 
+	// SearchHeadSHCPod Template String for search head pod
+	SearchHeadSHCPod = "splunk-%s-shc-search-head-%d"
+
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
+
+	// IndexerMultisitePod Template String for indexer pod in multisite cluster
+	IndexerMultisitePod = "splunk-%s-site%d-indexer-%d"
 
 	// MonitoringConsoleSts Montioring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
