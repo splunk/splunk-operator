@@ -134,11 +134,6 @@ func (testenv *TestEnv) GetKubeClient() client.Client {
 	return testenv.kubeClient
 }
 
-// UpdateKubeClient returns the kube client to talk to kube-apiserver
-func (testenv *TestEnv) UpdateKubeClient() client.Client {
-	return testenv.kubeClient
-}
-
 // NewDefaultTestEnv creates a default test environment
 func NewDefaultTestEnv(name string) (*TestEnv, error) {
 	return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedSparkImage, specifiedLicenseFilePath)

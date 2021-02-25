@@ -254,7 +254,7 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 
 func (d *Deployment) updateCR(name string, cr runtime.Object) (runtime.Object, error) {
 
-	err := d.testenv.UpdateKubeClient().Update(context.TODO(), cr)
+	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
 	if err != nil {
 		return nil, err
 	}
