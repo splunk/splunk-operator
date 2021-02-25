@@ -74,6 +74,9 @@ const (
 
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+
+	// SecretObject Secret object Template
+	SecretObject = "splunk-%s-secret"
 )
 
 var (
@@ -128,6 +131,11 @@ func init() {
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
 func (testenv *TestEnv) GetKubeClient() client.Client {
+	return testenv.kubeClient
+}
+
+// UpdateKubeClient returns the kube client to talk to kube-apiserver
+func (testenv *TestEnv) UpdateKubeClient() client.Client {
 	return testenv.kubeClient
 }
 
