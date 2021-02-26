@@ -143,38 +143,6 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with LM", func() {
-		It("smoke: can deploy a standalone instance and a License Master", func() {
-			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to downlaod license file")
-
-			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
-
-			// Create standalone Deployment with License Master
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-			// Wait for License Master to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Verify LM is configured on standalone instance
-			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
-
-			// Verify LM is configured on MC Pod
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, testenvInstance.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, mcPodName)
-		})
-	})
-
 	Context("Standalone deployment (S1) with Service Account", func() {
 		It("smoke: can deploy a standalone instance attached to a service account", func() {
 			// Create Service Account
@@ -204,38 +172,6 @@ var _ = Describe("Smoke test", func() {
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testenvInstance.GetName(), standalonePodName, serviceAccountName)
-		})
-	})
-
-	Context("Clustered deployment (C3 - clustered indexer) with LM", func() {
-		It("smoke: can deploy indexer cluster with LM", func() {
-			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to downlaod license file")
-
-			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
-
-			// Create Cluster Master with LicenseMasterRef, IndexerCluster without LicenseMasterRef
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
-
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
-
-			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-
 		})
 	})
 })
