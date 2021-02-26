@@ -54,7 +54,7 @@ func GetSecretObject(deployment *Deployment, ns string) *SecretResponse {
 	secretObjectName := fmt.Sprintf(SecretObject, ns)
 	output, err := exec.Command("kubectl", "get", "secret", secretObjectName, "-n", ns, "-o", "jsonpath='{.data}'").Output()
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		cmd := fmt.Sprintf("kubectl get secret %s -n %s -o jsonpath='{.data}'", secretObjectName, ns)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
