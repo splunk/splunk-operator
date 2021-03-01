@@ -27,11 +27,16 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// PodDetailsStruct captures output of kubectl get pods podname -o json
+// PodDetailsStruct aa
 type PodDetailsStruct struct {
 	Spec struct {
 		ServiceAccount     string `json:"serviceAccount"`
 		ServiceAccountName string `json:"serviceAccountName"`
+	}
+	Status struct {
+		ContainerStatuses []struct {
+			Image string `json:"image"`
+		}
 	}
 }
 
@@ -252,6 +257,27 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 		}
 		logf.Log.Info("Service Account on Pod", "FOUND", restResponse.Spec.ServiceAccount, "EXPECTED", serviceAccount)
 		return strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifySplunkVersion verifies splunk image version
+func VerifySplunkVersion(deployment *Deployment, ns string, podName string, baseline string) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse JSON")
+			return false
+		}
+		logf.Log.Info("Splunk version on Pod", "FOUND", restResponse.Status.ContainerStatuses[0].Image, "EXPECTED", baseline)
+		return strings.Contains(baseline, restResponse.Status.ContainerStatuses[0].Image)
+
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
