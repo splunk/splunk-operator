@@ -44,7 +44,7 @@ When configuring ingress for use with Splunk Forwarders, the configured ingress 
 
 When creating a new Splunk instance on Kubernetes, the default network ports will be used for internal communication such as internal logs, replication, and others. Any change in how these ports are configured needs to be consistent across the cluster. 
 
-For Ingress we recommend using separate ports for encrypted and non-encrypted traffic. In this documentation we will use port 9998 for encrypted data coming from outside the cluster, while keeping the default 9997 for non-encrypted intra-cluster communication.
+For Ingress we recommend using separate ports for encrypted and non-encrypted traffic. In this documentation we will use port 9998 for encrypted data coming from outside the cluster, while keeping the default 9997 for non-encrypted intra-cluster communication. For example, this  [ServiceTemplate configuration](#serviceTemplate) creates a standalone instance with port 9998 exposed.
 
 #### Indexer Discovery not supported
 Indexer Discovery is not supported on a Kubernetes cluster. Instead, the Ingress controllers will be responsible to connect forwarders to peer nodes in Indexer clusters.
@@ -115,7 +115,7 @@ http://<LoadBalance-External-IP>
 
 #### Multiple Hosts Configuration
 
-If your deployment has multiple hosts such as Search Heads and Cluster Master, use the following example as your Gateway and Virtual Service.
+If your deployment has multiple hosts such as Search Heads and Cluster Master, use this example to configure Splunk Web access, and HTTP Event Collector port. Follow the steps here [HEC Documentation](https://docs.splunk.com/Documentation/Splunk/8.1.2/Data/UsetheHTTPEventCollector) to learn how to create a HEC token and how to send data using HTTP. 
 
 Create Gateway for multiple hosts
 ```yaml
@@ -233,6 +233,12 @@ spec:
           ttl: 3600s
 ```
 
+If you are using HTTP Event Collector, modify your `ingress-gateway` service to listen for inbound TCP connections on port 8088.
+
+```shell
+$ kubectl patch -n istio-system service istio-ingressgateway --patch '{"spec":{"ports":[{"name":"splunk-hec","port":8088,"protocol":"TCP"}]}}'
+```
+
 ### Configuring Ingress for Splunk Forwarder data
 The pre-requisites for enabling inbound communications from Splunk Forwarders to the cluster are configuring the Istio Gateway and Istio Virtual Service:
 
@@ -300,7 +306,7 @@ In this configuration Istio passes the encrypted traffic to Splunk Enterprise wi
 
 
 When using TLS for Ingress, we recommend you add an additional port for secure communication. By default, port 9997 will be assigned for non-encrypted traffic and you can use any other available port for secure communications. This example shows how to add port 9998 for a standalone instance.
-
+<a name="serviceTemplate"></a>
 ```yaml
 apiVersion: enterprise.splunk.com/v1beta1
 kind: Standalone
@@ -403,7 +409,7 @@ spec:
     istio: ingressgateway # use istio default ingress gateway
   servers:
   - port:
-      number: 9998
+      number: 9997
       name: tls-s2s
       protocol: TLS
     tls:
@@ -426,11 +432,11 @@ spec:
   - splunk-s2s
   tcp:
   - match:
-    - port: 9998
+    - port: 9997
     route:
     - destination:
         port:
-          number: 9998
+          number: 9997
         host: splunk-standalone-standalone-service
 ```
 Note that the Virtual Service no longer handles TLS since it has been terminated at the gateway.
