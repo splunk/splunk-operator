@@ -3,7 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.34.1
+	github.com/aws/aws-sdk-go v1.37.21
 	github.com/coreos/prometheus-operator v0.38.3 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.12.2
@@ -49,7 +49,5 @@ replace (
 replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
 
 replace golang.org/x/text => golang.org/x/text v0.3.5 // Fix CVE-2020-14040 and CVE-2020-28852
-
-replace github.com/coreos/prometheus-operator/pkg/client => github.com/coreos/prometheus-operator/pkg/client v0.46.0
 
 replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
