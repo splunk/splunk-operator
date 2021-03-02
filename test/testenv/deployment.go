@@ -102,7 +102,7 @@ func (d *Deployment) DeployStandalone(name string) (*enterprisev1.Standalone, er
 
 // DeployStandaloneBaseline deploys a standalone splunk enterprise instance on the specified testenv
 func (d *Deployment) DeployStandaloneBaseline(name string, baseline string) (*enterprisev1.Standalone, error) {
-	standalone := newStandaloneBaselineSplunk(name, d.testenv.namespace, baseline)
+	standalone := newStandaloneWithGivenSplunkImage(name, d.testenv.namespace, baseline)
 	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,8 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-func (d *Deployment) updateCR(cr runtime.Object) error {
+// UpdateCR update
+func (d *Deployment) UpdateCR(cr runtime.Object) error {
 
 	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
 	if err != nil {

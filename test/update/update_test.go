@@ -47,7 +47,7 @@ var _ = Describe("update test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("update: can deploy a standalone instance with old splunk version, then update it", func() {
+		It("update: can deploy a standalone instance with an older splunk version, then update it", func() {
 
 			// Deploy old Splunk version
 			baseline := "splunk/splunk:8.0.6"
@@ -58,20 +58,24 @@ var _ = Describe("update test", func() {
 			// Verify standalone goes to ready state
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Verify Splunk version before update
+			// Verify splunk version before update
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifySplunkVersion(deployment, testenvInstance.GetName(), standalonePodName, baseline)
 
 			// Update splunk version to latest
 			newImage := "splunk/splunk:latest"
-			testenv.ModifySplunkVersion(deployment, testenvInstance.GetName(), standalonePodName, standalone, newImage)
+			standalone.Spec.Image = newImage
+			err = deployment.UpdateCR(standalone)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with latest splunk version")
 
-			// Verify Splunk version has been updated to latest
+			// Verify standalone is updating
+			testenv.VerifyStandaloneUpdating(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify standalone goes to ready state
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify splunk version has been updated to latest
 			testenv.VerifySplunkVersion(deployment, testenvInstance.GetName(), standalonePodName, newImage)
-
 		})
 	})
 

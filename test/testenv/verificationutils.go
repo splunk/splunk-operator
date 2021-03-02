@@ -27,7 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// PodDetailsStruct aa
+// PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Spec struct {
 		ServiceAccount     string `json:"serviceAccount"`
@@ -261,7 +261,7 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 }
 
 // VerifySplunkVersion verifies splunk image version
-func VerifySplunkVersion(deployment *Deployment, ns string, podName string, baseline string) {
+func VerifySplunkVersion(deployment *Deployment, ns string, podName string, expectVersion string) {
 	gomega.Eventually(func() bool {
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
@@ -275,8 +275,8 @@ func VerifySplunkVersion(deployment *Deployment, ns string, podName string, base
 			logf.Log.Error(err, "Failed to parse JSON")
 			return false
 		}
-		logf.Log.Info("Splunk version on Pod", "FOUND", restResponse.Status.ContainerStatuses[0].Image, "EXPECTED", baseline)
-		return strings.Contains(baseline, restResponse.Status.ContainerStatuses[0].Image)
+		logf.Log.Info("Splunk version on Pod", "FOUND", restResponse.Status.ContainerStatuses[0].Image, "EXPECTED", expectVersion)
+		return strings.Contains(restResponse.Status.ContainerStatuses[0].Image, expectVersion)
 
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
@@ -297,4 +297,17 @@ func VerifyIndexExistsOnS3(deployment *Deployment, podName string, indexName str
 		logf.Log.Info("Checking Index on S3", "INDEX NAME", indexName, "STATUS", indexFound)
 		return indexFound
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyStandaloneUpdating Ensure standalone is scaling up
+func VerifyStandaloneUpdating(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(deploymentName, standalone)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for standalone STATUS to be updating", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
 }

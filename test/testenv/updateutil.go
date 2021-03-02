@@ -43,7 +43,7 @@ func GetSplunkVersion(deployment *Deployment, ns string, podName string) *string
 
 }
 
-//ModifySplunkVersion Modifies the specific key in secret object
+// ModifySplunkVersion updates the splunk version
 func ModifySplunkVersion(deployment *Deployment, ns string, podName string, standalone *enterprisev1.Standalone, newImage string) bool {
 	//Get current splunk version for update
 	restResponse := GetSplunkVersion(deployment, ns, podName)
@@ -53,11 +53,9 @@ func ModifySplunkVersion(deployment *Deployment, ns string, podName string, stan
 		return false
 	}
 
-	// Modify data
-	newVersion := newSplunkImage(deployment.GetName(), ns, newImage)
-	err = deployment.updateCR(newVersion)
+	err = deployment.UpdateCR(standalone)
 	if err != nil {
-		logf.Log.Error(err, "Unable to update secret object")
+		logf.Log.Error(err, "Unable to update splunk version")
 		return false
 	}
 	return true
