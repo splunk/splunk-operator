@@ -62,7 +62,6 @@ to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
 * `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
-* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
 If your cluster does not have access to pull from Docker Hub, please see the
@@ -119,7 +118,6 @@ kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
 kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
-kubectl delete spark --all
 kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
 ```
 
