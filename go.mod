@@ -3,7 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.30.12
+	github.com/aws/aws-sdk-go v1.37.24
 	github.com/coreos/prometheus-operator v0.38.3 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.12.2
