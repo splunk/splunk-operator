@@ -19,8 +19,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	//"github.com/go-logr/stdr"
@@ -225,31 +223,32 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 }
 
 //  setupInitContainer modifies the podTemplateSpec object to incorporate support for DFS.
-func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, sparkImage string, imagePullPolicy string, commandOnContainer string) {
-	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
-	containerSpec := corev1.Container{
-		Image:           sparkImage,
-		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
-		Name:            "init",
-
-		Command: []string{"bash", "-c", commandOnContainer},
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
-		},
-
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("0.25"),
-				corev1.ResourceMemory: resource.MustParse("128Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
-				corev1.ResourceMemory: resource.MustParse("512Mi"),
-			},
-		},
-	}
-	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
-}
+//func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, sparkImage string, imagePullPolicy string, commandOnContainer string) {
+//func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, imagePullPolicy string, commandOnContainer string) {
+//	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
+//	containerSpec := corev1.Container{
+//		Image:           sparkImage,
+//		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
+//		Name:            "init",
+//
+//		Command: []string{"bash", "-c", commandOnContainer},
+//		VolumeMounts: []corev1.VolumeMount{
+//			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
+//		},
+//
+//		Resources: corev1.ResourceRequirements{
+//			Requests: corev1.ResourceList{
+//				corev1.ResourceCPU:    resource.MustParse("0.25"),
+//				corev1.ResourceMemory: resource.MustParse("128Mi"),
+//			},
+//			Limits: corev1.ResourceList{
+//				corev1.ResourceCPU:    resource.MustParse("1"),
+//				corev1.ResourceMemory: resource.MustParse("512Mi"),
+//			},
+//		},
+//	}
+//	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
+//}
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource

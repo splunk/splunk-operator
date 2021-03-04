@@ -55,8 +55,8 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 		*dstP.(*enterprisev1.LicenseMaster) = *srcP.(*enterprisev1.LicenseMaster)
 	case *enterprisev1.SearchHeadCluster:
 		*dstP.(*enterprisev1.SearchHeadCluster) = *srcP.(*enterprisev1.SearchHeadCluster)
-	case *enterprisev1.Spark:
-		*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
+	// case *enterprisev1.Spark:
+	// 	*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
 	case *enterprisev1.Standalone:
 		*dstP.(*enterprisev1.Standalone) = *srcP.(*enterprisev1.Standalone)
 	default:

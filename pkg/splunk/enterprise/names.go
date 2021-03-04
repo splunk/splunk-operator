@@ -60,7 +60,7 @@ const (
 	commandMerger = " && "
 
 	// command for the init container with DFC
-	commandForDfc = "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"
+	commandForDfc = "cp -r /opt/jdk /mnt"
 
 	// command for init container on a standalone without DFC
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
@@ -81,9 +81,9 @@ const (
 	splunkdPort     = "splunkd"
 	s2sPort         = "s2s"
 	hecPort         = "hec"
-	dfccontrolPort  = "dfccontrol"
-	datareceivePort = "datareceive"
-	dfsmasterPort   = "dfsmaster"
+	//dfccontrolPort  = "dfccontrol"
+	//datareceivePort = "datareceive"
+	//dfsmasterPort   = "dfsmaster"
 
 	protoHTTP  = "http"
 	protoHTTPS = "https"
