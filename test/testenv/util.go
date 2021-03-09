@@ -86,33 +86,6 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 	return &new
 }
 
-// newStandaloneWithGivenSplunkImage creates and initializes CR for Standalone Kind with given splunk image
-func newStandaloneWithGivenSplunkImage(name, ns string, baseline string) *enterprisev1.Standalone {
-
-	new := enterprisev1.Standalone{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Standalone",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  ns,
-			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
-		},
-
-		Spec: enterprisev1.StandaloneSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-				Spec: splcommon.Spec{
-					ImagePullPolicy: "IfNotPresent",
-					Image:           baseline,
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-	}
-
-	return &new
-}
-
 // newStandaloneWithGivenSpec creates and initializes CR for Standalone Kind with given spec
 func newStandaloneWithGivenSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
 

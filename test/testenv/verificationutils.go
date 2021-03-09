@@ -30,13 +30,11 @@ import (
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Spec struct {
+		Volumes []struct {
+			Name string `json:"name"`
+		}
 		ServiceAccount     string `json:"serviceAccount"`
 		ServiceAccountName string `json:"serviceAccountName"`
-	}
-	Status struct {
-		ContainerStatuses []struct {
-			Image string `json:"image"`
-		}
 	}
 }
 
@@ -260,8 +258,8 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifySplunkVersion verifies splunk image version
-func VerifySplunkVersion(deployment *Deployment, ns string, podName string, expectVersion string) {
+// VerifyEphemeralStorage verifies volume 'mnt-splunk-etc' exists only after CR contains EphemeralStorage setting
+func VerifyEphemeralStorage(deployment *Deployment, ns string, podName string, afterUpdate bool, expectedValue string) {
 	gomega.Eventually(func() bool {
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
@@ -275,9 +273,24 @@ func VerifySplunkVersion(deployment *Deployment, ns string, podName string, expe
 			logf.Log.Error(err, "Failed to parse JSON")
 			return false
 		}
-		logf.Log.Info("Splunk version on Pod", "FOUND", restResponse.Status.ContainerStatuses[0].Image, "EXPECTED", expectVersion)
-		return strings.Contains(restResponse.Status.ContainerStatuses[0].Image, expectVersion)
-
+		result := false
+		for i := 0; i < len(restResponse.Spec.Volumes); i++ {
+			if strings.Contains(restResponse.Spec.Volumes[i].Name, expectedValue) {
+				if afterUpdate {
+					result = true
+				}
+			} else {
+				if afterUpdate == false {
+					result = true
+				}
+			}
+		}
+		if afterUpdate {
+			logf.Log.Info("Verifying volume 'mnt-splunk-etc' exists on pod after update: ", "FOUND", result, "EXPECTED", true)
+		} else {
+			logf.Log.Info("Verifying volume 'mnt-splunk-etc' does not exists on pod before update: ", "FOUND", result, "EXPECTED", true)
+		}
+		return result
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
@@ -309,5 +322,48 @@ func VerifyStandaloneUpdating(deployment *Deployment, deploymentName string, sta
 		testenvInstance.Log.Info("Waiting for standalone STATUS to be updating", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
+}
+
+// VerifyClusterMasterUpdating Ensure Cluster Master is scaling up
+func VerifyClusterMasterUpdating(deployment *Deployment, deploymentName string, clusterMaster *enterprisev1.ClusterMaster, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(deploymentName, clusterMaster)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Cluster Master STATUS to be updating", "instance", clusterMaster.ObjectMeta.Name, "Phase", clusterMaster.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return clusterMaster.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
+}
+
+// VerifyIndexerClusterUpdating Ensure Indexer Cluster is scaling up
+func VerifyIndexerClusterUpdating(deployment *Deployment, deploymentName string, indexerCluster *enterprisev1.IndexerCluster, testenvInstance *TestEnv) {
+	idc := &enterprisev1.IndexerCluster{}
+	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(instanceName, idc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Indexer Cluster STATUS to be updating", "instance", instanceName, "Phase", idc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return idc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
+}
+
+// VerifySHClusterUpdating Ensure Search Head Cluster is scaling up
+func VerifySHClusterUpdating(deployment *Deployment, deploymentName string, searchHeadCluster *enterprisev1.SearchHeadCluster, testenvInstance *TestEnv) {
+	shc := &enterprisev1.SearchHeadCluster{}
+	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(instanceName, shc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Search Head Cluster STATUS to be updating", "instance", instanceName, "Phase", shc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
 }
