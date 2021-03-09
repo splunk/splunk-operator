@@ -15,6 +15,7 @@
 package testenv
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -140,40 +141,35 @@ func MCPodReady(ns string, deployment *Deployment) {
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
-// GetSearchHeadPeersOnMC GET Search head configured on MC
-func GetSearchHeadPeersOnMC(ns string, deploymentName string, shCount int) map[string]bool {
-	// Get Peers configured on Monitoring Console
-	peerList := GetConfiguredPeers(ns)
-	found := make(map[string]bool)
-	logf.Log.Info("Peer List", "instance", peerList)
-
-	// Check for SearchHead Peers in Peer List
-	for i := 0; i < shCount; i++ {
-		podName := fmt.Sprintf(SearchHeadPod, deploymentName, i)
-		found[podName] = false
-		for _, peer := range peerList {
-			if strings.Contains(peer, podName) {
-				logf.Log.Info("Check Peer matches search head pod", "Search Head Pod", podName, "Peer in peer list", peer)
-				found[podName] = true
-				break
-			}
-		}
-	}
-	return found
-}
-
-// CheckStandalonePodOnMC Check Standalone Pod configured on MC
-func CheckStandalonePodOnMC(ns string, podName string) bool {
+// CheckPodNameOnMC Check Standalone Pod configured on MC
+func CheckPodNameOnMC(ns string, podName string) bool {
 	// Get Peers configured on Monitoring Console
 	peerList := GetConfiguredPeers(ns)
 	logf.Log.Info("Peer List", "instance", peerList)
 	found := false
 	for _, peer := range peerList {
 		if strings.Contains(peer, podName) {
-			logf.Log.Info("Check Peer matches Standalone pod", "Standalone Pod", podName, "Peer in peer list", peer)
+			logf.Log.Info("Check Peer matches on pod", "Pod Name", podName, "Peer in peer list", peer)
 			found = true
 			break
 		}
 	}
 	return found
+}
+
+// GetPodIP returns IP address of a POD as a string
+func GetPodIP(ns string, podName string) string {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return ""
+	}
+	restResponse := PodDetailsStruct{}
+	err = json.Unmarshal([]byte(output), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster searchheads")
+		return ""
+	}
+	return restResponse.Status.PodIP
 }

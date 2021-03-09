@@ -33,6 +33,19 @@ type PodDetailsStruct struct {
 		ServiceAccount     string `json:"serviceAccount"`
 		ServiceAccountName string `json:"serviceAccountName"`
 	}
+	Status struct {
+		ContainerStatuses []struct {
+			ContainerID string `json:"containerID"`
+			Image       string `json:"image"`
+			ImageID     string `json:"imageID"`
+		} `json:"containerStatuses"`
+		HostIP string `json:"hostIP"`
+		Phase  string `json:"phase"`
+		PodIP  string `json:"podIP"`
+		PodIPs []struct {
+			IP string `json:"ip"`
+		} `json:"podIPs"`
+	} `json:"status"`
 }
 
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
@@ -317,4 +330,48 @@ func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, c
 		logf.Log.Info("Config NOT found")
 		return false
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyStandaloneScalingUp verify give CR is scaling up
+func VerifyStandaloneScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		standalone := &enterprisev1.Standalone{}
+		err := deployment.GetInstance(deployment.GetName(), standalone)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for standalone status to be Scaling Up", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+}
+
+// VerifySearchHeadClusterScalingUp verify give CR is scaling up
+func VerifySearchHeadClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		shc := &enterprisev1.SearchHeadCluster{}
+		shcName := deployment.GetName() + "-shc"
+		err := deployment.GetInstance(shcName, shc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Search Head Cluster CR status to be Scaling Up", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return shc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+}
+
+// VerifyIndexerClusterScalingUp verify give CR is scaling up
+func VerifyIndexerClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		idxc := &enterprisev1.IndexerCluster{}
+		idxcName := deployment.GetName() + "-idxc"
+		err := deployment.GetInstance(idxcName, idxc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Indexer Cluster CR status to be Scaling Up", "instance", idxc.ObjectMeta.Name, "Phase", idxc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return idxc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
 }
