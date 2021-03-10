@@ -36,7 +36,7 @@ Before deploying an example, you will need to review the yaml and replace “exa
 
 #### Important Notes on using Splunk on Kubernetes 
 
-#### Load Balance Requirements
+#### Load Balancer Requirements
 
 When configuring ingress for use with Splunk Forwarders, the configured ingress load balancer must resolve to two or more IPs. This is required so the auto load balancing capability of the forwarders is preserved.
 
