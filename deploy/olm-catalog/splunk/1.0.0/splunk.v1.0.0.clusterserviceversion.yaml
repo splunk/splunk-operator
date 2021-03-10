@@ -54,7 +54,7 @@ metadata:
         "spec": {}
       }]
     capabilities: Basic Install
-  name: splunk.v0.2.3
+  name: splunk.v1.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -188,7 +188,7 @@ spec:
                   value: docker.io/splunk/splunk:8.1.2
                 - name: RELATED_IMAGE_SPLUNK_SPARK
                   value: docker.io/splunk/spark:0.0.2
-                image: docker.io/splunk/splunk-operator:0.2.3
+                image: docker.io/splunk/splunk-operator:1.0.0
                 imagePullPolicy: IfNotPresent
                 name: splunk-operator
                 resources: {}
@@ -259,4 +259,4 @@ spec:
   maturity: alpha
   provider: {}
   replaces: splunk.v0.0.0
-  version: 0.2.3
+  version: 1.0.0

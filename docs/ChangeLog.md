@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 0.2.3 Beta(2021-03-09)
+## 1.0.0 GA(2021-03-09)
 * This release updates the CRD version from v1beta1 to v1 for GA
 
 ## 0.2.2 Beta(2021-02-09)
