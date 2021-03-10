@@ -14,7 +14,9 @@
 
 package apis
 
-import v1 "k8s.io/api/apps/v1"
+import (
+	v1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+)
 
 func init() {
 	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
