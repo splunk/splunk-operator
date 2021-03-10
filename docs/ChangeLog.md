@@ -1,5 +1,8 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 0.2.3 Beta(2021-03-09)
+* This release updates the CRD version from v1beta1 to v1 for GA
+
 ## 0.2.2 Beta(2021-02-09)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.2 image with it, or alternatively any release version 8.1.0 or later
 

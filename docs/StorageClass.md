@@ -18,7 +18,7 @@ and `/opt/splunk/var` volumes by using the `storageCapacity` and `storageClassNa
 under the `etcVolumeStorageConfig` and `varVolumeStorageConfig` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -52,7 +52,7 @@ storage by using the `ephemeralStorage` field under the `etcVolumeStorageConfig`
 and `varVolumeStorageConfig` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
