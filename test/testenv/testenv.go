@@ -69,9 +69,6 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// CMPod Template String for Cluster Master pod
-	CMPod = "splunk-%s-cluster-master-%d"
-
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
@@ -83,6 +80,9 @@ const (
 
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+
+	// SecretObjectName Secret object Template
+	SecretObjectName = "splunk-%s-secret"
 )
 
 var (

@@ -14,6 +14,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
 * [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
+* [Securing Splunk Deployments in Kubernetes](Security.md)
 
 COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source product
 developed by Splunkers with contributions from the community of partners and

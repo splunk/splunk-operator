@@ -252,7 +252,7 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// UpdateCR update
+// UpdateCR method to update existing CR spec
 func (d *Deployment) UpdateCR(cr runtime.Object) error {
 
 	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
