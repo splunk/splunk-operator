@@ -80,6 +80,9 @@ const (
 
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+
+	// SecretObjectName Secret object Template
+	SecretObjectName = "splunk-%s-secret"
 )
 
 var (
