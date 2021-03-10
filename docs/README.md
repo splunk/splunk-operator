@@ -35,8 +35,10 @@ be more successful and move at a rapid pace.
 
 ## Known Issues for the Splunk Operator
 
-*Please note that the Splunk Operator is considered to be a GA release*
-
+*Please note that the Splunk Operator is undergoing active development
+and considered to be a "beta" quality release. We expect significant
+modifications will be made prior to its general availability, it is not
+covered by support, and we strongly discourage using it in production.*
 Please see the [Change Log](ChangeLog.md) for a history of changes made in
 previous releases.
 
