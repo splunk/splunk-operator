@@ -175,7 +175,7 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
 	if exists {
-		//setupInitContainer(&ss.Spec.Template, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
 	}
 
 	return ss, err

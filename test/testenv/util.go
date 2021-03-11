@@ -308,7 +308,7 @@ func newLicenseConfigMap(name, ns, localLicenseFilePath string) (*corev1.ConfigM
 	return &cm, nil
 }
 
-// func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag, sparkImageAndTag string) *appsv1.Deployment {
+//func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag, sparkImageAndTag string) *appsv1.Deployment {
 func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
 
@@ -359,10 +359,11 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 								}, {
 									Name:  "RELATED_IMAGE_SPLUNK_ENTERPRISE",
 									Value: splunkEnterpriseImageAndTag,
-								// }, {
+								},
+								//{
 								// 	Name:  "RELATED_IMAGE_SPLUNK_SPARK",
 								// 	Value: sparkImageAndTag,
-								},
+								//},
 							},
 						},
 					},

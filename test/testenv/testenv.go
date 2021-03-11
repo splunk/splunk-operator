@@ -90,7 +90,6 @@ var (
 	metricsPort              = 8383
 	specifiedOperatorImage   = defaultOperatorImage
 	specifiedSplunkImage     = defaultSplunkImage
-	// specifiedSparkImage      = defaultSparkImage
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
 	specifiedTestTimeout     = defaultTestTimeout
@@ -110,7 +109,6 @@ type TestEnv struct {
 	operatorName       string
 	operatorImage      string
 	splunkImage        string
-	// sparkImage         string
 	initialized        bool
 	SkipTeardown       bool
 	licenseFilePath    string
@@ -142,6 +140,7 @@ func (testenv *TestEnv) GetKubeClient() client.Client {
 
 // NewDefaultTestEnv creates a default test environment
 func NewDefaultTestEnv(name string) (*TestEnv, error) {
+	//return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedSparkImage, specifiedLicenseFilePath)
 	return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
 }
 
@@ -169,7 +168,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		operatorName:       "splunk-op-" + envName,
 		operatorImage:      operatorImage,
 		splunkImage:        splunkImage,
-		// sparkImage:         sparkImage,
 		SkipTeardown:       specifiedSkipTeardown,
 		licenseCMName:      envName,
 		licenseFilePath:    licenseFilePath,
@@ -441,8 +439,8 @@ func (testenv *TestEnv) createRoleBinding() error {
 }
 
 func (testenv *TestEnv) createOperator() error {
-	// op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, testenv.sparkImage)
-	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.splunkImage, testenv.operatorImage)
+	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
+	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage )
 	err := testenv.GetKubeClient().Create(context.TODO(), op)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create operator")

@@ -142,14 +142,15 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 		return nil, err
 	}
 
-	//_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
+	_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
 
 	// add spark and java mounts to search head containers
 	//if cr.Spec.SparkRef.Name != "" {
 	//	addDFCToPodTemplate(&ss.Spec.Template, cr.Spec.SparkRef, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, cr.Spec.Replicas > 1, needToSetupSplunkOperatorApp)
-	//} else if needToSetupSplunkOperatorApp {
-	//	setupInitContainer(&ss.Spec.Template, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
-	//}
+	//} else
+	if needToSetupSplunkOperatorApp {
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
+	}
 
 	return ss, nil
 }
