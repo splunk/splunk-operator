@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: LicenseMaster
 metadata:
   name: lm-example
@@ -11,7 +11,7 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: ClusterMaster
 metadata:
   name: cm-example
@@ -21,7 +21,7 @@ spec:
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: idxc-example
@@ -34,7 +34,7 @@ spec:
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: SearchHeadCluster
 metadata:
   name: shc-example

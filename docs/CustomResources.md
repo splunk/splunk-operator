@@ -32,7 +32,7 @@ you would like the resource to reside within:
 If you do not provide a `namespace`, you current context will be used.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: s1
@@ -50,7 +50,7 @@ associated with the instance when you delete it.
 ## Common Spec Parameters for All Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -81,7 +81,7 @@ configuration parameters:
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -119,11 +119,10 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
 | serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
 
-
 ## LicenseMaster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: LicenseMaster
 metadata:
   name: example
@@ -143,7 +142,7 @@ The `LicenseMaster` resource does not provide any additional configuration param
 ## Standalone Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: standalone
@@ -166,7 +165,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 ## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -185,7 +184,7 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 ## ClusterMaster Resource Spec Parameters
 ClusterMaster resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -214,7 +213,7 @@ spec:
 ## IndexerCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: example
