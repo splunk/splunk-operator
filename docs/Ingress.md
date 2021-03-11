@@ -839,19 +839,12 @@ spec:
       - backend:
           serviceName: splunk-example-license-master-service
           servicePort: 8000
-  - host: spark-master.splunk.example.com
-    http:
-      paths:
-      - backend:
-          serviceName: splunk-example-spark-master-service
-          servicePort: 8009
   tls:
   - hosts:
     - splunk.example.com
     - deployer.splunk.example.com
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
-    - spark-master.splunk.example.com
     secretName: splunk.example.com-tls
 ```
 
