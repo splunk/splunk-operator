@@ -25,7 +25,7 @@ Here is an example command to encode and load your remote storage volume secret 
 Example. Standalone.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: <name>
@@ -69,7 +69,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 Example. Clustermaster.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: ClusterMaster
 metadata:
   name: <name>

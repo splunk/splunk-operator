@@ -308,7 +308,7 @@ In this configuration Istio passes the encrypted traffic to Splunk Enterprise wi
 When using TLS for Ingress, we recommend you add an additional port for secure communication. By default, port 9997 will be assigned for non-encrypted traffic and you can use any other available port for secure communications. This example shows how to add port 9998 for a standalone instance.
 <a name="serviceTemplate"></a>
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: standalone
