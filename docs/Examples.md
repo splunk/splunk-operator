@@ -37,7 +37,7 @@ indexers. A `Standalone` resource can be used to create a single instance
 that can perform either, or both, of these roles.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: single
@@ -56,7 +56,7 @@ The Splunk Operator makes creation of an indexer cluster as easy as creating a `
 #### Cluster Master
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: ClusterMaster
 metadata:
   name: cm
@@ -67,7 +67,7 @@ EOF
 #### Indexer part
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: example
@@ -103,7 +103,7 @@ If you want more indexers, just update it to include a `replicas` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: example
@@ -161,7 +161,7 @@ metadata:
   name: idc-example
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v1beta1
+    apiVersion: enterprise.splunk.com/v1
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -181,7 +181,7 @@ have to do is add an `clusterMasterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: single
@@ -199,7 +199,7 @@ different from the indexers:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: ClusterMaster
 metadata:
   name: cm
@@ -213,7 +213,7 @@ spec:
     storageClassName: customStorageClass
     storageCapacity: 25Gi
 ---
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: idxc-part1
@@ -252,7 +252,7 @@ with an `clusterMasterRef` parameter pointing to the cluster master we created i
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -328,47 +328,6 @@ kubectl get secret splunk-`<namespace`>-secret -o jsonpath='{.data.password}' | 
 Please see [Configuring Ingress](Ingress.md) for guidance on making your
 Splunk clusters accessible outside of Kubernetes.
 
-### Creating a Cluster with Data Fabric Search (DFS)
-
-Data Fabric Search (DFS) can easily be enabled on any `Standalone` or
-`SearchHeadCluster` insteance. To use DFS, you must first create a Spark
-cluster using the `Spark` resource:
-
-```yaml
-cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
-kind: Spark
-metadata:
-  name: example
-spec:
-  replicas: 3
-EOF
-```
-
-Within seconds, this will provision a Spark master and 3 workers to use
-with DFS. Similar to indexer clusters and search head clusters, you can
-easily scale search head clusters by just patching the `replicas` parameter.
-
-Once you have a Spark cluster created, you can enable DFS by just adding the
-`sparkRef` parameter to any `Standalone` or `SearchHeadCluster` instances. For
-example, to create an additional single instance search head with DFS enabled:
-
-```yaml
-cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
-kind: Standalone
-metadata:
-  name: dfsexample
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  sparkRef:
-    name: example
-EOF
-```
-
-The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions
-
 ### Cleaning Up
 
 As these examples demonstrate, the Splunk Operator for Kubernetes makes it
@@ -383,7 +342,6 @@ To remove the resources created from this example, run
 ```
 kubectl delete standalone dfsexample
 kubectl delete standalone single
-kubectl delete spark example
 kubectl delete shc example
 kubectl delete idc example
 kubectl delete clustermaster cm
@@ -412,7 +370,7 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -471,7 +429,7 @@ You can have the Splunk Operator install these automatically using something
 like the following:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -599,9 +557,9 @@ kubectl create configmap splunk-licenses --from-file=enterprise.lic
 
 You can create a `LicenseMaster` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
- 
+
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: LicenseMaster
 metadata:
   name: example
@@ -627,7 +585,7 @@ Finally, configure all of your other Splunk Enterprise components to use
 the `LicenseMaster` by adding `licenseMasterRef` to their spec:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: IndexerCluster
 metadata:
   name: example
@@ -696,7 +654,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret objec
 Enterprise custom resource to use your External LM:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -765,7 +723,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret creat
 Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: SearchHeadCluster
 metadata:
   name: example

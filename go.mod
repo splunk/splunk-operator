@@ -3,15 +3,16 @@ module github.com/splunk/splunk-operator
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.17.7
+	github.com/Azure/go-autorest/autorest/adal v0.9.13 // indirect
+	github.com/aws/aws-sdk-go v1.37.24
+	github.com/coreos/prometheus-operator v0.38.3 // indirect
 	github.com/go-logr/logr v0.1.0
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/onsi/ginkgo v1.12.2
 	github.com/onsi/gomega v1.10.1
 	github.com/operator-framework/operator-sdk v0.15.1
 	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
+	k8s.io/api v0.17.5
+	k8s.io/apimachinery v0.17.5
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.16.2
@@ -45,3 +46,5 @@ replace (
 )
 
 replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
+
+replace golang.org/x/text => golang.org/x/text v0.3.5 // Fix CVE-2020-14040 and CVE-2020-28852

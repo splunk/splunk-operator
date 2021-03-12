@@ -14,6 +14,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
 * [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
+* [Securing Splunk Deployments in Kubernetes](Security.md)
 
 COMMUNITY SUPPORTED: Splunk Operator for Kubernetes is an open source product
 developed by Splunkers with contributions from the community of partners and
@@ -62,7 +63,6 @@ to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
 * `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
-* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
 If your cluster does not have access to pull from Docker Hub, please see the
@@ -86,7 +86,7 @@ information.
 
 Most users can install and start the Splunk Operator by just running
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.1/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
 ```
 
 Users of Red Hat OpenShift should read the additional
@@ -119,8 +119,7 @@ kubectl delete licensemasters --all
 kubectl delete searchheadclusters --all
 kubectl delete clustermasters --all
 kubectl delete indexerclusters --all
-kubectl delete spark --all
-kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.1/splunk-operator-install.yaml
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
 ```
 
 
@@ -132,7 +131,7 @@ deployment named “s1”:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: s1

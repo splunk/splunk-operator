@@ -1,5 +1,28 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 0.2.2 Beta(2021-02-09)
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.2 image with it, or alternatively any release version 8.1.0 or later
+
+* This release updates the CRDs which may require updates to the custom resources being used in existing deployments
+
+* CSPL-526 - Enhanced ingress documentation with guidelines on ingesting data into the K8S cluster using ingress controllers(istio, nginx)
+
+* CSPL-564 - Changed the way licenseMasterRef is configured on the ClusterMaster and IndexerCluster CRDs
+
+* CSPL-609 - Added a shortname stdaln for the Standalone CRD
+
+* CSPL-637 - Updated Splunk port names to conform with Istio ingress controllers convention
+
+* CSPL-660 - Separated storage class specifications for etc and var volumes
+
+* CSPL-663 - Optimize deployment of Splunk apps on SHC using new parameter defaultsUrlApps
+
+* CSPL-694 - Avoid unnecessary pod resets
+
+* CSPL-720 - Added support to configure a custom service account per Splunk Enterprise CRD
+
+* CSPL-721 - Mounted etc and var as emptyDirs volumes on the monitoring console
+
 ## 0.2.1 Beta(2020-12-15)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You must use the latest splunk/splunk:edge nightly image with it, or alternatively any release version 8.1.0 or later
 

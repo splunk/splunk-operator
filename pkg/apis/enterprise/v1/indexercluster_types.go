@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1beta1
+package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,9 +94,6 @@ type IndexerClusterStatus struct {
 
 	// Indicates if the cluster is in maintenance mode.
 	MaintenanceMode bool `json:"maintenance_mode"`
-
-	// Indicates if we need to recheck the revision update on pods
-	SkipRecheckUpdate bool `json:"skip_recheck_update"`
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`

@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -263,8 +263,18 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// DeploySingleSiteCluster deploys a lm, indexer and sh clusters
-func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
+// UpdateCR method to update existing CR spec
+func (d *Deployment) UpdateCR(cr runtime.Object) error {
+
+	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, shc bool) error {
 
 	var licenseMaster string
 
@@ -291,9 +301,12 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) e
 		return err
 	}
 
-	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
-	if err != nil {
-		return err
+	// Deploy the SH cluster
+	if shc {
+		_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

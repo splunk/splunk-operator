@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -294,9 +294,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	extraCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
 
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}

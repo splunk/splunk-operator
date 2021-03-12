@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1beta1
+package v1
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -108,9 +108,6 @@ type SearchHeadClusterStatus struct {
 
 	// Indicates resource version of namespace scoped secret
 	NamespaceSecretResourceVersion string `json:"namespace_scoped_secret_resource_version"`
-
-	// Indicates if we need to recheck the revision update on pods
-	SkipRecheckUpdate bool `json:"skip_recheck_update"`
 
 	// status of each search head cluster member
 	Members []SearchHeadClusterMemberStatus `json:"members"`
