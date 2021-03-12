@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -656,6 +657,22 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 	}
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_CERT_PREFIX",
+			Value: "http",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+	}
+	if os.Getenv("SPLUNK_HEC_SSL") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_HEC_SSL",
+			Value: "false",
+		})
+	}
 
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {
@@ -665,13 +682,16 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		licenseMasterName := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		var namespace string
+		if spec.LicenseMasterRef.Namespace == "" {
+			namespace = cr.GetNamespace()
+		} else {
+			namespace = spec.LicenseMasterRef.Namespace
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: splcommon.GetServiceURI(namespace, licenseMasterName),
 		})
 	}
 
@@ -683,7 +703,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterMasterURL = splcommon.GetServiceURI(spec.ClusterMasterRef.Namespace, clusterMasterURL)
 		}
 		//Check if CM is connected to a LicenseMaster
 		namespacedName := types.NamespacedName{
