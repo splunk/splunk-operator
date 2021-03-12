@@ -21,13 +21,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // getSparkLabels returns a map of labels to use for Spark components.
 func getSparkLabels(identifier string, instanceType InstanceType) map[string]string {
-	return splcommon.GetLabels("spark", instanceType.ToString(), identifier, identifier, make([]string, 0))
+	labels, _ := splcommon.GetLabels("spark", instanceType.ToString(), identifier, identifier, make([]string, 0))
+	return labels
 }
 
 // getSparkMasterPorts returns a map of ports to use for Spark master instances.

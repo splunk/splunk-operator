@@ -12,7 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package v1beta1 contains API Schema definitions for the enterprise v1beta1 API group
-// +k8s:deepcopy-gen=package,register
-// +groupName=enterprise.splunk.com
-package v1beta1
+package apis
+
+import (
+	v1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+)
+
+func init() {
+	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
+	AddToSchemes = append(AddToSchemes, v1.SchemeBuilder.AddToScheme)
+}
