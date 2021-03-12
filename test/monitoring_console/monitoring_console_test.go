@@ -15,14 +15,12 @@ package monitoringconsoletest
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -54,7 +52,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			standaloneOneName := deployment.GetName()
 			standaloneOne, err := deployment.DeployStandalone(standaloneOneName)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standaloneOne, testenvInstance)
@@ -75,7 +73,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Add another standalone instance in namespace
 			testenvInstance.Log.Info("Adding second standalone deployment to namespace")
-			standaloneTwoName := deployment.GetName() + "-two"
+			// CSPL-901 standaloneTwoName := deployment.GetName() + "-two"
+			standaloneTwoName := "standalone-" + testenv.RandomDNSName(2)
 			standaloneTwo, err := deployment.DeployStandalone(standaloneTwoName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
@@ -87,26 +86,18 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Check Monitoring console is configured with all standalone instances in namespace
 			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName())
-			configuredStandaloneOne := false
-			confguredStandaloneTwo := false
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Only 2 peers expected in MC peer list
 			Expect(len(peerList)).To(Equal(2))
 
+			// Verify Pod Name in Peer List
 			podNameOne := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
 			podNameTwo := fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0)
-			for _, peer := range peerList {
-				if strings.Contains(peer, podNameOne) {
-					testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podNameOne, "Peer in peer list", peer)
-					configuredStandaloneOne = true
-				}
-				if strings.Contains(peer, podNameTwo) {
-					confguredStandaloneTwo = true
-					testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podNameTwo, "Peer in peer list", peer)
-				}
-			}
-			Expect(configuredStandaloneOne && confguredStandaloneTwo).To(Equal(true))
+			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameOne)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameOne), true)
+			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameTwo)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameTwo), true)
 		})
 	})
 
@@ -132,25 +123,22 @@ var _ = Describe("Monitoring Console test", func() {
 			// Check spluk standlone pods are configured in MC peer list
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName, "Peer in peer list", peerList[0])
-			Expect(testenv.CheckStandalonePodOnMC(testenvInstance.GetName(), podName)).To(Equal(true))
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)).To(Equal(true))
 
 			// Scale Standalone instance
-			testenvInstance.Log.Info("Scaling standalone cluster")
+			testenvInstance.Log.Info("Scaling Standalone CR")
 			scaledReplicaCount := 2
-			replicas := fmt.Sprintf("--replicas=%d", scaledReplicaCount)
-			_, err = exec.Command("kubectl", "scale", "standalone", "-n", testenvInstance.GetName(), deployment.GetName(), replicas).Output()
-			Expect(err).To(Succeed(), "Failed to execute scale up command")
+			standalone = &enterprisev1.Standalone{}
+			err = deployment.GetInstance(deployment.GetName(), standalone)
+			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+
+			standalone.Spec.Replicas = int32(scaledReplicaCount)
+
+			err = deployment.UpdateCR(standalone)
+			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
-			Eventually(func() splcommon.Phase {
-				err := deployment.GetInstance(deployment.GetName(), standalone)
-				if err != nil {
-					return splcommon.PhaseError
-				}
-				testenvInstance.Log.Info("Waiting for standalone status to be Scaling Up", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
-				testenv.DumpGetPods(testenvInstance.GetName())
-				return standalone.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseScalingUp))
+			testenv.VerifyStandaloneScalingUp(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -163,28 +151,28 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Peers in configuredPeer List", "count", len(peerList))
 			Expect(len(peerList)).To(Equal(2))
 
-			// Check standalone pods are configured  in MC Peer List
-			found := make(map[string]bool)
-			for i := 0; i < 2; i++ {
-				podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), i)
-				found[podName] = testenv.CheckStandalonePodOnMC(testenvInstance.GetName(), podName)
-			}
-			allStandaloneConfigured := true
-			for _, key := range found {
-				if !key {
-					allStandaloneConfigured = false
-					break
-				}
-			}
-			Expect(allStandaloneConfigured).To(Equal(true))
+			// Verify Pod Name in Peer List
+			podNameTwo := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)
+			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podName)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName), true)
+			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameTwo)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameTwo), true)
 		})
 	})
 
-	Context("SearchHeadCluster deployment with Scale Up", func() {
-		It("monitoring_console: MC can configure SHC instances after scale up in a namespace", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("monitoring_console: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 
-			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")
+			defaultSHReplicas := 3
+			defaultIndexerReplicas := 3
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), defaultIndexerReplicas, true)
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
@@ -193,80 +181,57 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Check Monitoring console is configured with all search head instances in namespace
-			defaultSHReplicas := 3
-			found := testenv.GetSearchHeadPeersOnMC(testenvInstance.GetName(), deployment.GetName(), defaultSHReplicas)
-			allSearchHeadsConfigured := true
-			for _, key := range found {
-				if !key {
-					allSearchHeadsConfigured = false
-					break
-				}
+			for i := 0; i < defaultSHReplicas; i++ {
+				podName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
+				testenvInstance.Log.Info("Checking for Search Head on MC", "Search Head Name", podName)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)
+				Expect(found).To(Equal(true))
 			}
-			Expect(allSearchHeadsConfigured).To(Equal(true))
+
+			// Check Monitoring console is configured with all Indexer in Name Space
+			for i := 0; i < defaultIndexerReplicas; i++ {
+				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
+				podIP := testenv.GetPodIP(testenvInstance.GetName(), podName)
+				testenvInstance.Log.Info("Checking for Indexer Pod on MC", "Search Head Name", podName, "IP Address", podIP)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podIP)
+				Expect(found).To(Equal(true))
+			}
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
-			testenvInstance.Log.Info("Scaling search head cluster")
-			replicas := fmt.Sprintf("--replicas=%d", scaledSHReplicas)
-			_, err = exec.Command("kubectl", "scale", "shc", "-n", testenvInstance.GetName(), deployment.GetName(), replicas).Output()
-			Expect(err).To(Succeed(), "Failed to scale search head cluster")
+			testenvInstance.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
+			shcName := deployment.GetName() + "-shc"
 
-			// Ensure search head cluster go to ScalingUp phase
+			// Get instance of current SHC CR with latest config
 			shc := &enterprisev1.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
-			Eventually(func() splcommon.Phase {
-				err := deployment.GetInstance(deployment.GetName(), shc)
-				if err != nil {
-					return splcommon.PhaseError
-				}
-				testenvInstance.Log.Info("Waiting for search head cluster STATUS to be Scaling Up", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
-				testenv.DumpGetPods(testenvInstance.GetName())
-				return shc.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseScalingUp))
+			// Update Replicas of SHC
+			shc.Spec.Replicas = int32(scaledSHReplicas)
+			err = deployment.UpdateCR(shc)
+			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
 
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			// Ensure Search Head cluster scales up and go to ScalingUp phase
+			testenv.VerifySearchHeadClusterScalingUp(deployment, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Scale indexers
+			scaledIndexerReplicas := defaultIndexerReplicas + 1
+			testenvInstance.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+			idxcName := deployment.GetName() + "-idxc"
 
-			// Check Monitoring console is configured with all search head instances in namespace
-			found = testenv.GetSearchHeadPeersOnMC(testenvInstance.GetName(), deployment.GetName(), scaledSHReplicas)
+			// Get instance of current Indexer CR with latest config
+			idxc := &enterprisev1.IndexerCluster{}
+			err = deployment.GetInstance(idxcName, idxc)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
-			allSearchHeadsConfigured = true
-			for _, key := range found {
-				if !key {
-					allSearchHeadsConfigured = false
-					break
-				}
-			}
-			Expect(allSearchHeadsConfigured).To(Equal(true))
-		})
-	})
+			// Update Replicas of Indexer Cluster
+			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
+			err = deployment.UpdateCR(idxc)
+			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
 
-	Context("SearchHeadCluster and Standalone", func() {
-		It("monitoring_console: MC can configure SHC and Standalone instances in a namespace", func() {
-
-			_, err := deployment.DeploySearchHeadCluster(deployment.GetName(), "", "", "")
-			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Check Monitoring console is configured with all search head instances in namespace
-			defaultSHReplicas := 3
-			found := testenv.GetSearchHeadPeersOnMC(testenvInstance.GetName(), deployment.GetName(), defaultSHReplicas)
-			allSearchHeadsConfigured := true
-			for _, key := range found {
-				if !key {
-					allSearchHeadsConfigured = false
-					break
-				}
-			}
-			Expect(allSearchHeadsConfigured).To(Equal(true))
+			// Ensure Indxer cluster scales up and go to ScalingUp phase
+			testenv.VerifyIndexerClusterScalingUp(deployment, testenvInstance)
 
 			// Deploy Standalone
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
@@ -275,25 +240,37 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Ensure Indexer cluster go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure Search Head Cluster go to Ready Phase
+			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
 			// Wait for Monitoring Console Pod to be in READY status
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
-			// Get Search Head Pods configured on Monitoring Console
-			found = testenv.GetSearchHeadPeersOnMC(testenvInstance.GetName(), deployment.GetName(), 3)
-
 			// Check Standalone configured on Monitoring Console
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			found[podName] = testenv.CheckStandalonePodOnMC(testenvInstance.GetName(), podName)
+			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)).To(Equal(true))
 
-			// Verify all instances are configured on Monitoring Console
-			allInstancesConfigured := true
-			for _, key := range found {
-				if !key {
-					allInstancesConfigured = false
-					break
-				}
+			// Verify all Search Head Members are configured on Monitoring Console
+			for i := 0; i < scaledSHReplicas; i++ {
+				podName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
+				testenvInstance.Log.Info("Checking for Search Head on MC after adding Standalone", "Search Head Name", podName)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)
+				Expect(found).To(Equal(true))
 			}
-			Expect(allInstancesConfigured).To(Equal(true))
+
+			// Check Monitoring console is configured with all Indexer in Name Space
+			for i := 0; i < scaledIndexerReplicas; i++ {
+				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
+				podIP := testenv.GetPodIP(testenvInstance.GetName(), podName)
+				testenvInstance.Log.Info("Checking for Indexer Pod on MC", "Search Head Name", podName, "IP Address", podIP)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podIP)
+				Expect(found).To(Equal(true))
+			}
 		})
 	})
 })

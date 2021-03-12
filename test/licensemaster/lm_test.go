@@ -79,11 +79,11 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 
 			// Verify LM is configured on SHs
-			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 0)
+			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 1)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 2)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 		})
 	})
@@ -129,11 +129,11 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 
 			// Verify LM is configured on SHs
-			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 0)
+			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 1)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadSHCPod, deployment.GetName(), 2)
+			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 		})
 	})

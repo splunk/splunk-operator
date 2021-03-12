@@ -267,10 +267,7 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 func (d *Deployment) UpdateCR(cr runtime.Object) error {
 
 	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)

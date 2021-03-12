@@ -61,10 +61,7 @@ const (
 	DefaultTimeout = 5 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
-	SearchHeadPod = "splunk-%s-search-head-%d"
-
-	// SearchHeadSHCPod Template String for search head pod
-	SearchHeadSHCPod = "splunk-%s-shc-search-head-%d"
+	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
