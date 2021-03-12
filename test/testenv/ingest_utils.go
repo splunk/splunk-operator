@@ -223,10 +223,18 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
 func cpMakeTar(srcPath, destPath string, writer io.Writer) error
 
-// IngestFileViaMonitor ingests a file into an instance using the oneshot CLI
+// IngestFileViaMonitor ingests a file into an instance using the monitor CLI
 func IngestFileViaMonitor(logFile string, indexName string, podName string, deployment *Deployment) error {
 
-	// Monitor log into specified index
+	// Send it to the instance
+	resp, stderr, cpErr := CopyFileToPod(podName, logFile, logFile, deployment)
+	if cpErr != nil {
+		logf.Log.Error(cpErr, "Failed File Copy to pod", "logFile", logFile, "podName", podName, "stderr", stderr)
+		return cpErr
+	}
+	logf.Log.Info("File Copied Successfully", "logFile", logFile, "resp", resp)
+
+	/// Monitor log into specified index
 	var addMonitorCmd strings.Builder
 	splunkBin := "/opt/splunk/bin/splunk"
 	username := "admin"

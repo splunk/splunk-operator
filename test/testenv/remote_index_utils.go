@@ -7,37 +7,55 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// dataIndexesResponse struct for /data/indexes response
-type dataIndexesResponse struct {
-	Entry []struct {
-		Name string `json:"name"`
-	} `json:"entry"`
+// DataIndexesResponse struct for /data/indexes response
+type DataIndexesResponse struct {
+	Entry []IndexEntry `json:"entry"`
 }
 
-// GetIndexOnPod get list of indexes on given pod
-func GetIndexOnPod(deployment *Deployment, podName string, indexName string) bool {
+// IndexEntry struct of index data response returned by /data/indexes endpoint
+type IndexEntry struct {
+	Name    string `json:"name"`
+	Content struct {
+		MaxGlobalDataSizeMB    int `json:"maxGlobalDataSizeMB"`
+		MaxGlobalRawDataSizeMB int `json:"maxGlobalRawDataSizeMB"`
+	}
+}
+
+// GetServiceDataIndexes returns output of services data indexes
+func GetServiceDataIndexes(deployment *Deployment, podName string) (DataIndexesResponse, error) {
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/data/indexes?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	restResponse := DataIndexesResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
+		return restResponse, err
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := dataIndexesResponse{}
 	err = json.Unmarshal([]byte(stdout), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse data/indexes response")
-		return false
+	}
+	return restResponse, err
+}
+
+// GetIndexOnPod get list of indexes on given pod
+func GetIndexOnPod(deployment *Deployment, podName string, indexName string) (bool, IndexEntry) {
+	restResponse, err := GetServiceDataIndexes(deployment, podName)
+	indexData := IndexEntry{}
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse data/indexes response")
+		return false, indexData
 	}
 	indexFound := false
 	for _, entry := range restResponse.Entry {
 		if entry.Name == indexName {
 			indexFound = true
+			indexData = entry
 			break
 		}
 	}
-	return indexFound
+	return indexFound, indexData
 }
 
 // RestartSplunk Restart splunk inside the container
@@ -67,7 +85,7 @@ func RollHotToWarm(deployment *Deployment, podName string, indexName string) boo
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values
-func GenerateIndexVolumeSpec(volumeName string, endpoint string, Path string, secretRef string) enterprisev1.VolumeSpec {
+func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string) enterprisev1.VolumeSpec {
 	return enterprisev1.VolumeSpec{
 		Name:      volumeName,
 		Endpoint:  endpoint,
