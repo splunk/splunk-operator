@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 )
 
 const (
@@ -61,10 +61,7 @@ const (
 	DefaultTimeout = 5 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
-	SearchHeadPod = "splunk-%s-search-head-%d"
-
-	// SearchHeadSHCPod Template String for search head pod
-	SearchHeadSHCPod = "splunk-%s-shc-search-head-%d"
+	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
@@ -80,6 +77,12 @@ const (
 
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+
+	// ClusterMasterPod ClusterMaster Pod Template String
+	ClusterMasterPod = "splunk-%s-cluster-master-0"
+
+	// MultiSiteIndexerPod Indexer Pod Template String
+	MultiSiteIndexerPod = "splunk-%s-%s-indexer-%d"
 
 	// SecretObjectName Secret object Template
 	SecretObjectName = "splunk-%s-secret"

@@ -4,16 +4,23 @@ The Splunk Operator requires three docker images to be present or available to y
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
 * `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
-* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of these images are publicly available, and published on [Docker Hub](https://hub.docker.com/).
 
 If your cluster does not have access to pull directly from Docker Hub, you will need to manually download and push these images to an accessible registry. You will also need to specify the location of these images by using an environment variable passed to the operator, or by adding additional `spec` parameters to your 
 custom resource definition.
 
+<<<<<<< HEAD
 Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image` custom resource parameter to change the location of your Splunk Enterprise image. Use the `RELATED_IMAGE_SPLUNK_SPARK` environment variable or the`sparkImage` parameter to change the location of the Spark image. 
 
 For additional detail, see the [Advanced Installation Instructions](Install.md) page, and the [Custom Resource Guide](CustomResources.md) page.
+=======
+Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image`
+custom resource parameter to change the location of the Splunk Enterprise
+image. Please see the
+[Advanced Installation Instructions](Install.md) or
+[Custom Resource Guide](CustomResources.md) for more details.
+>>>>>>> develop
 
 
 ## Using a Private Registry

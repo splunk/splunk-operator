@@ -14,7 +14,7 @@ You can customize the storage capacity and storage class name used by the `/opt/
 For example:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example
@@ -45,7 +45,7 @@ For testing and demonstration of Splunk Enterprise instances, you have the optio
 For example:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: example

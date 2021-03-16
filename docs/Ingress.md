@@ -310,7 +310,7 @@ This example shows how to add port 9998 for a standalone instance:
 
 <a name="serviceTemplate"></a>
 ```yaml
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: standalone
@@ -848,19 +848,12 @@ spec:
       - backend:
           serviceName: splunk-example-license-master-service
           servicePort: 8000
-  - host: spark-master.splunk.example.com
-    http:
-      paths:
-      - backend:
-          serviceName: splunk-example-spark-master-service
-          servicePort: 8009
   tls:
   - hosts:
     - splunk.example.com
     - deployer.splunk.example.com
     - cluster-master.splunk.example.com
     - license-master.splunk.example.com
-    - spark-master.splunk.example.com
     secretName: splunk.example.com-tls
 ```
 

@@ -50,7 +50,6 @@ The Splunk Operator requires these docker images to be present or available to y
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
 * `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
-* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -77,6 +76,19 @@ NAME                               READY   STATUS    RESTARTS   AGE
 splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ```
 
+<<<<<<< HEAD
+=======
+To remove all Splunk deployments and completely remove the
+Splunk Operator, run:
+```
+kubectl delete standalones --all
+kubectl delete licensemasters --all
+kubectl delete searchheadclusters --all
+kubectl delete clustermasters --all
+kubectl delete indexerclusters --all
+kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
+```
+>>>>>>> develop
 
 ## Creating a Splunk Enterprise deployment
 
@@ -87,7 +99,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1beta1
+apiVersion: enterprise.splunk.com/v1
 kind: Standalone
 metadata:
   name: s1
