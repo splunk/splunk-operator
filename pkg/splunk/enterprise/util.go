@@ -16,14 +16,14 @@ package enterprise
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	//"github.com/go-logr/stdr"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"

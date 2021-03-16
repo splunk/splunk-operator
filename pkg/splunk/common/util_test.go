@@ -566,7 +566,7 @@ func TestGetIstioAnnotations(t *testing.T) {
 
 func TestGetLabels(t *testing.T) {
 	test := func(component, name, instanceIdentifier string, partOfIdentifier string, want map[string]string) {
-		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier, make([]string, 0))
+		got, _ := GetLabels(component, name, instanceIdentifier, partOfIdentifier, make([]string, 0))
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
 		}
@@ -597,8 +597,11 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/instance":   "splunk-site1-indexer",
 	})
 
-	testNew := func(component, name, instanceIdentifier string, partOfIdentifier string, selectFew []string, want map[string]string) {
-		got := GetLabels(component, name, instanceIdentifier, partOfIdentifier, selectFew)
+	testNew := func(component, name, instanceIdentifier string, partOfIdentifier string, selectFew []string, want map[string]string, expectedErr string) {
+		got, err := GetLabels(component, name, instanceIdentifier, partOfIdentifier, selectFew)
+		if err != nil && expectedErr != err.Error() {
+			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") expected Error %s, got error %s", component, name, instanceIdentifier, partOfIdentifier, expectedErr, err.Error())
+		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
 		}
@@ -612,19 +615,18 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-master",
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
 		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
-	})
+	}, "")
 
 	// Test a few labels using selectFew option
 	selectFewPartial := []string{"manager", "component"}
 	testNew("indexer", "cluster-master", "t1", "t1", selectFewPartial, map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
-	})
+	}, "")
 
 	// Test incorrect label
 	selectFewIncorrect := []string{"randomvalue"}
-	testNew("indexer", "cluster-master", "t1", "t1", selectFewIncorrect, map[string]string{})
-
+	testNew("indexer", "cluster-master", "t1", "t1", selectFewIncorrect, map[string]string{}, "Incorrect label type randomvalue")
 }
 
 func TestAppendPodAffinity(t *testing.T) {

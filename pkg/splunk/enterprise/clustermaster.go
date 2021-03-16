@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"time"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 

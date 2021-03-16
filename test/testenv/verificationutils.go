@@ -22,7 +22,7 @@ import (
 
 	gomega "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -33,6 +33,19 @@ type PodDetailsStruct struct {
 		ServiceAccount     string `json:"serviceAccount"`
 		ServiceAccountName string `json:"serviceAccountName"`
 	}
+	Status struct {
+		ContainerStatuses []struct {
+			ContainerID string `json:"containerID"`
+			Image       string `json:"image"`
+			ImageID     string `json:"imageID"`
+		} `json:"containerStatuses"`
+		HostIP string `json:"hostIP"`
+		Phase  string `json:"phase"`
+		PodIP  string `json:"podIP"`
+		PodIPs []struct {
+			IP string `json:"ip"`
+		} `json:"podIPs"`
+	} `json:"status"`
 }
 
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
@@ -187,11 +200,11 @@ func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
 
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster master
 func VerifyNoDisconnectedSHPresentOnCM(deployment *Deployment, testenvInstance *TestEnv) {
-	gomega.Eventually(func() bool {
+	gomega.Consistently(func() bool {
 		shStatus := CheckSearchHeadRemoved(deployment)
 		testenvInstance.Log.Info("Verifying no SH in DISCONNECTED state present on CM", "Status", shStatus)
 		return shStatus
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyNoSHCInNamespace verify no SHC is present in namespace
@@ -229,15 +242,15 @@ func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
 func VerifyLMConfiguredOnPod(deployment *Deployment, podName string) {
-	gomega.Eventually(func() bool {
+	gomega.Consistently(func() bool {
 		lmConfigured := CheckLicenseMasterConfigured(deployment, podName)
 		return lmConfigured
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyServiceAccountConfiguredOnPod check if given service account is configured on given pod
 func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podName string, serviceAccount string) {
-	gomega.Eventually(func() bool {
+	gomega.Consistently(func() bool {
 		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
 		if err != nil {
 			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
@@ -252,23 +265,113 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 		}
 		logf.Log.Info("Service Account on Pod", "FOUND", restResponse.Spec.ServiceAccount, "EXPECTED", serviceAccount)
 		return strings.Contains(serviceAccount, restResponse.Spec.ServiceAccount)
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyIndexFoundOnPod verify index found on a given POD
 func VerifyIndexFoundOnPod(deployment *Deployment, podName string, indexName string) {
-	gomega.Eventually(func() bool {
-		indexFound := GetIndexOnPod(deployment, podName, indexName)
+	gomega.Consistently(func() bool {
+		indexFound, _ := GetIndexOnPod(deployment, podName, indexName)
 		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
+		return indexFound
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyIndexConfigsMatch verify index specific config
+func VerifyIndexConfigsMatch(deployment *Deployment, podName string, indexName string, maxGlobalDataSizeMB int, maxGlobalRawDataSizeMB int) {
+	gomega.Consistently(func() bool {
+		indexFound, data := GetIndexOnPod(deployment, podName, indexName)
+		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
+		if indexFound == true {
+			if data.Content.MaxGlobalDataSizeMB == maxGlobalDataSizeMB && data.Content.MaxGlobalRawDataSizeMB == maxGlobalRawDataSizeMB {
+				logf.Log.Info("Checking index configs", "MaxGlobalDataSizeMB", data.Content.MaxGlobalDataSizeMB, "MaxGlobalRawDataSizeMB", data.Content.MaxGlobalRawDataSizeMB)
+				return true
+			}
+		}
+		return false
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyIndexExistsOnS3 Verify Index Exists on S3
+func VerifyIndexExistsOnS3(deployment *Deployment, indexName string, podName string) {
+	gomega.Eventually(func() bool {
+		indexFound := CheckPrefixExistsOnS3(indexName)
+		logf.Log.Info("Checking Index on S3", "INDEX NAME", indexName, "STATUS", indexFound)
+		// During testing found some false failure. Rolling index buckets again to ensure data is pushed to remote storage
+		if !indexFound {
+			logf.Log.Info("Index NOT found. Rolling buckets again", "Index Name", indexName)
+			RollHotToWarm(deployment, podName, indexName)
+		}
 		return indexFound
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyIndexExistsOnS3 Verify Index Exists on S3
-func VerifyIndexExistsOnS3(deployment *Deployment, podName string, indexName string) {
+// VerifyRollingRestartFinished verify no rolling restart is active
+func VerifyRollingRestartFinished(deployment *Deployment) {
 	gomega.Eventually(func() bool {
-		indexFound := CheckPrefixExistsOnS3(indexName)
-		logf.Log.Info("Checking Index on S3", "INDEX NAME", indexName, "STATUS", indexFound)
-		return indexFound
+		rollingRestartStatus := CheckRollingRestartStatus(deployment)
+		logf.Log.Info("Rolling Restart Status", "Active", rollingRestartStatus)
+		return rollingRestartStatus
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyConfOnPod Verify give conf and value on config file on pod
+func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, confFilePath string, config string, value string) {
+	gomega.Consistently(func() bool {
+		confLine, err := GetConfLineFromPod(podName, confFilePath, namespace, config)
+		if err != nil {
+			logf.Log.Error(err, "Failed to get config on pod")
+			return false
+		}
+		if strings.Contains(confLine, config) && strings.Contains(confLine, value) {
+			logf.Log.Info("Config found", "Config", config, "Value", value, "Conf Line", confLine)
+			return true
+		}
+		logf.Log.Info("Config NOT found")
+		return false
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyStandaloneScalingUp verify give CR is scaling up
+func VerifyStandaloneScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		standalone := &enterprisev1.Standalone{}
+		err := deployment.GetInstance(deployment.GetName(), standalone)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for standalone status to be Scaling Up", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+}
+
+// VerifySearchHeadClusterScalingUp verify give CR is scaling up
+func VerifySearchHeadClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		shc := &enterprisev1.SearchHeadCluster{}
+		shcName := deployment.GetName() + "-shc"
+		err := deployment.GetInstance(shcName, shc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Search Head Cluster CR status to be Scaling Up", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return shc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+}
+
+// VerifyIndexerClusterScalingUp verify give CR is scaling up
+func VerifyIndexerClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		idxc := &enterprisev1.IndexerCluster{}
+		idxcName := deployment.GetName() + "-idxc"
+		err := deployment.GetInstance(idxcName, idxc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Indexer Cluster CR status to be Scaling Up", "instance", idxc.ObjectMeta.Name, "Phase", idxc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return idxc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
 }

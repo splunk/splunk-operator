@@ -22,7 +22,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "smartore-" + testenv.RandomDNSName(2)
+	testSuiteName   = "smartstore-" + testenv.RandomDNSName(2)
 )
 
 // TestBasic is the main entry point
