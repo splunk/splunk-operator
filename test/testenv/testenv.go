@@ -438,7 +438,7 @@ func (testenv *TestEnv) createRoleBinding() error {
 
 func (testenv *TestEnv) createOperator() error {
 	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
-	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage )
+	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
 	err := testenv.GetKubeClient().Create(context.TODO(), op)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create operator")
