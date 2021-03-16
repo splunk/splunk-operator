@@ -34,13 +34,6 @@ type SearchHeadClusterSpec struct {
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
-
-	// SparkRef refers to a Spark cluster managed by the operator within Kubernetes
-	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
-	//SparkRef corev1.ObjectReference `json:"sparkRef"`
-
-	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
-	//SparkImage string `json:"sparkImage"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

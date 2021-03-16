@@ -22,20 +22,20 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
 
   # Don't pull splunk operator if exists locally since we maybe building it locally
-  #if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
-  #  docker pull ${SPLUNK_OPERATOR_IMAGE}
-  #  if [ $? -ne 0 ]; then
-  #   echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
-  #   exit 1
-  #  fi
-  #fi
+  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
+    docker pull ${SPLUNK_OPERATOR_IMAGE}
+    if [ $? -ne 0 ]; then
+     echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
+     exit 1
+    fi
+  fi
 
-  #docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  #docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  #if [ $? -ne 0 ]; then
-  #  echo "Unable to push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}. Exiting..."
-  #  exit 1
-  #fi
+  docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
+  docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
+  if [ $? -ne 0 ]; then
+    echo "Unable to push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}. Exiting..."
+    exit 1
+  fi
 
   # Always attempt to pull splunk enterprise image
   docker pull ${SPLUNK_ENTERPRISE_IMAGE}

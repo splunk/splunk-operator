@@ -35,13 +35,6 @@ type StandaloneSpec struct {
 	// Number of standalone pods
 	Replicas int32 `json:"replicas"`
 
-	// SparkRef refers to a Spark cluster managed by the operator within Kubernetes
-	// When defined, Data Fabric Search (DFS) will be enabled and configured to use the Spark cluster.
-	//SparkRef corev1.ObjectReference `json:"sparkRef"`
-
-	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables)
-	//SparkImage string `json:"sparkImage"`
-
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 }

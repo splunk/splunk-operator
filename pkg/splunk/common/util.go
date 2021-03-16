@@ -202,7 +202,6 @@ func CompareSortedStrings(a []string, b []string) bool {
 // GetIstioAnnotations returns a map of istio annotations for a pod template
 func GetIstioAnnotations(ports []corev1.ContainerPort) map[string]string {
 	// list of ports within the deployments that we want istio to leave alone
-	//excludeOutboundPorts := []int32{8089, 8191, 9997, 7777, 9000, 17000, 17500, 19000}
 	excludeOutboundPorts := []int32{8089, 8191, 9997}
 
 	// calculate outbound port exclusions

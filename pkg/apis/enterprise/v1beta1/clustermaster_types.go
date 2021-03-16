@@ -33,11 +33,6 @@ type ClusterMasterSpec struct {
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
-
-	// Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK environment variables).
-	// Also used on cluster master for init container to setup the soft links from ../master-apps/splunk-operator/local/ to
-	// /mnt/splunk-operator/local/
-	//SparkImage string `json:"sparkImage"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster

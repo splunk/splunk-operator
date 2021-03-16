@@ -81,9 +81,6 @@ const (
 	splunkdPort     = "splunkd"
 	s2sPort         = "s2s"
 	hecPort         = "hec"
-	//dfccontrolPort  = "dfccontrol"
-	//datareceivePort = "datareceive"
-	//dfsmasterPort   = "dfsmaster"
 
 	protoHTTP  = "http"
 	protoHTTPS = "https"

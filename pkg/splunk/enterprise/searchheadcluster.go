@@ -29,8 +29,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-
-	//"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
@@ -507,11 +505,6 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 		return nil, err
 	}
 
-	// add spark and java mounts to search head containers
-	//if cr.Spec.SparkRef.Name != "" {
-	//	addDFCToPodTemplate(&ss.Spec.Template, cr.Spec.SparkRef, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, cr.Spec.Replicas > 1, false)
-	//}
-
 	return ss, nil
 }
 
@@ -525,78 +518,5 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 	if spec.Replicas < 3 {
 		spec.Replicas = 3
 	}
-	//spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
-
-// addDFCToPodTemplate modifies the podTemplateSpec object to incorporate support for DFS.
-// Also sets the softlinks for Splunk-operator app(if required)
-//func addDFCToPodTemplate(podTemplateSpec *corev1.PodTemplateSpec, sparkRef corev1.ObjectReference, sparkImage string, imagePullPolicy string, slotsEnabled bool, needToSetupSplunkOperatorApp bool) {
-//	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
-//	var commands []string
-//	var volMounts []corev1.VolumeMount
-//
-//	// Too greedy to piggyback the Operator App commands? Its Ok, as it saves few seconds on Pod resets
-//	if needToSetupSplunkOperatorApp {
-//		commands = []string{"bash", "-c", commandForDfcAndSmartstore}
-//		volMounts = []corev1.VolumeMount{
-//			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
-//			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
-//			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
-//		}
-//	} else {
-//		commands = []string{"bash", "-c", commandForDfc}
-//		volMounts = []corev1.VolumeMount{
-//			{Name: "mnt-splunk-jdk", MountPath: "/mnt/jdk"},
-//			{Name: "mnt-splunk-spark", MountPath: "/mnt/spark"},
-//		}
-//	}
-//
-//	containerSpec := corev1.Container{
-//		Image:           sparkImage,
-//		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
-//		Name:            "init",
-//		Command:         commands,
-//		VolumeMounts:    volMounts,
-//		Resources: corev1.ResourceRequirements{
-//			Requests: corev1.ResourceList{
-//				corev1.ResourceCPU:    resource.MustParse("0.25"),
-//				corev1.ResourceMemory: resource.MustParse("128Mi"),
-//			},
-//			Limits: corev1.ResourceList{
-//				corev1.ResourceCPU:    resource.MustParse("1"),
-//				corev1.ResourceMemory: resource.MustParse("512Mi"),
-//			},
-//		},
-//	}
-//	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
-//
-//	// add empty jdk and spark mount directories to all of the splunk containers
-//	emptyVolumeSource := corev1.VolumeSource{
-//		EmptyDir: &corev1.EmptyDirVolumeSource{},
-//	}
-//	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-jdk", "/mnt/splunk-jdk", emptyVolumeSource)
-//	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-spark", "/mnt/splunk-spark", emptyVolumeSource)
-//
-//	// prepare spark master host URL
-//	//sparkMasterHost := spark.GetSparkServiceName(spark.SparkMaster, sparkRef.Name, false)
-//	//if sparkRef.Namespace != "" {
-//	//	sparkMasterHost = splcommon.GetServiceFQDN(sparkRef.Namespace, sparkMasterHost)
-//	//}
-//
-//	// append DFS env variables to splunk enterprise containers
-//	dfsEnvVar := []corev1.EnvVar{
-//		{Name: "SPLUNK_ENABLE_DFS", Value: "true"},
-//		{Name: "SPARK_MASTER_HOST", Value: sparkMasterHost},
-//		{Name: "SPARK_MASTER_WEBUI_PORT", Value: "8009"},
-//		{Name: "SPARK_HOME", Value: "/mnt/splunk-spark"},
-//		{Name: "JAVA_HOME", Value: "/mnt/splunk-jdk"},
-//		{Name: "SPLUNK_DFW_NUM_SLOTS_ENABLED", Value: "true"},
-//	}
-//	if !slotsEnabled {
-//		dfsEnvVar[5].Value = "false"
-//	}
-//	for idx := range podTemplateSpec.Spec.Containers {
-//		podTemplateSpec.Spec.Containers[idx].Env = append(podTemplateSpec.Spec.Containers[idx].Env, dfsEnvVar...)
-//	}
-//}

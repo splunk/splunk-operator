@@ -249,15 +249,8 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997
 	case SplunkStandalone:
-		//result[GetPortName(dfccontrolPort, protoTCP)] = 17000
-		//result[GetPortName(datareceivePort, protoTCP)] = 19000
-		//result[GetPortName(dfsmasterPort, protoTCP)] = 9000
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997
-	//case SplunkSearchHead:
-		//result[GetPortName(dfccontrolPort, protoTCP)] = 17000
-		//result[GetPortName(datareceivePort, protoTCP)] = 19000
-		//result[GetPortName(dfsmasterPort, protoTCP)] = 9000
 	case SplunkIndexer:
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997

@@ -25,14 +25,12 @@ import (
 )
 
 func TestApplyDeployment(t *testing.T) {
-	//funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.Deployment-test-splunk-stack1-spark-worker"}}
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.Deployment-test-splunk-stack1-worker"}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	var replicas int32 = 1
 	current := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			//Name:      "splunk-stack1-spark-worker",
 			Name:      "splunk-stack1-worker",
 			Namespace: "test",
 		},
