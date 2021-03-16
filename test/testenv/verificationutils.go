@@ -30,9 +30,18 @@ import (
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Spec struct {
+		Containers []struct {
+			Resources struct {
+				Limits struct {
+					CPU    string `json:"cpu"`
+					Memory string `json:"memory"`
+				} `json:"limits"`
+			} `json:"resources"`
+		}
 		ServiceAccount     string `json:"serviceAccount"`
 		ServiceAccountName string `json:"serviceAccountName"`
 	}
+
 	Status struct {
 		ContainerStatuses []struct {
 			ContainerID string `json:"containerID"`
@@ -374,4 +383,44 @@ func VerifyIndexerClusterScalingUp(deployment *Deployment, testenvInstance *Test
 		DumpGetPods(testenvInstance.GetName())
 		return idxc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+}
+
+// VerifyStandaloneUpdating ensures Standalone is scaling up
+func VerifyStandaloneUpdating(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(deploymentName, standalone)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for standalone STATUS to be updating", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
+}
+
+// VerifyCPULimits verifies value of CPU limits is as expected
+func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse JSON")
+			return false
+		}
+		result := false
+
+		for i := 0; i < len(restResponse.Spec.Containers); i++ {
+			if strings.Contains(restResponse.Spec.Containers[0].Resources.Limits.CPU, expectedCPULimits) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", expectedCPULimits)
+			}
+		}
+		return result
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
