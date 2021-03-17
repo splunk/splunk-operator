@@ -76,13 +76,7 @@ If you plan to retag the container images as part of pushing it to a private reg
 image: splunk/splunk-operator
 ```
 
-<<<<<<< HEAD
-If you are using a private registry for the Docker images, edit the `RELATED_IMAGE_SPLUNK_ENTERPRISE` and `RELATED_IMAGE_SPLUNK_SPARK` environment variables in `splunk-operator.yaml`.
-=======
-If you are using a private registry for the `splunk/splunk:8.1.0` (or later), you should modify the
-`RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variables in `splunk-operator.yaml` to point
-to the appropriate locations.
->>>>>>> develop
+If you are using a private registry for the Docker images, edit the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variables in `splunk-operator.yaml`.
 
 ```yaml
 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
@@ -99,36 +93,3 @@ environment variable to the operator's deployment spec:
 - name: CLUSTER_DOMAIN
   value: "mydomain.com"
 ```
-<<<<<<< HEAD
-=======
-
-
-## Installing Splunk Operator
-
-You can install and start the operator by running
-
-```
-kubectl apply -f splunk-operator.yaml
-```
-
-After starting the operator, you should see a single pod running
-within your namespace:
-
-```
-kubectl get pods
-NAME                               READY   STATUS    RESTARTS   AGE
-splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
-```
-
-To remove all Splunk deployments and completely uninstall the
-Splunk Operator, run:
-
-```
-kubectl delete standalones --all
-kubectl delete licensemasters --all
-kubectl delete searchheadclusters --all
-kubectl delete clustermasters --all
-kubectl delete indexerclusters --all
-kubectl delete -f splunk-operator.yaml
-```
->>>>>>> develop

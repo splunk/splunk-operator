@@ -10,7 +10,6 @@ deployments.
       - [Indexer part](#indexer-part)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
-    - [Creating a Cluster with Data Fabric Search (DFS)](#creating-a-cluster-with-data-fabric-search-dfs)
     - [Cleaning Up](#cleaning-up)
   - [Smartstore Index Management](#smartstore-index-management)
   - [Using Default Settings](#using-default-settings)
@@ -340,7 +339,6 @@ resources in favor of `Standalone`, unless you have a specific reason not to.
 To remove the resources created from this example, run
 
 ```
-kubectl delete standalone dfsexample
 kubectl delete standalone single
 kubectl delete shc example
 kubectl delete idc example

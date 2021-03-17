@@ -1,6 +1,6 @@
 # Getting Started with the Splunk Operator for Kubernetes
 
-Splunk Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise on your choice of private or public cloud provider. The operator simplifies scaling and management of Splunk Enterprise by automating administrative workflows using Kubernetes best practices. 
+Splunk Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise on your choice of private or public cloud provider. The Operator simplifies scaling and management of Splunk Enterprise by automating administrative workflows using Kubernetes best practices. 
 
 The Splunk Operator runs as a container, and uses the Kubernetes [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) and [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) objects to create and manage a scalable and sustainable Splunk Enterprise environment.
 
@@ -27,11 +27,6 @@ If you're interested in contributing to the SOK open source project, review the 
 
 
 ## Known Issues for the Splunk Operator
-
-*Please note that the Splunk Operator is undergoing active development
-and considered to be a "beta" quality release. We expect significant
-modifications will be made prior to its general availability, it is not
-covered by support, and we strongly discourage using it in production.*
 
 Review the [Change Log](ChangeLog.md) page for a history of changes in each release.
 
@@ -76,19 +71,6 @@ NAME                               READY   STATUS    RESTARTS   AGE
 splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ```
 
-<<<<<<< HEAD
-=======
-To remove all Splunk deployments and completely remove the
-Splunk Operator, run:
-```
-kubectl delete standalones --all
-kubectl delete licensemasters --all
-kubectl delete searchheadclusters --all
-kubectl delete clustermasters --all
-kubectl delete indexerclusters --all
-kubectl delete -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
-```
->>>>>>> develop
 
 ## Creating a Splunk Enterprise deployment
 

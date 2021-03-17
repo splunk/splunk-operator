@@ -308,7 +308,6 @@ When using TLS for Ingress, we recommend you add an additional port for secure c
 
 This example shows how to add port 9998 for a standalone instance:
 
-<a name="serviceTemplate"></a>
 ```yaml
 apiVersion: enterprise.splunk.com/v1
 kind: Standalone
@@ -469,7 +468,7 @@ It is important to confirm which Nginx Ingress controller you intended to implem
 ## Configuring Ingress Using Kubernetes Ingress Nginx 
 
 For instructions on how to install and configure the NGINX Ingress Controller, see the 
-[NGINX Ingress Controller GitHub repository](https://github.com/nginxinc/kubernetes-ingress/) and the [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/).
+[NGINX Ingress Controller GitHub repository](https://github.com/kubernetes/ingress-nginx) and the [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/).
 
 This Ingress Controller uses a ConfigMap to enable Ingress access to the cluster. Currently there is no support for TCP gateway termination. Requests for this feature are available in [Request 3087](https://github.com/kubernetes/ingress-nginx/issues/3087), and [Ticket 636](https://github.com/kubernetes/ingress-nginx/issues/636) but at this time only HTTPS is supported for gateway termination.
 
