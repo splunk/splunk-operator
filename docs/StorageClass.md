@@ -92,7 +92,7 @@ If you are interested in using Local Persistent Volumes, consider one of these o
 
 ## Additional Storage Providers
 
-The [introduction](https://kubernetes.io/blog/2018/01/introducing-container-storage-interface/) of Kubernetes’s [Container Storage Interface](https://kubernetes.io/blog/2019/01/15/container-storage-interface-ga/) (CSI) has made it easy for new vendors to offer innovative solutions for managing the persistence of containerized applications. Users of Kubernetes 1.13 or later are encouraged to take a review the Kubernetes [list of CSI Drivers](https://kubernetes-csi.github.io/docs/drivers.html).
+The [introduction](https://kubernetes.io/blog/2018/01/introducing-container-storage-interface/) of Kubernetes’s [Container Storage Interface](https://kubernetes.io/blog/2019/01/15/container-storage-interface-ga/) (CSI) has made it easy for new vendors to offer innovative solutions for managing the persistence of containerized applications. Users of Kubernetes 1.13 or later are encouraged to review the Kubernetes [list of CSI Drivers](https://kubernetes-csi.github.io/docs/drivers.html).
 
 We have tested basic functionality of the Splunk Operator with the storage options:
 
