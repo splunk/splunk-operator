@@ -61,9 +61,9 @@ docker load -i splunk-operator.tar.gz
 ```
 
 
-## A sample script to push images
+## A simple script to push images
 
-A sample script `build/push_images.sh`  is included with the opertor to push Docker images to multiple remote hosts using SSH. The script takes the name of a container and an image path, and pushes the image to all the entries in `push_targets`. 
+The script `build/push_images.sh`  is included to push Docker images to multiple remote hosts using SSH. The script takes the name of a container and an image path, and pushes the image to all the entries in `push_targets`. 
 
 To use the script:
 
