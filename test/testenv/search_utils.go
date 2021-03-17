@@ -75,6 +75,8 @@ func PerformSearchSync(podName string, search string, deployment *Deployment) (s
 		return "", err
 	}
 
+	logf.Log.Info("Output of search Query", "Search", search, "Output", searchReqResp)
+
 	// Since results can have multiple formats depending on the search SPL, leave this response as a string
 	return searchReqResp, err
 }
@@ -97,6 +99,8 @@ func PerformSearchReq(podName string, search string, deployment *Deployment) (st
 		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command)
 		return "", err
 	}
+
+	logf.Log.Info("Output of search Query", "Search", search, "Output", stdout)
 
 	// Get SID
 	var searchReqResult map[string]interface{}

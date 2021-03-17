@@ -282,7 +282,7 @@ jobs:
             mkdir -p /tmp/test-results
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
-            TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster"
+            TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster|scaling_test"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results
