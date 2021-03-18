@@ -1,5 +1,0 @@
-apiVersion: enterprise.splunk.com/v1
-kind: Spark
-metadata:
-  name: test
-spec: {}

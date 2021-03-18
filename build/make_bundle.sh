@@ -78,9 +78,6 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: spec.customresourcedefinitions.owned[2].displayName
   value: SearchHeadCluster
 - command: update
-  path: spec.customresourcedefinitions.owned[3].displayName
-  value: Spark
-- command: update
   path: spec.customresourcedefinitions.owned[4].displayName
   value: Standalone
 - command: update
@@ -119,16 +116,6 @@ cat << EOF >$YAML_SCRIPT_FILE
     },
     {
       "apiVersion": "enterprise.splunk.com/v1",
-      "kind": "Spark",
-      "metadata": {
-        "name": "example"
-      },
-      "spec": {
-        "replicas": 1
-      }
-    },
-    {
-      "apiVersion": "enterprise.splunk.com/v1",
       "kind": "Standalone",
       "metadata": {
         "name": "example",
@@ -151,6 +138,4 @@ yq w $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml 
 yq w $OLM_CATALOG/splunk/splunk.package.yaml packageName "splunk-certified" > $OLM_CERTIFIED/splunk/splunk.package.yaml
 
 # Mac OS expects sed -i '', Linux expects sed -i''. To workaround this, using .bak
-sed -i.bak "s,$DOCKER_IO_PATH/spark,$REDHAT_REGISTRY_PATH/spark,g" $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml
-rm -f $OLM_CERTIFIED/splunk/splunk.v${VERSION}.clusterserviceversion.yaml.bak
 zip $OLM_CERTIFIED/splunk.zip -j $OLM_CERTIFIED/splunk $OLM_CERTIFIED/splunk/*

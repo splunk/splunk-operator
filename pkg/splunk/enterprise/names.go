@@ -59,14 +59,8 @@ const (
 	// command merger
 	commandMerger = " && "
 
-	// command for the init container with DFC
-	commandForDfc = "cp -r /opt/jdk /mnt && cp -r /opt/spark /mnt"
-
-	// command for init container on a standalone without DFC
+	// command for init container on a standalone
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
-
-	// command for init container with Smartstore enabled and DFC enabled
-	commandForDfcAndSmartstore = commandForDfc + commandMerger + commandForStandaloneSmartstore
 
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
@@ -77,13 +71,10 @@ const (
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
 
-	splunkwebPort   = "splunkweb"
-	splunkdPort     = "splunkd"
-	s2sPort         = "s2s"
-	hecPort         = "hec"
-	dfccontrolPort  = "dfccontrol"
-	datareceivePort = "datareceive"
-	dfsmasterPort   = "dfsmaster"
+	splunkwebPort = "splunkweb"
+	splunkdPort   = "splunkd"
+	s2sPort       = "s2s"
+	hecPort       = "hec"
 
 	protoHTTP  = "http"
 	protoHTTPS = "https"

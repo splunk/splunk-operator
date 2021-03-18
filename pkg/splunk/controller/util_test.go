@@ -92,18 +92,14 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("Container added")
 
-	// check container different Image
-	revised.Spec.Containers = []corev1.Container{{Image: "splunk/spark"}}
-	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
-	podUpdateTester("Container Image")
-
 	// check container different Ports
+	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
 	revised.Spec.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: 8000}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("Container Ports")
 
 	// check container different VolumeMounts
-	revised.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "mnt-spark"}}
+	revised.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "mnt-splunk"}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("Container VolumeMounts")
 
