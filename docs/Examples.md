@@ -304,8 +304,8 @@ service/splunk-default-monitoring-console-service           ClusterIP   10.100.7
 splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless                             ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service                              ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
-splunk-example-search-head-headless                         ClusterIP   None             <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
-splunk-example-search-head-service                          ClusterIP   10.100.37.53     <none>        8000/TCP,8089/TCP,9000/TCP,17000/TCP,19000/TCP   118s
+splunk-example-search-head-headless                         ClusterIP   None             <none>        8000/TCP,8089/TCP                                118s
+splunk-example-search-head-service                          ClusterIP   10.100.37.53     <none>        8000/TCP,8089/TCP                                118s
 splunk-operator-metrics                                     ClusterIP   10.100.181.146   <none>        8383/TCP,8686/TCP                                11d
 ```
 

@@ -27,7 +27,6 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
-	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
@@ -97,7 +96,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		return result, err
 	}
 
-	// create or update a headless service (this is required by DFS for Spark->standalone comms, possibly other things)
+	// create or update a headless service
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
 	if err != nil {
 		return result, err
@@ -144,11 +143,8 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 
 	_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
 
-	// add spark and java mounts to search head containers
-	if cr.Spec.SparkRef.Name != "" {
-		addDFCToPodTemplate(&ss.Spec.Template, cr.Spec.SparkRef, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, cr.Spec.Replicas > 1, needToSetupSplunkOperatorApp)
-	} else if needToSetupSplunkOperatorApp {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
+	if needToSetupSplunkOperatorApp {
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
 
 	return ss, nil
@@ -165,6 +161,5 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 		return err
 	}
 
-	spec.SparkImage = spark.GetSparkImage(spec.SparkImage)
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }

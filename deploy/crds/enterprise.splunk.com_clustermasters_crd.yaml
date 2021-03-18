@@ -1098,12 +1098,6 @@ spec:
                     type: object
                   type: array
               type: object
-            sparkImage:
-              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
-                environment variables). Also used on cluster master for init container
-                to setup the soft links from ../master-apps/splunk-operator/local/
-                to /mnt/splunk-operator/local/
-              type: string
             tolerations:
               description: Pod's tolerations for Kubernetes node's taint
               items:
