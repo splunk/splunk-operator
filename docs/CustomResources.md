@@ -358,3 +358,19 @@ Monitoring Console, Deployer, License Manager)__
 The Monitoring Console can be combined with Cluster Manager.
 Deployer 
 
+## Storage Guidelines
+
+The Splunk pods must have access to storage that meets or exceeds the specs provided in the [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) document. 
+
+__Key points:__
+
+_Search Heads_ - Use SSDs for high ad-hoc, scheduled searches. If you want to use HDD, the HDD must provide 800+ sustained IIOPs. Minimum 300GB of storoge space.
+
+_Indexers_ - Use SSDs to serve high performance of data ingestion and searches. The storage space requirement depends on the amount of data ingested per day and data retention period. 100GB/day per indexer with 30 days data retention will need 100*30*.5 = ```1500GB min space on the indexer```.  Look into the [Estimate your storage requirements](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Estimateyourstoragerequirements)page for determine right size of storage.
+
+_Indexers with smartstore_ - Use SSDs or NVMes. In addition to the ingestion/searches processing, a smartstore enabled indexer also requires additional bandwith for data buckets cache management. If the indexer is adding approximately 100GB/day of indexed data, the recommended size reserved for cached data is 3000GB for 30 days data retention. At a minimum, provision enough storage to keep at least 7-10 days of data in cache, as searches typically occur on data indexed within the last 7 - 10 day. So that would be ```minimum of 700GB storoge```. Indexer with smartstore Have access to a remote object storage. For additional help on smartstore configuration, see this page [SmartStore Resource Guide](https://github.com/splunk/splunk-operator/blob/develop/docs/SmartStore.md)
+
+For further information on how to setup storage for Splunk CRDs, look into [Setting Up a Persistent Storage for Splunk](https://github.com/splunk/splunk-operator/blob/develop/docs/StorageClass.md)
+
+
+
