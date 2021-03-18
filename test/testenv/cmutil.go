@@ -97,46 +97,83 @@ func CheckRFSF(deployment *Deployment) bool {
 	return rfMet && sfMet
 }
 
-// ClusterMasterSearchHeadResponse /services/cluster/master/searchhead response
-type ClusterMasterSearchHeadResponse struct {
-	Entries []ClusterMasterSearchHeadEntry `json:"entry"`
+// ClusterMasterPeersAndSearchHeadResponse /services/cluster/master/peers  and /services/cluster/master/searchhead response
+type ClusterMasterPeersAndSearchHeadResponse struct {
+	Entry []struct {
+		Content struct {
+			Label                                  string `json:"label"`
+			RegisterSearchAddress                  string `json:"register_search_address"`
+			ReplicationCount                       int    `json:"replication_count"`
+			ReplicationPort                        int    `json:"replication_port"`
+			ReplicationUseSsl                      bool   `json:"replication_use_ssl"`
+			RestartRequiredForApplyingDryRunBundle bool   `json:"restart_required_for_applying_dry_run_bundle"`
+			Site                                   string `json:"site"`
+			SplunkVersion                          string `json:"splunk_version"`
+			Status                                 string `json:"status"`
+			SummaryReplicationCount                int    `json:"summary_replication_count"`
+		} `json:"content"`
+	} `json:"entry"`
 }
 
-// ClusterMasterSearchHeadEntry represents a single search head
-type ClusterMasterSearchHeadEntry struct {
-	Name    string                         `json:"name"`
-	Content ClusterMasterSearchHeadContent `json:"content"`
+// GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Master
+func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
+	url := ""
+	if endpoint == "sh" {
+		url = "https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+	} else {
+		url = "https://localhost:8089/services/cluster/master/peers?output_mode=json"
+	}
+	//code to execute
+	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	restResponse := ClusterMasterPeersAndSearchHeadResponse{}
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return restResponse
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster peers")
+	}
+	return restResponse
 }
 
-// ClusterMasterSearchHeadContent represents detailed information about a search head
-type ClusterMasterSearchHeadContent struct {
-	EaiACL       interface{} `json:"eai:acl"`
-	HostPortPair string      `json:"host_port_pair"`
-	Label        string      `json:"label"`
-	Site         string      `json:"site"`
-	Status       string      `json:"status"`
+// CheckIndexerOnCM check given Indexer on cluster master
+func CheckIndexerOnCM(deployment *Deployment, indexerName string) bool {
+	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "peer")
+	found := false
+	for _, entry := range restResponse.Entry {
+		logf.Log.Info("Peer found On CM", "Indexer Name", entry.Content.Label, "Status", entry.Content.Status)
+		if entry.Content.Label == indexerName {
+			found = true
+			break
+		}
+	}
+	return found
+}
+
+// CheckSearchHeadOnCM check given search head on cluster master
+func CheckSearchHeadOnCM(deployment *Deployment, searchHeadName string) bool {
+	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "sh")
+	found := false
+	for _, entry := range restResponse.Entry {
+		logf.Log.Info("Search Head On CM", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
+		if entry.Content.Label == searchHeadName {
+			found = true
+			break
+		}
+	}
+	return found
 }
 
 // CheckSearchHeadRemoved check if search head is removed from Indexer Cluster
 func CheckSearchHeadRemoved(deployment *Deployment) bool {
-	//code to execute
-	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
-	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
-	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := ClusterMasterSearchHeadResponse{}
-	err = json.Unmarshal([]byte(stdout), &restResponse)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse cluster searchheads")
-		return false
-	}
+	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "sh")
 	searchHeadRemoved := true
-	for _, entry := range restResponse.Entries {
+	for _, entry := range restResponse.Entry {
 		logf.Log.Info("Search Found", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
 		if entry.Content.Status == "Disconnected" {
 			searchHeadRemoved = false
