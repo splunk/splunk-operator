@@ -76,7 +76,7 @@ configuration parameters:
 | imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | CPU and memory [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (defaults shown in example above) |
+| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | CPU and memory [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (defaults shown in example above). These resources should be set to values that meet the SLOs of the Splunk Deployment. The guildelines for CPU/Mem resources are given in the section [Setting CPU/Mem resources](#cpu-mem-spec-for-splunk-enterprise-resources)  |
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 
 ## Common Spec Parameters for Splunk Enterprise Resources
@@ -257,3 +257,104 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
+
+
+## Guidelines on Setting CPU/Mem resources
+
+Set the CPU/Mem resources that can provide required bandwidth for the usecases and SLOs your Splunk deployment is intended for. The resources guidelines in Splunk operator (running Splunk on Kubernetes) for a production grade Splunk deployment are same as given in the Splunk Docs at [Capacity Plannning Manual](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/IntroductiontocapacityplanningforSplunkEnterprise)
+
+
+In this capacity planning manual, the 
+[Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) page provides the hardware resources specs that you should refer to for scoping and scaling the Splunk platform for your use. Once you got familiar with hardware resources specs, you can use one of the [Kubernetes Quality of Service classes](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) to set the "requests" and "limits" for the Splunk deployment to meet your SLOs.
+
+### Kubernetes Quality of Service classes:
+
+
+| QoS        | Summary| Description    
+| ---------- | ------- | ------- |
+| Guarenteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    |Every container including Splunk Container, init containers, in the Pod must have a memory limit and a memory request, and they must be the same. Further, every container including Splunk Container, init containers, in the Pod must have a CPU limit and a CPU request, and they must be the same<br>This QoS is suited best for high grade production envoronment. As your request CPU/mem setting are same as limits, the Splunk POD should have enough room in the beginining itself to address the production load. |
+| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | The Splunk pod does not meet the criteria for QoS class Guaranteed. At least one Container in the Splunk Pod has a memory or CPU request. <br>This QoS can be a candidate for a non prod environment where you may want to run Splunk Pods with the minimum resources, and let Kubernetes allocate more resources depending on usage. Burstable settings can also be useful during initial phase of Production environment, where you want to start with lower numbers,  measure the CPU/Mem peaks, throttling and OOMs. Eventually, adjust the resource settings to the peaks that you see most of the time. That is learning from Burstable QoS can drive setting for the Guarented QoS in case you want to use a combination of information gathered from [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) and information from your own experiments  |
+| BestEffort | No CPU/Mem ```requests``` or ```limits``` required | For a Splunk pod to be given a QoS class of BestEffort, the Containers in the Pod must not have any memory or CPU limits or requests. This QoS can be good to use for minimal dev/test experimental purposes but not for any major splunk devloyments. |  
+
+  
+## Example of setting Splunk with Guaranteed QoS Class:
+
+Let's look into what should be the setting for CPU/Mem resources based on the [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) for a standalone splunk pod. The minimumn resources requirement is "12 physical CPU cores, or 24 vCPU at 2Ghz or greater speed per core. 12GB RAM".
+Assuming vCPUs, in order to make sure Kubernetes schedule the Splunk POD in a node that has above reference resources bandwith, set the CPU and Memory values for ```requests``` to 24 and 12Gi respectively. Make sure the same values are used for ```limits``` parameter also. So the yaml file will look like:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+spec:
+  imagePullPolicy: Always
+  resources:
+    requests:
+      memory: "12Gi"
+      cpu: "24"
+    limits:
+      memory: "12Gi"
+      cpu: "24"  
+```
+
+## Example of setting Splunk with Burstable QoS Class:
+Using the similar hardware reference from the last example, you can have a Burstable QoS service by letting the Kubernetes schedule the Splunk POD in a node that can serve the CPU/Mem providided in the ```requests``` section. However, set the CPU and Memory values for ```limits``` to 24 and 12Gi respectively. 
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+spec:
+  imagePullPolicy: Always
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "4"
+    limits:
+      memory: "12Gi"
+      cpu: "24"  
+```
+
+In the above example, Splunk POD will be able to start serving the searches and ingestion that can be served by the 4 CPU cores and 2Gi memory. Subsequently, as the load grows, kubernetes will allocate additional CPU cores upto the ```limits``` of 24 CPU cores, as well as additional memory upto 12Gi.
+
+
+## Example of setting Splunk with BestEffort QoS Class:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+spec:
+  imagePullPolicy: Always
+
+```
+
+### Special Considerations
+
+__CPU Throttling__
+
+In all the above examples, kubernetes will start throttling CPUs if the Splunk Pod's demand for CPU cycles exceeds the CPU cores provided in the ```limits``` parameter. In  cases where your nodes have enough spare CPU cores, you can leave ```limits``` undefined to let PODs use spare CPU cycles. 
+
+__POD Eviction - OOM__
+
+In all the above examples, kubernetes will evict a Splunk Pod from the node if the Pod try to use memory that exceeds memory set in the ```limits``` parameter. You can keep the ```requests``` and ```limits``` values for the memory same to avoid pod eviction due to OOM.
+
+### Summary of CPU/Mem Requirements
+Refering to [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware), following is the summary of minimum CPU/Mem requirements for production environment:
+
+| Standalone        | Search Head Cluster| Indexer Cluster|    
+| ---------- | ------- | ------- |
+| 12 CPU Cores or 24 vCPU, 2Ghz or greater per core, 12GB RAM. | Each Search Head: 16 CPU Cores or 32 vCPU, 2Ghz or greater per core, 12GB RAM.| Each Indexer: 12 CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM.|  
+
+
+__Utility (Deployment Server, Cluster Manager
+Monitoring Console, Deployer, License Manager)__
+
+8 vCPU, 16GB RAM for  small/medium deployments/clusters
+16 vCPU, 32GB RAM for large deployments/clusters
+The Monitoring Console can be combined with Cluster Manager.
+Deployer 
+
