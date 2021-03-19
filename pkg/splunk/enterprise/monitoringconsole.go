@@ -28,6 +28,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -203,6 +204,19 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 								{
 									Name:      "mnt-splunk-var",
 									MountPath: "/opt/splunk/var",
+								},
+							},
+							//Below requests/limits for MC are defined taking into account below EC2 validated architecture and its defined limits
+							//1. https://www.splunk.com/pdfs/technical-briefs/deploying-splunk-enterprise-on-amazon-web-services-technical-brief.pdf
+							//2. (c5.2xlarge) architecture req from https://aws.amazon.com/ec2/instance-types/c5/
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("0.1"),
+									corev1.ResourceMemory: resource.MustParse("512Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("4"),
+									corev1.ResourceMemory: resource.MustParse("8Gi"),
 								},
 							},
 						},
