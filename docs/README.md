@@ -73,7 +73,7 @@ The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernete
 The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](StorageClass.md) page for more
 information.
 
-The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/8.2.0/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
 
 ## Installing the Splunk Operator
 
