@@ -12,7 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package v1beta1 contains API Schema definitions for the enterprise v1beta1 API group
+// NOTE: Boilerplate only.  Ignore this file.
+
+// Package v1 contains API Schema definitions for the enterprise v1 API group
 // +k8s:deepcopy-gen=package,register
 // +groupName=enterprise.splunk.com
-package v1beta1
+package v1
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/scheme"
+)
+
+var (
+	// SchemeGroupVersion is group version used to register these objects
+	SchemeGroupVersion = schema.GroupVersion{Group: "enterprise.splunk.com", Version: "v1"}
+
+	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
+	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
+)

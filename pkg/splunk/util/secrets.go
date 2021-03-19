@@ -100,9 +100,10 @@ func GetSecretFromPod(c splcommon.ControllerClient, PodName string, namespace st
 
 // GetSecretLabels gets the labels for a secret
 func GetSecretLabels() map[string]string {
-	return splcommon.GetLabels("versionedSecrets", "", "", "", []string{
+	labels, _ := splcommon.GetLabels("versionedSecrets", "", "", "", []string{
 		"manager", "component",
 	})
+	return labels
 }
 
 // SetSecretOwnerRef sets owner references for object

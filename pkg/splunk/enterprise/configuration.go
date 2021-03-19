@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -42,7 +42,9 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 	if instanceType != SplunkIndexer || len(partOfIdentifier) == 0 {
 		partOfIdentifier = instanceIdentifier
 	}
-	return splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), instanceIdentifier, partOfIdentifier, make([]string, 0))
+
+	labels, _ := splcommon.GetLabels(instanceType.ToKind(), instanceType.ToString(), instanceIdentifier, partOfIdentifier, make([]string, 0))
+	return labels
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
@@ -249,15 +251,8 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997
 	case SplunkStandalone:
-		result[GetPortName(dfccontrolPort, protoTCP)] = 17000
-		result[GetPortName(datareceivePort, protoTCP)] = 19000
-		result[GetPortName(dfsmasterPort, protoTCP)] = 9000
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997
-	case SplunkSearchHead:
-		result[GetPortName(dfccontrolPort, protoTCP)] = 17000
-		result[GetPortName(datareceivePort, protoTCP)] = 19000
-		result[GetPortName(dfsmasterPort, protoTCP)] = 9000
 	case SplunkIndexer:
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997

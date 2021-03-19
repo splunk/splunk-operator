@@ -37,13 +37,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 )
 
 const (
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
-	defaultSparkImage    = "splunk/spark"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
 	defaultTestTimeout = 1500
@@ -61,10 +60,7 @@ const (
 	DefaultTimeout = 5 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
-	SearchHeadPod = "splunk-%s-search-head-%d"
-
-	// SearchHeadSHCPod Template String for search head pod
-	SearchHeadSHCPod = "splunk-%s-shc-search-head-%d"
+	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
@@ -81,8 +77,14 @@ const (
 	// MonitoringConsolePod Montioring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
-	// SecretObject Secret object Template
-	SecretObject = "splunk-%s-secret"
+	// ClusterMasterPod ClusterMaster Pod Template String
+	ClusterMasterPod = "splunk-%s-cluster-master-0"
+
+	// MultiSiteIndexerPod Indexer Pod Template String
+	MultiSiteIndexerPod = "splunk-%s-%s-indexer-%d"
+
+	// SecretObjectName Secret object Template
+	SecretObjectName = "splunk-%s-secret"
 )
 
 var (
@@ -90,7 +92,6 @@ var (
 	metricsPort              = 8383
 	specifiedOperatorImage   = defaultOperatorImage
 	specifiedSplunkImage     = defaultSplunkImage
-	specifiedSparkImage      = defaultSparkImage
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
 	specifiedTestTimeout     = defaultTestTimeout
@@ -110,7 +111,6 @@ type TestEnv struct {
 	operatorName       string
 	operatorImage      string
 	splunkImage        string
-	sparkImage         string
 	initialized        bool
 	SkipTeardown       bool
 	licenseFilePath    string
@@ -129,7 +129,6 @@ func init() {
 	flag.StringVar(&specifiedLicenseFilePath, "license-file", "", "Enterprise license file to use")
 	flag.StringVar(&specifiedOperatorImage, "operator-image", defaultOperatorImage, "Splunk Operator image to use")
 	flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
-	flag.StringVar(&specifiedSparkImage, "spark-image", defaultSparkImage, "Spark image to use")
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&specifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
@@ -142,12 +141,11 @@ func (testenv *TestEnv) GetKubeClient() client.Client {
 
 // NewDefaultTestEnv creates a default test environment
 func NewDefaultTestEnv(name string) (*TestEnv, error) {
-	return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedSparkImage, specifiedLicenseFilePath)
+	return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
 }
 
 // NewTestEnv creates a new test environment to run tests againsts
-func NewTestEnv(name, commitHash, operatorImage, splunkImage, sparkImage, licenseFilePath string) (*TestEnv, error) {
-
+func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath string) (*TestEnv, error) {
 	var envName string
 	if commitHash == "" {
 		envName = name
@@ -169,7 +167,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, sparkImage, licens
 		operatorName:       "splunk-op-" + envName,
 		operatorImage:      operatorImage,
 		splunkImage:        splunkImage,
-		sparkImage:         sparkImage,
 		SkipTeardown:       specifiedSkipTeardown,
 		licenseCMName:      envName,
 		licenseFilePath:    licenseFilePath,
@@ -267,7 +264,7 @@ func (testenv *TestEnv) setup() error {
 		}
 	}
 	testenv.initialized = true
-	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace, "operatorImage", testenv.operatorImage, "splunkImage", testenv.splunkImage, "sparkImage", testenv.sparkImage)
+	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace, "operatorImage", testenv.operatorImage, "splunkImage", testenv.splunkImage)
 	return nil
 }
 
@@ -440,7 +437,8 @@ func (testenv *TestEnv) createRoleBinding() error {
 }
 
 func (testenv *TestEnv) createOperator() error {
-	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, testenv.sparkImage)
+	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
+	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
 	err := testenv.GetKubeClient().Create(context.TODO(), op)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create operator")

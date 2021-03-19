@@ -12,20 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package spark
-
-// InstanceType is used to represent the type of spark instance (master or worker).
-type InstanceType string
-
-const (
-	// SparkMaster is the master node of a spark cluster
-	SparkMaster InstanceType = "spark-master"
-
-	// SparkWorker is a worker node in a spark cluster
-	SparkWorker InstanceType = "spark-worker"
-)
-
-// ToString returns a string for a given InstanceType
-func (instanceType InstanceType) ToString() string {
-	return string(instanceType)
-}
+// Package v1 contains API Schema definitions for the enterprise v1 API group
+// +k8s:deepcopy-gen=package,register
+// +groupName=enterprise.splunk.com
+package v1

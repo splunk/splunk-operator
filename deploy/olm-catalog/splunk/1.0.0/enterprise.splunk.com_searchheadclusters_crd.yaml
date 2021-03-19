@@ -1,27 +1,48 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: clustermasters.enterprise.splunk.com
+  name: searchheadclusters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
-    description: Status of cluster master
+    description: Status of search head cluster
     name: Phase
     type: string
+  - JSONPath: .status.deployerPhase
+    description: Status of the deployer
+    name: Deployer
+    type: string
+  - JSONPath: .status.replicas
+    description: Desired number of search head cluster members
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready search head cluster members
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of search head cluster
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
-    kind: ClusterMaster
-    listKind: ClusterMasterList
-    plural: clustermasters
+    kind: SearchHeadCluster
+    listKind: SearchHeadClusterList
+    plural: searchheadclusters
     shortNames:
-    - cm-idxc
-    singular: clustermaster
+    - shc
+    singular: searchheadcluster
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: ClusterMaster is the Schema for the clustermasters API
+      description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -36,7 +57,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: ClusterMasterSpec defines the desired state of ClusterMaster
+          description: SearchHeadClusterSpec defines the desired state of a Splunk
+            Enterprise search head cluster
           properties:
             Mock:
               description: Mock to differentiate between UTs and actual reconcile
@@ -730,6 +752,11 @@ spec:
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string
+            replicas:
+              description: Number of search head pods; a search head cluster will
+                be created if > 1
+              format: int32
+              type: integer
             resources:
               description: resource requirements for the pod containers
               properties:
@@ -995,108 +1022,47 @@ spec:
                       type: object
                   type: object
               type: object
-            smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                and server.conf.spec on docs.splunk.com
+            sparkImage:
+              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
+                environment variables)
+              type: string
+            sparkRef:
+              description: SparkRef refers to a Spark cluster managed by the operator
+                within Kubernetes When defined, Data Fabric Search (DFS) will be enabled
+                and configured to use the Spark cluster.
               properties:
-                cacheManager:
-                  description: Defines Cache manager settings
-                  properties:
-                    evictionPadding:
-                      description: Additional size beyond 'minFreeSize' before eviction
-                        kicks in
-                      type: integer
-                    evictionPolicy:
-                      description: Eviction policy to use
-                      type: string
-                    hotlistBloomFilterRecencyHours:
-                      description: Time period relative to the bucket's age, during
-                        which the bloom filter file is protected from cache eviction
-                      type: integer
-                    hotlistRecencySecs:
-                      description: Time period relative to the bucket's age, during
-                        which the bucket is protected from cache eviction
-                      type: integer
-                    maxCacheSize:
-                      description: Max cache size per partition
-                      type: integer
-                    maxConcurrentDownloads:
-                      description: Maximum number of buckets that can be downloaded
-                        from remote storage in parallel
-                      type: integer
-                    maxConcurrentUploads:
-                      description: Maximum number of buckets that can be uploaded
-                        to remote storage in parallel
-                      type: integer
-                  type: object
-                defaults:
-                  description: Default configuration for indexes
-                  properties:
-                    maxGlobalDataSizeMB:
-                      description: MaxGlobalDataSizeMB defines the maximum amount
-                        of space for warm and cold buckets of an index
-                      type: integer
-                    maxGlobalRawDataSizeMB:
-                      description: MaxGlobalDataSizeMB defines the maximum amount
-                        of cumulative space for warm and cold buckets of an index
-                      type: integer
-                    volumeName:
-                      description: Remote Volume name
-                      type: string
-                  type: object
-                indexes:
-                  description: List of Splunk indexes
-                  items:
-                    description: IndexSpec defines Splunk index name and storage path
-                    properties:
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      name:
-                        description: Splunk index name
-                        type: string
-                      remotePath:
-                        description: Index location relative to the remote volume
-                          path
-                        type: string
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  type: array
-                volumes:
-                  description: List of remote storage volumes
-                  items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
-                    properties:
-                      endpoint:
-                        description: Remote volume URI
-                        type: string
-                      name:
-                        description: Remote volume name
-                        type: string
-                      path:
-                        description: Remote volume path
-                        type: string
-                      secretRef:
-                        description: Secret object name
-                        type: string
-                    type: object
-                  type: array
+                apiVersion:
+                  description: API version of the referent.
+                  type: string
+                fieldPath:
+                  description: 'If referring to a piece of an object instead of an
+                    entire object, this string should contain a valid JSON/Go field
+                    access statement, such as desiredState.manifest.containers[2].
+                    For example, if the object reference is to a container within
+                    a pod, this would take on a value like: "spec.containers{name}"
+                    (where "name" refers to the name of the container that triggered
+                    the event) or if no container name is specified "spec.containers[2]"
+                    (container with index 2 in this pod). This syntax is chosen only
+                    to have some well-defined way of referencing a part of an object.
+                    TODO: this design is not final and this field is subject to change
+                    in the future.'
+                  type: string
+                kind:
+                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                  type: string
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                  type: string
+                namespace:
+                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
+                  type: string
+                resourceVersion:
+                  description: 'Specific resourceVersion to which this reference is
+                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                  type: string
+                uid:
+                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
+                  type: string
               type: object
             tolerations:
               description: Pod's tolerations for Kubernetes node's taint
@@ -2333,19 +2299,29 @@ spec:
               type: array
           type: object
         status:
-          description: ClusterMasterStatus defines the observed state of ClusterMaster
+          description: SearchHeadClusterStatus defines the observed state of a Splunk
+            Enterprise search head cluster
           properties:
-            bundlePushInfo:
-              description: Bundle push status tracker
-              properties:
-                lastCheckInterval:
-                  format: int64
-                  type: integer
-                needToPushMasterApps:
-                  type: boolean
+            adminPasswordChangedSecrets:
+              additionalProperties:
+                type: boolean
+              description: Holds secrets whose admin password has changed
               type: object
-            phase:
-              description: current phase of the cluster master
+            adminSecretChangedFlag:
+              description: Indicates when the admin password has been changed for
+                a peer
+              items:
+                type: boolean
+              type: array
+            captain:
+              description: name or label of the search head captain
+              type: string
+            captainReady:
+              description: true if the search head cluster's captain is ready to service
+                requests
+              type: boolean
+            deployerPhase:
+              description: current phase of the deployer
               enum:
               - Pending
               - Ready
@@ -2355,117 +2331,74 @@ spec:
               - Terminating
               - Error
               type: string
-            resourceRevMap:
-              additionalProperties:
-                type: string
-              description: Resource Revision tracker
-              type: object
+            initialized:
+              description: true if the search head cluster has finished initialization
+              type: boolean
+            maintenanceMode:
+              description: true if the search head cluster is in maintenance mode
+              type: boolean
+            members:
+              description: status of each search head cluster member
+              items:
+                description: SearchHeadClusterMemberStatus is used to track the status
+                  of each search head cluster member
+                properties:
+                  active_historical_search_count:
+                    description: Number of currently running historical searches.
+                    type: integer
+                  active_realtime_search_count:
+                    description: Number of currently running realtime searches.
+                    type: integer
+                  adhoc_searchhead:
+                    description: Flag that indicates if this member can run scheduled
+                      searches.
+                    type: boolean
+                  is_registered:
+                    description: Indicates if this member is registered with the searchhead
+                      cluster captain.
+                    type: boolean
+                  name:
+                    description: Name of the search head cluster member
+                    type: string
+                  status:
+                    description: Indicates the status of the member.
+                    type: string
+                type: object
+              type: array
+            minPeersJoined:
+              description: true if the minimum number of search head cluster members
+                have joined
+              type: boolean
+            namespace_scoped_secret_resource_version:
+              description: Indicates resource version of namespace scoped secret
+              type: string
+            phase:
+              description: current phase of the search head cluster
+              enum:
+              - Pending
+              - Ready
+              - Updating
+              - ScalingUp
+              - ScalingDown
+              - Terminating
+              - Error
+              type: string
+            readyReplicas:
+              description: current number of ready search head cluster members
+              format: int32
+              type: integer
+            replicas:
+              description: desired number of search head cluster members
+              format: int32
+              type: integer
             selector:
               description: selector for pods, used by HorizontalPodAutoscaler
               type: string
-            smartstore:
-              description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                and server.conf.spec on docs.splunk.com
-              properties:
-                cacheManager:
-                  description: Defines Cache manager settings
-                  properties:
-                    evictionPadding:
-                      description: Additional size beyond 'minFreeSize' before eviction
-                        kicks in
-                      type: integer
-                    evictionPolicy:
-                      description: Eviction policy to use
-                      type: string
-                    hotlistBloomFilterRecencyHours:
-                      description: Time period relative to the bucket's age, during
-                        which the bloom filter file is protected from cache eviction
-                      type: integer
-                    hotlistRecencySecs:
-                      description: Time period relative to the bucket's age, during
-                        which the bucket is protected from cache eviction
-                      type: integer
-                    maxCacheSize:
-                      description: Max cache size per partition
-                      type: integer
-                    maxConcurrentDownloads:
-                      description: Maximum number of buckets that can be downloaded
-                        from remote storage in parallel
-                      type: integer
-                    maxConcurrentUploads:
-                      description: Maximum number of buckets that can be uploaded
-                        to remote storage in parallel
-                      type: integer
-                  type: object
-                defaults:
-                  description: Default configuration for indexes
-                  properties:
-                    maxGlobalDataSizeMB:
-                      description: MaxGlobalDataSizeMB defines the maximum amount
-                        of space for warm and cold buckets of an index
-                      type: integer
-                    maxGlobalRawDataSizeMB:
-                      description: MaxGlobalDataSizeMB defines the maximum amount
-                        of cumulative space for warm and cold buckets of an index
-                      type: integer
-                    volumeName:
-                      description: Remote Volume name
-                      type: string
-                  type: object
-                indexes:
-                  description: List of Splunk indexes
-                  items:
-                    description: IndexSpec defines Splunk index name and storage path
-                    properties:
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      name:
-                        description: Splunk index name
-                        type: string
-                      remotePath:
-                        description: Index location relative to the remote volume
-                          path
-                        type: string
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  type: array
-                volumes:
-                  description: List of remote storage volumes
-                  items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
-                    properties:
-                      endpoint:
-                        description: Remote volume URI
-                        type: string
-                      name:
-                        description: Remote volume name
-                        type: string
-                      path:
-                        description: Remote volume path
-                        type: string
-                      secretRef:
-                        description: Secret object name
-                        type: string
-                    type: object
-                  type: array
-              type: object
+            shcSecretChangedFlag:
+              description: Indicates when the shc_secret has been changed for a peer
+              items:
+                type: boolean
+              type: array
           type: object
       type: object
   version: v1
