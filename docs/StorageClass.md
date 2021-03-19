@@ -77,7 +77,7 @@ spec:
 
 ## Storage Space Considerations
 
-
+Please see Storage guidelines at https://github.com/splunk/splunk-operator/blob/develop/docs/CustomResources.md 
 
 ## Performance Considerations
 
