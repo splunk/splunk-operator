@@ -27,7 +27,6 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
-	"github.com/splunk/splunk-operator/pkg/splunk/spark"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -159,8 +158,6 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 		return err
 	}
 
-	cr.Spec.SparkImage = spark.GetSparkImage(cr.Spec.SparkImage)
-
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
@@ -175,7 +172,7 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
 	if exists {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.SparkImage, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
 	}
 
 	return ss, err

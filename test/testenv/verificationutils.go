@@ -341,22 +341,8 @@ func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, c
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyStandaloneScalingUp verify give CR is scaling up
-func VerifyStandaloneScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
-	gomega.Eventually(func() splcommon.Phase {
-		standalone := &enterprisev1.Standalone{}
-		err := deployment.GetInstance(deployment.GetName(), standalone)
-		if err != nil {
-			return splcommon.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for standalone status to be Scaling Up", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
-}
-
-// VerifySearchHeadClusterScalingUp verify give CR is scaling up
-func VerifySearchHeadClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+// VerifySearchHeadClusterPhase verify the phase of SHC matches given phase
+func VerifySearchHeadClusterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
 		shc := &enterprisev1.SearchHeadCluster{}
 		shcName := deployment.GetName() + "-shc"
@@ -364,25 +350,38 @@ func VerifySearchHeadClusterScalingUp(deployment *Deployment, testenvInstance *T
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for Search Head Cluster CR status to be Scaling Up", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Search Head Cluster Phase", "instance", shc.ObjectMeta.Name, "Expected", phase, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
 }
 
-// VerifyIndexerClusterScalingUp verify give CR is scaling up
-func VerifyIndexerClusterScalingUp(deployment *Deployment, testenvInstance *TestEnv) {
+// VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
+func VerifyIndexerClusterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase, idxcName string) {
 	gomega.Eventually(func() splcommon.Phase {
 		idxc := &enterprisev1.IndexerCluster{}
-		idxcName := deployment.GetName() + "-idxc"
 		err := deployment.GetInstance(idxcName, idxc)
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for Indexer Cluster CR status to be Scaling Up", "instance", idxc.ObjectMeta.Name, "Phase", idxc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Indexer Cluster Phase", "instance", idxc.ObjectMeta.Name, "Expected", phase, "Phase", idxc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return idxc.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseScalingUp))
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
+// VerifyStandalonePhase verify the phase of Standalone CR
+func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
+	gomega.Eventually(func() splcommon.Phase {
+		standalone := &enterprisev1.Standalone{}
+		err := deployment.GetInstance(deployment.GetName(), standalone)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for standalone status", "instance", standalone.ObjectMeta.Name, "Expected", phase, " Actual Phase", standalone.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return standalone.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
 // VerifyStandaloneUpdating ensures Standalone is scaling up
