@@ -191,15 +191,13 @@ var _ = Describe("Smoke test", func() {
 
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-				siteName := fmt.Sprintf("site%d", siteNumber)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenv.VerifyIndexFoundOnPod(deployment, podName, indexName)
 			}
 
 			// Ingest data to the index
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-				siteName := fmt.Sprintf("site%d", siteNumber)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 				testenv.CreateMockLogfile(logFile, 2000)
 				testenv.IngestFileViaMonitor(logFile, indexName, podName, deployment)
@@ -207,15 +205,13 @@ var _ = Describe("Smoke test", func() {
 
 			// Roll Hot Buckets on the test index per indexer
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-				siteName := fmt.Sprintf("site%d", siteNumber)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenv.RollHotToWarm(deployment, podName, indexName)
 			}
 
 			// Roll index buckets and Check for indexes on S3
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
-				siteName := fmt.Sprintf("site%d", siteNumber)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenv.VerifyIndexExistsOnS3(deployment, indexName, podName)
 			}
 		})
