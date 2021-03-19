@@ -13,6 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+  - [Kubernetes Quality of Service classes](#kubernetes-quality-of-service-classes)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -233,25 +234,15 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
 
 
-## Guidelines on Setting CPU/Mem resources
-
-Set the CPU/Mem resources that can provide required bandwidth for the usecases and SLOs your Splunk deployment is intended for. The resources guidelines in Splunk operator (running Splunk on Kubernetes) for a production grade Splunk deployment are same as given in the Splunk Docs at [Capacity Plannning Manual](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/IntroductiontocapacityplanningforSplunkEnterprise)
-
-
-In this capacity planning manual, the 
-[Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) page provides the hardware resources specs that you should refer to for scoping and scaling the Splunk platform for your use. Once you got familiar with hardware resources specs, you can use one of the [Kubernetes Quality of Service classes](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) to set the "requests" and "limits" for the Splunk deployment to meet your SLOs.
-
-### Kubernetes Quality of Service classes:
-
+## Kubernetes Quality of Service classes:
 
 | QoS        | Summary| Description    
 | ---------- | ------- | ------- |
-| Guarenteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    |Every container including Splunk Container, init containers, in the Pod must have a memory limit and a memory request, and they must be the same. Further, every container including Splunk Container, init containers, in the Pod must have a CPU limit and a CPU request, and they must be the same<br>This QoS is suited best for high grade production envoronment. As your request CPU/mem setting are same as limits, the Splunk POD should have enough room in the beginining itself to address the production load. |
-| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | The Splunk pod does not meet the criteria for QoS class Guaranteed. At least one Container in the Splunk Pod has a memory or CPU request. <br>This QoS can be a candidate for a non prod environment where you may want to run Splunk Pods with the minimum resources, and let Kubernetes allocate more resources depending on usage. Burstable settings can also be useful during initial phase of Production environment, where you want to start with lower numbers,  measure the CPU/Mem peaks, throttling and OOMs. Eventually, adjust the resource settings to the peaks that you see most of the time. That is learning from Burstable QoS can drive setting for the Guarented QoS in case you want to use a combination of information gathered from [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) and information from your own experiments  |
-| BestEffort | No CPU/Mem ```requests``` or ```limits``` required | For a Splunk pod to be given a QoS class of BestEffort, the Containers in the Pod must not have any memory or CPU limits or requests. This QoS can be good to use for minimal dev/test experimental purposes but not for any major splunk devloyments. |  
-
+| Guaranteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    | When the CPU and memory  ```requests``` and ```limits``` values are equal, the pod is given a QoS class of Guaranteed. This level of service is recommended for Splunk Enterprise production environments. |
+| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing (UAT) environment, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage. |
+| BestEffort | No CPU/Mem ```requests``` or ```limits``` are set | When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for testing, or a small development task. |  
   
-## Example of setting Splunk with Guaranteed QoS Class:
+### A Guaranteed QoS Class example:
 
 Let's look into what should be the setting for CPU/Mem resources based on the [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) for a standalone splunk pod. The minimumn resources requirement is "12 physical CPU cores, or 24 vCPU at 2Ghz or greater speed per core. 12GB RAM".
 Assuming vCPUs, in order to make sure Kubernetes schedule the Splunk POD in a node that has above reference resources bandwith, set the CPU and Memory values for ```requests``` to 24 and 12Gi respectively. Make sure the same values are used for ```limits``` parameter also. So the yaml file will look like:
@@ -272,7 +263,7 @@ spec:
       cpu: "24"  
 ```
 
-## Example of setting Splunk with Burstable QoS Class:
+### A Burstable QoS Class example:
 Using the similar hardware reference from the last example, you can have a Burstable QoS service by letting the Kubernetes schedule the Splunk POD in a node that can serve the CPU/Mem providided in the ```requests``` section. However, set the CPU and Memory values for ```limits``` to 24 and 12Gi respectively. 
 
 ```yaml
@@ -294,7 +285,7 @@ spec:
 In the above example, Splunk POD will be able to start serving the searches and ingestion that can be served by the 4 CPU cores and 2Gi memory. Subsequently, as the load grows, kubernetes will allocate additional CPU cores upto the ```limits``` of 24 CPU cores, as well as additional memory upto 12Gi.
 
 
-## Example of setting Splunk with BestEffort QoS Class:
+### A BestEffort QoS Class example:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -306,13 +297,13 @@ spec:
 
 ```
 
-### Special Considerations
+### Pod resource management 
 
 __CPU Throttling__
 
-In all the above examples, kubernetes will start throttling CPUs if the Splunk Pod's demand for CPU cycles exceeds the CPU cores provided in the ```limits``` parameter. In  cases where your nodes have enough spare CPU cores, you can leave ```limits``` undefined to let PODs use spare CPU cycles. 
+In the QoS examples, Kubernetes will begin throttling CPUs if the pod's demand for CPU  exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
 
 __POD Eviction - OOM__
 
-In all the above examples, kubernetes will evict a Splunk Pod from the node if the Pod try to use memory that exceeds memory set in the ```limits``` parameter. You can keep the ```requests``` and ```limits``` values for the memory same to avoid pod eviction due to OOM.
+In the QoS examples, Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter. To avoid pod eviction due to memory usage, set the ```requests``` and ```limits``` values for memory to the same value.
 
