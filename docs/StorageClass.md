@@ -90,7 +90,7 @@ discourage and do not support using this for any production environments.*
 
 ## Storage Space Considerations
 
-
+Please see Storage guidelines at https://github.com/splunk/splunk-operator/blob/develop/docs/CustomResources.md 
 
 ## Performance Considerations
 
