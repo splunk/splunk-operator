@@ -42,59 +42,50 @@ covered by support, and we strongly discourage using it in production.*
 Please see the [Change Log](ChangeLog.md) for a history of changes made in
 previous releases.
 
-
 ## Prerequisites for the Splunk Operator
 
-While we are only able to test and support a small subset of configurations,
-the Splunk Operator should work with any CNCF certified distribution of
-Kubernetes, version 1.12 or later. Setting up, configuring and managing
-Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
-of support. Please submit bugs to https://github.com/splunk/splunk-operator/issues.
+While we are only able to test and support a small subset of configurations, the Splunk Operator should work with any CNCF certified distribution of Kubernetes, version 1.12 or later. Setting up, configuring, and managing Kubernetes clusters is outside the scope of this guide and Splunk’s coverage of support. You can submit bugs to https://github.com/splunk/splunk-operator/issues.
 
 ### Supported Kubernetes Platforms
+The supported Kubernetes platforms are:
 
-[Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)
-
-[Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)
-
-[Red Hat OpenShift](https://www.openshift.com/)
-
-Docker Enterprise Edition
-
-Open Source Kubernetes
-
-[Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)
+* [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)
+* [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)
+* [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)
+* [Red Hat OpenShift](https://www.openshift.com/)
 
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
-crash your API server when using custom resource definitions. Please do not
+crash your API server when using custom resource definitions. Do not
 attempt to run the Splunk Operator using these releases. This bug is fixed in
 Kuberenetes 1.16.2.*
 
-The Splunk Operator requires three docker images to be present or available
-to your Kubernetes cluster:
+
+### Docker requirements
+The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
 * `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
-* `splunk/spark`: The [Splunk Spark image](https://github.com/splunk/docker-spark) (used when DFS is enabled)
 
-All of these images are publicly available on [Docker Hub](https://hub.docker.com/).
-If your cluster does not have access to pull from Docker Hub, please see the
-[Required Images Documentation](Images.md).
+All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
-The Splunk Operator uses
-[Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims)
-to store all of your configuration (etc) and event (var) data. If an
-underlying server fails, Kubernetes will automatically try to recover by
-restarting Splunk pods on another server that is able to reuse the same
-data volumes. This minimizes the maintenance burden on your operations team
-by reducing the impact of common hardware failures to be similar to a server
-restart. The use of Persistent Volume Claims requires that your cluster is
-configured to support one or more persistent
-[Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/).
-Please see [Setting Up a Persistent Storage for Splunk](StorageClass.md) for more
+### Summary of performance requirements
+The resources guidelines for running production Splunk Enterprise instances in pods using the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional detail.
+
+A summary of the minimum reference hardware requirements:
+| Standalone        | Search Head Cluster | Indexer Cluster |    
+| ---------- | ------- | ------- |
+| 12 CPU Cores or 24 vCPU, 2Ghz or greater per core, 12GB RAM. | Each pod requires: 16 CPU Cores or 32 vCPU, 2Ghz or greater per core, 12GB RAM.| Each pod requires: 12 CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM.|  
+
+For information on utilizing Kubernetes Quality of Service classes to enforce minimum CPU and memory allocations in production environments, see [Kubernetes Quality of Service classes](CustomResources.md#Kubernetes-Quality-of-Service-classes)
+
+
+### Storage guidelines
+The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) to store all of your Splunk Enterprise configuration ("$SPLUNK_HOME/etc" path) and event ("$SPLUNK_HOME/var" path) data. If one of the underlying machines fail, Kubernetes will automatically try to recover by restarting the Splunk Enterprise pods on another machine that is able to reuse the same data volumes. This minimizes the maintenance burden on your operations team by reducing the impact of common hardware failures to the equivalent of a service restart. 
+The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](StorageClass.md) page for more
 information.
 
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/8.2.0/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
 
 ## Installing the Splunk Operator
 
