@@ -44,6 +44,21 @@ gp2 (default)   kubernetes.io/aws-ebs   176d
 If no `storageClassName` is provided, the default Storage Class for your
 Kubernetes cluster will be used.
 
+The following `kubectl` command can be use to verify space allocated to the etc and var directories on your POD. 
+Replace the [POD_NAME] with your Splunk pod name.
+
+```
+$ kubectl exec [POD_NAME] -- df -h
+In this example, you can verify that Splunk pod has got requested amount of storage -- etcVolumeStorageConfig is set to 15GB and varVolumeStorageConfig size is set to 25GB
+
+Filesystem      Size  Used Avail Use% Mounted on
+....
+/dev/nvme2n1     25G  530M   24G   3% /opt/splunk/var
+/dev/nvme1n1     15G  270M   15G   2% /opt/splunk/etc
+....
+```
+
+
 
 ## Ephemeral Storage
 
@@ -72,6 +87,9 @@ This will mount local, ephemeral volumes for `/opt/splunk/etc` and
 *Please note that the contents of these directories will automatically be deleted
 forever whenever the Pod is removed from a node (for any reason). We strongly
 discourage and do not support using this for any production environments.*
+
+## Storage Space Considerations
+
 
 
 ## Performance Considerations
