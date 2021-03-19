@@ -65,11 +65,11 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
+	// LicenseMasterPod Template String for standalone pod
+	LicenseMasterPod = "splunk-%s-license-master-%d"
+
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
-
-	// IndexerMultisitePod Template String for indexer pod in multisite cluster
-	IndexerMultisitePod = "splunk-%s-site%d-indexer-%d"
 
 	// MonitoringConsoleSts Montioring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
@@ -81,11 +81,23 @@ const (
 	ClusterMasterPod = "splunk-%s-cluster-master-0"
 
 	// MultiSiteIndexerPod Indexer Pod Template String
-	MultiSiteIndexerPod = "splunk-%s-%s-indexer-%d"
+	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
 
 	// SecretObjectName Secret object Template
 	SecretObjectName = "splunk-%s-secret"
+
+	// SecretObjectPodName Secret object Template
+	SecretObjectPodName = "splunk-%s-%s-secret-v%d"
 )
+
+//SecretObject Secret Object structure
+var SecretObject = map[string]string{
+	"HecToken":            "hec_token",
+	"AdminPassword":       "password",
+	"IdxcPass4Symmkey":    "idxc_secret",
+	"ShcPass4Symmkey":     "shc_secret",
+	"GeneralPass4Symmkey": "pass4Symmkey",
+}
 
 var (
 	metricsHost              = "0.0.0.0"
