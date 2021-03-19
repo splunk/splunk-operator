@@ -51,6 +51,20 @@ Kubernetes, version 1.12 or later. Setting up, configuring and managing
 Kubernetes clusters is outside the scope of this guide and Splunk’s coverage
 of support. Please submit bugs to https://github.com/splunk/splunk-operator/issues.
 
+### Supported Kubernetes Platforms
+
+[Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)
+
+[Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)
+
+[Red Hat OpenShift](https://www.openshift.com/)
+
+Docker Enterprise Edition
+
+Open Source Kubernetes
+
+[Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)
+
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
 crash your API server when using custom resource definitions. Please do not
