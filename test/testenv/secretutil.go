@@ -50,8 +50,7 @@ func EncodeBase64(str string) string {
 }
 
 // GetSecretObject Gets the secret object
-func GetSecretObject(deployment *Deployment, ns string) *SecretResponse {
-	secretName := fmt.Sprintf(SecretObjectName, ns)
+func GetSecretObject(deployment *Deployment, ns string, secretName string) *SecretResponse {
 	output, err := exec.Command("kubectl", "get", "secret", secretName, "-n", ns, "-o", "jsonpath='{.data}'").Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get secret %s -n %s -o jsonpath='{.data}'", secretName, ns)
@@ -69,33 +68,34 @@ func GetSecretObject(deployment *Deployment, ns string) *SecretResponse {
 }
 
 // GetSecretKey Gets the value to specific key from secret object
-func GetSecretKey(deployment *Deployment, ns string, key string) string {
-	restResponse := GetSecretObject(deployment, ns)
+func GetSecretKey(deployment *Deployment, ns string, key string, secretName string) string {
+	restResponse := GetSecretObject(deployment, ns, secretName)
+	logf.Log.Info("Secret object encoded values", string(secretName))
 	//return key based on request
 	switch key {
 	case "hec_token":
-		key := DecodeBase64(restResponse.HecToken)
-		return key
+		value := DecodeBase64(restResponse.HecToken)
+		return value
 	case "idxc_secret":
-		key := DecodeBase64(restResponse.IdxcSecret)
-		return key
+		value := DecodeBase64(restResponse.IdxcSecret)
+		return value
 	case "pass4SymmKey":
-		key := DecodeBase64(restResponse.Pass4SymmKey)
-		return key
+		value := DecodeBase64(restResponse.Pass4SymmKey)
+		return value
 	case "password":
-		key := DecodeBase64(restResponse.Password)
-		return key
+		value := DecodeBase64(restResponse.Password)
+		return value
 	case "shc_secret":
-		key := DecodeBase64(restResponse.ShcSecret)
-		return key
+		value := DecodeBase64(restResponse.ShcSecret)
+		return value
 	default:
 		return "Invalid Key"
 	}
 }
 
 //ModifySecretObject Modifies the entire secret object
-func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string) bool {
-	secretName := fmt.Sprintf(SecretObjectName, ns)
+func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) bool {
+	logf.Log.Info("Modify secret object", secretName, "with secret", data)
 	secret := newSecretSpec(ns, secretName, data)
 	//Update object using spec
 	err := deployment.UpdateCR(secret)
@@ -109,7 +109,8 @@ func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns strin
 //ModifySecretKey Modifies the specific key in secret object
 func ModifySecretKey(deployment *Deployment, ns string, key string, value string) bool {
 	//Get current config for update
-	restResponse := GetSecretObject(deployment, ns)
+	secretName := fmt.Sprintf(SecretObjectName, ns)
+	restResponse := GetSecretObject(deployment, ns, secretName)
 	out, err := json.Marshal(restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
@@ -123,7 +124,21 @@ func ModifySecretKey(deployment *Deployment, ns string, key string, value string
 		return false
 	}
 	//Modify data
-	data[key] = []byte(EncodeBase64(value))
-	modify := ModifySecretObject(deployment, data, ns)
+	data[key] = []byte(value)
+	logf.Log.Info("Modify secret object", secretName, "with key", key, "Value", value)
+	modify := ModifySecretObject(deployment, data, ns, secretName)
 	return modify
+}
+
+//GetMountedKey Gets the key mounted on pod
+func GetMountedKey(deployment *Deployment, podName string, key string) string {
+	stdin := fmt.Sprintf("cat /mnt/splunk-secrets/%s", key)
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return ""
+	}
+	logf.Log.Info("key found on pod", "pod", podName, "Key", stdout, "stderr", stderr)
+	return string(stdout)
 }

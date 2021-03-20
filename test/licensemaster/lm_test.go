@@ -121,11 +121,11 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 1, 0)
+			indexerPodName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 2, 0)
+			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 2, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 3, 0)
+			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 3, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 
 			// Verify LM is configured on SHs
@@ -168,11 +168,11 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 1, 0)
+			indexerPodName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 2, 0)
+			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 2, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerMultisitePod, deployment.GetName(), 3, 0)
+			indexerPodName = fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 3, 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
 		})
 	})

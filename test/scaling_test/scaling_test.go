@@ -287,8 +287,7 @@ var _ = Describe("Scaling test", func() {
 
 			// Ingest data on Indexers
 			for i := 1; i <= siteCount; i++ {
-				siteName := fmt.Sprintf("site%d", i)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 				testenv.CreateMockLogfile(logFile, 2000)
 				testenv.IngestFileViaMonitor(logFile, "main", podName, deployment)
@@ -316,7 +315,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
 
 			// Ingest data on  new Indexers
-			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), "site1", 1)
+			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 			testenv.CreateMockLogfile(logFile, 2000)
 			testenv.IngestFileViaMonitor(logFile, "main", podName, deployment)

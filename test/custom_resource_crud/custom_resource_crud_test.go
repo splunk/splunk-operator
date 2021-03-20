@@ -129,7 +129,7 @@ var _ = Describe("crcrud test", func() {
 			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseUpdating, idxcName)
 
 			// Verify Indexers go to ready state
-			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseReady, idxcName)
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
 
 			// Verify CPU limits after updating the CR
 			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
@@ -177,7 +177,7 @@ var _ = Describe("crcrud test", func() {
 		})
 	})
 
-	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("crcrud : can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
@@ -205,8 +205,7 @@ var _ = Describe("crcrud test", func() {
 
 			// Verify CPU limits on Indexers before updating the CR
 			for i := 1; i <= siteCount; i++ {
-				siteName := fmt.Sprintf("site%d", i)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), podName, defaultCPULimits)
 			}
 
@@ -235,46 +234,9 @@ var _ = Describe("crcrud test", func() {
 
 			// Verify CPU limits after updating the CR
 			for i := 1; i <= siteCount; i++ {
-				siteName := fmt.Sprintf("site%d", i)
-				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteName, 0)
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), podName, newCPULimits)
 			}
-
-			// Verify CPU limits on Search Heads before updating the CR
-			SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, defaultCPULimits)
-			SearchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, defaultCPULimits)
-			SearchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, defaultCPULimits)
-
-			// Change CPU limits to trigger CR update
-			shc := &enterprisev1.SearchHeadCluster{}
-			instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
-			err = deployment.GetInstance(instanceName, shc)
-			if err != nil {
-				testenvInstance.Log.Error(err, "Unable to fetch Search Head Cluster deployment")
-			}
-
-			shc.Spec.Resources.Limits = corev1.ResourceList{
-				"cpu": resource.MustParse(newCPULimits),
-			}
-			err = deployment.UpdateCR(shc)
-			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
-
-			// Verify Search Head Cluster is updating
-			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
-
-			// Verify Search Head go to ready state
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Verify CPU limits after updating the CR
-			SearchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, newCPULimits)
-			SearchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, newCPULimits)
-			SearchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, newCPULimits)
 		})
 	})
 })
