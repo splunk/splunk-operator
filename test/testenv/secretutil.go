@@ -15,22 +15,35 @@
 package testenv
 
 import (
+	// "bytes"
 	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"strings"
+
+	// "strings"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 //SecretResponse Secret object struct
 type SecretResponse struct {
-	HecToken     string `json:"hec_token"`
-	IdxcSecret   string `json:"idxc_secret"`
-	Pass4SymmKey string `json:"pass4SymmKey"`
-	Password     string `json:"password"`
-	ShcSecret    string `json:"shc_secret"`
+	Data struct {
+		HecToken     string `json:"hec_token"`
+		IdxcSecret   string `json:"idxc_secret"`
+		Pass4SymmKey string `json:"pass4SymmKey"`
+		Password     string `json:"password"`
+		ShcSecret    string `json:"shc_secret"`
+	} `json:"data"`
+}
+
+//SecretObject Secret Object structure
+var SecretObject = map[string]string{
+	"HecToken":         "hec_token",
+	"AdminPassword":    "password",
+	"IdxcPass4Symmkey": "idxc_secret",
+	"ShcPass4Symmkey":  "shc_secret",
+	"Pass4SymmKey":     "pass4SymmKey",
 }
 
 // DecodeBase64 decodes base64 and returns string
@@ -50,52 +63,52 @@ func EncodeBase64(str string) string {
 }
 
 // GetSecretObject Gets the secret object
-func GetSecretObject(deployment *Deployment, ns string, secretName string) *SecretResponse {
-	output, err := exec.Command("kubectl", "get", "secret", secretName, "-n", ns, "-o", "jsonpath='{.data}'").Output()
+func GetSecretObject(deployment *Deployment, ns string, secretName string) SecretResponse {
+	output, err := exec.Command("kubectl", "get", "secret", secretName, "-n", ns, "-o", "json").Output()
+	restResponse := SecretResponse{}
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get secret %s -n %s -o jsonpath='{.data}'", secretName, ns)
+		cmd := fmt.Sprintf("kubectl get secret %s -n %s -o json", secretName, ns)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return nil
+		return restResponse
 	}
 	// Parse response into response struct
-	restResponse := SecretResponse{}
-	err = json.Unmarshal([]byte(strings.Trim(string(output), "'")), &restResponse)
+	err = json.Unmarshal([]byte(output), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
-		return nil
+		return restResponse
 	}
-	return &restResponse
+	return restResponse
 }
 
 // GetSecretKey Gets the value to specific key from secret object
 func GetSecretKey(deployment *Deployment, ns string, key string, secretName string) string {
 	restResponse := GetSecretObject(deployment, ns, secretName)
-	logf.Log.Info("Secret object encoded values", string(secretName))
-	//return key based on request
-	switch key {
-	case "hec_token":
-		value := DecodeBase64(restResponse.HecToken)
-		return value
-	case "idxc_secret":
-		value := DecodeBase64(restResponse.IdxcSecret)
-		return value
-	case "pass4SymmKey":
-		value := DecodeBase64(restResponse.Pass4SymmKey)
-		return value
-	case "password":
-		value := DecodeBase64(restResponse.Password)
-		return value
-	case "shc_secret":
-		value := DecodeBase64(restResponse.ShcSecret)
-		return value
-	default:
-		return "Invalid Key"
+	if restResponse == (SecretResponse{}) {
+		return "Not Found"
 	}
+	logf.Log.Info("Get secret object encoded value", "Secret Name", secretName, "Key", key)
+	value := "Invalid Key"
+	if key == "hec_token" {
+		value = DecodeBase64(restResponse.Data.HecToken)
+	}
+	if key == "idxc_secret" {
+		value = DecodeBase64(restResponse.Data.IdxcSecret)
+	}
+	if key == "pass4SymmKey" {
+		value = DecodeBase64(restResponse.Data.Pass4SymmKey)
+	}
+	if key == "password" {
+		value = DecodeBase64(restResponse.Data.Password)
+	}
+	if key == "shc_secret" {
+		value = DecodeBase64(restResponse.Data.ShcSecret)
+	}
+	return value
 }
 
 //ModifySecretObject Modifies the entire secret object
 func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) bool {
-	logf.Log.Info("Modify secret object", secretName, "with secret", data)
+	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
 	//Update object using spec
 	err := deployment.UpdateCR(secret)
@@ -111,7 +124,7 @@ func ModifySecretKey(deployment *Deployment, ns string, key string, value string
 	//Get current config for update
 	secretName := fmt.Sprintf(SecretObjectName, ns)
 	restResponse := GetSecretObject(deployment, ns, secretName)
-	out, err := json.Marshal(restResponse)
+	out, err := json.Marshal(restResponse.Data)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
 		return false
@@ -125,9 +138,28 @@ func ModifySecretKey(deployment *Deployment, ns string, key string, value string
 	}
 	//Modify data
 	data[key] = []byte(value)
-	logf.Log.Info("Modify secret object", secretName, "with key", key, "Value", value)
+	logf.Log.Info("Modify secret object with following: ", "Secret Name", secretName, "Key", key, "Value", value)
 	modify := ModifySecretObject(deployment, data, ns, secretName)
 	return modify
+}
+
+// UpdateSecret Updates the secret object based on SecretResponse Struct
+func UpdateSecret(deployment *Deployment, ns string, secretObj SecretResponse) (bool, error) {
+	secretName := fmt.Sprintf(SecretObjectName, ns)
+	secretDataString, err := json.Marshal(secretObj.Data)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse response")
+		return false, err
+	}
+	//Convert object to map for update
+	var data map[string][]byte
+	err = json.Unmarshal([]byte(secretDataString), &data)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse response")
+		return false, err
+	}
+	modify := ModifySecretObject(deployment, data, ns, secretName)
+	return modify, err
 }
 
 //GetMountedKey Gets the key mounted on pod
@@ -139,6 +171,6 @@ func GetMountedKey(deployment *Deployment, podName string, key string) string {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return ""
 	}
-	logf.Log.Info("key found on pod", "pod", podName, "Key", stdout, "stderr", stderr)
+	logf.Log.Info("Key found on pod", "Pod Name", podName, "stdout", stdout, "stderr", stderr)
 	return string(stdout)
 }

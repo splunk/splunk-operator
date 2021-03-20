@@ -90,15 +90,6 @@ const (
 	SecretObjectPodName = "splunk-%s-%s-secret-v%d"
 )
 
-//SecretObject Secret Object structure
-var SecretObject = map[string]string{
-	"HecToken":            "hec_token",
-	"AdminPassword":       "password",
-	"IdxcPass4Symmkey":    "idxc_secret",
-	"ShcPass4Symmkey":     "shc_secret",
-	"GeneralPass4Symmkey": "pass4Symmkey",
-}
-
 var (
 	metricsHost              = "0.0.0.0"
 	metricsPort              = 8383
@@ -504,10 +495,26 @@ func (testenv *TestEnv) createLicenseConfigMap() error {
 	if err != nil {
 		return err
 	}
-	if err := testenv.GetKubeClient().Create(context.TODO(), lic); err != nil {
+
+	// Check if config map already exists
+	key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
+	err = testenv.GetKubeClient().Get(context.TODO(), key, lic)
+
+	if err != nil {
+		testenv.Log.Info("No Existing license config map not found. Creating a new License Configmap", "Name", testenv.namespace)
+	} else {
+		testenv.Log.Info("Existing license config map found.", "License Config Map Name", testenv.namespace)
+		return nil
+	}
+
+	// Create a new licese config map
+	err = testenv.GetKubeClient().Create(context.TODO(), lic)
+	if err != nil {
 		testenv.Log.Error(err, "Unable to create license configmap")
 		return err
 	}
+
+	testenv.Log.Info("New License Config Map created.", "License Config Map Name", testenv.namespace)
 
 	testenv.pushCleanupFunc(func() error {
 		err := testenv.GetKubeClient().Delete(context.TODO(), lic)
