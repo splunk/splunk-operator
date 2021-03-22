@@ -423,3 +423,31 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 		return result
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
+
+// VerifySecretObjectUpdate Check whether the secret object info is pushed to other pods
+func VerifySecretObjectUpdate(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedKey string) {
+	gomega.Equal(func() bool {
+		for _, pod := range verificationPods {
+			key := GetSecretKey(deployment, testenvInstance.GetName(), secretKey, pod)
+			if key != modifiedKey {
+				testenvInstance.Log.Info("Key", modifiedKey, "not updated on pod", "Pod", pod, "Key found", key)
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// VerifySecretPodUpdate Check whether the secret object info is mounted on all pods
+func VerifySecretPodUpdate(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedKey string) {
+	gomega.Equal(func() bool {
+		for _, pod := range verificationPods {
+			key := GetMountedKey(deployment, pod, secretKey)
+			if key != modifiedKey {
+				testenvInstance.Log.Info("Key", modifiedKey, "not updated on pod", "Pod", pod, "Key found", key)
+				return false
+			}
+		}
+		return true
+	})
+}
