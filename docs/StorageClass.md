@@ -88,10 +88,6 @@ This will mount local, ephemeral volumes for `/opt/splunk/etc` and
 forever whenever the Pod is removed from a node (for any reason). We strongly
 discourage and do not support using this for any production environments.*
 
-## Storage Space Considerations
-
-Please see Storage guidelines at https://github.com/splunk/splunk-operator/blob/develop/docs/CustomResources.md 
-
 ## Performance Considerations
 
 Splunk Enterprise’s performance is heavily dependent on the performance of your
