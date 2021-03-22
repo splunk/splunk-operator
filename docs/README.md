@@ -75,6 +75,10 @@ information.
 
 The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
 
+### Use of Splunk SmartStore
+As a splunk deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast, SSD-based cache on each Splunk indexer node to keep recent data locally available for search. When data rolls to WARM lifecycle stage, it is uploaded to an S3 API-compliant object store for persistence. Look into the [Configuring SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) document for configuring and useing SmartStore.
+
+
 ## Installing the Splunk Operator
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:

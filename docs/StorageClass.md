@@ -75,10 +75,6 @@ spec:
 
 **Note: The contents of these directories will be deleted forever if the pod is removed from a node for any reason. We strongly discourage and do not support using this setting for any production environments.**
 
-## Storage Space Considerations
-
-Please see Storage guidelines at https://github.com/splunk/splunk-operator/blob/develop/docs/CustomResources.md 
-
 ## Performance Considerations
 
 The performance of Splunk Enterprise is highly dependent on the performance of your underlying storage infrastructure. Different Storage Class providers offer a wide range of performance characteristics, and how you configure and architect your storage infrastructure will have a significant impact on the performance of Splunk Enterprise running in Kubernetes.
