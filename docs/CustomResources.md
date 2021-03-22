@@ -248,9 +248,11 @@ The resources guidelines for running production Splunk Enterprise instances in p
 
   
 ### A Guaranteed QoS Class example:
+The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
 
-Let's look into what should be the setting for CPU/Mem resources based on the [Reference Hardware](https://docs.splunk.com/Documentation/Splunk/8.1.2/Capacity/Referencehardware) for a standalone splunk pod. The minimumn resources requirement is "12 physical CPU cores, or 24 vCPU at 2Ghz or greater speed per core. 12GB RAM".
-Assuming vCPUs, in order to make sure Kubernetes schedule the Splunk POD in a node that has above reference resources bandwith, set the CPU and Memory values for ```requests``` to 24 and 12Gi respectively. Make sure the same values are used for ```limits``` parameter also. So the yaml file will look like:
+*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` value.*
+
+Example:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -269,7 +271,9 @@ spec:
 ```
 
 ### A Burstable QoS Class example:
-Using the similar hardware reference from the last example, you can have a Burstable QoS service by letting the Kubernetes schedule the Splunk POD in a node that can serve the CPU/Mem providided in the ```requests``` section. However, set the CPU and Memory values for ```limits``` to 24 and 12Gi respectively. 
+Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance will start with minimal indexing and search capacity, but will be allowed to scale up to the CPU and memory ```limits``` values.
+
+Example:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -287,10 +291,11 @@ spec:
       cpu: "24"  
 ```
 
-In the above example, Splunk POD will be able to start serving the searches and ingestion that can be served by the 4 CPU cores and 2Gi memory. Subsequently, as the load grows, kubernetes will allocate additional CPU cores upto the ```limits``` of 24 CPU cores, as well as additional memory upto 12Gi.
-
 
 ### A BestEffort QoS Class example:
+With no ```requests``` or ```limits``` values set for CPU and memory, the QoS class is set to BestEffort.
+
+Example:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
