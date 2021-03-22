@@ -441,6 +441,36 @@ func VerifySecretsUpdatedOnPod(deployment *Deployment, testenvInstance *TestEnv,
 	}
 }
 
+// VerifyNewSecretValueOnVersionedSecretObject Check whether the new versioned secret object is created with new value
+func VerifyNewSecretValueOnVersionedSecretObject(deployment *Deployment, testenvInstance *TestEnv, verificationSecrets []string, secretKey string, previousValue string) {
+	for _, secretObject := range verificationSecrets {
+		found := false
+		currentValue := GetSecretKey(deployment, testenvInstance.GetName(), secretKey, secretObject)
+		if currentValue == previousValue {
+			testenvInstance.Log.Info("New Key Not created ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Previous Value of Key", previousValue, "Key Value found", currentValue)
+		} else {
+			testenvInstance.Log.Info("New key created ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Previous Value of Key", previousValue, "Key Value found", currentValue)
+			found = true
+		}
+		gomega.Expect(found).Should(gomega.Equal(true))
+	}
+}
+
+// VerifyNewVersionedSecretValueUpdatedOnPod Check whether the new secret object value is mounted on all pods
+func VerifyNewVersionedSecretValueUpdatedOnPod(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, previousValue string) {
+	for _, pod := range verificationPods {
+		found := false
+		currentValue := GetMountedKey(deployment, pod, secretKey)
+		if currentValue == previousValue {
+			testenvInstance.Log.Info("New Key not updated on pod", "Pod Name ", pod, "Secret Key", secretKey, "Previous Value of Key", previousValue, "Key Value found", currentValue)
+		} else {
+			testenvInstance.Log.Info("New Key verified on pod", "Pod Name ", pod, "Secret Key", secretKey, "Previous Value of Key", previousValue, "Key Value found", currentValue)
+			found = true
+		}
+		gomega.Expect(found).Should(gomega.Equal(true))
+	}
+}
+
 // VerifyClusterMasterPhase verify phase of cluster master
 func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	cm := &enterprisev1.ClusterMaster{}

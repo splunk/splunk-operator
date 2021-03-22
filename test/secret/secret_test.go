@@ -77,7 +77,8 @@ var _ = Describe("secret test", func() {
 			secretObj.Data.HecToken = testenv.EncodeBase64(modifiedHecToken)
 			secretObj.Data.Password = testenv.EncodeBase64(modifedKeyValue)
 			secretObj.Data.Pass4SymmKey = testenv.EncodeBase64(modifedKeyValue)
-			testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj)
+			err = testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj, false /*delete*/)
+			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
@@ -91,7 +92,7 @@ var _ = Describe("secret test", func() {
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
-			// Once system is up after update check each pod for secret key update
+			// Once Pods are READY check each versioned secret for updated secret keys
 			standaloneSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "standalone", 2)
 			licenseMasterSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "license-master", 2)
 			monitoringConsoleSecretName := fmt.Sprintf(testenv.SecretObjectPodName, testenvInstance.GetName(), "monitoring-console", 2)
@@ -106,7 +107,7 @@ var _ = Describe("secret test", func() {
 			// Verify that Pass4SymmKey is updated
 			testenv.VerifySecretObjectUpdated(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
 
-			// All pods to be used to check for secret object update
+			// Once Pods are READY check each pod for updated secret keys
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			licenseMasterPodName := fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)
 			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, testenvInstance.GetName(), 0)
@@ -120,6 +121,115 @@ var _ = Describe("secret test", func() {
 
 			// Verify that Pass4SymmKey is updated
 			testenv.VerifySecretsUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
+
+			// Delete secret key
+			err = testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj, true /*delete*/)
+			Expect(err).To(Succeed(), "Unable to delete secret Object")
+
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(deployment, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Once Pods are READY check each versioned secret for updated secret keys
+			standaloneSecretName = fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "standalone", 3)
+			licenseMasterSecretName = fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "license-master", 3)
+			monitoringConsoleSecretName = fmt.Sprintf(testenv.SecretObjectPodName, testenvInstance.GetName(), "monitoring-console", 3)
+			verificationSecrets = []string{standaloneSecretName, licenseMasterSecretName, monitoringConsoleSecretName}
+
+			// Verify that new HEC TOKEN is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["HecToken"], testenv.DecodeBase64(secretObj.Data.HecToken))
+
+			// Verify that new Admin Password is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["AdminPassword"], testenv.DecodeBase64(secretObj.Data.Password))
+
+			// Verify that new Pass4SymmKey is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
+
+			// Verify that new IdxcSecret is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["IdxcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.IdxcSecret))
+
+			// Verify that new ShcSecret is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
+
+			// Verify that new HEC TOKEN is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["HecToken"], testenv.DecodeBase64(secretObj.Data.HecToken))
+
+			// Verify that new Admin Password is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["AdminPassword"], testenv.DecodeBase64(secretObj.Data.Password))
+
+			// Verify that new Pass4SymmKey is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
+
+			// Verify that new IdxcSecret is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["IdxcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.IdxcSecret))
+
+			// Verify that new ShcSecret is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
+
+			// secret object for reference comparison
+			secretObj = testenv.GetSecretObject(deployment, testenvInstance.GetName(), secretName)
+
+			// delete secret by passing empty data in spec
+			var data map[string][]byte
+			err = testenv.ModifySecretObject(deployment, data, testenvInstance.GetName(), secretName)
+			Expect(err).To(Succeed(), "Unable to delete secret Object")
+
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(deployment, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Once Pods are READY check each versioned secret for updated secret keys
+			standaloneSecretName = fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "standalone", 4)
+			licenseMasterSecretName = fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "license-master", 4)
+			monitoringConsoleSecretName = fmt.Sprintf(testenv.SecretObjectPodName, testenvInstance.GetName(), "monitoring-console", 4)
+			verificationSecrets = []string{standaloneSecretName, licenseMasterSecretName, monitoringConsoleSecretName}
+
+			// Verify that new HEC TOKEN is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["HecToken"], testenv.DecodeBase64(secretObj.Data.HecToken))
+
+			// Verify that new Admin Password is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["AdminPassword"], testenv.DecodeBase64(secretObj.Data.Password))
+
+			// Verify that new Pass4SymmKey is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
+
+			// Verify that new IdxcSecret is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["IdxcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.IdxcSecret))
+
+			// Verify that new ShcSecret is created
+			testenv.VerifyNewSecretValueOnVersionedSecretObject(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
+
+			// Verify that new HEC TOKEN is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["HecToken"], testenv.DecodeBase64(secretObj.Data.HecToken))
+
+			// Verify that new Admin Password is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["AdminPassword"], testenv.DecodeBase64(secretObj.Data.Password))
+
+			// Verify that new Pass4SymmKey is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["Pass4SymmKey"], testenv.DecodeBase64(secretObj.Data.Pass4SymmKey))
+
+			// Verify that new IdxcSecret is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["IdxcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.IdxcSecret))
+
+			// Verify that new ShcSecret is updated on pod
+			testenv.VerifyNewVersionedSecretValueUpdatedOnPod(deployment, testenvInstance, verificationPods, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
+
 		})
 	})
 
@@ -167,7 +277,8 @@ var _ = Describe("secret test", func() {
 			secretObj.Data.Pass4SymmKey = testenv.EncodeBase64(modifedKeyValue)
 			secretObj.Data.IdxcSecret = testenv.EncodeBase64(modifedKeyValue)
 			secretObj.Data.ShcSecret = testenv.EncodeBase64(modifedKeyValue)
-			testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj)
+			err = testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj, false /*delete*/)
+			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Master goes to update phase
 			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
@@ -190,7 +301,7 @@ var _ = Describe("secret test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
-			// Once PODS are up after update check each pod for secret key update
+			// Once Pods are READY check each versioned secret for updated secret keys
 			clusterMasterSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "cluster-master", 2)
 			indexerSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "idxc-indexer", 2)
 			licenseMasterSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "license-master", 2)
@@ -214,7 +325,7 @@ var _ = Describe("secret test", func() {
 			// Verify that ShcPass4Symmkey is updated
 			testenv.VerifySecretObjectUpdated(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
 
-			// All pods to be used to check for secret object update
+			// Once Pods are READY check each pod for updated secret keys
 			clusterMasterPodName := fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())
 			licenseMasterPodName := fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)
 			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, testenvInstance.GetName(), 0)
@@ -289,7 +400,8 @@ var _ = Describe("secret test", func() {
 			secretObj.Data.Pass4SymmKey = testenv.EncodeBase64(modifedKeyValue)
 			secretObj.Data.IdxcSecret = testenv.EncodeBase64(modifedKeyValue)
 			secretObj.Data.ShcSecret = testenv.EncodeBase64(modifedKeyValue)
-			testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj)
+			err = testenv.UpdateSecret(deployment, testenvInstance.GetName(), secretObj, false /*delete*/)
+			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Master goes to update phase
 			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
@@ -309,7 +421,7 @@ var _ = Describe("secret test", func() {
 			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
-			// Once POS are up after update check each pod for secret key update
+			// Once Pods are READY check each versioned secret for updated secret keys
 			clusterMasterSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "cluster-master", 2)
 			licenseMasterSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "license-master", 2)
 			searchHeadDeployerSecretName := fmt.Sprintf(testenv.SecretObjectPodName, deployment.GetName(), "shc-deployer", 2)
@@ -335,7 +447,7 @@ var _ = Describe("secret test", func() {
 			// Verify that ShcPass4Symmkey is updated
 			testenv.VerifySecretObjectUpdated(deployment, testenvInstance, verificationSecrets, testenv.SecretObject["ShcPass4Symmkey"], testenv.DecodeBase64(secretObj.Data.ShcSecret))
 
-			// All pods to be used to check for secret object update
+			// Once Pods are READY check each versioned secret for updated secret keys
 			clusterMasterPodName := fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())
 			licenseMasterPodName := fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)
 			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, testenvInstance.GetName(), 0)

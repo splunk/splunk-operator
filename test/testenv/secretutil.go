@@ -88,53 +88,63 @@ func GetSecretKey(deployment *Deployment, ns string, key string, secretName stri
 	}
 	logf.Log.Info("Get secret object encoded value", "Secret Name", secretName, "Key", key)
 	value := "Invalid Key"
-	if key == "hec_token" {
+	switch key {
+	case "hec_token":
 		value = DecodeBase64(restResponse.Data.HecToken)
-	}
-	if key == "idxc_secret" {
+	case "idxc_secret":
 		value = DecodeBase64(restResponse.Data.IdxcSecret)
-	}
-	if key == "pass4SymmKey" {
+	case "pass4SymmKey":
 		value = DecodeBase64(restResponse.Data.Pass4SymmKey)
-	}
-	if key == "password" {
+	case "password":
 		value = DecodeBase64(restResponse.Data.Password)
-	}
-	if key == "shc_secret" {
+	case "shc_secret":
 		value = DecodeBase64(restResponse.Data.ShcSecret)
 	}
 	return value
 }
 
 //ModifySecretObject Modifies the entire secret object
-func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) bool {
+func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
 	//Update object using spec
 	err := deployment.UpdateCR(secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
-		return false
+		return err
 	}
-	return true
+	return nil
+}
+
+//DeleteSecretObject Modifies the entire secret object
+func DeleteSecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) error {
+	logf.Log.Info("Delete secret object", "Secret Name", secretName)
+	secret := newSecretSpec(ns, secretName, data)
+	//Update object using spec
+	err := deployment.DeleteCR(secret)
+	if err != nil {
+		logf.Log.Error(err, "Unable to delete secret object")
+		return err
+	}
+	return nil
 }
 
 //ModifySecretKey Modifies the specific key in secret object
-func ModifySecretKey(deployment *Deployment, ns string, key string, value string) bool {
+func ModifySecretKey(deployment *Deployment, ns string, key string, value string) error {
 	//Get current config for update
 	secretName := fmt.Sprintf(SecretObjectName, ns)
 	restResponse := GetSecretObject(deployment, ns, secretName)
 	out, err := json.Marshal(restResponse.Data)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
-		return false
+		return err
 	}
 	//Convert object to map for update
 	var data map[string][]byte
 	err = json.Unmarshal([]byte(out), &data)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
-		return false
+		return err
 	}
 	//Modify data
 	data[key] = []byte(value)
@@ -144,22 +154,27 @@ func ModifySecretKey(deployment *Deployment, ns string, key string, value string
 }
 
 // UpdateSecret Updates the secret object based on SecretResponse Struct
-func UpdateSecret(deployment *Deployment, ns string, secretObj SecretResponse) (bool, error) {
+func UpdateSecret(deployment *Deployment, ns string, secretObj SecretResponse, delete bool) error {
 	secretName := fmt.Sprintf(SecretObjectName, ns)
 	secretDataString, err := json.Marshal(secretObj.Data)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
-		return false, err
+		return err
 	}
 	//Convert object to map for update
 	var data map[string][]byte
 	err = json.Unmarshal([]byte(secretDataString), &data)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse response")
-		return false, err
+		return err
 	}
-	modify := ModifySecretObject(deployment, data, ns, secretName)
-	return modify, err
+	// Update or delete the secret object based on delete parameter
+	if delete {
+		err = DeleteSecretObject(deployment, data, ns, secretName)
+	} else {
+		err = ModifySecretObject(deployment, data, ns, secretName)
+	}
+	return err
 }
 
 //GetMountedKey Gets the key mounted on pod
