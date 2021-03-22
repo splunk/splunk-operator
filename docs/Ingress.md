@@ -114,7 +114,7 @@ http://<LoadBalance-External-IP>
 
 #### Multiple Hosts Configuration
 
-If your deployment has multiple hosts such as Search Heads and Cluster Master, use this example to configure Splunk Web access, and HTTP Event Collector port. Follow the steps here [HEC Documentation](https://docs.splunk.com/Documentation/Splunk/8.1.2/Data/UsetheHTTPEventCollector) to learn how to create a HEC token and how to send data using HTTP. 
+If your deployment has multiple hosts such as Search Heads and Cluster Master, use this example to configure Splunk Web access, and HTTP Event Collector port. Follow the steps here [HEC Documentation](https://docs.splunk.com/Documentation/Splunk/latest/Data/UsetheHTTPEventCollector) to learn how to create a HEC token and how to send data using HTTP. 
 
 1. Create a Gateway for multiple hosts.
 

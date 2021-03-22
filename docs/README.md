@@ -57,7 +57,7 @@ information.
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/0.2.2/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.0-RC/splunk-operator-install.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
