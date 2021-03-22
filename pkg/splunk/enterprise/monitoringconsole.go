@@ -208,7 +208,10 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 							},
 							//Below requests/limits for MC are defined taking into account below EC2 validated architecture and its defined limits
 							//1. https://www.splunk.com/pdfs/technical-briefs/deploying-splunk-enterprise-on-amazon-web-services-technical-brief.pdf
+							//defines the validate architecture for License Master and Monitoring console i.e, c5.2xlarge
 							//2. (c5.2xlarge) architecture req from https://aws.amazon.com/ec2/instance-types/c5/
+							//defines that for c5.2xlarge architecture we need 8vCPU and 16Gi memory
+							//since we only have MC here (as we have separate LM) so 4vCPU and 8Gi memory has been set as limit for MC pod
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("0.1"),
