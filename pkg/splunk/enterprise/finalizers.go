@@ -37,48 +37,50 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	var component string
+	var components []string
 	switch objectKind {
 	case "Standalone":
-		component = "standalone"
+		components = append(components, "standalone")
 	case "LicenseMaster":
-		component = "license-master"
+		components = append(components, "license-master")
 	case "SearchHeadCluster":
-		component = "search-head"
+		components = append(components, "search-head", "deployer")
 	case "IndexerCluster":
-		component = "indexer"
+		components = append(components, "indexer")
 	case "ClusterMaster":
-		component = "cluster-master"
+		components = append(components, "cluster-master")
 	default:
 		scopedLog.Info("Skipping PVC removal")
 		return nil
 	}
 
-	// get list of PVCs associated with this CR
-	labels := map[string]string{
-		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
-	}
-	listOpts := []client.ListOption{
-		client.InNamespace(cr.GetNamespace()),
-		client.MatchingLabels(labels),
-	}
-	pvclist := corev1.PersistentVolumeClaimList{}
-	if err := c.List(context.Background(), &pvclist, listOpts...); err != nil {
-		return err
-	}
-
-	if len(pvclist.Items) == 0 {
-		scopedLog.Info("No PVC found")
-		return nil
-	}
-
-	// delete each PVC
-	for _, pvc := range pvclist.Items {
-		scopedLog.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)
-		if err := c.Delete(context.Background(), &pvc); err != nil {
+	for _, component := range components {
+		// get list of PVCs associated with this CR
+		labels := map[string]string{
+			"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+		}
+		listOpts := []client.ListOption{
+			client.InNamespace(cr.GetNamespace()),
+			client.MatchingLabels(labels),
+		}
+		pvclist := corev1.PersistentVolumeClaimList{}
+		if err := c.List(context.Background(), &pvclist, listOpts...); err != nil {
 			return err
 		}
-	}
 
+		if len(pvclist.Items) == 0 {
+			scopedLog.Info("No PVC found")
+			return nil
+		}
+
+		// delete each PVC
+		for _, pvc := range pvclist.Items {
+			scopedLog.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)
+			if err := c.Delete(context.Background(), &pvc); err != nil {
+				return err
+			}
+		}
+
+	}
 	return nil
 }
