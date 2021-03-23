@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -183,6 +183,17 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 	return deployed.(*enterprisev1.ClusterMaster), err
 }
 
+//DeployClusterMasterWithSmartStoreIndexes deploys the cluster master with smartstore indexes
+func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMasterName string, ansibleConfig string, smartstorespec enterprisev1.SmartStoreSpec) (*enterprisev1.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name)
+	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
+	deployed, err := d.deployCR(name, cm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.ClusterMaster), err
+}
+
 //DeployIndexerCluster deploys the indexer cluster
 func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
@@ -252,8 +263,15 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 	return cr, nil
 }
 
-// DeploySingleSiteCluster deploys a lm, indexer and sh clusters
-func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) error {
+// UpdateCR method to update existing CR spec
+func (d *Deployment) UpdateCR(cr runtime.Object) error {
+
+	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
+	return err
+}
+
+// DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
+func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, shc bool) error {
 
 	var licenseMaster string
 
@@ -280,9 +298,12 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int) e
 		return err
 	}
 
-	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
-	if err != nil {
-		return err
+	// Deploy the SH cluster
+	if shc {
+		_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, "")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -429,12 +450,9 @@ func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev
 	return deployed.(*enterprisev1.Standalone), err
 }
 
-// DeployStandaloneWithIndexes deploys a standalone splunk enterprise instance on the specified testenv
-func (d *Deployment) DeployStandaloneWithIndexes(name string, indexesSecret string, volumeName, string, indexName string) (*enterprisev1.Standalone, error) {
+// DeployStandaloneWithGivenSmartStoreSpec deploys a standalone give smartstore spec
+func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(name string, smartStoreSpec enterprisev1.SmartStoreSpec) (*enterprisev1.Standalone, error) {
 
-	s3Endpoint := "https://s3-" + s3Region + ".amazonaws.com"
-	volumeSpec := GenerateIndexVolumeSpec(volumeName, s3Endpoint, testIndexesS3Bucket, indexesSecret)
-	indexSpec := GenerateIndexSpec(indexName, volumeName)
 	spec := enterprisev1.StandaloneSpec{
 		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
 			Spec: splcommon.Spec{
@@ -442,19 +460,68 @@ func (d *Deployment) DeployStandaloneWithIndexes(name string, indexesSecret stri
 			},
 			Volumes: []corev1.Volume{},
 		},
-		SmartStore: enterprisev1.SmartStoreSpec{
-			VolList: []enterprisev1.VolumeSpec{
-				volumeSpec,
-			},
-			IndexList: []enterprisev1.IndexSpec{
-				indexSpec,
-			},
-		},
+		SmartStore: smartStoreSpec,
 	}
+
 	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
 	return deployed.(*enterprisev1.Standalone), err
+}
+
+// DeployMultisiteClusterWithSearchHeadAndIndexes deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string, indexerReplicas int, siteCount int, indexesSecret string, smartStoreSpec enterprisev1.SmartStoreSpec) error {
+
+	var licenseMaster string
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster-master
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployClusterMasterWithSmartStoreIndexes(name, licenseMaster, defaults, smartStoreSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: %s
+`, name, siteName)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: site0
+`, name)
+	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
+	return err
 }

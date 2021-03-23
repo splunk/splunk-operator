@@ -110,4 +110,4 @@ fi
 
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v -progress -r -stream -nodes=${NUM_NODES} --focus="${TEST_TO_RUN}" ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v -progress -r -stream -keepGoing -nodes=${NUM_NODES} --focus="${TEST_TO_RUN}" ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

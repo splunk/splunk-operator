@@ -31,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -170,6 +170,36 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 	return &new
 }
 
+// newClusterMaster creates and initialize the CR for ClusterMaster Kind
+func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibleConfig string, smartstorespec enterprisev1.SmartStoreSpec) *enterprisev1.ClusterMaster {
+	new := enterprisev1.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterprisev1.ClusterMasterSpec{
+			SmartStore: smartstorespec,
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Volumes: []corev1.Volume{},
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterName,
+				},
+				Defaults: ansibleConfig,
+			},
+		},
+	}
+
+	return &new
+}
+
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
 func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
 	new := enterprisev1.IndexerCluster{
@@ -187,9 +217,6 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
-				},
-				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
 				},
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: clusterMasterRef,
@@ -311,7 +338,7 @@ func newLicenseConfigMap(name, ns, localLicenseFilePath string) (*corev1.ConfigM
 	return &cm, nil
 }
 
-func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag, sparkImageAndTag string) *appsv1.Deployment {
+func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	operator := appsv1.Deployment{
@@ -361,9 +388,6 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 								}, {
 									Name:  "RELATED_IMAGE_SPLUNK_ENTERPRISE",
 									Value: splunkEnterpriseImageAndTag,
-								}, {
-									Name:  "RELATED_IMAGE_SPLUNK_SPARK",
-									Value: sparkImageAndTag,
 								},
 							},
 						},
@@ -451,4 +475,29 @@ func DumpGetPods(ns string) {
 			logf.Log.Info(line)
 		}
 	}
+}
+
+// GetConfLineFromPod gets given config from file on POD
+func GetConfLineFromPod(podName string, filePath string, ns string, configName string) (string, error) {
+	var config string
+	var err error
+	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return config, err
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		// Check for empty lines to prevent an error in logic below
+		if len(line) == 0 {
+			continue
+		}
+		// Look for give config name in file
+		if strings.HasPrefix(line, configName) {
+			logf.Log.Info("Configuration found.", "Config", configName, "Line", line)
+			config = line
+			break
+		}
+	}
+	return config, err
 }

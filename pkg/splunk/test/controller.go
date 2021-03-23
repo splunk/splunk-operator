@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,8 +55,6 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 		*dstP.(*enterprisev1.LicenseMaster) = *srcP.(*enterprisev1.LicenseMaster)
 	case *enterprisev1.SearchHeadCluster:
 		*dstP.(*enterprisev1.SearchHeadCluster) = *srcP.(*enterprisev1.SearchHeadCluster)
-	case *enterprisev1.Spark:
-		*dstP.(*enterprisev1.Spark) = *srcP.(*enterprisev1.Spark)
 	case *enterprisev1.Standalone:
 		*dstP.(*enterprisev1.Standalone) = *srcP.(*enterprisev1.Standalone)
 	default:

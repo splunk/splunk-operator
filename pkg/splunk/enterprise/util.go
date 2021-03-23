@@ -20,11 +20,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	//"github.com/go-logr/stdr"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1beta1"
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -224,11 +223,10 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	return SplunkOperatorAppConfigMap, configMapDataChanged, nil
 }
 
-//  setupInitContainer modifies the podTemplateSpec object to incorporate support for DFS.
-func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, sparkImage string, imagePullPolicy string, commandOnContainer string) {
-	// create an init container in the pod, which is just used to populate the jdk and spark mount directories
+//  setupInitContainer modifies the podTemplateSpec object
+func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string) {
 	containerSpec := corev1.Container{
-		Image:           sparkImage,
+		Image:           Image,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
 		Name:            "init",
 
