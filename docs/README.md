@@ -57,12 +57,19 @@ In order to create Splunk deployments through Splunk operator, access to a funct
 | [Red Hat OpenShift](https://www.openshift.com/)| | |
 | [HPE Ezmeral](https://www.hpe.com/us/en/solutions/container-platform.html)| | |
 
-<br>
+
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
 crash your API server when using custom resource definitions. Do not
 attempt to run the Splunk Operator using these releases. This bug is fixed in
 Kuberenetes 1.16.2.*
+
+### Splunk Enterprise Compatibility
+Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](#ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
+
+### Splunk Apps Installation
+
+Splunk Apps can be installed using Splunk operator by following instructions given at [Installing Splunk Apps](https://github.com/splunk/splunk-operator/blob/develop/docs/Examples.md#installing-splunk-apps). Splunk Premium apps are not supported with the Splunk Operator.
 
 
 ### Docker requirements
