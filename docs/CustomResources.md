@@ -240,9 +240,9 @@ Use the Kubernetes [Quality of Service classes](https://kubernetes.io/docs/tasks
 
 | QoS        | Summary| Description    
 | ---------- | ------- | ------- |
-| Guaranteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    | When the CPU and memory  ```requests``` and ```limits``` values are equal, the pod is given a QoS class of Guaranteed. This level of service is recommended for Splunk Enterprise production environments. |
-| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing (UAT) environment, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage. |
-| BestEffort | No CPU/Mem ```requests``` or ```limits``` are set | When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for testing, or a small development task. |  
+| Guaranteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    | When the CPU and memory  ```requests``` and ```limits``` values are equal, the pod is given a QoS class of Guaranteed. This level of service is recommended for Splunk Enterprise ___production environments___. |
+| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing ___(UAT) environment___, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage. |
+| BestEffort | No CPU/Mem ```requests``` or ```limits``` are set | When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for ___testing, or a small development task___. |
 
 The resources guidelines for running production Splunk Enterprise instances in pods using the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional detail.
 

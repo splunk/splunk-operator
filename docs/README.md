@@ -32,16 +32,32 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 ## Prerequisites for the Splunk Operator
 
-While we are only able to test and support a small subset of configurations, the Splunk Operator should work with any CNCF certified distribution of Kubernetes, version 1.12 or later. Setting up, configuring, and managing Kubernetes clusters is outside the scope of this guide and Splunk’s coverage of support. You can submit bugs to https://github.com/splunk/splunk-operator/issues.
+### Supported Kubernetes Versions
 
-### Supported Kubernetes Platforms
-The supported Kubernetes platforms are:
+- Kubernetes 1.12 and later
 
-* [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)
-* [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)
-* [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)
-* [Red Hat OpenShift](https://www.openshift.com/)
+The Splunk Operator is supported with [CNCF certified](https://www.cncf.io/certification/software-conformance/) distributions of Kubernetes, version 1.12* and later.
 
+Implementing, configuring, and administering Kubernetes clusters is outside the scope of this guide, and Splunk’s coverage of support.
+
+You can submit defects to https://github.com/splunk/splunk-operator/issues.
+
+### Kubernetes Platform Suggestions:
+
+In order to create Splunk deployments through Splunk operator, access to a functioning kubernetes environment is required. Some options include:
+
+
+
+| Platform        | Splunk Smartstore Support | Additional Info|
+| ---------- | ------- | ------- |
+| [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)| Yes | Actively used in the development of the Splunk Operator.|
+| [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)| | Actively used in the development of the Splunk Operator.|
+| [Kind](https://kind.sigs.k8s.io/) |  Yes| Actively used in the development of the Splunk Operator. Suitable for development/test environments only |
+| [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)| | |
+| [Red Hat OpenShift](https://www.openshift.com/)| | |
+| [HPE Ezmeral](https://www.hpe.com/us/en/solutions/container-platform.html)| | |
+
+<br>
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
 [critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
 crash your API server when using custom resource definitions. Do not
