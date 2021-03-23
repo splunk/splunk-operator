@@ -52,23 +52,6 @@ Filesystem      Size  Used Avail Use% Mounted on
 ....
 ```
 
-
-The following `kubectl` command can be use to verify space allocated to the etc and var directories on your POD. 
-Replace the [POD_NAME] with your Splunk pod name.
-
-```
-$ kubectl exec [POD_NAME] -- df -h
-In this example, you can verify that Splunk pod has got requested amount of storage -- etcVolumeStorageConfig is set to 15GB and varVolumeStorageConfig size is set to 25GB
-
-Filesystem      Size  Used Avail Use% Mounted on
-....
-/dev/nvme2n1     25G  530M   24G   3% /opt/splunk/var
-/dev/nvme1n1     15G  270M   15G   2% /opt/splunk/etc
-....
-```
-
-
-
 ## Ephemeral Storage
 
 For testing and demonstration of Splunk Enterprise instances, you have the option of using ephemeral storage instead of persistent storage. Use the `ephemeralStorage` field under the `etcVolumeStorageConfig`and `varVolumeStorageConfig` spec to mount local, ephemeral volumes for `/opt/splunk/etc` and`/opt/splunk/var` using the Kubernetes [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) feature.
