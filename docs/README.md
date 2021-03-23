@@ -88,6 +88,8 @@ A summary of the minimum reference hardware requirements:
 | ---------- | ------- | ------- |
 | 12 CPU Cores or 24 vCPU, 2Ghz or greater per core, 12GB RAM. | Each pod requires: 16 CPU Cores or 32 vCPU, 2Ghz or greater per core, 12GB RAM.| Each pod requires: 12 CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM.|  
 
+Splunk Operator does not support vCPU licensing.
+
 For information on utilizing Kubernetes Quality of Service classes to enforce minimum CPU and memory allocations in production environments, see [Kubernetes Quality of Service classes](CustomResources.md#Kubernetes-Quality-of-Service-classes)
 
 
