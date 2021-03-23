@@ -36,16 +36,6 @@ metadata:
       },
       {
         "apiVersion": "enterprise.splunk.com/v1",
-        "kind": "Spark",
-        "metadata": {
-          "name": "example"
-        },
-        "spec": {
-          "replicas": 1
-        }
-      },
-      {
-        "apiVersion": "enterprise.splunk.com/v1",
         "kind": "Standalone",
         "metadata": {
           "name": "example",
@@ -54,7 +44,7 @@ metadata:
         "spec": {}
       }]
     capabilities: Basic Install
-  name: splunk.v1.0.0
+  name: splunk.v1.0.0-RC
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -132,10 +122,9 @@ spec:
         version: v1
       - kind: Secrets
         version: v1
-      displayName: Spark
-    - description: Spark is the Schema for a Spark cluster
-      kind: Spark
-      name: sparks.enterprise.splunk.com
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
       version: v1
       resources:
       - kind: StatefulSets
@@ -151,10 +140,6 @@ spec:
       - kind: Secrets
         version: v1
       displayName: Standalone
-    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
-      kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1
   description: Placeholder description
   displayName: Splunk
   install:
@@ -185,10 +170,8 @@ spec:
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:8.1.2
-                - name: RELATED_IMAGE_SPLUNK_SPARK
-                  value: docker.io/splunk/spark:0.0.2
-                image: docker.io/splunk/splunk-operator:1.0.0
+                  value: docker.io/splunk/splunk:8.1.3
+                image: docker.io/splunk/splunk-operator:1.0.0-RC
                 imagePullPolicy: IfNotPresent
                 name: splunk-operator
                 resources: {}
@@ -259,4 +242,4 @@ spec:
   maturity: alpha
   provider: {}
   replaces: splunk.v0.0.0
-  version: 1.0.0
+  version: 1.0.0-RC

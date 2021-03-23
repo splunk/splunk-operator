@@ -1,5 +1,22 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 1.0.0-RC (2021-03-22)
+* This a release candidate for upcoming GA release.
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.3 image with it
+
+* Changed CRD version from v1beta1 to v1, 1.0.0-RC operator version
+
+* CSPL-826 - Created documentation detailing secure Splunk deployments in Kubernetes.
+
+* CSPL-674 - Removed Spark support
+
+* CSPL-624 - Added Splunk Operator upgrade documentation
+
+* Security enhancements 
+
+* Test automation enhancements
+
 ## 0.2.2 Beta(2021-02-09)
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.2 image with it, or alternatively any release version 8.1.0 or later
 
