@@ -1,27 +1,43 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: clustermasters.enterprise.splunk.com
+  name: standalones.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
-    description: Status of cluster master
+    description: Status of standalone instances
     name: Phase
     type: string
+  - JSONPath: .status.replicas
+    description: Number of desired standalone instances
+    name: Desired
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Current number of ready standalone instances
+    name: Ready
+    type: integer
+  - JSONPath: .metadata.creationTimestamp
+    description: Age of standalone resource
+    name: Age
+    type: date
   group: enterprise.splunk.com
   names:
-    kind: ClusterMaster
-    listKind: ClusterMasterList
-    plural: clustermasters
+    kind: Standalone
+    listKind: StandaloneList
+    plural: standalones
     shortNames:
-    - cm-idxc
-    singular: clustermaster
+    - stdaln
+    singular: standalone
   scope: Namespaced
   subresources:
+    scale:
+      labelSelectorPath: .status.selector
+      specReplicasPath: .spec.replicas
+      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: ClusterMaster is the Schema for the clustermasters API
+      description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -36,7 +52,8 @@ spec:
         metadata:
           type: object
         spec:
-          description: ClusterMasterSpec defines the desired state of ClusterMaster
+          description: StandaloneSpec defines the desired state of a Splunk Enterprise
+            standalone instances.
           properties:
             Mock:
               description: Mock to differentiate between UTs and actual reconcile
@@ -730,6 +747,10 @@ spec:
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string
+            replicas:
+              description: Number of standalone pods
+              format: int32
+              type: integer
             resources:
               description: resource requirements for the pod containers
               properties:
@@ -1098,12 +1119,6 @@ spec:
                     type: object
                   type: array
               type: object
-            sparkImage:
-              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
-                environment variables). Also used on cluster master for init container
-                to setup the soft links from ../master-apps/splunk-operator/local/
-                to /mnt/splunk-operator/local/
-              type: string
             tolerations:
               description: Pod's tolerations for Kubernetes node's taint
               items:
@@ -2339,19 +2354,11 @@ spec:
               type: array
           type: object
         status:
-          description: ClusterMasterStatus defines the observed state of ClusterMaster
+          description: StandaloneStatus defines the observed state of a Splunk Enterprise
+            standalone instances.
           properties:
-            bundlePushInfo:
-              description: Bundle push status tracker
-              properties:
-                lastCheckInterval:
-                  format: int64
-                  type: integer
-                needToPushMasterApps:
-                  type: boolean
-              type: object
             phase:
-              description: current phase of the cluster master
+              description: current phase of the standalone instances
               enum:
               - Pending
               - Ready
@@ -2361,6 +2368,14 @@ spec:
               - Terminating
               - Error
               type: string
+            readyReplicas:
+              description: current number of ready standalone instances
+              format: int32
+              type: integer
+            replicas:
+              description: number of desired standalone instances
+              format: int32
+              type: integer
             resourceRevMap:
               additionalProperties:
                 type: string

@@ -384,19 +384,6 @@ func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crN
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
-// VerifyStandaloneUpdating ensures Standalone is scaling up
-func VerifyStandaloneUpdating(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
-	gomega.Eventually(func() splcommon.Phase {
-		err := deployment.GetInstance(deploymentName, standalone)
-		if err != nil {
-			return splcommon.PhaseError
-		}
-		testenvInstance.Log.Info("Waiting for standalone STATUS to be updating", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
-		DumpGetPods(testenvInstance.GetName())
-		return standalone.Status.Phase
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseUpdating))
-}
-
 // VerifyCPULimits verifies value of CPU limits is as expected
 func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
 	gomega.Eventually(func() bool {
@@ -424,30 +411,47 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifySecretObjectUpdate Check whether the secret object info is pushed to other pods
-func VerifySecretObjectUpdate(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedKey string) {
-	gomega.Equal(func() bool {
-		for _, pod := range verificationPods {
-			key := GetSecretKey(deployment, testenvInstance.GetName(), secretKey, pod)
-			if key != modifiedKey {
-				testenvInstance.Log.Info("Key", modifiedKey, "not updated on pod", "Pod", pod, "Key found", key)
-				return false
-			}
+// VerifySecretObjectUpdated Check whether the new secret object is created
+func VerifySecretObjectUpdated(deployment *Deployment, testenvInstance *TestEnv, verificationSecrets []string, secretKey string, modifiedValue string) {
+	for _, secretObject := range verificationSecrets {
+		found := false
+		currentValue := GetSecretKey(deployment, testenvInstance.GetName(), secretKey, secretObject)
+		if currentValue != modifiedValue {
+			testenvInstance.Log.Info("Key Not Updated on Secret Object ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
+		} else {
+			testenvInstance.Log.Info("Key verified on Secret Object ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
+			found = true
 		}
-		return true
-	})
+		gomega.Expect(found).Should(gomega.Equal(true))
+	}
 }
 
-// VerifySecretPodUpdate Check whether the secret object info is mounted on all pods
-func VerifySecretPodUpdate(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedKey string) {
-	gomega.Equal(func() bool {
-		for _, pod := range verificationPods {
-			key := GetMountedKey(deployment, pod, secretKey)
-			if key != modifiedKey {
-				testenvInstance.Log.Info("Key", modifiedKey, "not updated on pod", "Pod", pod, "Key found", key)
-				return false
-			}
+// VerifySecretsUpdatedOnPod Check whether the secret object info is mounted on all pods
+func VerifySecretsUpdatedOnPod(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedValue string) {
+	for _, pod := range verificationPods {
+		found := false
+		currentValue := GetMountedKey(deployment, pod, secretKey)
+		if currentValue != modifiedValue {
+			testenvInstance.Log.Info("Key not updated on pod", "Pod Name ", pod, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
+		} else {
+			testenvInstance.Log.Info("Key verified on pod", "Pod Name ", pod, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
+			found = true
 		}
-		return true
-	})
+		gomega.Expect(found).Should(gomega.Equal(true))
+	}
+}
+
+// VerifyClusterMasterPhase verify phase of cluster master
+func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
+	cm := &enterprisev1.ClusterMaster{}
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(deployment.GetName(), cm)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for cluster-master Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
+		DumpGetPods(testenvInstance.GetName())
+		// Test ClusterMaster Phase to see if its ready
+		return cm.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }

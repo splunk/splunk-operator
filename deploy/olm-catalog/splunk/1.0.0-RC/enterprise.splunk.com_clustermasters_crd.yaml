@@ -1,43 +1,27 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: standalones.enterprise.splunk.com
+  name: clustermasters.enterprise.splunk.com
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.phase
-    description: Status of standalone instances
+    description: Status of cluster master
     name: Phase
     type: string
-  - JSONPath: .status.replicas
-    description: Number of desired standalone instances
-    name: Desired
-    type: integer
-  - JSONPath: .status.readyReplicas
-    description: Current number of ready standalone instances
-    name: Ready
-    type: integer
-  - JSONPath: .metadata.creationTimestamp
-    description: Age of standalone resource
-    name: Age
-    type: date
   group: enterprise.splunk.com
   names:
-    kind: Standalone
-    listKind: StandaloneList
-    plural: standalones
+    kind: ClusterMaster
+    listKind: ClusterMasterList
+    plural: clustermasters
     shortNames:
-    - stdaln
-    singular: standalone
+    - cm-idxc
+    singular: clustermaster
   scope: Namespaced
   subresources:
-    scale:
-      labelSelectorPath: .status.selector
-      specReplicasPath: .spec.replicas
-      statusReplicasPath: .status.replicas
     status: {}
   validation:
     openAPIV3Schema:
-      description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      description: ClusterMaster is the Schema for the clustermasters API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -52,8 +36,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: StandaloneSpec defines the desired state of a Splunk Enterprise
-            standalone instances.
+          description: ClusterMasterSpec defines the desired state of ClusterMaster
           properties:
             Mock:
               description: Mock to differentiate between UTs and actual reconcile
@@ -747,10 +730,6 @@ spec:
             licenseUrl:
               description: Full path or URL for a Splunk Enterprise license file
               type: string
-            replicas:
-              description: Number of standalone pods
-              format: int32
-              type: integer
             resources:
               description: resource requirements for the pod containers
               properties:
@@ -1118,48 +1097,6 @@ spec:
                         type: string
                     type: object
                   type: array
-              type: object
-            sparkImage:
-              description: Image to use for Spark pod containers (overrides RELATED_IMAGE_SPLUNK_SPARK
-                environment variables)
-              type: string
-            sparkRef:
-              description: SparkRef refers to a Spark cluster managed by the operator
-                within Kubernetes When defined, Data Fabric Search (DFS) will be enabled
-                and configured to use the Spark cluster.
-              properties:
-                apiVersion:
-                  description: API version of the referent.
-                  type: string
-                fieldPath:
-                  description: 'If referring to a piece of an object instead of an
-                    entire object, this string should contain a valid JSON/Go field
-                    access statement, such as desiredState.manifest.containers[2].
-                    For example, if the object reference is to a container within
-                    a pod, this would take on a value like: "spec.containers{name}"
-                    (where "name" refers to the name of the container that triggered
-                    the event) or if no container name is specified "spec.containers[2]"
-                    (container with index 2 in this pod). This syntax is chosen only
-                    to have some well-defined way of referencing a part of an object.
-                    TODO: this design is not final and this field is subject to change
-                    in the future.'
-                  type: string
-                kind:
-                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                  type: string
-                name:
-                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
-                  type: string
-                namespace:
-                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
-                  type: string
-                resourceVersion:
-                  description: 'Specific resourceVersion to which this reference is
-                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                  type: string
-                uid:
-                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
-                  type: string
               type: object
             tolerations:
               description: Pod's tolerations for Kubernetes node's taint
@@ -2396,11 +2333,19 @@ spec:
               type: array
           type: object
         status:
-          description: StandaloneStatus defines the observed state of a Splunk Enterprise
-            standalone instances.
+          description: ClusterMasterStatus defines the observed state of ClusterMaster
           properties:
+            bundlePushInfo:
+              description: Bundle push status tracker
+              properties:
+                lastCheckInterval:
+                  format: int64
+                  type: integer
+                needToPushMasterApps:
+                  type: boolean
+              type: object
             phase:
-              description: current phase of the standalone instances
+              description: current phase of the cluster master
               enum:
               - Pending
               - Ready
@@ -2410,14 +2355,6 @@ spec:
               - Terminating
               - Error
               type: string
-            readyReplicas:
-              description: current number of ready standalone instances
-              format: int32
-              type: integer
-            replicas:
-              description: number of desired standalone instances
-              format: int32
-              type: integer
             resourceRevMap:
               additionalProperties:
                 type: string
