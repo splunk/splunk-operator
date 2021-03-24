@@ -23,6 +23,8 @@ import (
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Monitoring Console test", func() {
@@ -75,8 +77,27 @@ var _ = Describe("Monitoring Console test", func() {
 			// Add another standalone instance in namespace
 			testenvInstance.Log.Info("Adding second standalone deployment to namespace")
 			// CSPL-901 standaloneTwoName := deployment.GetName() + "-two"
-			standaloneTwoName := "standalone-" + testenv.RandomDNSName(2)
-			standaloneTwo, err := deployment.DeployStandalone(standaloneTwoName)
+			standaloneTwoName := "standalone-" + testenv.RandomDNSName(3)
+			// Configure Resources on second standalone CSPL-555
+			standaloneTwoSpec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								"cpu":    resource.MustParse("2"),
+								"memory": resource.MustParse("4Gi"),
+							},
+							Requests: corev1.ResourceList{
+								"cpu":    resource.MustParse("0.2"),
+								"memory": resource.MustParse("256Mi"),
+							},
+						},
+					},
+					Volumes: []corev1.Volume{},
+				},
+			}
+			standaloneTwo, err := deployment.DeployStandalonewithGivenSpec(standaloneTwoName, standaloneTwoSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone two to be in READY status
@@ -99,6 +120,26 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameOne), true)
 			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameTwo)
 			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameTwo), true)
+
+			// Delete Standlone TWO of the standalone and ensure MC is updated
+			testenvInstance.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
+			deployment.GetInstance(standaloneTwoName, standaloneTwo)
+			err = deployment.DeleteCR(standaloneTwo)
+			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
+
+			// Wait for Monitoring Console Pod to be in READY status
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Check Monitoring console is configured with all standalone instances in namespace
+			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName())
+			testenvInstance.Log.Info("Peer List", "instance", peerList)
+
+			// Only 1 peer expected in MC peer list
+			Expect(len(peerList)).To(Equal(1))
+
+			podName = fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
+			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName, "Peer in peer list", peerList[0])
+			Expect(strings.Contains(peerList[0], podName)).To(Equal(true))
 		})
 	})
 

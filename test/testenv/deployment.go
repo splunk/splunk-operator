@@ -270,6 +270,13 @@ func (d *Deployment) UpdateCR(cr runtime.Object) error {
 	return err
 }
 
+// DeleteCR deletes the given CR
+func (d *Deployment) DeleteCR(cr runtime.Object) error {
+
+	err := d.testenv.GetKubeClient().Delete(context.TODO(), cr)
+	return err
+}
+
 // DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
 func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, shc bool) error {
 
