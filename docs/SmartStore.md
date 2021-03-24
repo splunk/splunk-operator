@@ -223,7 +223,7 @@ smartstore:
 
 ## Following is the table that maps the Custom Resource SmartStore spec to the Splunk docs. 
 
-See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf), and [server.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf) for more information about these configuration details.
+See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf), and [server.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Serverconf) for more information about these configuration details.
 
 | Custome Resource Spec | Splunk Config| Splunk Stanza |
 | :--- | :--- | :--- |
