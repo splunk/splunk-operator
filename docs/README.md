@@ -51,11 +51,11 @@ In order to create Splunk deployments through Splunk operator, access to a funct
 | Platform        | Splunk Smartstore Support | Additional Info|
 | ---------- | ------- | ------- |
 | [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)| Yes | Actively used in the development of the Splunk Operator.|
-| [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)| | Actively used in the development of the Splunk Operator.|
-| [Kind](https://kind.sigs.k8s.io/) |  Yes| Actively used in the development of the Splunk Operator. Suitable for development/test environments only |
-| [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)| | |
-| [Red Hat OpenShift](https://www.openshift.com/)| | |
-| [HPE Ezmeral](https://www.hpe.com/us/en/solutions/container-platform.html)| | |
+| [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)| No | Actively used in the development of the Splunk Operator.|
+| [Kind](https://kind.sigs.k8s.io/) |  Yes| Actively used in the development of the Splunk Operator. Suitable for development/test environments only|
+| [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)| No| No additional info available |
+| [Red Hat OpenShift](https://www.openshift.com/)| No| No additional info available|
+| [HPE Ezmeral](https://www.hpe.com/us/en/solutions/container-platform.html)|No | No additional info available|
 
 
 *Kubernetes releases 1.16.0 and 1.16.1 contain a
@@ -65,7 +65,7 @@ attempt to run the Splunk Operator using these releases. This bug is fixed in
 Kuberenetes 1.16.2.*
 
 ### Splunk Enterprise Compatibility
-Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](#ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
+Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](https://github.com/splunk/splunk-operator/blob/develop/docs/ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
 
 ### Splunk Apps Installation
 
@@ -101,7 +101,7 @@ information.
 The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
 
 ### Use of Splunk SmartStore
-As a splunk deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast, SSD-based cache on each Splunk indexer node to keep recent data locally available for search. When data rolls to WARM lifecycle stage, it is uploaded to an S3 API-compliant object store for persistence. Look into the [Configuring SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) document for configuring and useing SmartStore.
+As a splunk deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast, SSD-based cache on each Splunk indexer node to keep recent data locally available for search. When data rolls to WARM lifecycle stage, it is uploaded to an S3 API-compliant object store for persistence. Look into the [Configuring SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) document for configuring and using SmartStore.
 
 
 ## Installing the Splunk Operator
