@@ -15,166 +15,52 @@
 package testenv
 
 import (
-	// "bytes"
-	b64 "encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 
-	// "strings"
-
+	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//SecretResponse Secret object struct
-type SecretResponse struct {
-	Data struct {
-		HecToken     string `json:"hec_token"`
-		IdxcSecret   string `json:"idxc_secret"`
-		Pass4SymmKey string `json:"pass4SymmKey"`
-		Password     string `json:"password"`
-		ShcSecret    string `json:"shc_secret"`
-	} `json:"data"`
+// SecretKeytoServerConfStanza map to convert secretName to server conf stanza
+var SecretKeytoServerConfStanza = map[string]string{
+	"shc_secret":   "shclustering",
+	"idxc_secret":  "clustering",
+	"pass4SymmKey": "general",
 }
 
-//SecretObject Secret Object structure
-var SecretObject = map[string]string{
-	"HecToken":         "hec_token",
-	"AdminPassword":    "password",
-	"IdxcPass4Symmkey": "idxc_secret",
-	"ShcPass4Symmkey":  "shc_secret",
-	"Pass4SymmKey":     "pass4SymmKey",
-}
-
-// DecodeBase64 decodes base64 and returns string
-func DecodeBase64(str string) string {
-	out, err := b64.StdEncoding.DecodeString(str)
+// GetSecretStruct Gets the secret struct for a given k8 secret name.
+func GetSecretStruct(deployment *Deployment, ns string, secretName string) (*corev1.Secret, error) {
+	secretObject := &corev1.Secret{}
+	err := deployment.GetInstance(secretName, secretObject)
 	if err != nil {
-		logf.Log.Error(err, "Failed to decode", "string", str)
-		return ""
+		deployment.testenv.Log.Error(err, "Unable to get secret object", "Secret Name", secretName, "Namespace", ns)
 	}
-	return string(out)
+	return secretObject, err
 }
 
-// EncodeBase64 Encodes base64 and returns string
-func EncodeBase64(str string) string {
-	out := b64.StdEncoding.EncodeToString([]byte(str))
-	return out
-}
-
-// GetSecretObject Gets the secret object
-func GetSecretObject(deployment *Deployment, ns string, secretName string) SecretResponse {
-	output, err := exec.Command("kubectl", "get", "secret", secretName, "-n", ns, "-o", "json").Output()
-	restResponse := SecretResponse{}
-	if err != nil {
-		cmd := fmt.Sprintf("kubectl get secret %s -n %s -o json", secretName, ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return restResponse
-	}
-	// Parse response into response struct
-	err = json.Unmarshal([]byte(output), &restResponse)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse response")
-		return restResponse
-	}
-	return restResponse
-}
-
-// GetSecretKey Gets the value to specific key from secret object
-func GetSecretKey(deployment *Deployment, ns string, key string, secretName string) string {
-	restResponse := GetSecretObject(deployment, ns, secretName)
-	if restResponse == (SecretResponse{}) {
-		return "Not Found"
-	}
-	logf.Log.Info("Get secret object encoded value", "Secret Name", secretName, "Key", key)
-	value := "Invalid Key"
-	switch key {
-	case "hec_token":
-		value = DecodeBase64(restResponse.Data.HecToken)
-	case "idxc_secret":
-		value = DecodeBase64(restResponse.Data.IdxcSecret)
-	case "pass4SymmKey":
-		value = DecodeBase64(restResponse.Data.Pass4SymmKey)
-	case "password":
-		value = DecodeBase64(restResponse.Data.Password)
-	case "shc_secret":
-		value = DecodeBase64(restResponse.Data.ShcSecret)
-	}
-	return value
-}
-
-//ModifySecretObject Modifies the entire secret object
-func ModifySecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) error {
+//ModifySecretObject Modifies the secret object with given data
+func ModifySecretObject(deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
-	//Update object using spec
 	err := deployment.UpdateCR(secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
-		return err
 	}
-	return nil
+	return err
 }
 
-//DeleteSecretObject Modifies the entire secret object
-func DeleteSecretObject(deployment *Deployment, data map[string][]byte, ns string, secretName string) error {
-	logf.Log.Info("Delete secret object", "Secret Name", secretName)
-	secret := newSecretSpec(ns, secretName, data)
-	//Update object using spec
+//DeleteSecretObject Deletes the entire secret object
+func DeleteSecretObject(deployment *Deployment, ns string, secretName string) error {
+	logf.Log.Info("Delete secret object", "Secret Name", secretName, "Namespace", ns)
+	secret := newSecretSpec(ns, secretName, map[string][]byte{})
 	err := deployment.DeleteCR(secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to delete secret object")
 		return err
 	}
 	return nil
-}
-
-//ModifySecretKey Modifies the specific key in secret object
-func ModifySecretKey(deployment *Deployment, ns string, key string, value string) error {
-	//Get current config for update
-	secretName := fmt.Sprintf(SecretObjectName, ns)
-	restResponse := GetSecretObject(deployment, ns, secretName)
-	out, err := json.Marshal(restResponse.Data)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse response")
-		return err
-	}
-	//Convert object to map for update
-	var data map[string][]byte
-	err = json.Unmarshal([]byte(out), &data)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse response")
-		return err
-	}
-	//Modify data
-	data[key] = []byte(value)
-	logf.Log.Info("Modify secret object with following: ", "Secret Name", secretName, "Key", key, "Value", value)
-	modify := ModifySecretObject(deployment, data, ns, secretName)
-	return modify
-}
-
-// UpdateSecret Updates the secret object based on SecretResponse Struct
-func UpdateSecret(deployment *Deployment, ns string, secretObj SecretResponse, delete bool) error {
-	secretName := fmt.Sprintf(SecretObjectName, ns)
-	secretDataString, err := json.Marshal(secretObj.Data)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse response")
-		return err
-	}
-	//Convert object to map for update
-	var data map[string][]byte
-	err = json.Unmarshal([]byte(secretDataString), &data)
-	if err != nil {
-		logf.Log.Error(err, "Failed to parse response")
-		return err
-	}
-	// Update or delete the secret object based on delete parameter
-	if delete {
-		err = DeleteSecretObject(deployment, data, ns, secretName)
-	} else {
-		err = ModifySecretObject(deployment, data, ns, secretName)
-	}
-	return err
 }
 
 //GetMountedKey Gets the key mounted on pod
@@ -187,5 +73,77 @@ func GetMountedKey(deployment *Deployment, podName string, key string) string {
 		return ""
 	}
 	logf.Log.Info("Key found on pod", "Pod Name", podName, "stdout", stdout, "stderr", stderr)
-	return string(stdout)
+	return stdout
+}
+
+// GetRandomeHECToken generates a random HEC token
+func GetRandomeHECToken() string {
+	return fmt.Sprintf("%s-%s-%s-%s-%s", strings.ToUpper(RandomDNSName(8)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(4)), strings.ToUpper(RandomDNSName(12)))
+}
+
+// GetSecretFromServerConf gets give secret from server under given stanza
+func GetSecretFromServerConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+	filePath := "/opt/splunk/etc/system/local/server.conf"
+	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		return "", "", err
+	}
+
+	secretList := strings.Split(confline, "=")
+	key := strings.TrimSpace(secretList[0])
+	value := DecryptSplunkEncodedSecret(deployment, podName, ns, strings.TrimSpace(secretList[1]))
+	return key, value, nil
+}
+
+// DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
+func DecryptSplunkEncodedSecret(deployment *Deployment, podName string, ns string, secretValue string) string {
+	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
+		return "Failed"
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+	logf.Log.Info("Decrypted Key Value", "Decrypted Key", stdout)
+	return strings.TrimSuffix(stdout, "\n")
+}
+
+// GetKeysToMatch retuns slice of secrets in server conf based on pod name
+func GetKeysToMatch(podName string) []string {
+	var keysToMatch []string
+	if strings.Contains(podName, "standalone") || strings.Contains(podName, "license-master") || strings.Contains(podName, "monitoring-console") {
+		keysToMatch = []string{"pass4SymmKey"}
+	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, "cluster-master") {
+		keysToMatch = []string{"pass4SymmKey", "idxc_secret"}
+	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, "-deployer-") {
+		keysToMatch = []string{"pass4SymmKey", "shc_secret"}
+	}
+	return keysToMatch
+}
+
+// GetVersionedSecretNames retuns list of versioned secrets of given namespace and version
+func GetVersionedSecretNames(ns string, version int) []string {
+	output, err := exec.Command("kubectl", "get", "secrets", "-n", ns).Output()
+	var splunkSecrets []string
+	suffix := fmt.Sprintf("v%d", version)
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk") {
+			secretName := strings.Fields(line)[0]
+			if strings.HasSuffix(secretName, suffix) {
+				splunkSecrets = append(splunkSecrets, strings.Fields(line)[0])
+
+			}
+		}
+	}
+	logf.Log.Info("Versioned Secret Objects Found in Namespace", "NameSpace", ns, "Versioned Secrets", splunkSecrets)
+	return splunkSecrets
 }
