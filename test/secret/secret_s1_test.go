@@ -14,6 +14,8 @@
 package secret
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -71,7 +73,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
-			namespaceScopedSecretName := splcommon.GetNamespaceScopedSecretName(testenvInstance.GetName())
+			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
@@ -79,13 +81,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			modifiedHecToken := testenv.GetRandomeHECToken()
 			modifedValue := testenv.RandomDNSName(10)
-			updatedSecretData := map[string][]byte{
-				"hec_token":    []byte(modifiedHecToken),
-				"password":     []byte(modifedValue),
-				"pass4SymmKey": []byte(modifedValue),
-				"idxc_secret":  []byte(modifedValue),
-				"shc_secret":   []byte(modifedValue),
-			}
+			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
 			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
@@ -150,7 +146,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
-			namespaceScopedSecretName := splcommon.GetNamespaceScopedSecretName(testenvInstance.GetName())
+			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
@@ -189,7 +185,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("secret,smoke: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("secret, smoke, integration: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
 
 			/* Test Scenario
 			1. Delete Secret Passing Empty Data Map to secret Object
@@ -208,7 +204,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
-			namespaceScopedSecretName := splcommon.GetNamespaceScopedSecretName(testenvInstance.GetName())
+			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			Expect(err).To(Succeed(), "Unable to get secret struct")

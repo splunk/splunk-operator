@@ -14,6 +14,8 @@
 package secret
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -79,7 +81,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Get Current Secrets Struct
-			namespaceScopedSecretName := splcommon.GetNamespaceScopedSecretName(testenvInstance.GetName())
+			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
@@ -87,13 +89,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			modifiedHecToken := testenv.GetRandomeHECToken()
 			modifedValue := testenv.RandomDNSName(10)
-			updatedSecretData := map[string][]byte{
-				"hec_token":    []byte(modifiedHecToken),
-				"password":     []byte(modifedValue),
-				"pass4SymmKey": []byte(modifedValue),
-				"idxc_secret":  []byte(modifedValue),
-				"shc_secret":   []byte(modifedValue),
-			}
+			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
 			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")

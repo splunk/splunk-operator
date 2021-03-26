@@ -147,3 +147,15 @@ func GetVersionedSecretNames(ns string, version int) []string {
 	logf.Log.Info("Versioned Secret Objects Found in Namespace", "NameSpace", ns, "Versioned Secrets", splunkSecrets)
 	return splunkSecrets
 }
+
+// GetSecretDataMap return the map with given secret values
+func GetSecretDataMap(hecToken string, password string, pass4SymmKey string, idxcSecret string, shcSecret string) map[string][]byte {
+	updatedSecretData := map[string][]byte{
+		"hec_token":    []byte(hecToken),
+		"password":     []byte(password),
+		"pass4SymmKey": []byte(pass4SymmKey),
+		"idxc_secret":  []byte(idxcSecret),
+		"shc_secret":   []byte(shcSecret),
+	}
+	return updatedSecretData
+}
