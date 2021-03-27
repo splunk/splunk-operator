@@ -83,11 +83,11 @@ const (
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
 
-	// SecretObjectName Secret object Template
-	SecretObjectName = "splunk-%s-secret"
+	// NamespaceScopedSecretObjectName Name Space Scoped Secret object Template
+	NamespaceScopedSecretObjectName = "splunk-%s-secret"
 
-	// SecretObjectPodName Secret object Template
-	SecretObjectPodName = "splunk-%s-%s-secret-v%d"
+	// VersionedSecretName Versioned Secret object Template
+	VersionedSecretName = "splunk-%s-%s-secret-v%d"
 )
 
 var (

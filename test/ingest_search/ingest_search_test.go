@@ -51,7 +51,7 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search: can search internal logs for standalone instance", func() {
+		It("ingest_search, integration: can search internal logs for standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -127,7 +127,7 @@ var _ = Describe("Ingest and Search Test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("ingest_search: can ingest custom data to new index and search", func() {
+		It("ingest_search, integration: can ingest custom data to new index and search", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")

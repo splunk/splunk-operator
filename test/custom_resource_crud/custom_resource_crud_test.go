@@ -82,7 +82,7 @@ var _ = Describe("crcrud test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("integration, crcrud: can deploy indexer and search head cluster, change their CR, update the instances", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)

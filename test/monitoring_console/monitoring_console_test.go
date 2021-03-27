@@ -51,7 +51,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("monitoring_console: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("monitoring_console, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 
 			standaloneOneName := deployment.GetName()
 			standaloneOne, err := deployment.DeployStandalone(standaloneOneName)
@@ -203,7 +203,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("monitoring_console: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("monitoring_console, integration: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
