@@ -109,7 +109,7 @@ kubectl get svc -n istio-system
 4. Use a browser to connect to the External-IP to access Splunk Web. For example:
 
 ```
-http://<LoadBalance-External-IP>
+http://<LoadBalancer-External-IP>
 ```
 
 #### Multiple Hosts and HEC Configuration
@@ -383,7 +383,7 @@ spec:
 
 If you only have one indexer cluster that you would like to use as the destination for all S2S traffic, you can optionally replace `splunk.example.com` in the above examples with the wildcard `*`. When you use this wildcard, you do not have to set the `tlsHostname` parameter in `outputs.conf` on your forwarders.
 
-Additionally, it is necessary to push an inputs.conf to both configure the relevant TLS settings and open port 9998 for receiving on the indexers as these configurations are not default. This can be achieved by installing an app containing a custom inputs.conf to the indexers through the Operator's [app management capabilities](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps).
+4. Deploy an app to the standalone instance with the inputs.conf settings needed to open port 9998 and configure the relevant TLS settings. For details on app management using the Splunk Operator, see [Using Apps for Splunk Configuration](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps).
 
 Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the documentation [Configure Secure Forwarding](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders)
 
@@ -552,6 +552,13 @@ spec:
 ```
 
 Example to create a TLS enabled Ingress configuration
+
+There are a few important configurations to be aware of in the TLS configuration:
+
+* The `nginx.ingress.kubernetes.io/backend-protocol:` annotation requires `"HTTPS"` when TLS is configured on the backend services.
+* The secretName must reference a [valid TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
+
+Note: This example assumes that https is enabled for Splunk Web.
 
 ```
 apiVersion: networking.k8s.io/v1beta1
@@ -723,6 +730,9 @@ helm upgrade splunk-nginx  nginx-stable/nginx-ingress
 
 The following ingress example yaml configures Splunk Web as well as HEC as an operator installed service. HEC is exposed via ssl and Splunk Web is non-ssl.
 
+* TLS to the ingress controller is configured in the `tls:` section of the yaml and `secretName` references a valid [TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
+* For any backend service that has TLS enabled, a corresponding `nginx.org/ssl-services annotation` is required.
+
 Create Ingress
 ```yaml
 apiVersion: extensions/v1beta1
@@ -765,12 +775,6 @@ spec:
 status:
   loadBalancer: {}
 ```
-
-Note:
-
-TLS to the ingress controller is configured in the "tls" section of the yaml and secretName references a valid [TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
-
-For any backend service that has TLS enabled, a corresponding nginx.org/ssl-services annotation is required.
 
 ##### Ingress Service for Splunk Forwarders 
 Enable the global configuration to setup a listener and transport server
