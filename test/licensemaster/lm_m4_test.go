@@ -42,52 +42,6 @@ var _ = Describe("Licensemaster test", func() {
 		}
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("licensemaster, integration: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
-
-			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
-
-			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
-
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
-
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
-
-			// Verify LM is configured on indexers
-			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
-
-			// Verify LM is configured on SHs
-			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
-		})
-	})
-
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("licensemaster: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
@@ -138,32 +92,4 @@ var _ = Describe("Licensemaster test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
-
-			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
-
-			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
-
-			// Create standalone Deployment with License Master
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-			// Wait for License Master to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
-			// Verify LM is configured on standalone instance
-			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
-		})
-	})
 })

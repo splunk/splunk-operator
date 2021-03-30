@@ -159,3 +159,18 @@ func GetSecretDataMap(hecToken string, password string, pass4SymmKey string, idx
 	}
 	return updatedSecretData
 }
+
+// CheckAdminPasswordViaAPI check if password can be used to access api
+func CheckAdminPasswordViaAPI(deployment *Deployment, podName string, password string) bool {
+	cmd := fmt.Sprintf("curl -iks -u admin:%s https://localhost:8089/servicesNS/admin/splunk_httpinput/data/inputs/http?output_mode=json", password)
+	output, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	if err != nil {
+		return false
+	}
+	response := strings.Split(string(output), "\n")
+	if strings.Contains(response[0], "HTTP/1.1 200 OK") {
+		logf.Log.Info("200 OK response found", "pod", podName)
+		return true
+	}
+	return false
+}
