@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	gomega "github.com/onsi/gomega"
 
@@ -501,6 +502,33 @@ func VerifySplunkSecretViaAPI(deployment *Deployment, testenvInstance *TestEnv, 
 				validKey = CheckAdminPasswordViaAPI(deployment, podName, string(data[secretName]))
 			}
 			gomega.Expect(validKey).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifyPVC verifies if PVC exists or not
+func VerifyPVC(deployment *Deployment, testenvInstance *TestEnv, ns string, pvcName string, expectedToExist bool, verificationTimeout time.Duration) {
+	gomega.Eventually(func() bool {
+		pvcExists := false
+		pvcsList := DumpGetPvcs(testenvInstance.GetName())
+		for i := 0; i < len(pvcsList); i++ {
+			if strings.EqualFold(pvcsList[i], pvcName) {
+				pvcExists = true
+				break
+			}
+		}
+		testenvInstance.Log.Info("PVC Status Verified", "PVC", pvcName, "STATUS", pvcExists, "EXPECTED", expectedToExist)
+		return pvcExists
+	}, verificationTimeout, PollInterval).Should(gomega.Equal(expectedToExist))
+}
+
+// VerifyPVCsPerDeployment verifies for a given deployment if PVCs (etc and var) exists
+func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, deploymentType string, instances int, expectedtoExist bool, verificationTimeout time.Duration) {
+	pvcKind := []string{"etc", "var"}
+	for i := 0; i < instances; i++ {
+		for _, pvcVolumeKind := range pvcKind {
+			PvcName := fmt.Sprintf(PVCString, pvcVolumeKind, deployment.GetName(), deploymentType, i)
+			VerifyPVC(deployment, testenvInstance, testenvInstance.GetName(), PvcName, expectedtoExist, verificationTimeout)
 		}
 	}
 }
