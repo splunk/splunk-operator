@@ -602,15 +602,6 @@ spec:
     - hec.example.com
     secretName: operator-tls
 ```
-Note:
-This example assumes that https is enabled for Splunk Web.
-
-There are a few important configurations to be aware of in the TLS configuration:
-
-The nginx.ingress.kubernetes.io/backend-protocol: "HTTPS" annotation is required when TLS is configured on the backend services.
-
-secretName must reference a [valid TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
-
 
 
 ### Configuring Ingress NGINX for Splunk Forwarders with End-to-End TLS
