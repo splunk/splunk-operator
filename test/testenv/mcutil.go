@@ -25,16 +25,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func getPods(ns string) string {
-	output, err := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-		return ""
-	}
-	return string(output)
-}
-
 // getMCPod Get MC Pod String
 func getMCPod(ns string) string {
 	mcPod := fmt.Sprintf(MonitoringConsolePod, ns, 0)
@@ -63,7 +53,7 @@ func getMCSts(ns string) string {
 func CheckMCPodReady(ns string) bool {
 	// Check Status of monitoring console statefulset
 	stsLine := getMCSts(ns)
-	if len(stsLine) < 0 {
+	if len(stsLine) == 0 {
 		return false
 	}
 	stsSlice := strings.Fields(stsLine)
@@ -72,7 +62,7 @@ func CheckMCPodReady(ns string) bool {
 
 	// Check Status of monitoring console pod
 	podLine := getMCPod(ns)
-	if len(podLine) < 0 {
+	if len(podLine) == 0 {
 		return false
 	}
 	podSlice := strings.Fields(podLine)

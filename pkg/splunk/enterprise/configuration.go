@@ -713,7 +713,10 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
-		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
+		//Used pre-defined resource values for MC
+		if instanceType != SplunkMonitoringConsole {
+			podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
+		}
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
