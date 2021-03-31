@@ -8,7 +8,7 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3.
  * Use of GCS with SmartStore is supported by using configuration via Splunk App.
  * Specification allows definition of SmartStore-enabled indexes only.
- * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).x`
+ * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).
  
 
 SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custome Resource with SmartStore volume spec, through `SecretRef`
