@@ -13,7 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
-  - [Kubernetes Quality of Service classes](#kubernetes-quality-of-service-classes)
+  - [Example of Guaranteed and Burstable QoS](#example-of-guaranteed-and-burstable-qos)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -234,18 +234,9 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
 
 
-## Kubernetes Quality of Service classes:
-Use the Kubernetes [Quality of Service classes](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) to configure pod resource allocation, and define the expected behavior of pods when they exceed resource limits. 
+## Example of Guaranteed and Burstable QoS
 
-
-| QoS        | Summary| Description    
-| ---------- | ------- | ------- |
-| Guaranteed | CPU/Mem ```requests``` = CPU/Mem ```limits```    | When the CPU and memory  ```requests``` and ```limits``` values are equal, the pod is given a QoS class of Guaranteed. This level of service is recommended for Splunk Enterprise ___production environments___. |
-| Burstable | CPU/Mem ```requests``` < CPU/Mem ```limits```  | When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing ___(UAT) environment___, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage. |
-| BestEffort | No CPU/Mem ```requests``` or ```limits``` are set | When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for ___testing, or a small development task___. |
-
-The resources guidelines for running production Splunk Enterprise instances in pods using the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional detail.
-
+As given in the [Kubernetes Quality of Service section](readme#using-kubernetes-quality-of-service-classes), you can set up your kubernetes cluster with different Quality of Services by using your Pods’ CPU and Memory resources values. Following are examples of Guaranteed and Burstable QoS:
   
 ### A Guaranteed QoS Class example:
 The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
@@ -271,7 +262,7 @@ spec:
 ```
 
 ### A Burstable QoS Class example:
-Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance will start with minimal indexing and search capacity, but will be allowed to scale up to the CPU and memory ```limits``` values.
+Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but should be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory upto ```limits``` values.
 
 Example:
 
@@ -291,29 +282,16 @@ spec:
       cpu: "24"  
 ```
 
-
 ### A BestEffort QoS Class example:
-With no ```requests``` or ```limits``` values set for CPU and memory, the QoS class is set to BestEffort.
+With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. As the Splunk Operator sets the default values for resources when you don’t provide any values for the CPU/Mem resources, so the BestEffort QoS is not a viable option with Splunk Operator.
 
-Example:
-
-```yaml
-apiVersion: enterprise.splunk.com/v1
-kind: Standalone
-metadata:
-  name: example
-spec:
-  imagePullPolicy: Always
-
-```
-
-### Pod resource management 
+### Pod Resources Management
 
 __CPU Throttling__
 
-In the QoS examples, Kubernetes will begin throttling CPUs if the pod's demand for CPU  exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
+Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
 
 __POD Eviction - OOM__
 
-In the QoS examples, Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter. To avoid pod eviction due to memory usage, set the ```requests``` and ```limits``` values for memory to the same value.
+As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
 

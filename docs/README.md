@@ -12,10 +12,13 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
 * [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
 * [Securing Splunk Deployments in Kubernetes](Security.md)
+* [Contacting Support](#contacting-support)
 
 ## Support Resources
 
-COMMUNITY SUPPORTED: Splunk Operator for Kubernetes (SOK) is an open source product developed by Splunkers with contributions from the community of partners and customers. This unique product will be enhanced, maintained and supported by the community, led by Splunkers with deep subject matter expertise. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
+SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers.
+
+COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. This unique product will be enhanced, maintained and supported by the community, led by Splunkers with deep subject matter expertise. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
 
 If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
 
@@ -34,63 +37,63 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 ### Supported Kubernetes Versions
 
-- Kubernetes 1.12 and later
+- Kubernetes, version 1.16.2+ and later.
 
-The Splunk Operator is supported with [CNCF certified](https://www.cncf.io/certification/software-conformance/) distributions of Kubernetes, version 1.12* and later.
+The Splunk Operator should work with any [CNCF certified distribution]((https://www.cncf.io/certification/software-conformance/)) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
 
-Implementing, configuring, and administering Kubernetes clusters is outside the scope of this guide, and Splunk’s coverage of support.
-
-You can submit defects to https://github.com/splunk/splunk-operator/issues.
-
-### Kubernetes Platform Suggestions:
-
-In order to create Splunk deployments through Splunk operator, access to a functioning kubernetes environment is required. Some options include:
-
-
-
-| Platform        | Splunk Smartstore Support | Additional Info|
-| ---------- | ------- | ------- |
-| [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks)| Yes | Actively used in the development of the Splunk Operator.|
-| [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine)| No | Actively used in the development of the Splunk Operator.|
-| [Kind](https://kind.sigs.k8s.io/) |  Yes| Actively used in the development of the Splunk Operator. Suitable for development/test environments only|
-| [Microsoft Azure Kubernetes Service (AKS)](https://azure.microsoft.com/en-us/services/kubernetes-service/)| No| No additional info available |
-| [Red Hat OpenShift](https://www.openshift.com/)| No| No additional info available|
-| [HPE Ezmeral](https://www.hpe.com/us/en/solutions/container-platform.html)|No | No additional info available|
+|  |   |
+| ---- | --- |
+| Splunk Development & Testing Platforms | Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) |
+|Customer Reported Platforms | Microsoft Azure Kubernetes Service (AKS), Red Hat OpenShift |
+ Partner Tested Platforms | HPE Ezmeral|
+| Other Platforms |[CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) |
+|  |   |
 
 
-*Kubernetes releases 1.16.0 and 1.16.1 contain a
-[critical bug(https://github.com/kubernetes/kubernetes/pull/83789) that can
-crash your API server when using custom resource definitions. Do not
-attempt to run the Splunk Operator using these releases. This bug is fixed in
-Kuberenetes 1.16.2.*
+
+
 
 ### Splunk Enterprise Compatibility
-Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](https://github.com/splunk/splunk-operator/blob/develop/docs/ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
+Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
 
 ### Splunk Apps Installation
 
-Splunk Apps can be installed using Splunk operator by following instructions given at [Installing Splunk Apps](https://github.com/splunk/splunk-operator/blob/develop/docs/Examples.md#installing-splunk-apps). Splunk Premium apps are not supported with the Splunk Operator.
+Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples#installing-splunk-apps).  Premium apps such as Enterprise Security and IT Service Intelligence are currently not supported.
 
 
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image (built by this repository)
-* `splunk/splunk:8.1.0`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.0 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.3 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
-### Summary of performance requirements
-The resources guidelines for running production Splunk Enterprise instances in pods using the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional detail.
+Review the [Change Log](ChangeLog.md) page for a history of changes and Splunk Enterprise compatibility for each release.
 
-A summary of the minimum reference hardware requirements:
-| Standalone        | Search Head Cluster | Indexer Cluster |    
+### Hardware Resources Requirements
+The resource guidelines for running production Splunk Enterprise instances in pods through the Splunk Operator are the same as running Splunk Enterprise natively on a supported operating system and file system. Refer to the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware) for additional details.  We would also recommend following the same guidance on [Splunk Enterprise for disabling Transparent Huge Pages (THP)](https://docs.splunk.com/Documentation/Splunk/latest/ReleaseNotes/SplunkandTHP) for the nodes in your Kubernetes cluster.  Please be aware that this may impact performance of other non-Splunk workloads.
+
+#### Minimum Reference Hardware
+Based on Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware), a summary of the minimum reference hardware requirements is given below.
+| Standalone        | Search Head/Search Head Cluster | Indexer Cluster |
 | ---------- | ------- | ------- |
-| 12 CPU Cores or 24 vCPU, 2Ghz or greater per core, 12GB RAM. | Each pod requires: 16 CPU Cores or 32 vCPU, 2Ghz or greater per core, 12GB RAM.| Each pod requires: 12 CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM.|  
+| _Each Standalone Pod: 12 Physical CPU Cores or 24 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Search Head Pod: 16 Physical CPU Cores or 32 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Indexer Pod: 12 Physical CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM._ |
 
-Splunk Operator does not support vCPU licensing.
+Splunk Operator does not support ___vCPU licensing___.
 
-For information on utilizing Kubernetes Quality of Service classes to enforce minimum CPU and memory allocations in production environments, see [Kubernetes Quality of Service classes](CustomResources.md#Kubernetes-Quality-of-Service-classes)
+#### _Using Kubernetes Quality of Service Classes_
+
+In addition to the guidelines provided in the reference hardware, [Kubernetes Quality of Service Classes](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/)  can be used to configure CPU/Mem resources allocations that map to your _service level objectives_. For further information on utilizing Kubernetes Quality of Service (QoS) classes, see the table below:
+
+
+| QoS        | Summary| Description |
+| ---------- | ------- | ------- |
+| _Guaranteed_ | _CPU/Mem ```requests``` = CPU/Mem ```limits```_    | _When the CPU and memory  ```requests``` and ```limits``` values are equal, the pod is given a QoS class of Guaranteed. This level of service is recommended for Splunk Enterprise ___production environments___._ |
+| _Burstable_ | _CPU/Mem ```requests``` < CPU/Mem ```limits```_  | _When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing ___(UAT) environment___, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage._|
+| _BestEffort_ | _No CPU/Mem ```requests``` or ```limits``` are set_ | _When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for ___testing, or a small development task___._ |
+
+Examples on how to implement these QoS are given at  [Example of Guaranteed, Burstable and BestEffort QoS](CustomResources.md#example-of-guaranteed-and-burstable-qos) section.
 
 
 ### Storage guidelines
@@ -98,12 +101,13 @@ The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernete
 The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](StorageClass.md) page for more
 information.
 
-The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the the Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F). 
+### What Storage Type To Use?
 
-### Use of Splunk SmartStore
-As a splunk deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast, SSD-based cache on each Splunk indexer node to keep recent data locally available for search. When data rolls to WARM lifecycle stage, it is uploaded to an S3 API-compliant object store for persistence. Look into the [Configuring SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) document for configuring and using SmartStore.
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IIOPs for a successful Splunk Enterprise environment.ßß
 
-
+### Mandatory Use of Splunk SmartStore
+For production environments, we are mandating the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
+ 
 ## Installing the Splunk Operator
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
@@ -179,3 +183,6 @@ To delete your standalone deployment, run:
 ```
 kubectl delete standalone s1
 ```
+
+## Contacting Support
+If you are a Splunk Enterprise customer with a valid support entitlement contract and have a Splunk-related question, you can open a support case on the https://www.splunk.com/ support portal.

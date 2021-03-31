@@ -1,11 +1,14 @@
 # SmartStore Resource Guide
 
-The Splunk Operator includes support for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
+*NOTE: The below method is recommended for Demo & Testing purposes.  For Production deployments of Splunk and the SmartStore feature, it is recommended to configure indexes and SmartStore in a Splunk App and distribute accordingly.*
 
- * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterMaster
- * SmartStore support in Kubernetes Operator is limited to Amazon S3 & S3-API-compliant object stores only
- * Specification allows definition of SmartStore-enabled indexes only
- * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore)
+The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
+
+ * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterMaster.
+ * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3.
+ * Use of GCS with SmartStore is supported by using configuration via Splunk App.
+ * Specification allows definition of SmartStore-enabled indexes only.
+ * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).x`
  
 
 SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custome Resource with SmartStore volume spec, through `SecretRef`
