@@ -13,6 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+  - [Example of Guaranteed and Burstable QoS](#example-of-guaranteed-and-burstable-qos)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -69,14 +70,14 @@ The `spec` section is used to define the desired state for a resource. All
 custom resources provided by the Splunk Operator include the following
 configuration parameters:
 
-| Key             | Type                                                         | Description                                                  |
-| --------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| image           | string                                                       | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE`) |
-| imagePullPolicy | string                                                       | Sets pull policy for all images (either "Always" or the default: "IfNotPresent") |
-| schedulerName   | string                                                       | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
-| affinity        | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources       | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | CPU and memory [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (defaults shown in example above) |
-| serviceTemplate | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
+| Key                   | Type       | Description                                                                                                |
+| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
+| image                 | string     | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable |
+| imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
+| schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
+| affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
+| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. |
+| serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 
 ## Common Spec Parameters for Splunk Enterprise Resources
 
@@ -231,3 +232,66 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
+
+
+## Example of Guaranteed and Burstable QoS
+
+As given in the [Kubernetes Quality of Service section](readme#using-kubernetes-quality-of-service-classes), you can set up your kubernetes cluster with different Quality of Services by using your Pods’ CPU and Memory resources values. Following are examples of Guaranteed and Burstable QoS:
+  
+### A Guaranteed QoS Class example:
+The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
+
+*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` value.*
+
+Example:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+spec:
+  imagePullPolicy: Always
+  resources:
+    requests:
+      memory: "12Gi"
+      cpu: "24"
+    limits:
+      memory: "12Gi"
+      cpu: "24"  
+```
+
+### A Burstable QoS Class example:
+Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but should be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory upto ```limits``` values.
+
+Example:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+spec:
+  imagePullPolicy: Always
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "4"
+    limits:
+      memory: "12Gi"
+      cpu: "24"  
+```
+
+### A BestEffort QoS Class example:
+With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. As the Splunk Operator sets the default values for resources when you don’t provide any values for the CPU/Mem resources, so the BestEffort QoS is not a viable option with Splunk Operator.
+
+### Pod Resources Management
+
+__CPU Throttling__
+
+Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
+
+__POD Eviction - OOM__
+
+As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
+
