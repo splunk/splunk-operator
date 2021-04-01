@@ -170,6 +170,11 @@ kubectl port-forward splunk-s1-standalone-0 8000
 
 4. Log into Splunk Enterprise at http://localhost:8000 using the `admin` account with the password.
 
+5. To delete your standalone deployment, run:
+
+```
+kubectl delete standalone s1
+``` 
 
 The `Standalone` custom resource is just one of the resources the Splunk Operator provides. You can find more custom resources and the parameters they support on the [Custom Resource Guide](CustomResources.md) page.
 
@@ -178,11 +183,6 @@ For additional deployment examples, including Splunk Enterprise clusters, see th
 
 For additional guidance on making Splunk Enterprise ports accessible outside of Kubernetes, see the [Configuring Ingress](Ingress.md) page.
 
-To delete your standalone deployment, run:
-
-```
-kubectl delete standalone s1
-```
-
 ## Contacting Support
 If you are a Splunk Enterprise customer with a valid support entitlement contract and have a Splunk-related question, you can open a support case on the https://www.splunk.com/ support portal.
+
