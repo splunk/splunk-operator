@@ -77,9 +77,10 @@ fi
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 
-# Check if test foucs is set
+
+# Check if test focus is set 
 if [[ -z "${TEST_FOCUS}" ]]; then
-  TEST_TO_RUN="smoke:"
+  TEST_TO_RUN="${TEST_REGEX}"
   echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
 else
   TEST_TO_RUN="${TEST_FOCUS}"

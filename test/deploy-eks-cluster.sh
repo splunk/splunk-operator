@@ -1,5 +1,20 @@
 #!/bin/bash
 
+if [[ -z "${EKS_VPC_PUBLIC_SUBNET_STRING}" ]]; then
+  echo "EKS PUBLIC SUBNET STRING not set. Chaning to env.sh value"
+  export EKS_VPC_PUBLIC_SUBNET_STRING="${VPC_PUBLIC_SUBNET_STRING}"
+fi
+
+if [[ -z "${EKS_VPC_PRIVATE_SUBNET_STRING}" ]]; then
+  echo "EKS PRIVATE SUBNET STRING not set. Chaning to env.sh value"
+  export EKS_VPC_PRIVATE_SUBNET_STRING="${VPC_PRIVATE_SUBNET_STRING}"
+fi
+
+if [[ -z "${ECR_REPOSITORY}" ]]; then
+  echo "ECR_REPOSITORY not set. Chaning to env.sh value"
+  export ECR_REPOSITORY="${PRIVATE_REGISTORY}"
+fi
+
 function deleteCluster() {
   eksctl delete cluster --name=${CLUSTER_NAME}
   if [ $? -ne 0 ]; then
@@ -20,7 +35,7 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${CLUSTER_NAME}")
   if [ -z "${found}" ]; then
-    eksctl create cluster --name=${CLUSTER_NAME} --nodes=${NUM_WORKERS} --vpc-public-subnets=${VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${VPC_PRIVATE_SUBNET_STRING}
+    eksctl create cluster --name=${CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${CLUSTER_NAME}"
       return 1
