@@ -50,7 +50,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			1. Update Secrets Data
 			2. Verify New versioned secret are created with correct value.
 			3. Verify new secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey) */
+			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			5. Verify New Secrets via api access (password)*/
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadFromS3Bucket()
@@ -130,6 +131,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
 			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
+			// Verify Secrets via api access on Pod
+			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 		})
 	})
 })

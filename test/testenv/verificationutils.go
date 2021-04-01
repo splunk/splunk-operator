@@ -177,7 +177,7 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+		podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
 		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
@@ -486,6 +486,21 @@ func VerifySplunkServerConfSecrets(deployment *Deployment, testenvInstance *Test
 				testenvInstance.Log.Info("Secret Values on server.conf DONOT MATCH", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
 			}
 			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifySplunkSecretViaAPI check if keys can be used to access api i.e validate they are authentic
+func VerifySplunkSecretViaAPI(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	keysToMatch := []string{"password" /*, "hec_token"*/}
+	for _, podName := range verificationPods {
+		for _, secretName := range keysToMatch {
+			validKey := false
+			testenvInstance.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
+			if secretName == "password" {
+				validKey = CheckAdminPasswordViaAPI(deployment, podName, string(data[secretName]))
+			}
+			gomega.Expect(validKey).Should(gomega.Equal(match))
 		}
 	}
 }
