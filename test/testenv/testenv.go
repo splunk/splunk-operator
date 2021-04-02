@@ -71,10 +71,13 @@ const (
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
-	// MonitoringConsoleSts Montioring Console Statefulset Template
+	// PVCString Template String for PVC
+	PVCString = "pvc-%s-splunk-%s-%s-%d"
+
+	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
-	// MonitoringConsolePod Montioring Console Statefulset Template
+	// MonitoringConsolePod Monitoring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
 	// ClusterMasterPod ClusterMaster Pod Template String
