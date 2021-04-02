@@ -234,7 +234,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
 
 
-## Example of Guaranteed and Burstable QoS
+## Examples of Guaranteed and Burstable QoS
 
 You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
   
