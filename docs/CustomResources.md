@@ -236,7 +236,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 ## Example of Guaranteed and Burstable QoS
 
-As given in the [Kubernetes Quality of Service section](readme#using-kubernetes-quality-of-service-classes), you can set up your kubernetes cluster with different Quality of Services by using your Pods’ CPU and Memory resources values. Following are examples of Guaranteed and Burstable QoS:
+As given in the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes), you can set up your kubernetes cluster with different Quality of Services by using your Pods’ CPU and Memory resources values. Following are examples of Guaranteed and Burstable QoS:
   
 ### A Guaranteed QoS Class example:
 The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
