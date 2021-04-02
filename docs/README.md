@@ -39,7 +39,7 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 - Kubernetes, version 1.16.2+ and later.
 
-The Splunk Operator should work with any [CNCF certified distribution]((https://www.cncf.io/certification/software-conformance/)) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
+The Splunk Operator should work with any [CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
 
 |  |   |
 | ---- | --- |
@@ -58,7 +58,7 @@ Each Splunk Operator release has specific Splunk Enterprise compatibility requir
 
 ### Splunk Apps Installation
 
-Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples#installing-splunk-apps).  Premium apps such as Enterprise Security and IT Service Intelligence are currently not supported.
+Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples.md#installing-splunk-apps).  Premium apps such as Enterprise Security and IT Service Intelligence are currently not supported.
 
 
 ### Docker requirements
@@ -103,7 +103,7 @@ information.
 
 ### What Storage Type To Use?
 
-The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IIOPs for a successful Splunk Enterprise environment.ßß
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IIOPs for a successful Splunk Enterprise environment.
 
 ### Mandatory Use of Splunk SmartStore
 For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
