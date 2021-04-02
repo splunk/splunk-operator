@@ -491,16 +491,42 @@ func VerifySplunkServerConfSecrets(deployment *Deployment, testenvInstance *Test
 	}
 }
 
+// VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
+// Set match to true or false to indicate desired +ve or -ve match
+func VerifySplunkInputConfSecrets(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	secretName := "hec_token"
+	for _, podName := range verificationPods {
+		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
+			found := false
+			testenvInstance.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
+			stanza := SecretKeytoServerConfStanza[secretName]
+			_, value, err := GetSecretFromInputsConf(deployment, podName, testenvInstance.GetName(), "token", stanza)
+			gomega.Expect(err).To(gomega.Succeed(), "Secret not found in conf file", "Secret Name", secretName)
+			comparsion := strings.Compare(value, string(data[secretName]))
+			if comparsion == 0 {
+				testenvInstance.Log.Info("Secret Values on input.conf Match", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+				found = true
+			} else {
+				testenvInstance.Log.Info("Secret Values on input.conf DONOT MATCH", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+			}
+			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
 // VerifySplunkSecretViaAPI check if keys can be used to access api i.e validate they are authentic
 func VerifySplunkSecretViaAPI(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
-	keysToMatch := []string{"password" /*, "hec_token"*/}
+	var keysToMatch []string
 	for _, podName := range verificationPods {
+		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
+			keysToMatch = []string{"password", "hec_token"}
+		} else {
+			keysToMatch = []string{"password"}
+		}
 		for _, secretName := range keysToMatch {
 			validKey := false
 			testenvInstance.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
-			if secretName == "password" {
-				validKey = CheckAdminPasswordViaAPI(deployment, podName, string(data[secretName]))
-			}
+			validKey = CheckSecretViaAPI(deployment, podName, secretName, string(data[secretName]))
 			gomega.Expect(validKey).Should(gomega.Equal(match))
 		}
 	}

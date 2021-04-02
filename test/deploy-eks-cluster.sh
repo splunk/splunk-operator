@@ -12,7 +12,7 @@ fi
 
 if [[ -z "${ECR_REPOSITORY}" ]]; then
   echo "ECR_REPOSITORY not set. Chaning to env.sh value"
-  export ECR_REPOSITORY="${PRIVATE_REGISTORY}"
+  export ECR_REPOSITORY="${PRIVATE_REGISTRY}"
 fi
 
 function deleteCluster() {
