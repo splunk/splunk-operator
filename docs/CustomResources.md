@@ -13,7 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
-  - [Example of Guaranteed and Burstable QoS](#example-of-guaranteed-and-burstable-qos)
+  - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -236,7 +236,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 ## Example of Guaranteed and Burstable QoS
 
-As given in the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes), you can set up your kubernetes cluster with different Quality of Services by using your Pods’ CPU and Memory resources values. Following are examples of Guaranteed and Burstable QoS:
+You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
   
 ### A Guaranteed QoS Class example:
 The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 

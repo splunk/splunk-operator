@@ -93,7 +93,7 @@ In addition to the guidelines provided in the reference hardware, [Kubernetes Qu
 | _Burstable_ | _CPU/Mem ```requests``` < CPU/Mem ```limits```_  | _When the CPU and memory  ```requests``` value is set lower than the ```limits``` the pod is given a QoS class of Burstable. This level of service is useful in a user acceptance testing ___(UAT) environment___, where the pods run with minimum resources, and Kubernetes allocates additional resources depending on usage._|
 | _BestEffort_ | _No CPU/Mem ```requests``` or ```limits``` are set_ | _When the ```requests``` or ```limits``` values are not set, the pod is given a QoS class of BestEffort. This level of service is sufficient for ___testing, or a small development task___._ |
 
-Examples on how to implement these QoS are given at  [Example of Guaranteed, Burstable and BestEffort QoS](CustomResources.md#example-of-guaranteed-and-burstable-qos) section.
+Examples on how to implement these QoS are given at [Examples of Guaranteed and Burstable QoS](CustomResources.md#examples-of-guaranteed-and-burstable-qos) section.
 
 
 ### Storage guidelines
@@ -103,7 +103,7 @@ information.
 
 ### What Storage Type To Use?
 
-The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IIOPs for a successful Splunk Enterprise environment.
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IOPs for a successful Splunk Enterprise environment.
 
 ### Mandatory Use of Splunk SmartStore
 For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
