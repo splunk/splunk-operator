@@ -16,6 +16,8 @@ deployments.
   - [Installing Splunk Apps](#installing-splunk-apps)
   - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
   - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
+  - [Configuring Splunk Enterprise CRs to use License Master](#configuring-splunk-enterprise-crs-to-use-license-master)
+  - [Configuring Indexer Clusters to use License Master](#configuring-indexer-clusters-to-use-license-master)
   - [Using an External License Master](#using-an-external-license-master)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
   - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
@@ -23,6 +25,26 @@ deployments.
     - [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object)
     - [Updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
     - [Deleting global kubernetes secret object](#deleting-global-kubernetes-secret-object)
+
+## Connecting Splunk Enterprise CRs to use License Master
+
+Once a LicenseMaster is created, configure your other Splunk Enterprise CR specs to use
+the `LicenseMaster` by adding `licenseMasterRef` to their spec. As an example, you can connect
+a `Standalone` using the following spec:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  licenseMasterRef:
+    name: example
+```
+
+## Connecting Indexer Clusters to use License Master
 
 Please refer to the [Custom Resource Guide](CustomResources.md) for more
 information about the custom resources that you can use with the Splunk
@@ -579,12 +601,15 @@ Note that `licenseUrl` may specify a local path or URL such as
 "https://myco.com/enterprise.lic", and the `volumes` parameter can
 be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
 
-Finally, configure all of your other Splunk Enterprise components to use
-the `LicenseMaster` by adding `licenseMasterRef` to their spec:
+## Configuring Splunk Enterprise CRs to use License Master
+
+Once a LicenseMaster is created, configure your other Splunk Enterprise CR specs to use
+the `LicenseMaster` by adding `licenseMasterRef` to their spec. As an example, you can connect
+a `Standalone` using the following spec:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
-kind: IndexerCluster
+kind: Standalone
 metadata:
   name: example
   finalizers:
@@ -594,6 +619,52 @@ spec:
     name: example
 ```
 
+## Configuring Indexer Clusters to use License Master
+
+While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseMaster`, you need to add `licenseMasterRef` only to the `ClusterMaster` spec as follows:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v1
+kind: ClusterMaster
+metadata:
+  name: example-cm
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  licenseMasterRef:
+    name: example
+---
+apiVersion: enterprise.splunk.com/v1
+kind: IndexerCluster
+metadata:
+  name: example-idc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  clusterMasterRef:
+    name: example-cm
+EOF
+```
+
+If forwarding of LicenseMaster logs to the above `Indexer Cluster` is required, you will need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
+
+```yaml
+apiVersion: enterprise.splunk.com/v1
+kind: LicenseMaster
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  volumes:
+    - name: licenses
+      configMap:
+        name: splunk-licenses
+  licenseUrl: /mnt/licenses/enterprise.lic
+  clusterMasterRef:
+    name: example-cm
+```
 
 ## Using an External License Master
 
