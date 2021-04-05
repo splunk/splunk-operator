@@ -103,7 +103,7 @@ information.
 
 ### What Storage Type To Use?
 
-The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IIOPs for a successful Splunk Enterprise environment.
+The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IOPs for a successful Splunk Enterprise environment.
 
 
 ### Mandatory Use of Splunk SmartStore
