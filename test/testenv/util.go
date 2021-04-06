@@ -482,6 +482,24 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// DumpGetPvcs prints and returns list of pvcs in the namespace
+func DumpGetPvcs(ns string) []string {
+	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
+	var splunkPvcs []string
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pvc -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "pvc-") {
+			splunkPvcs = append(splunkPvcs, strings.Fields(line)[0])
+		}
+	}
+	return splunkPvcs
+}
+
 // GetConfLineFromPod gets given config from file on POD
 func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
@@ -520,4 +538,16 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 		err = fmt.Errorf("Failed to find config %s under stanza %s", configName, stanza)
 	}
 	return config, err
+}
+
+// ExecuteCommandOnPod execute command on given pod and return result
+func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (string, error) {
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return "", err
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	return stdout, nil
 }

@@ -50,7 +50,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			1. Update Secrets Data
 			2. Verify New versioned secret are created with correct value.
 			3. Verify new secrets are mounted on pods.
-			4.  Verify New Secrets are present in server.conf (Pass4SymmKey) */
+			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			5. Verify New Secrets via api access (password)*/
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadFromS3Bucket()
@@ -113,6 +114,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Verify Secrets on ServerConf on Pod
 			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
+			// Verify Secrets via api access on Pod
+			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+
 		})
 	})
 
@@ -123,7 +127,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			1. Delete Secret Object
 			2. Verify New versioned secret are created with new values.
 			3. Verify New secrets are mounted on pods.
-			4.  Verify New Secrets are present in server.conf (Pass4SymmKey) */
+			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			5. Verify New Secrets via api access (password)*/
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadFromS3Bucket()
@@ -181,6 +186,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Verify Secrets on ServerConf on Pod
 			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+
+			// Verify Secrets via api access on Pod
+			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 		})
 	})
 
@@ -191,7 +199,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			1. Delete Secret Passing Empty Data Map to secret Object
 			2. Verify New versioned secret are created with new values.
 			3. Verify New secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey) */
+			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			5. Verify New Secrets via api access (password)*/
 
 			// Create standalone Deployment with License Master
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
@@ -237,6 +246,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Verify Secrets on ServerConf on Pod
 			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
+			// Verify Secrets via api access on Pod
+			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 		})
 	})
 })
