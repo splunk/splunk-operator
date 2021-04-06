@@ -21,7 +21,7 @@ The following components are licensed under Apache 2.0:
 go-logr	v0.1.0
 https://github.com/go-logr/logr
 
-operator-framework/operator-sdk v0.15.1	
+operator-framework/operator-sdk v0.18.2
 https://github.com/operator-framework/operator-sdk
 
 k8s.io/api 
