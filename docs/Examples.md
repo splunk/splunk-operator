@@ -26,30 +26,9 @@ deployments.
     - [Updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
     - [Deleting global kubernetes secret object](#deleting-global-kubernetes-secret-object)
 
-## Connecting Splunk Enterprise CRs to use License Master
-
-Once a LicenseMaster is created, configure your other Splunk Enterprise CR specs to use
-the `LicenseMaster` by adding `licenseMasterRef` to their spec. As an example, you can connect
-a `Standalone` using the following spec:
-
-```yaml
-apiVersion: enterprise.splunk.com/v1
-kind: Standalone
-metadata:
-  name: example
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  licenseMasterRef:
-    name: example
-```
-
-## Connecting Indexer Clusters to use License Master
-
 Please refer to the [Custom Resource Guide](CustomResources.md) for more
 information about the custom resources that you can use with the Splunk
 Operator.
-
 
 ## Creating a Clustered Deployment
 
