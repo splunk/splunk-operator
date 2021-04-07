@@ -16,7 +16,7 @@ deployments.
   - [Installing Splunk Apps](#installing-splunk-apps)
   - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
   - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
-  - [Configuring Splunk Enterprise CRs to use License Master](#configuring-splunk-enterprise-crs-to-use-license-master)
+  - [Configuring Standalone to use License Master](#configuring-standalone-to-use-license-master)
   - [Configuring Indexer Clusters to use License Master](#configuring-indexer-clusters-to-use-license-master)
   - [Using an External License Master](#using-an-external-license-master)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
@@ -580,11 +580,10 @@ Note that `licenseUrl` may specify a local path or URL such as
 "https://myco.com/enterprise.lic", and the `volumes` parameter can
 be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
 
-## Configuring Splunk Enterprise CRs to use License Master
+## Configuring Standalone to use License Master
 
-Once a LicenseMaster is created, configure your other Splunk Enterprise CR specs to use
-the `LicenseMaster` by adding `licenseMasterRef` to their spec. As an example, you can connect
-a `Standalone` using the following spec:
+Once a LicenseMaster is created, you can configure your `Standalone` to use
+the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
