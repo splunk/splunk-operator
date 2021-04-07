@@ -625,7 +625,7 @@ spec:
 EOF
 ```
 
-If forwarding of LicenseMaster logs to the above `Indexer Cluster` is required, you will need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
+In order to forward `LicenseMaster` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
