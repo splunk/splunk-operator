@@ -122,7 +122,9 @@ $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
 splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ```
+## Upgrading the Splunk Operator
 
+For information on upgrading the Splunk Operator, see the [How to upgrade Splunk Operator and Splunk Enterprise Deployments](SplunkOperatorUpgrade.md) page.
 
 ## Creating a Splunk Enterprise deployment
 
