@@ -3,7 +3,7 @@
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
 : "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
 : "${CLUSTER_PROVIDER:=kind}"
-: "${CLUSTER_NAME:=integration-test-cluster}"
+: "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
 : "${NUM_NODES:=2}"
 : "${COMMIT_HASH:=}"

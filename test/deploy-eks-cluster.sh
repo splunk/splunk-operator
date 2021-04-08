@@ -47,7 +47,7 @@ function createCluster() {
   fi
 
   echo "Logging in to ECR"
-  rc=$(aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin "${PRIVATE_REGISTRY}"/splunk/splunk-operator)
+  rc=$(aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin "${ECR_REPOSITORY}"/splunk/splunk-operator)
   if [ "$rc" != "Login Succeeded" ]; then
       echo "Unable to login to ECR - $rc"
       return 1
