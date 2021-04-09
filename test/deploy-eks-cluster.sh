@@ -33,7 +33,7 @@ function createCluster() {
     return 1
   fi
 
-  found=$(eksctl get cluster --name "${CLUSTER_NAME}")
+  found=$(eksctl get cluster --name "${CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
     eksctl create cluster --name=${CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING}
     if [ $? -ne 0 ]; then
