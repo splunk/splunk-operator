@@ -41,17 +41,12 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 The Splunk Operator should work with any [CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
 
-|  |   |
-| ---- | --- |
-| Splunk Development & Testing Platforms | Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) |
-|Customer Reported Platforms | Microsoft Azure Kubernetes Service (AKS), Red Hat OpenShift |
- Partner Tested Platforms | HPE Ezmeral|
-| Other Platforms |[CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) |
-|  |   |
-
-
-
-
+<table>
+<tr><td> Splunk Development & Testing Platforms </td><td> Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) </td></tr>
+<tr><td> Customer Reported Platforms </td><td> Microsoft Azure Kubernetes Service (AKS), Red Hat OpenShift </td></tr>
+<tr><td> Partner Tested Platforms</td><td> HPE Ezmeral</td></tr>
+<tr><td> Other Platforms </td><td>CNCF certified distribution</td></tr>
+</table>
 
 ### Splunk Enterprise Compatibility
 Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
@@ -76,7 +71,8 @@ The resource guidelines for running production Splunk Enterprise instances in po
 
 #### Minimum Reference Hardware
 Based on Splunk Enterprise [Reference Hardware documentation](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware), a summary of the minimum reference hardware requirements is given below.
-| Standalone        | Search Head/Search Head Cluster | Indexer Cluster |
+
+| Standalone        | Search Head / Search Head Cluster | Indexer Cluster |
 | ---------- | ------- | ------- |
 | _Each Standalone Pod: 12 Physical CPU Cores or 24 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Search Head Pod: 16 Physical CPU Cores or 32 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Indexer Pod: 12 Physical CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM._ |
 
@@ -188,4 +184,3 @@ For additional guidance on making Splunk Enterprise ports accessible outside of 
 
 ## Contacting Support
 If you are a Splunk Enterprise customer with a valid support entitlement contract and have a Splunk-related question, you can open a support case on the https://www.splunk.com/ support portal.
-
