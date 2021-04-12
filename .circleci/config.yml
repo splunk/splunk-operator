@@ -384,6 +384,7 @@ jobs:
             echo 'export CLUSTER_NODES=${NUM_NODES}' >> $BASH_ENV
             echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
             echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
+            echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
       - kubernetes/install
       - aws-cli/install
       - aws-eks/install-eksctl
