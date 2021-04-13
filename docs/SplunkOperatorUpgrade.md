@@ -41,7 +41,7 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ​
 ```
 ​
-If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.
+If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.  
 ​
 If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image.
 ​
