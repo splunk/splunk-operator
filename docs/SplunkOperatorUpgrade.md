@@ -6,7 +6,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 ​
 * Note: The Splunk Operator does not provide a way to downgrade to a previous release.
 ​
-## Prequisites
+## Prerequisites
 ​
 * Before you upgrade, review the Splunk Operator [change log](https://github.com/splunk/splunk-operator/releases) page for information on changes made in the latest release. The Splunk Enterprise Docker image compatibility is noted in each release version.
 ​
