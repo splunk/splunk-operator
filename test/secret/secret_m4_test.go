@@ -136,6 +136,9 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
 			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
+			// Verify Hec token on InputConf on Pod
+			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+
 			// Verify Secrets via api access on Pod
 			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 		})

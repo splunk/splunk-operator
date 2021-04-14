@@ -104,6 +104,13 @@ var (
 	specifiedCommitHash      = ""
 )
 
+//HTTPCodes Response codes for http request
+var HTTPCodes = map[string]string{
+	"Ok":           "HTTP/1.1 200 OK",
+	"Forbidden":    "HTTP/1.1 403 Forbidden",
+	"Unauthorized": "HTTP/1.1 401 Unauthorized",
+}
+
 type cleanupFunc func() error
 
 // TestEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run tests against

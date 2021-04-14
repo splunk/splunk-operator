@@ -28,6 +28,13 @@ var SecretKeytoServerConfStanza = map[string]string{
 	"shc_secret":   "shclustering",
 	"idxc_secret":  "clustering",
 	"pass4SymmKey": "general",
+	"hec_token":    "http://splunk_hec_token",
+}
+
+// SecretAPIRequests map to convert secretName to respective api requests
+var SecretAPIRequests = map[string]string{
+	"password":  "curl -iks -u %s:%s https://%s:%d/servicesNS/admin/splunk_httpinput/data/inputs/http?output_mode=json",
+	"hec_token": "curl -ik -H 'Authorization: %s %s' https://%s:%d/services/collector -d '{\"event\": \"data\", \"sourcetype\": \"manual\"}'",
 }
 
 // GetSecretStruct Gets the secret struct for a given k8 secret name.
@@ -160,17 +167,36 @@ func GetSecretDataMap(hecToken string, password string, pass4SymmKey string, idx
 	return updatedSecretData
 }
 
-// CheckAdminPasswordViaAPI check if password can be used to access api
-func CheckAdminPasswordViaAPI(deployment *Deployment, podName string, password string) bool {
-	cmd := fmt.Sprintf("curl -iks -u admin:%s https://localhost:8089/servicesNS/admin/splunk_httpinput/data/inputs/http?output_mode=json", password)
+// CheckSecretViaAPI check if secret (hec token or password) can be used to access api
+func CheckSecretViaAPI(deployment *Deployment, podName string, secretName string, secret string) bool {
+	var cmd string
+	if secretName == "password" {
+		cmd = fmt.Sprintf(SecretAPIRequests[secretName], "admin", secret, "localhost", 8089)
+	} else if secretName == "hec_token" {
+		cmd = fmt.Sprintf(SecretAPIRequests[secretName], "Splunk", secret, "localhost", 8088)
+	}
 	output, err := ExecuteCommandOnPod(deployment, podName, cmd)
 	if err != nil {
 		return false
 	}
 	response := strings.Split(string(output), "\n")
-	if strings.Contains(response[0], "HTTP/1.1 200 OK") {
+	if strings.Contains(response[0], HTTPCodes["Ok"]) {
 		logf.Log.Info("200 OK response found", "pod", podName)
 		return true
 	}
 	return false
+}
+
+// GetSecretFromInputsConf gets give secret from server under given stanza
+func GetSecretFromInputsConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+	filePath := "/opt/splunk/etc/apps/splunk_httpinput/local/inputs.conf"
+	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get secret from pod", "Pod Name", podName, "Secret Name", configName)
+		return "", "", err
+	}
+	secretList := strings.Split(confline, "=")
+	key := strings.TrimSpace(secretList[0])
+	value := strings.TrimSpace(secretList[1])
+	return key, value, nil
 }
