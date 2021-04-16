@@ -469,7 +469,7 @@ You can also install apps hosted remotely using URLs:
 
 Also these application configuration parameters can be placed in a `defaults.yml`
 file and use the `defaultsUrlApps` parameter.  The `defaultsUrlApps` parameter
-is specific for applicastion installation and will install the apps in the
+is specific for application installation and will install the apps in the
 correct instances as per the deployment.
 
 Unlike `defaultsUrl` which is applied at every instance created by the CR, the
@@ -484,7 +484,7 @@ and pushed to the members via SH Bundle push.
 and pushed to the indexers in the cluster via CM Bundle push.
 
 For application installation the preferred method will be through the `defaultsUrlApps`
-while other ansible defaults can be still be installed via `defaultsUrl`.  For backwards
+while other Ansible defaults can be still be installed via `defaultsUrl`.  For backwards
 compatibility applications could be installed via `defaultsUrl` though this is not
 recommended.  Both options can be used in conjunction:
 
