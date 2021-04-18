@@ -614,29 +614,38 @@ spec:
                       type: array
                   type: object
               type: object
-            applications:
+            appFrameworkRef:
               description: App Framework configuration. Refers to the config block
                 for App Framework. Through this config, apps can be installed in an
-                Indexer Cluster. The implementatiom is still TBD.
+                Indexer Cluster. The implementation of this apps framework is still
+                TBD.
               properties:
                 featureEnabled:
-                  description: Is Application Framework Feature Enabled. Default value
-                    is False
-                  type: string
+                  description: Flag to Enable/Disable Application Framework Feature.
+                    Default value is False. Implementation of Apps Framework is still
+                    TBD so turning this flag to true will not do any changes.
+                  type: boolean
                 s3Bucket:
-                  description: App Package Remote Store Bucket
+                  description: App Package Remote Store Bucket Name of the s3 bucket
+                    within s3Endpoint where splunk apps packages can be placed.
                   type: string
                 s3Endpoint:
-                  description: App Package Remote Store Endpoint
+                  description: App Package Remote Store Endpoint. This is s3 location
+                    where you will have the splunk apps packages placed.
                   type: string
                 s3PollInterval:
-                  description: App Package Remote Store Polling interval
+                  description: App Package Remote Store Polling interval in minutes.
+                    New or Updated Apps will be pulled from s3 remote location at
+                    every polling interval. This value can be  >=1. The default value
+                    is 60 minutes.
                   type: integer
                 s3SecretRef:
-                  description: App Package Remote Store Credentials
+                  description: App Package Remote Store Credentials Secret object
+                    containing the S3 authentication info.
                   type: string
                 type:
-                  description: App Package Remote Store type
+                  description: App Package Remote Store type. The currently supported
+                    type is s3 only.
                   type: string
               type: object
             clusterMasterRef:
