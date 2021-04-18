@@ -617,11 +617,10 @@ spec:
             appFrameworkRef:
               description: App Framework configuration. Refers to the config block
                 for App Framework. Through this config, apps can be installed in an
-                Indexer Cluster. The implementatiom is still TBD.
+                Indexer Cluster. The implementation of this apps framework is still
+                TBD.
               properties:
                 featureEnabled:
-                  description: Is Application Framework Feature Enabled. Default value
-                    is False
                   description: Flag to Enable/Disable Application Framework Feature.
                     Default value is False. Implementation of Apps Framework is still
                     TBD so turning this flag to true will not do any changes.
