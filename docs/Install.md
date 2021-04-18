@@ -32,6 +32,11 @@ kubectl apply -f splunk-operator.yaml
 
 ## Admin Installation for All Namespaces
 
+_**Note:** The Admin Installation for all Namespaces is not functioning as intended with this release. We're tracking the issue [here](https://github.com/splunk/splunk-operator/issues/206). Check the status of the issue before attempting to use these instructions._
+
+--------------------
+
+
 If you want to configure a single instance of the operator to manage all the namespaces of your cluster, use the alternative cluster scope installation yaml file:
 
 ```

@@ -36,7 +36,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "deletecr-" + testenv.RandomDNSName(2)
+	testSuiteName   = "deletecr-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point

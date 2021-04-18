@@ -464,21 +464,44 @@ func newStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *e
 	return &new
 }
 
-// DumpGetPods prints list of pods in the namespace
-func DumpGetPods(ns string) {
+// DumpGetPods prints and returns list of pods in the namespace
+func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	var splunkPods []string
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
-	} else {
-		for _, line := range strings.Split(string(output), "\n") {
-			logf.Log.Info(line)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
+			splunkPods = append(splunkPods, strings.Fields(line)[0])
 		}
 	}
+	return splunkPods
+}
+
+// DumpGetPvcs prints and returns list of pvcs in the namespace
+func DumpGetPvcs(ns string) []string {
+	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
+	var splunkPvcs []string
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pvc -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "pvc-") {
+			splunkPvcs = append(splunkPvcs, strings.Fields(line)[0])
+		}
+	}
+	return splunkPvcs
 }
 
 // GetConfLineFromPod gets given config from file on POD
-func GetConfLineFromPod(podName string, filePath string, ns string, configName string) (string, error) {
+func GetConfLineFromPod(podName string, filePath string, ns string, configName string, stanza string, checkStanza bool) (string, error) {
 	var config string
 	var err error
 	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
@@ -487,17 +510,44 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return config, err
 	}
+
+	var stanzaString string
+	stanzaFound := true
+	if checkStanza {
+		stanzaFound = false
+		stanzaString = fmt.Sprintf("[%s]", stanza)
+	}
 	for _, line := range strings.Split(string(output), "\n") {
 		// Check for empty lines to prevent an error in logic below
 		if len(line) == 0 {
 			continue
 		}
-		// Look for give config name in file
-		if strings.HasPrefix(line, configName) {
+		// Look for given config name in file
+		if stanzaFound == false {
+			if strings.HasPrefix(line, stanzaString) {
+				stanzaFound = true
+			}
+			continue
+		} else if strings.HasPrefix(line, configName) {
 			logf.Log.Info("Configuration found.", "Config", configName, "Line", line)
 			config = line
 			break
 		}
 	}
+	if config == "" {
+		err = fmt.Errorf("Failed to find config %s under stanza %s", configName, stanza)
+	}
 	return config, err
+}
+
+// ExecuteCommandOnPod execute command on given pod and return result
+func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (string, error) {
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return "", err
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	return stdout, nil
 }

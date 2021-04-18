@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-var _ = Describe("crcrud test", func() {
+var _ = Describe("Crcrud test for SVA S1", func() {
 
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
@@ -73,7 +73,7 @@ var _ = Describe("crcrud test", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify Standalone goes to ready state
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
 
 			// Verify CPU limits after updating the CR
 			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), standalonePodName, newCPULimits)

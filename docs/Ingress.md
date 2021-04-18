@@ -53,7 +53,7 @@ For instructions on how to install and configure Istio for your specific infrast
 
 Most scenarios for Istio will require the configuration of a Gateway and a Virtual Service. Familiarize yourself with the [Istio Gateway](https://istio.io/latest/docs/reference/config/networking/gateway/) and [Istio Virtual Service ](https://istio.io/latest/docs/reference/config/networking/virtual-service/).
 
-### Configuring Ingress for Splunk Web
+### Configuring Ingress for Splunk Web and HEC
 
 You can configure Istio to provide direct access to Splunk Web.
 
@@ -109,10 +109,10 @@ kubectl get svc -n istio-system
 4. Use a browser to connect to the External-IP to access Splunk Web. For example:
 
 ```
-http://<LoadBalance-External-IP>
+http://<LoadBalancer-External-IP>
 ```
 
-#### Multiple Hosts Configuration
+#### Multiple Hosts and HEC Configuration
 
 If your deployment has multiple hosts such as Search Heads and Cluster Master, use this example to configure Splunk Web access, and HTTP Event Collector port. Follow the steps here [HEC Documentation](https://docs.splunk.com/Documentation/Splunk/latest/Data/UsetheHTTPEventCollector) to learn how to create a HEC token and how to send data using HTTP. 
 
@@ -383,6 +383,8 @@ spec:
 
 If you only have one indexer cluster that you would like to use as the destination for all S2S traffic, you can optionally replace `splunk.example.com` in the above examples with the wildcard `*`. When you use this wildcard, you do not have to set the `tlsHostname` parameter in `outputs.conf` on your forwarders.
 
+4. Deploy an app to the standalone instance with the inputs.conf settings needed to open port 9998 and configure the relevant TLS settings. For details on app management using the Splunk Operator, see [Using Apps for Splunk Configuration](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps).
+
 Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the documentation [Configure Secure Forwarding](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders)
 
 #### Splunk Forwarder data with TLS Gateway Termination
@@ -492,6 +494,9 @@ metadata:
     # use the shared ingress-nginx
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/default-backend: splunk-standalone-standalone-service
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:
   rules:
   - host: splunk.example.com
@@ -516,6 +521,9 @@ metadata:
     # use the shared ingress-nginx
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/default-backend: splunk-standalone-standalone-service
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:
   rules:
   - host: splunk.example.com
@@ -543,6 +551,57 @@ spec:
           servicePort: 8000
 ```
 
+Example to create a TLS enabled Ingress configuration
+
+There are a few important configurations to be aware of in the TLS configuration:
+
+* The `nginx.ingress.kubernetes.io/backend-protocol:` annotation requires `"HTTPS"` when TLS is configured on the backend services.
+* The secretName must reference a [valid TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
+
+Note: This example assumes that https is enabled for Splunk Web.
+
+```
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100M
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/session-cookie-samesite: "true"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/en-US"
+    cert-manager.io/cluster-issuer: selfsigned
+  name: splunk-ingress
+  namespace: default
+spec:
+  rules:
+  - host: shc.example.com
+    http:
+      paths:
+      - path: /en-US
+        pathType: Prefix
+        backend:
+          serviceName: splunk-shc-search-head-service
+          servicePort: 8000
+  - host: hec.example.com
+    http:
+      paths:
+      - path: /services/collector
+        pathType: Prefix
+        backend:
+          serviceName: splunk-idc-indexer-service
+          servicePort: 8088
+  tls:
+  - hosts:
+    - shc.example.com
+    - hec.example.com
+    secretName: operator-tls
+```
 
 
 ### Configuring Ingress NGINX for Splunk Forwarders with End-to-End TLS
@@ -644,16 +703,16 @@ $ kubectl create -f crds/
 cd deployments/helm-chart
 
 # Edit and make changes to values.yaml as needed
-helm install epat-eks-nginx nginx-stable/nginx-ingress
+helm install splunk-nginx nginx-stable/nginx-ingress
 
 #list the helms installed
 helm list
 
 NAME            NAMESPACE   REVISION    UPDATED             STATUS      CHART               APP VERSION
-epat-eks-nginx  default     5  2020-10-29 15:03:47.6 EDT    deployed    nginx-ingress-0.7.0 1.9.0
+splunk-nginx  default     5  2020-10-29 15:03:47.6 EDT    deployed    nginx-ingress-0.7.0 1.9.0
 
 #if needed to update any configs for ingress, update the values.yaml and run upgrade
-helm upgrade epat-eks-nginx  nginx-stable/nginx-ingress
+helm upgrade splunk-nginx  nginx-stable/nginx-ingress
 ```
 
 #### Configure Ingress services
@@ -661,6 +720,9 @@ helm upgrade epat-eks-nginx  nginx-stable/nginx-ingress
 ##### Configure Ingress for Splunk Web and HEC
 
 The following ingress example yaml configures Splunk Web as well as HEC as an operator installed service. HEC is exposed via ssl and Splunk Web is non-ssl.
+
+* TLS to the ingress controller is configured in the `tls:` section of the yaml and `secretName` references a valid [TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
+* For any backend service that has TLS enabled, a corresponding `nginx.org/ssl-services annotation` is required.
 
 Create Ingress
 ```yaml
@@ -743,13 +805,13 @@ spec:
 ```yaml
 kubectl get svc
 NAME                                         TYPE           CLUSTER-IP       EXTERNAL-IP                                                               PORT(S)                                                            AGE
-epat-eks-nginx-nginx-ingress                 LoadBalancer   172.20.195.54    aa725344587a4443b97c614c6c78419c-1675645062.us-east-2.elb.amazonaws.com   80:31452/TCP,443:30402/TCP,30403:30403/TCP                         7d1h
+splunk-nginx-nginx-ingress                 LoadBalancer   172.20.195.54    aa725344587a4443b97c614c6c78419c-1675645062.us-east-2.elb.amazonaws.com   80:31452/TCP,443:30402/TCP,30403:30403/TCP                         7d1h
 ```
 
 ​		2. Edit the service and add the Splunk Forwarder ingress port:
 
 ```
-kubectl edit service epat-eks-nginx-nginx-ingress
+kubectl edit service splunk-nginx-nginx-ingress
 ```
 
 Example Service:
@@ -758,20 +820,20 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    meta.helm.sh/release-name: epat-eks-nginx
+    meta.helm.sh/release-name: splunk-nginx
     meta.helm.sh/release-namespace: default
   creationTimestamp: "2020-10-23T17:05:08Z"
   finalizers:
   - service.kubernetes.io/load-balancer-cleanup
   labels:
-    app.kubernetes.io/instance: epat-eks-nginx
+    app.kubernetes.io/instance: splunk-nginx
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/name: epat-eks-nginx-nginx-ingress
+    app.kubernetes.io/name: splunk-nginx-nginx-ingress
     helm.sh/chart: nginx-ingress-0.7.0
-  name: epat-eks-nginx-nginx-ingress
+  name: splunk-nginx-nginx-ingress
   namespace: default
   resourceVersion: "3295579"
-  selfLink: /api/v1/namespaces/default/services/epat-eks-nginx-nginx-ingress
+  selfLink: /api/v1/namespaces/default/services/splunk-nginx-nginx-ingress
   uid: a7253445-87a4-443b-97c6-14c6c78419c9
 spec:
   clusterIP: 172.20.195.54
@@ -794,7 +856,7 @@ spec:
     protocol: TCP
     targetPort: 30403
   selector:
-    app: epat-eks-nginx-nginx-ingress
+    app: splunk-nginx-nginx-ingress
   sessionAffinity: None
   type: LoadBalancer
 ```

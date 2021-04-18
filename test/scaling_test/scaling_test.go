@@ -263,7 +263,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Multisite Indexer Cluster (M4 - Multisite indexer Cluster, search head cluster)", func() {
-		It("scaling_test: Multisite IDXC can be scaled up and data is searchable", func() {
+		It("scaling_test, integration: Multisite IDXC can be scaled up and data is searchable", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3
