@@ -561,6 +561,10 @@ func (in *SearchHeadClusterMemberStatus) DeepCopy() *SearchHeadClusterMemberStat
 func (in *SearchHeadClusterSpec) DeepCopyInto(out *SearchHeadClusterSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+<<<<<<< HEAD:pkg/apis/enterprise/v1/zz_generated.deepcopy.go
+=======
+	out.SparkRef = in.SparkRef
+>>>>>>> ff690dab13210b72c28ad860e03bab1077eba2ef:pkg/apis/enterprise/v1beta1/zz_generated.deepcopy.go
 	out.AppFrameworkRef = in.AppFrameworkRef
 	return
 }
