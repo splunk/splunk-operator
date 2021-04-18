@@ -162,11 +162,6 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 	if err != nil {
 		return err
 	}
-<<<<<<< HEAD
-=======
-
-	cr.Spec.SparkImage = spark.GetSparkImage(cr.Spec.SparkImage)
->>>>>>> ff690dab13210b72c28ad860e03bab1077eba2ef
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
