@@ -39,8 +39,8 @@ var _ = Describe("Smoke test", func() {
 		}
 	})
 
-	Context("Configure multiple indexes on standlaone deployment using CR Spec", func() {
-		It("smartstore: Can configure multiple indexes through app", func() {
+	Context("Standalone Deployment (S1)", func() {
+		It("smartstore, integration: Can configure multiple indexes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
 				"test-index-" + testenv.RandomDNSName(3): volName,
@@ -89,8 +89,8 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	Context("Confiugre volume in default settings on standlaone deployment using CR Spec", func() {
-		It("smartstore: Can configure indexes which use default volumes through app", func() {
+	Context("Standalone Deployment (S1)", func() {
+		It("smartstore, integration: Can configure indexes which use default volumes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
@@ -154,8 +154,8 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	Context("Confiugre indexes and volumes on Indexer Cluster using CR Spec", func() {
-		It("smartstore: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
+		It("smartstore, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)

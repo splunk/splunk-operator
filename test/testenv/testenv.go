@@ -71,10 +71,13 @@ const (
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
-	// MonitoringConsoleSts Montioring Console Statefulset Template
+	// PVCString Template String for PVC
+	PVCString = "pvc-%s-splunk-%s-%s-%d"
+
+	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
-	// MonitoringConsolePod Montioring Console Statefulset Template
+	// MonitoringConsolePod Monitoring Console Statefulset Template
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
 	// ClusterMasterPod ClusterMaster Pod Template String
@@ -83,11 +86,11 @@ const (
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
 
-	// SecretObjectName Secret object Template
-	SecretObjectName = "splunk-%s-secret"
+	// NamespaceScopedSecretObjectName Name Space Scoped Secret object Template
+	NamespaceScopedSecretObjectName = "splunk-%s-secret"
 
-	// SecretObjectPodName Secret object Template
-	SecretObjectPodName = "splunk-%s-%s-secret-v%d"
+	// VersionedSecretName Versioned Secret object Template
+	VersionedSecretName = "splunk-%s-%s-secret-v%d"
 )
 
 var (
@@ -100,6 +103,13 @@ var (
 	specifiedTestTimeout     = defaultTestTimeout
 	specifiedCommitHash      = ""
 )
+
+//HTTPCodes Response codes for http request
+var HTTPCodes = map[string]string{
+	"Ok":           "HTTP/1.1 200 OK",
+	"Forbidden":    "HTTP/1.1 403 Forbidden",
+	"Unauthorized": "HTTP/1.1 401 Unauthorized",
+}
 
 type cleanupFunc func() error
 

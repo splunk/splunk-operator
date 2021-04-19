@@ -1,12 +1,12 @@
 # How to upgrade Splunk Operator and Splunk Enterprise Deployments
 ​
-To upgrade the Splunk Operator for Kubernetes, you will overwrite the prior operator release with the latest version. Once the lastest version of `splunk-operator-install.yaml` ([see below](#upgrading-splunk-operator-and-splunk-operator-deployment)) is applied the CRD's are updated and operator deployment is updated with newer version of Splunk Operator image. Any new spec defined by the operator will be applied to the pods managed by Splunk Operator for Kubernetes.
+To upgrade the Splunk Operator for Kubernetes, you will overwrite the prior Operator release with the latest version. Once the lastest version of `splunk-operator-install.yaml` ([see below](#upgrading-splunk-operator-and-splunk-operator-deployment)) is applied the CRD's are updated and Operator deployment is updated with newer version of Splunk Operator image. Any new spec defined by the operator will be applied to the pods managed by Splunk Operator for Kubernetes.  
 ​
 A Splunk Operator for Kubernetes upgrade might include support for a later version of the Splunk Enterprise Docker image. In that scenario, after the Splunk Operator completes its upgrade, the pods managed by Splunk Operator for Kubernetes will be restarted using the latest Splunk Enterprise Docker image.
 ​
 * Note: The Splunk Operator does not provide a way to downgrade to a previous release.
 ​
-## Prequisites
+## Prerequisites
 ​
 * Before you upgrade, review the Splunk Operator [change log](https://github.com/splunk/splunk-operator/releases) page for information on changes made in the latest release. The Splunk Enterprise Docker image compatibility is noted in each release version.
 ​
@@ -21,7 +21,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 1. Download the latest Splunk Operator installation yaml file.
 ​
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.0-RC/splunk-operator-install.yaml 
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.0/splunk-operator-install.yaml 
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install. 
@@ -41,7 +41,7 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ​
 ```
 ​
-If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.
+If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.  
 ​
 If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image.
 ​

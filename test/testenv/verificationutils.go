@@ -15,10 +15,12 @@
 package testenv
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	gomega "github.com/onsi/gomega"
 
@@ -176,7 +178,7 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
+		podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
 		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
@@ -327,7 +329,7 @@ func VerifyRollingRestartFinished(deployment *Deployment) {
 // VerifyConfOnPod Verify give conf and value on config file on pod
 func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, confFilePath string, config string, value string) {
 	gomega.Consistently(func() bool {
-		confLine, err := GetConfLineFromPod(podName, confFilePath, namespace, config)
+		confLine, err := GetConfLineFromPod(podName, confFilePath, namespace, config, "", false)
 		if err != nil {
 			logf.Log.Error(err, "Failed to get config on pod")
 			return false
@@ -411,36 +413,6 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifySecretObjectUpdated Check whether the new secret object is created
-func VerifySecretObjectUpdated(deployment *Deployment, testenvInstance *TestEnv, verificationSecrets []string, secretKey string, modifiedValue string) {
-	for _, secretObject := range verificationSecrets {
-		found := false
-		currentValue := GetSecretKey(deployment, testenvInstance.GetName(), secretKey, secretObject)
-		if currentValue != modifiedValue {
-			testenvInstance.Log.Info("Key Not Updated on Secret Object ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
-		} else {
-			testenvInstance.Log.Info("Key verified on Secret Object ", "Secret Object Name", secretObject, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
-			found = true
-		}
-		gomega.Expect(found).Should(gomega.Equal(true))
-	}
-}
-
-// VerifySecretsUpdatedOnPod Check whether the secret object info is mounted on all pods
-func VerifySecretsUpdatedOnPod(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, secretKey string, modifiedValue string) {
-	for _, pod := range verificationPods {
-		found := false
-		currentValue := GetMountedKey(deployment, pod, secretKey)
-		if currentValue != modifiedValue {
-			testenvInstance.Log.Info("Key not updated on pod", "Pod Name ", pod, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
-		} else {
-			testenvInstance.Log.Info("Key verified on pod", "Pod Name ", pod, "Secret Key", secretKey, "Expected Value of Key", modifiedValue, "Key Value found", currentValue)
-			found = true
-		}
-		gomega.Expect(found).Should(gomega.Equal(true))
-	}
-}
-
 // VerifyClusterMasterPhase verify phase of cluster master
 func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	cm := &enterprisev1.ClusterMaster{}
@@ -454,4 +426,135 @@ func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, 
 		// Test ClusterMaster Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
+// VerifySecretsOnPods Check whether the secret object info is mounted on given pods
+// Set match to true or false to indicate desired +ve or -ve match
+func VerifySecretsOnPods(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	for _, pod := range verificationPods {
+		for secretKey, secretValue := range data {
+			found := false
+			currentValue := GetMountedKey(deployment, pod, secretKey)
+			comparsion := bytes.Compare([]byte(currentValue), secretValue)
+			if comparsion == 0 {
+				found = true
+				testenvInstance.Log.Info("Secret Values on POD Match", "Match Expected", match, "Pod Name ", pod, "Secret Key", secretKey, "Given Value of Key", string(secretValue), "Key Value found", currentValue)
+			} else {
+				testenvInstance.Log.Info("Secret Values on POD DONOT Match", "Match Expected", match, "Pod Name ", pod, "Secret Key", secretKey, "Given Value of Key", string(secretValue), "Key Value found", currentValue)
+			}
+			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifySecretsOnSecretObjects Compare secret value on passed in map to value present on secret object.
+// Set match to true or false to indicate desired +ve or -ve match
+func VerifySecretsOnSecretObjects(deployment *Deployment, testenvInstance *TestEnv, secretObjectNames []string, data map[string][]byte, match bool) {
+	for _, secretName := range secretObjectNames {
+		currentSecretData, err := GetSecretStruct(deployment, testenvInstance.GetName(), secretName)
+		gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
+		for secretKey, secretValue := range data {
+			found := false
+			secretValueOnSecretObject := currentSecretData.Data[secretKey]
+			comparsion := bytes.Compare(secretValueOnSecretObject, secretValue)
+			if comparsion == 0 {
+				testenvInstance.Log.Info("Secret Values on Secret Object Match", "Match Expected", match, "Secret Object Name", secretName, "Secret Key", secretKey, "Given Value of Key", string(secretValue), "Key Value found", string(secretValueOnSecretObject))
+				found = true
+			} else {
+				testenvInstance.Log.Info("Secret Values on Secret Object DONOT match", "Match Expected", match, "Secret Object Name", secretName, "Secret Key", secretKey, "Given Value of Key", string(secretValue), "Key Value found", string(secretValueOnSecretObject))
+			}
+			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifySplunkServerConfSecrets Compare secret value on passed in map to value present on server.conf for given pods and secrets
+// Set match to true or false to indicate desired +ve or -ve match
+func VerifySplunkServerConfSecrets(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	for _, podName := range verificationPods {
+		keysToMatch := GetKeysToMatch(podName)
+		testenvInstance.Log.Info("Verificaton Keys Set", "Pod Name", podName, "Keys To Compare", keysToMatch)
+		for _, secretName := range keysToMatch {
+			found := false
+			stanza := SecretKeytoServerConfStanza[secretName]
+			_, value, err := GetSecretFromServerConf(deployment, podName, testenvInstance.GetName(), "pass4SymmKey", stanza)
+			gomega.Expect(err).To(gomega.Succeed(), "Secret not found in conf file", "Secret Name", secretName)
+			comparsion := strings.Compare(value, string(data[secretName]))
+			if comparsion == 0 {
+				testenvInstance.Log.Info("Secret Values on server.conf Match", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+				found = true
+			} else {
+				testenvInstance.Log.Info("Secret Values on server.conf DONOT MATCH", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+			}
+			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
+// Set match to true or false to indicate desired +ve or -ve match
+func VerifySplunkInputConfSecrets(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	secretName := "hec_token"
+	for _, podName := range verificationPods {
+		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
+			found := false
+			testenvInstance.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
+			stanza := SecretKeytoServerConfStanza[secretName]
+			_, value, err := GetSecretFromInputsConf(deployment, podName, testenvInstance.GetName(), "token", stanza)
+			gomega.Expect(err).To(gomega.Succeed(), "Secret not found in conf file", "Secret Name", secretName)
+			comparsion := strings.Compare(value, string(data[secretName]))
+			if comparsion == 0 {
+				testenvInstance.Log.Info("Secret Values on input.conf Match", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+				found = true
+			} else {
+				testenvInstance.Log.Info("Secret Values on input.conf DONOT MATCH", "Match Expected", match, "Pod Name", podName, "Secret Key", secretName, "Given Value of Key", string(data[secretName]), "Key Value found", value)
+			}
+			gomega.Expect(found).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifySplunkSecretViaAPI check if keys can be used to access api i.e validate they are authentic
+func VerifySplunkSecretViaAPI(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+	var keysToMatch []string
+	for _, podName := range verificationPods {
+		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
+			keysToMatch = []string{"password", "hec_token"}
+		} else {
+			keysToMatch = []string{"password"}
+		}
+		for _, secretName := range keysToMatch {
+			validKey := false
+			testenvInstance.Log.Info("Key Verificaton", "Pod Name", podName, "Key", secretName)
+			validKey = CheckSecretViaAPI(deployment, podName, secretName, string(data[secretName]))
+			gomega.Expect(validKey).Should(gomega.Equal(match))
+		}
+	}
+}
+
+// VerifyPVC verifies if PVC exists or not
+func VerifyPVC(deployment *Deployment, testenvInstance *TestEnv, ns string, pvcName string, expectedToExist bool, verificationTimeout time.Duration) {
+	gomega.Eventually(func() bool {
+		pvcExists := false
+		pvcsList := DumpGetPvcs(testenvInstance.GetName())
+		for i := 0; i < len(pvcsList); i++ {
+			if strings.EqualFold(pvcsList[i], pvcName) {
+				pvcExists = true
+				break
+			}
+		}
+		testenvInstance.Log.Info("PVC Status Verified", "PVC", pvcName, "STATUS", pvcExists, "EXPECTED", expectedToExist)
+		return pvcExists
+	}, verificationTimeout, PollInterval).Should(gomega.Equal(expectedToExist))
+}
+
+// VerifyPVCsPerDeployment verifies for a given deployment if PVCs (etc and var) exists
+func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, deploymentType string, instances int, expectedtoExist bool, verificationTimeout time.Duration) {
+	pvcKind := []string{"etc", "var"}
+	for i := 0; i < instances; i++ {
+		for _, pvcVolumeKind := range pvcKind {
+			PvcName := fmt.Sprintf(PVCString, pvcVolumeKind, deployment.GetName(), deploymentType, i)
+			VerifyPVC(deployment, testenvInstance, testenvInstance.GetName(), PvcName, expectedtoExist, verificationTimeout)
+		}
+	}
 }
