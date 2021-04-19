@@ -37,7 +37,7 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 ### Supported Kubernetes Versions
 
-- Kubernetes, version 1.16.2+ and later.
+- Kubernetes, version 1.16.2+ and later (x86 64-bit only).
 
 The Splunk Operator should work with any [CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
 
@@ -109,7 +109,7 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.0-RC/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.0/splunk-operator-install.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.

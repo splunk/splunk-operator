@@ -16,5 +16,5 @@ package version
 
 var (
 	// Version of splunk-operator
-	Version = "1.0.0-RC"
+	Version = "1.0.0"
 )
