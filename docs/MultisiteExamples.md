@@ -76,7 +76,7 @@ spec:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: failure-domain.beta.kubernetes.io/zone
+          - key: topology.kubernetes.io/zone
             operator: In
             values:
             - zone-1a
@@ -107,7 +107,7 @@ spec:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          - key: failure-domain.beta.kubernetes.io/zone
+          - key: topology.kubernetes.io/zone
             operator: In
             values:
             - zone-1a
@@ -115,7 +115,7 @@ EOF
 ```
 Create IndexerCluster CR for each required site with zone affinity specified as needed
 
-Note: The value of label for zone i.e. `zone-1a` for label `failure-domain.beta.kubernetes.io/zone` is specific to each cloud provider and should be changed based on the cloud provider you are using.
+Note: The value of label for zone i.e. `zone-1a` for label `topology.kubernetes.io/zone` is specific to each cloud provider and should be changed based on the cloud provider you are using.
 
 ## Connecting a search-head cluster to a multisite indexer-cluster
 
