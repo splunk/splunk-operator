@@ -1,6 +1,25 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 1.0.0-RC (2021-03-22)
+## 1.0.0 GA(2021-04-19)
+* This is the GA 1.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.3 image with it
+
+* CSPL-555 - Use pre-defined system resource values for Montioring Console pod (CPU & Memory) to avoid continuous reset of the MC pod when those values aren't consistent on different CRs
+
+* CSPL-780 - When deleting Search Head Cluster's custom resources, add fix to delete PVCs for both the "search-head" and "deployer" components 
+
+* Documentation updates to include 
+  * System resources & Storage requirements
+  * How to Upgrade Splunk Operator
+  * Ingress documentation updates with ngingx examples
+  * How to configure Indexer cluster to use License Master
+
+* Nightly build pipeline enhanced to run on EKS Cluster
+
+* Functional Test automation enhancements and refactoring
+
+## 1.0.0-RC(2021-03-22)
 * This a release candidate for upcoming GA release.
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.1.3 image with it
