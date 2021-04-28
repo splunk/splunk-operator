@@ -68,9 +68,26 @@ spec:
       - kind: Secrets
         version: v1
       displayName: IndexerCluster
-    - kind: ClusterMaster
+    - displayName: LicenseMaster
+      kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
       version: v1beta1
+    - displayName: SearchHeadCluster
+      kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -84,27 +101,9 @@ spec:
         version: v1
       - kind: Secrets
         version: v1
-      displayName: LicenseMaster
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
       version: v1alpha3
-      resources:
-      - kind: StatefulSets
-        version: apps/v1
-      - kind: Deployments
-        version: apps/v1
-      - kind: Pods
-        version: v1
-      - kind: Services
-        version: v1
-      - kind: ConfigMaps
-        version: v1
-      - kind: Secrets
-        version: v1
-      displayName: SearchHeadCluster
     - kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
-      version: v1alpha2
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -118,6 +117,7 @@ spec:
         version: v1
       - kind: Secrets
         version: v1
+      version: v1alpha2
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com

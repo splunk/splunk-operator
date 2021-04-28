@@ -23,6 +23,12 @@ for v in $OLD_VERSIONS; do
     name: $v
     served: true
     storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
 EOF
 done
 
