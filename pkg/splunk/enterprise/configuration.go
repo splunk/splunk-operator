@@ -708,6 +708,11 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 
+	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
+	for _, envVar := range spec.ExtraEnv {
+		extraEnv = append(extraEnv, envVar)
+	}
+
 	// append any extra variables
 	env = append(env, extraEnv...)
 

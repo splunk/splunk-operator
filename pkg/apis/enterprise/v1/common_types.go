@@ -74,6 +74,10 @@ type CommonSplunkSpec struct {
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
 	ServiceAccount string `json:"serviceAccount"`
+
+	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
+	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
+	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
