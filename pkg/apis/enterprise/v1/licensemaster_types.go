@@ -32,16 +32,17 @@ import (
 type LicenseMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	// App Framework configuration. Refers to the config block for App Framework.
-	// Through this config, apps can be installed in a LicenseMaster splunk CR.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
 type LicenseMasterStatus struct {
 	// current phase of the license master
 	Phase splcommon.Phase `json:"phase"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

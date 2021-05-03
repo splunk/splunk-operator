@@ -38,10 +38,8 @@ type StandaloneSpec struct {
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
 
-	// App Framework configuration. Refers to the config block for App Framework.
-	// Through this config, apps can be installed in a standalone splunk CR.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
@@ -63,6 +61,9 @@ type StandaloneStatus struct {
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

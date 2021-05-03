@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +41,16 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 	err := validateLicenseMasterSpec(&cr.Spec)
 	if err != nil {
 		return result, err
+	}
+
+	// ToDo sgontla: Handle
+	// 1. Spec update
+	// 2. S3 credentails change
+	// 3. Probe times expired
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		// TBD: Probe the remote store, and handle any changes on remote store
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	// updates status after function completes
@@ -107,7 +118,7 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
 	if err != nil {
 		return err
 	}
