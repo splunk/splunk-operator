@@ -17,7 +17,6 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +30,13 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+//ToDo sgontla: Move it to a common place
+const (
+	defaultAppsRepoPollInterval uint = 60 * 60      // one hour
+	minAppsRepoPollInterval     uint = 60           // one minute
+	maxAppsRepoPollInterval     uint = 60 * 60 * 24 // one day
 )
 
 var logC = logf.Log.WithName("splunk.enterprise.configValidation")
@@ -733,6 +739,7 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
 }
 
+// checkIfVolumeExists checks if the volume is configured or not
 func checkIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
 	for i, volume := range volumeList {
 		if volume.Name == volName {
@@ -778,76 +785,133 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
-// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec) error {
+// validateSplunkAppSources validates the App source config in App Framework spec
+func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
 
-	// In the initial phases of App Framework feature, we are providing
-	// a flag to toggle this feature.
-	if !appFramework.FeatureEnabled {
-		return nil
+	duplicateAppSourceStorageChecker := make(map[string]bool)
+	duplicateAppSourceNameChecker := make(map[string]bool)
+	var vol string
+
+	// Make sure that all the App Sources are provided with the mandatory config values.
+	for i, appSrc := range appFramework.AppSources {
+		if appSrc.Name == "" {
+			return fmt.Errorf("App Source name is missing for AppSource at: %d", i)
+		}
+
+		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
+			return fmt.Errorf("Multiple app sources with the name %s is not allowed", appSrc.Name)
+		}
+		duplicateAppSourceNameChecker[appSrc.Name] = true
+
+		if appSrc.Location == "" {
+			return fmt.Errorf("App Source location is missing for AppSource: %s", appSrc.Name)
+		}
+
+		if appSrc.VolName != "" {
+			_, err := checkIfVolumeExists(appFramework.VolList, appSrc.VolName)
+			if err != nil {
+				return fmt.Errorf("Invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
+			}
+			vol = appSrc.VolName
+		} else {
+			if appFramework.Defaults.VolName == "" {
+				return fmt.Errorf("volumeName is missing for App Source: %s", appSrc.Name)
+			}
+			vol = appFramework.Defaults.VolName
+		}
+
+		if appSrc.Scope != "" {
+			if localScope && appSrc.Scope != "local" {
+				return fmt.Errorf("Invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+			}
+
+			if appSrc.Scope != "local" && appSrc.Scope != "cluster" {
+				return fmt.Errorf("Scope for App Source: %s should be either local or cluster", appSrc.Name)
+			}
+		} else {
+			if appFramework.Defaults.Scope == "" {
+				return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
+			}
+		}
+
+		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
+			return fmt.Errorf("Duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
+		}
+		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
+
 	}
 
-	//log all the inputs for AppFrameworkSpec.
-	//TBD: Future - use logging toggle switch to reduce any excessive logging.
-	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
-		"FeatureEnabled", appFramework.FeatureEnabled,
-		"Type", appFramework.Type,
-		"S3Endpoint", appFramework.S3Endpoint,
-		"S3Bucket", appFramework.S3Bucket,
-		"S3SecretRef", appFramework.S3SecretRef,
-		"S3PollInterval", appFramework.S3PollInterval)
-
-	scopedLog.Info("Validating app framework spec")
-
-	if appFramework.Type == "" {
-		return fmt.Errorf("Apps Remote Storage Type is missing")
+	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" {
+		return fmt.Errorf("Invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
-	if strings.ToLower(appFramework.Type) != "s3" {
-		return fmt.Errorf("Currently supported type for Apps Remote Storage Type is s3 only")
+	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" && appFramework.Defaults.Scope != "cluster" {
+		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
 
-	if appFramework.S3Endpoint == "" {
-		return fmt.Errorf("Apps Remote Storage S3Endpoint is missing")
-	}
-
-	if appFramework.S3Bucket == "" {
-		return fmt.Errorf("Apps Remote Storage S3Bucket is missing")
-	}
-
-	if appFramework.S3SecretRef == "" {
-		return fmt.Errorf("Apps Remote Storage S3SecretRef is missing")
-	}
-
-	if appFramework.S3PollInterval == 0 {
-		// this means either the S3PollInterval was not provided
-		// or it was explictely set to 0 - in both cases we will
-		// set the S3PollInterval to default 60 minutes
-		scopedLog.Info("Setting S3PollInterval to default 60 minutes")
-		appFramework.S3PollInterval = 60
+	if appFramework.Defaults.VolName != "" {
+		_, err := checkIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
+		if err != nil {
+			return fmt.Errorf("Invalid Volume Name for Defaults. Error: %s", err)
+		}
 	}
 
 	return nil
 }
 
-// ValidateSplunkSmartstoreSpec checks and validates the smartstore config
-func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
-	var err error
+//  isAppFrameworkConfigured checks and returns true if App Framework is configured
+//  App Repo config without any App sources will not cause any App Framework activity
+func isAppFrameworkConfigured(appFramework *enterprisev1.AppFrameworkSpec) bool {
+	return !(appFramework == nil || appFramework.AppSources == nil)
+}
 
-	// Smartstore is an optional config (at least) for now
-	if !isSmartstoreConfigured(smartstore) {
+// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
+func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
+	var err error
+	if !isAppFrameworkConfigured(appFramework) {
 		return nil
 	}
 
-	numVolumes := len(smartstore.VolList)
-	numIndexes := len(smartstore.IndexList)
-	if numIndexes > 0 && numVolumes == 0 {
-		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
+	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
+		"localScope: %t", localScope)
+
+	// Todo: sgontla: Enable later. For now, allowing multiple volumes and app sources for UT purpose
+	if len(appFramework.VolList) > 1 || len(appFramework.AppSources) > 2 {
+		//return fmt.Errorf("Invalid App Framework config. Only one Volume, and a max. of two App sources supported")
 	}
+
+	scopedLog.Info("Validating app framework spec")
+
+	// Todo: sgontla: Best place to store the final value as part of the status, so that the config change detection will be easy
+	if appFramework.AppsRepoPollInterval == 0 {
+		scopedLog.Error(err, "AppsRepoPollInterval is not configured. Setting it to the default value of %d seconds", defaultAppsRepoPollInterval)
+		appFramework.AppsRepoPollInterval = defaultAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
+		scopedLog.Error(err, "AppsRepoPollInterval configured value %d is too small. Setting it to the default min. value of %d seconds", appFramework.AppsRepoPollInterval, minAppsRepoPollInterval)
+		appFramework.AppsRepoPollInterval = minAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
+		scopedLog.Error(err, "AppsRepoPollInterval configured value %d is too high. Setting it to the default max. value of %d seconds", appFramework.AppsRepoPollInterval, minAppsRepoPollInterval)
+		appFramework.AppsRepoPollInterval = maxAppsRepoPollInterval
+	}
+
+	err = validateRemoteVolumeSpec(appFramework.VolList)
+	if err != nil {
+		return err
+	}
+
+	err = validateSplunkAppSources(appFramework, localScope)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+// validateRemoteVolumeSpec validates the Remote storage volume spec
+func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec) error {
 
 	duplicateChecker := make(map[string]bool)
 
-	volList := smartstore.VolList
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {
@@ -873,42 +937,71 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 		}
 	}
 
-	defaults := smartstore.Defaults
-	// When volName is configured, bucket remote path should also be configured
-	if defaults.VolName != "" {
-		_, err = checkIfVolumeExists(volList, defaults.VolName)
-		if err != nil {
-			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
-		}
-	}
+	return nil
+}
 
-	duplicateChecker = make(map[string]bool)
-	indexList := smartstore.IndexList
+// validateSplunkIndexesSpec validates the smartstore index spec
+func validateSplunkIndexesSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+
+	duplicateChecker := make(map[string]bool)
+
 	// Make sure that all the indexes are provided with the mandatory config values.
-	for i, index := range indexList {
+	for i, index := range smartstore.IndexList {
+		if index.Name == "" {
+			return fmt.Errorf("Index name is missing for index at: %d", i)
+		}
+
 		if _, ok := duplicateChecker[index.Name]; ok {
 			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
 		}
 		duplicateChecker[index.Name] = true
 
-		if index.Name == "" {
-			return fmt.Errorf("Index name is missing for index at: %d", i)
-		}
-
-		if index.VolName == "" && defaults.VolName == "" {
+		if index.VolName == "" && smartstore.Defaults.VolName == "" {
 			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
 		}
 
 		if index.VolName != "" {
-			_, err = checkIfVolumeExists(volList, index.VolName)
+			_, err := checkIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
 				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
 			}
 		}
-
 	}
 
 	return nil
+}
+
+// ValidateSplunkSmartstoreSpec checks and validates the smartstore config
+func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+	var err error
+
+	// Smartstore is an optional config (at least) for now
+	if !isSmartstoreConfigured(smartstore) {
+		return nil
+	}
+
+	numVolumes := len(smartstore.VolList)
+	numIndexes := len(smartstore.IndexList)
+	if numIndexes > 0 && numVolumes == 0 {
+		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
+	}
+
+	err = validateRemoteVolumeSpec(smartstore.VolList)
+	if err != nil {
+		return err
+	}
+
+	defaults := smartstore.Defaults
+	// When volName is configured, bucket remote path should also be configured
+	if defaults.VolName != "" {
+		_, err = checkIfVolumeExists(smartstore.VolList, defaults.VolName)
+		if err != nil {
+			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
+		}
+	}
+
+	err = validateSplunkIndexesSpec(smartstore)
+	return err
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format

@@ -631,39 +631,71 @@ spec:
                       type: array
                   type: object
               type: object
-            appFrameworkRef:
-              description: App Framework configuration. Refers to the config block
-                for App Framework. Through this config, apps can be installed in a
-                standalone splunk CR. The implementation of this apps framework is
-                still TBD.
+            appRepo:
+              description: Splunk Enterprise App repository. Specifies remote App
+                location and scope for Splunk App management
               properties:
-                featureEnabled:
-                  description: Flag to Enable/Disable Application Framework Feature.
-                    Default value is False. Implementation of Apps Framework is still
-                    TBD so turning this flag to true will not do any changes.
-                  type: boolean
-                s3Bucket:
-                  description: App Package Remote Store Bucket Name of the s3 bucket
-                    within s3Endpoint where splunk apps packages can be placed.
-                  type: string
-                s3Endpoint:
-                  description: App Package Remote Store Endpoint. This is s3 location
-                    where you will have the splunk apps packages placed.
-                  type: string
-                s3PollInterval:
-                  description: App Package Remote Store Polling interval in minutes.
-                    New or Updated Apps will be pulled from s3 remote location at
-                    every polling interval. This value can be  >=1. The default value
-                    is 60 minutes.
+                appSources:
+                  description: List of App sources on remote storage
+                  items:
+                    description: AppSourceSpec defines list of App package (*.spl,
+                      *.tgz) locations on remote volumes
+                    properties:
+                      location:
+                        description: Location relative to the volume path
+                        type: string
+                      name:
+                        description: Logical name for the set of apps placed in this
+                          location. Logical name must be unique to the appRepo
+                        type: string
+                      scope:
+                        description: 'Scope of the App deployment: cluster, local.
+                          Scope determines whether the App(s) is/are installed locally
+                          or cluster-wide'
+                        type: string
+                      volumeName:
+                        description: Remote Storage Volume name
+                        type: string
+                    type: object
+                  type: array
+                appsRepoPollIntervalSeconds:
+                  description: Interval in seconds to check the Remote Storage for
+                    App changes
                   type: integer
-                s3SecretRef:
-                  description: App Package Remote Store Credentials Secret object
-                    containing the S3 authentication info.
-                  type: string
-                type:
-                  description: App Package Remote Store type. The currently supported
-                    type is s3 only.
-                  type: string
+                defaults:
+                  description: Defines default configuration settings for App sources
+                  properties:
+                    scope:
+                      description: 'Scope of the App deployment: cluster, local. Scope
+                        determines whether the App(s) is/are installed locally or
+                        cluster-wide'
+                      type: string
+                    volumeName:
+                      description: Remote Storage Volume name
+                      type: string
+                  type: object
+                volumes:
+                  description: List of remote storage volumes
+                  items:
+                    description: VolumeSpec defines remote volume config
+                    properties:
+                      endpoint:
+                        description: Remote volume URI
+                        type: string
+                      name:
+                        description: Remote volume name
+                        type: string
+                      path:
+                        description: Remote volume path
+                        type: string
+                      secretRef:
+                        description: Secret object name
+                        type: string
+                      storageType:
+                        description: Remote Storage type.
+                        type: string
+                    type: object
+                  type: array
               type: object
             clusterMasterRef:
               description: ClusterMasterRef refers to a Splunk Enterprise indexer
@@ -1135,8 +1167,7 @@ spec:
                 volumes:
                   description: List of remote storage volumes
                   items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
+                    description: VolumeSpec defines remote volume config
                     properties:
                       endpoint:
                         description: Remote volume URI
@@ -1149,6 +1180,9 @@ spec:
                         type: string
                       secretRef:
                         description: Secret object name
+                        type: string
+                      storageType:
+                        description: Remote Storage type.
                         type: string
                     type: object
                   type: array
@@ -2391,6 +2425,84 @@ spec:
           description: StandaloneStatus defines the observed state of a Splunk Enterprise
             standalone instances.
           properties:
+            appContext:
+              description: App Framework Context
+              properties:
+                appRepo:
+                  description: List of App package (*.spl, *.tgz) locations on remote
+                    volume
+                  properties:
+                    appSources:
+                      description: List of App sources on remote storage
+                      items:
+                        description: AppSourceSpec defines list of App package (*.spl,
+                          *.tgz) locations on remote volumes
+                        properties:
+                          location:
+                            description: Location relative to the volume path
+                            type: string
+                          name:
+                            description: Logical name for the set of apps placed in
+                              this location. Logical name must be unique to the appRepo
+                            type: string
+                          scope:
+                            description: 'Scope of the App deployment: cluster, local.
+                              Scope determines whether the App(s) is/are installed
+                              locally or cluster-wide'
+                            type: string
+                          volumeName:
+                            description: Remote Storage Volume name
+                            type: string
+                        type: object
+                      type: array
+                    appsRepoPollIntervalSeconds:
+                      description: Interval in seconds to check the Remote Storage
+                        for App changes
+                      type: integer
+                    defaults:
+                      description: Defines default configuration settings for App
+                        sources
+                      properties:
+                        scope:
+                          description: 'Scope of the App deployment: cluster, local.
+                            Scope determines whether the App(s) is/are installed locally
+                            or cluster-wide'
+                          type: string
+                        volumeName:
+                          description: Remote Storage Volume name
+                          type: string
+                      type: object
+                    volumes:
+                      description: List of remote storage volumes
+                      items:
+                        description: VolumeSpec defines remote volume config
+                        properties:
+                          endpoint:
+                            description: Remote volume URI
+                            type: string
+                          name:
+                            description: Remote volume name
+                            type: string
+                          path:
+                            description: Remote volume path
+                            type: string
+                          secretRef:
+                            description: Secret object name
+                            type: string
+                          storageType:
+                            description: Remote Storage type.
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                isDeploymentInProgress:
+                  description: IsDeploymentInProgress indicates if the App deployment
+                    in progress
+                  type: boolean
+                version:
+                  description: App Framework version info for future use
+                  type: integer
+              type: object
             phase:
               description: current phase of the standalone instances
               enum:
@@ -2503,8 +2615,7 @@ spec:
                 volumes:
                   description: List of remote storage volumes
                   items:
-                    description: VolumeSpec defines remote volume name and remote
-                      volume URI
+                    description: VolumeSpec defines remote volume config
                     properties:
                       endpoint:
                         description: Remote volume URI
@@ -2517,6 +2628,9 @@ spec:
                         type: string
                       secretRef:
                         description: Secret object name
+                        type: string
+                      storageType:
+                        description: Remote Storage type.
                         type: string
                     type: object
                   type: array

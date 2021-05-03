@@ -67,6 +67,16 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
+	// ToDo sgontla: Handle
+	// 1. Spec update
+	// 2. S3 credentails change
+	// 3. Probe times expired
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		// TBD: Probe the remote store, and handle any changes on remote store
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	}
+
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
@@ -161,7 +171,7 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 		return err
 	}
 
-	err = ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err = ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
 	if err != nil {
 		return err
 	}

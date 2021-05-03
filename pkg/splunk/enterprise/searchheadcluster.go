@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -44,6 +45,16 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	err := validateSearchHeadClusterSpec(&cr.Spec)
 	if err != nil {
 		return result, err
+	}
+
+	// ToDo sgontla: Handle
+	// 1. Spec update
+	// 2. S3 credentails change
+	// 3. Probe times expired
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		// TBD: Probe the remote store, and handle any changes on remote store
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	// updates status after function completes
@@ -519,7 +530,7 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 		spec.Replicas = 3
 	}
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, false)
 	if err != nil {
 		return err
 	}
