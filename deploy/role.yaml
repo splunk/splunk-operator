@@ -1,7 +1,7 @@
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  creationTimestamp: null
   name: splunk:operator:namespace-manager
 rules:
 - apiGroups:
@@ -52,5 +52,10 @@ rules:
   - enterprise.splunk.com
   resources:
   - '*'
+  - indexerclusters
+  - clustermasters
+  - licensemasters
+  - searchheadclusters
+  - standalones
   verbs:
   - '*'

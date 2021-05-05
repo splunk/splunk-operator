@@ -46,6 +46,7 @@ type LicenseMasterStatus struct {
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
+// +kubebuilder:storageversion
 type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
