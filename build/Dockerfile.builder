@@ -26,7 +26,7 @@ RUN ln -s /usr/bin/microdnf /usr/bin/dnf \
 
 USER root
 
-ENV OPERATOR_SDK_VERSION 0.15.1
+ENV OPERATOR_SDK_VERSION 0.18.2
 ENV OPERATOR_SDK_URL https://github.com/operator-framework/operator-sdk/releases/download/v${OPERATOR_SDK_VERSION}/operator-sdk-v${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
 ENV DOCKER_CLI_URL https://download.docker.com/linux/centos/7/x86_64/stable/Packages/docker-ce-cli-19.03.5-3.el7.x86_64.rpm
 

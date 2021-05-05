@@ -65,6 +65,7 @@ type BundlePushInfo struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster master"
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
+// +kubebuilder:storageversion
 type ClusterMaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
