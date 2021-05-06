@@ -23,6 +23,12 @@ for v in $OLD_VERSIONS; do
     name: $v
     served: true
     storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
 EOF
 done
 
@@ -126,7 +132,7 @@ cat << EOF >$YAML_SCRIPT_FILE
 EOF
 
 echo Updating $OLM_CATALOG
-operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --verbose
+operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --make-manifests=false --verbose
 yq w -i -s $YAML_SCRIPT_FILE $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml
 rm -f $YAML_SCRIPT_FILE
 
