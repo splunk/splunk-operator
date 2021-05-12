@@ -54,7 +54,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			5. Verify New Secrets via api access (password)*/
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
