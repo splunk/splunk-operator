@@ -64,27 +64,59 @@ func CheckPrefixExistsOnS3(prefix string) bool {
 	return false
 }
 
-// DownloadFromS3Bucket downloads license file from S3
-func DownloadFromS3Bucket() (string, error) {
-	dataBucket := testS3Bucket
+// DownloadLicenseFromS3Bucket downloads license file from S3
+func DownloadLicenseFromS3Bucket() (string, error) {
 	location := enterpriseLicenseLocation
 	item := "enterprise.lic"
-	file, err := os.Create(item)
+	dataBucket := testS3Bucket
+	filename, err := DownloadFileFromS3(dataBucket, item, location)
+	return filename, err
+}
+
+// S3Session Create session object for S3 bucket connection
+func S3Session() (*session.Session, error) {
+	sess, err := session.NewSession(&aws.Config{Region: aws.String(s3Region)})
 	if err != nil {
-		logf.Log.Error(err, "Failed to create license file")
+		logf.Log.Error(err, "Failed to create session to S3")
+	}
+	return sess, err
+}
+
+// DownloadFileFromS3 downloads file from S3
+func DownloadFileFromS3(dataBucket string, filename string, filepath string) (string, error) {
+	file, err := os.Create(filename)
+	if err != nil {
+		logf.Log.Error(err, "Failed to create file")
 	}
 	defer file.Close()
-	sess, _ := session.NewSession(&aws.Config{Region: aws.String(s3Region)})
+	sess, err := S3Session()
 	downloader := s3manager.NewDownloader(sess)
 	numBytes, err := downloader.Download(file,
 		&s3.GetObjectInput{
 			Bucket: aws.String(dataBucket),
-			Key:    aws.String(location + "/" + "enterprise.lic"),
+			Key:    aws.String(filepath + "/" + filename),
 		})
 	if err != nil {
-		logf.Log.Error(err, "Failed to download license file")
+		logf.Log.Error(err, "Failed to download file")
 	}
 
 	logf.Log.Info("Downloaded", "filename", file.Name(), "bytes", numBytes)
+	return file.Name(), err
+}
+
+// UploadFileToS3 upload file to S3
+func UploadFileToS3(dataBucket string, filename string, filepath string, file *os.File) (string, error) {
+	sess, err := S3Session()
+	uploader := s3manager.NewUploader(sess)
+	numBytes, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(dataBucket),
+		Key:    aws.String(filename), // Name of the file to be saved
+		Body:   file,                 // File
+	})
+	if err != nil {
+		logf.Log.Error(err, "Error in file upload")
+	}
+
+	logf.Log.Info("Uploaded", "filename", file.Name(), "bytes", numBytes)
 	return file.Name(), err
 }
