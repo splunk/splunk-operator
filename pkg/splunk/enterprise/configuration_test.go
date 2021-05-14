@@ -598,130 +598,249 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
-	// Valid app framework config with proper inputs
-
-	//Test1: missing S3Bucket
-	AppFrameWorkMissingBucket := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		Type:           "S3",
-		S3Endpoint:     "http://test_s3_end_point",
-		S3SecretRef:    "appSecret",
-		S3PollInterval: 60,
+	// Valid app framework config
+	AppFramework := enterprisev1.AppFrameworkSpec{
+		VolList: []enterprisev1.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+		},
+		AppSources: []enterprisev1.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "cluster"},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+		},
 	}
 
-	var expectedError string = "Apps Remote Storage S3Bucket is missing"
-	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingBucket)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-
-	//Test2: missing S3Endpoint
-	AppFrameWorkMissingS3EndPoint := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		Type:           "S3",
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3PollInterval: 60,
-	}
-
-	expectedError = "Apps Remote Storage S3Bucket is missing"
-	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingS3EndPoint)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-
-	//Test3: missing Type
-	AppFrameWorkMissingType := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3Endpoint:     "http://test_s3_end_point",
-		S3PollInterval: 60,
-	}
-
-	expectedError = "Apps Remote Storage Type is missing"
-	err = ValidateAppFrameworkSpec(&AppFrameWorkMissingType)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-
-	//Test4: Type can be "S3" only
-	AppFrameWorkInvalidType := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		Type:           "HTTP",
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3Endpoint:     "http://test_s3_end_point",
-		S3PollInterval: 60,
-	}
-
-	expectedError = "Currently supported type for Apps Remote Storage Type is S3 only"
-	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidType)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-
-	//Test5: Invalid S3PollInterval
-	AppFrameWorkInvalidS3PollInterval := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		Type:           "S3",
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3PollInterval: 0,
-	}
-
-	expectedError = "Apps Remote Storage S3PollInternal cannot be less than 1 minute"
-	err = ValidateAppFrameworkSpec(&AppFrameWorkInvalidS3PollInterval)
-	if err == nil {
-		t.Errorf("expected error: %s but returned: %s", expectedError, err)
-	}
-
-	//Test5: No S3PollInterval given- should default to 60 minutes
-	AppFrameWorkDefaultS3PollInterval := enterprisev1.AppFrameworkSpec{
-		FeatureEnabled: true,
-		Type:           "S3",
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3Endpoint:     "http://test_s3_end_point",
-	}
-
-	err = ValidateAppFrameworkSpec(&AppFrameWorkDefaultS3PollInterval)
-
-	//validate that the S3PollInterval has been set to default value of 60 minutes
-	if AppFrameWorkDefaultS3PollInterval.S3PollInterval != 60 {
-		t.Errorf("The S3PollInterval did not get set to default value")
-	}
-
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
 	if err != nil {
-		t.Errorf("Expected no errors, the S3PollInterval would have set to default")
+		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
 	}
 
-	//Test6: FeatureEnabled is false so no validation errors expected
-	AppFrameWorkFeatureDisabled := enterprisev1.AppFrameworkSpec{
-		Type:           "S3",
-		S3Endpoint:     "http://test_s3_end_point",
-		S3SecretRef:    "appSecret",
-		S3PollInterval: 60,
+	AppFramework.VolList[0].SecretRef = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Missing Secret Object reference should error out")
+	}
+	AppFramework.VolList[0].SecretRef = "s3-secret"
+
+	// App Framework config with missing App Source name
+	AppFramework.AppSources[0].Name = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Should not accept an app source with missing name ")
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFrameWorkFeatureDisabled)
+	//App Framework config app source config with missing location(withot default location) should errro out
+	AppFramework.AppSources[0].Name = "adminApps"
+	AppFramework.AppSources[0].Location = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
+	}
+	AppFramework.AppSources[0].Location = "adminAppsRepo"
+
+	// Having defaults volume and location should not complain an app source missing the volume and remote location info.
+	AppFramework.Defaults.Scope = "cluster"
+	AppFramework.Defaults.VolName = "msos_s2s3_vol"
+	AppFramework.AppSources[0].Scope = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
 	if err != nil {
-		t.Errorf("Expected no errors as FeatureEnabled is false but got error: %s", err)
+		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
+	AppFramework.AppSources[0].Location = "adminAppsRepo"
 
-	//Test7: FeatureEnabled is true, validate no errors when all
-	//       parameters are provided
-	AppFrameWorkAllParamsValid := enterprisev1.AppFrameworkSpec{
-		Type:           "S3",
-		S3Endpoint:     "http://test_s3_end_point",
-		S3Bucket:       "test_bucket",
-		S3SecretRef:    "appSecret",
-		S3PollInterval: 60,
-	}
-
-	err = ValidateAppFrameworkSpec(&AppFrameWorkAllParamsValid)
+	// Empty App Repo config should not cause an error
+	err = ValidateAppFrameworkSpec(nil, false)
 	if err != nil {
-		t.Errorf("Expected no errors as all good params provided but got error: %s", err)
+		t.Errorf("App Repo config is optional, should not cause an error. But, got the error: %v", err)
+	}
+
+	// Configuring indexes without volume config should return error
+	AppFrameworkWithoutVolumeSpec := enterprisev1.AppFrameworkSpec{
+		AppSources: []enterprisev1.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "cluster"},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+		},
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, false)
+	if err == nil {
+		t.Errorf("App Repo config without volume details should return error")
+	}
+
+	// Defaults with invalid volume reference should return error
+	AppFramework.Defaults.VolName = "UnknownVolume"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Volume referred in the defaults should be a valid volume")
+	}
+
+	//Duplicate App Sources should return an error
+	tmpVolume := AppFramework.AppSources[1].VolName
+	tmpLocation := AppFramework.AppSources[1].Location
+
+	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
+	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Duplicate app sources should return an error")
+	}
+
+	AppFramework.AppSources[1].VolName = tmpVolume
+	AppFramework.AppSources[1].Location = tmpLocation
+
+	// Duplicate app sources names should cause an error
+	tmpAppSourceName := AppFramework.AppSources[1].Name
+	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Failed to detect duplicate app source names")
+	}
+	AppFramework.AppSources[1].Name = tmpAppSourceName
+
+	// If the default volume is not configured, then each index should be configured
+	// with an explicit volume info. If not, should return an error
+	AppFramework.AppSources[0].VolName = ""
+	AppFramework.Defaults.VolName = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("If no default volume, App Source with missing volume info should return an error")
+	}
+
+	// If the AppSource doesn't have VolName, and if the defaults have it, shouldn't cause an error
+	AppFramework.Defaults.VolName = "msos_s2s3_vol"
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err != nil {
+		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
+	}
+
+	// Volume referenced from an index must be a valid volume
+	AppFramework.AppSources[0].VolName = "UnknownVolume"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Index with an invalid volume name should return error")
+	}
+	AppFramework.AppSources[0].VolName = "msos_s2s3_vol"
+
+	// if the CR supports only local apps, and if the app source scope is not local, should return error
+	AppFramework.AppSources[0].Scope = "cluster"
+	err = ValidateAppFrameworkSpec(&AppFramework, true)
+	if err == nil {
+		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
+	}
+
+	// If the app scope value other than "local" or "cluster" should return an error
+	AppFramework.AppSources[0].Scope = "unknown"
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
+	}
+
+	// If the CR supports only local apps, and default is configured with "cluster" scope, that should be detected
+	AppFramework.AppSources[0].Scope = "local"
+	AppFramework.AppSources[1].Scope = "local"
+	AppFramework.AppSources[2].Scope = "local"
+
+	AppFramework.Defaults.Scope = "cluster"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, true)
+	if err == nil {
+		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
+	}
+	AppFramework.AppSources[0].Scope = "local"
+
+	// Default scope should be either "local" OR "cluster"
+	AppFramework.Defaults.Scope = "unknown"
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
+	}
+	AppFramework.Defaults.Scope = "cluster"
+
+	// Missing scope, if the default scope is not specified should return error
+	AppFramework.Defaults.Scope = ""
+	AppFramework.AppSources[0].Scope = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Missing scope should be detected, but failed")
+	}
+	AppFramework.Defaults.Scope = "local"
+	AppFramework.AppSources[0].Scope = "local"
+
+	// AppsRepoPollInterval should be in between the minAppsRepoPollInterval and maxAppsRepoPollInterval
+	// Default Poll interval
+	if defaultAppsRepoPollInterval < minAppsRepoPollInterval || defaultAppsRepoPollInterval > maxAppsRepoPollInterval {
+		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", minAppsRepoPollInterval, maxAppsRepoPollInterval)
+	}
+
+	AppFramework.AppsRepoPollInterval = 0
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if AppFramework.AppsRepoPollInterval != defaultAppsRepoPollInterval {
+		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", defaultAppsRepoPollInterval)
+	}
+
+	// Check for minAppsRepoPollInterval
+	AppFramework.AppsRepoPollInterval = minAppsRepoPollInterval - 1
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if AppFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
+	}
+
+	// Check for maxAppsRepoPollInterval
+	AppFramework.AppsRepoPollInterval = maxAppsRepoPollInterval + 1
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if AppFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
+	}
+
+	// Invalid volume name in defaults should return an error
+	AppFramework.Defaults.VolName = "unknownVolume"
+	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	if err == nil {
+		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 }
 

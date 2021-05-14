@@ -128,7 +128,7 @@ type IndexConfDefaultsSpec struct {
 	IndexAndGlobalCommonSpec `json:",inline"`
 }
 
-// VolumeSpec defines remote volume name and remote volume URI
+// VolumeSpec defines remote volume config
 type VolumeSpec struct {
 	// Remote volume name
 	Name string `json:"name"`
@@ -141,6 +141,18 @@ type VolumeSpec struct {
 
 	// Secret object name
 	SecretRef string `json:"secretRef"`
+
+	// Remote Storage type.
+	Type string `json:"storageType"`
+
+	// App Package Remote Store provider.
+	// For e.g. AWS, Azure, Minio, etc.
+	Provider string `json:"provider"`
+}
+
+// VolumeAndTypeSpec used to add any custom varaibles for volume implementation
+type VolumeAndTypeSpec struct {
+	VolumeSpec `json:",inline"`
 }
 
 // IndexSpec defines Splunk index name and storage path
@@ -178,36 +190,50 @@ type IndexAndCacheManagerCommonSpec struct {
 	HotlistBloomFilterRecencyHours uint `json:"hotlistBloomFilterRecencyHours,omitempty"`
 }
 
+// AppSourceDefaultSpec defines config common for defaults and App Sources
+type AppSourceDefaultSpec struct {
+	// Remote Storage Volume name
+	VolName string `json:"volumeName,omitempty"`
+
+	// Scope of the App deployment: cluster, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	Scope string `json:"scope,omitempty"`
+}
+
+// AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes
+type AppSourceSpec struct {
+	// Logical name for the set of apps placed in this location. Logical name must be unique to the appRepo
+	Name string `json:"name"`
+
+	// Location relative to the volume path
+	Location string `json:"location"`
+
+	AppSourceDefaultSpec `json:",inline"`
+}
+
 // AppFrameworkSpec defines the application package remote store repository
 type AppFrameworkSpec struct {
 
-	// Flag to Enable/Disable Application Framework Feature.
-	// Default value is False. Implementation of Apps Framework
-	// is still TBD so turning this flag to true will not do any
-	// changes.
-	FeatureEnabled bool `json:"featureEnabled"`
+	// Defines default configuration settings for App sources
+	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 
-	// App Package Remote Store type.
-	// The currently supported type is s3 only.
-	Type string `json:"type"`
+	// Interval in seconds to check the Remote Storage for App changes
+	AppsRepoPollInterval uint `json:"appsRepoPollIntervalSeconds,omitempty"`
 
-	// App Package Remote Store Endpoint.
-	// This is s3 location where you will have
-	// the splunk apps packages placed.
-	S3Endpoint string `json:"s3Endpoint"`
+	// List of remote storage volumes
+	VolList []VolumeSpec `json:"volumes,omitempty"`
 
-	// App Package Remote Store Bucket
-	// Name of the s3 bucket within s3Endpoint
-	// where splunk apps packages can be placed.
-	S3Bucket string `json:"s3Bucket"`
+	// List of App sources on remote storage
+	AppSources []AppSourceSpec `json:"appSources,omitempty"`
+}
 
-	// App Package Remote Store Credentials
-	// Secret object containing the S3 authentication info.
-	S3SecretRef string `json:"s3SecretRef"`
+// AppDeploymentContext for storing the App deployment state
+type AppDeploymentContext struct {
+	// App Framework version info for future use
+	Version uint16 `json:"version"`
 
-	// App Package Remote Store Polling interval in minutes.
-	// New or Updated Apps will be pulled from s3 remote location
-	// at every polling interval.
-	// This value can be  >=1. The default value is 60 minutes.
-	S3PollInterval uint `json:"s3PollInterval"`
+	// IsDeploymentInProgress indicates if the App deployment in progress
+	IsDeploymentInProgress bool `json:"isDeploymentInProgress"`
+
+	// List of App package (*.spl, *.tgz) locations on remote volume
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }

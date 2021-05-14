@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
@@ -36,10 +38,32 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		RequeueAfter: time.Second * 5,
 	}
 
+	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
 	// validate and updates defaults for CR
 	err := validateLicenseMasterSpec(&cr.Spec)
 	if err != nil {
 		return result, err
+	}
+
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+
+		var sourceToAppsList map[string]*splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			splclient.RegisterS3Client(vol.Provider)
+		}
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get apps list from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	// updates status after function completes
@@ -107,7 +131,7 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
 	if err != nil {
 		return err
 	}

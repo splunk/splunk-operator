@@ -35,10 +35,8 @@ type SearchHeadClusterSpec struct {
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
 
-	// App Framework configuration. Refers to the config block for App Framework.
-	// Through this config, apps can be installed in a standalone splunk CR.
-	// The implementation of this apps framework is still TBD.
-	AppFrameworkRef AppFrameworkSpec `json:"appFrameworkRef"`
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -108,6 +106,9 @@ type SearchHeadClusterStatus struct {
 
 	// status of each search head cluster member
 	Members []SearchHeadClusterMemberStatus `json:"members"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

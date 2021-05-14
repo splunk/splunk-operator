@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
@@ -38,6 +39,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		RequeueAfter: time.Second * 5,
 	}
 
+	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -65,6 +67,26 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		}
 
 		cr.Status.SmartStore = cr.Spec.SmartStore
+	}
+
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		var sourceToAppsList map[string]*splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			splclient.RegisterS3Client(vol.Provider)
+		}
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get apps list from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
@@ -161,7 +183,7 @@ func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
 		return err
 	}
 
-	err = ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err = ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
 	if err != nil {
 		return err
 	}

@@ -83,6 +83,29 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 	}()
 
+	//check if the apps need to be downloaded from remote storage
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		var sourceToAppsList map[string]*splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+				splclient.RegisterS3Client(vol.Provider)
+			}
+		}
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get apps list from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	}
+
 	// create or update general config resources
 	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
@@ -158,7 +181,7 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 		return err
 	}
 
-	err = ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkRef)
+	err = ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
 		return err
 	}

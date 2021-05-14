@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -44,6 +45,26 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	err := validateSearchHeadClusterSpec(&cr.Spec)
 	if err != nil {
 		return result, err
+	}
+
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		var sourceToAppsList map[string]*splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			splclient.RegisterS3Client(vol.Provider)
+		}
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get apps list from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	// updates status after function completes
@@ -519,7 +540,7 @@ func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) err
 		spec.Replicas = 3
 	}
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkRef)
+	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, false)
 	if err != nil {
 		return err
 	}
