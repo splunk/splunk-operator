@@ -423,7 +423,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	}
 }
 
-func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
+func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -454,6 +454,11 @@ func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
 							Scope:   "local"},
 					},
 				},
+			},
+			// TODO gaurav: Remove this dependency on mock setting and try to use
+			// mock client for S3 responses.
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Mock: true,
 			},
 		},
 	}

@@ -76,16 +76,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		return result, err
 	}
 
-	// ToDo sgontla: Handle
-	// 1. Spec update
-	// 2. S3 credentails change
-	// 3. Probe times expired
-	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		// TBD: Probe the remote store, and handle any changes on remote store
-
-		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
-	}
-
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
@@ -94,7 +84,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	}()
 
 	//check if the apps need to be downloaded from remote storage
-	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]*splclient.S3Response
 
 		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {

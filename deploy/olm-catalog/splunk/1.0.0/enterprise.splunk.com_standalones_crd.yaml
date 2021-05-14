@@ -703,6 +703,10 @@ spec:
                         path:
                           description: Remote volume path
                           type: string
+                        provider:
+                          description: App Package Remote Store provider. For e.g.
+                            AWS, Azure, Minio, etc.
+                          type: string
                         secretRef:
                           description: Secret object name
                           type: string
@@ -1234,6 +1238,10 @@ spec:
                           type: string
                         path:
                           description: Remote volume path
+                          type: string
+                        provider:
+                          description: App Package Remote Store provider. For e.g.
+                            AWS, Azure, Minio, etc.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2575,6 +2583,10 @@ spec:
                             path:
                               description: Remote volume path
                               type: string
+                            provider:
+                              description: App Package Remote Store provider. For
+                                e.g. AWS, Azure, Minio, etc.
+                              type: string
                             secretRef:
                               description: Secret object name
                               type: string
@@ -2715,6 +2727,10 @@ spec:
                           type: string
                         path:
                           description: Remote volume path
+                          type: string
+                        provider:
+                          description: App Package Remote Store provider. For e.g.
+                            AWS, Azure, Minio, etc.
                           type: string
                         secretRef:
                           description: Secret object name
