@@ -38,22 +38,9 @@ func GetS3Endpoint() string {
 // CheckPrefixExistsOnS3 lists object in a bucket
 func CheckPrefixExistsOnS3(prefix string) bool {
 	dataBucket := testIndexesS3Bucket
-	sess, err := session.NewSession(&aws.Config{Region: aws.String(s3Region)})
-	if err != nil {
-		logf.Log.Error(err, "Failed to create s3 session")
-	}
-	svc := s3.New(session.Must(sess, err))
-	resp, err := svc.ListObjects(&s3.ListObjectsInput{
-		Bucket: aws.String(dataBucket),
-		Prefix: aws.String(prefix),
-	})
 
-	if err != nil {
-		logf.Log.Error(err, "Failed to list objects on s3 bucket")
-		return false
-	}
-
-	for _, key := range resp.Contents {
+	resp := GetFileListOnS3(dataBucket)
+	for _, key := range resp {
 		logf.Log.Info("CHECKING KEY ", "KEY", *key.Key)
 		if strings.Contains(*key.Key, prefix) {
 			logf.Log.Info("Prefix found on bucket", "Prefix", prefix, "KEY", *key.Key)
@@ -90,33 +77,100 @@ func DownloadFileFromS3(dataBucket string, filename string, filepath string) (st
 	}
 	defer file.Close()
 	sess, err := S3Session()
-	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(dataBucket),
-			Key:    aws.String(filepath + "/" + filename),
-		})
-	if err != nil {
-		logf.Log.Error(err, "Failed to download file")
+	if err == nil {
+		downloader := s3manager.NewDownloader(sess)
+		numBytes, err := downloader.Download(file,
+			&s3.GetObjectInput{
+				Bucket: aws.String(dataBucket),
+				Key:    aws.String(filepath + "/" + filename),
+			})
+		if err != nil {
+			logf.Log.Error(err, "Failed to download file")
+		}
+		logf.Log.Info("Downloaded", "filename", file.Name(), "bytes", numBytes)
 	}
-
-	logf.Log.Info("Downloaded", "filename", file.Name(), "bytes", numBytes)
 	return file.Name(), err
 }
 
 // UploadFileToS3 upload file to S3
 func UploadFileToS3(dataBucket string, filename string, filepath string, file *os.File) (string, error) {
 	sess, err := S3Session()
-	uploader := s3manager.NewUploader(sess)
-	numBytes, err := uploader.Upload(&s3manager.UploadInput{
+	if err == nil {
+		uploader := s3manager.NewUploader(sess)
+		numBytes, err := uploader.Upload(&s3manager.UploadInput{
+			Bucket: aws.String(dataBucket),
+			Key:    aws.String(filename), // Name of the file to be saved
+			Body:   file,                 // File
+		})
+		if err != nil {
+			logf.Log.Error(err, "Error in file upload")
+		}
+		logf.Log.Info("Uploaded", "filename", file.Name(), "bytes", numBytes)
+	}
+	return file.Name(), err
+}
+
+// GetFileListOnS3 lists object in a bucket
+func GetFileListOnS3(dataBucket string) []*s3.Object {
+	sess, err := S3Session()
+	svc := s3.New(session.Must(sess, err))
+	resp, err := svc.ListObjects(&s3.ListObjectsInput{
 		Bucket: aws.String(dataBucket),
-		Key:    aws.String(filename), // Name of the file to be saved
-		Body:   file,                 // File
 	})
 	if err != nil {
-		logf.Log.Error(err, "Error in file upload")
+		logf.Log.Error(err, "Failed to list objects on s3 bucket")
+		return nil
 	}
 
-	logf.Log.Info("Uploaded", "filename", file.Name(), "bytes", numBytes)
-	return file.Name(), err
+	return resp.Contents
+}
+
+// DeleteFilesOnS3 Delete a list of file on S3 Bucket
+func DeleteFilesOnS3(dataBucket string, filenames []string) bool {
+	sess, err := S3Session()
+	svc := s3.New(session.Must(sess, err))
+	objects := make([]*s3.ObjectIdentifier, len(filenames))
+
+	for ind, filename := range filenames {
+		objects[ind].Key = aws.String(filename)
+	}
+	deleteInput := &s3.DeleteObjectsInput{
+		Bucket: aws.String(dataBucket),
+		Delete: &s3.Delete{
+			Objects: objects,
+			Quiet:   aws.Bool(false),
+		},
+	}
+
+	_, err = svc.DeleteObjects(deleteInput)
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete files on S3 bucket")
+		return false
+	}
+	return true
+}
+
+// DeleteFileonS3 Delete a file on S3
+func DeleteFileonS3(dataBucket string, filename string) bool {
+	sess, err := S3Session()
+	svc := s3.New(session.Must(sess, err))
+	_, err = svc.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(dataBucket),
+		Key:    aws.String(filename)})
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete files on S3 bucket")
+		return false
+	}
+
+	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
+		Bucket: aws.String(dataBucket),
+		Key:    aws.String(filename),
+	})
+	if err != nil {
+		logf.Log.Error(err, "Error occurred while waiting for file to be deleted")
+		return false
+
+	}
+	logf.Log.Info("Deleted", "filename", filename)
+	return true
 }
