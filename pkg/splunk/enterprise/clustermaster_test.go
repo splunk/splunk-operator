@@ -189,7 +189,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
@@ -420,5 +420,54 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	err = PushMasterAppsBundle(client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the password is not found")
+	}
+}
+
+func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterprisev1.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	_, err = ApplyClusterMaster(client, &cr)
+	if err != nil {
+		t.Errorf("ApplyClusterMaster with valid App Framework config should be successful, but got error: %v", err)
 	}
 }

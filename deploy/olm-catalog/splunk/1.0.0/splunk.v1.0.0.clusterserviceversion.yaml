@@ -68,6 +68,56 @@ spec:
       - kind: Secrets
         version: v1
       displayName: IndexerCluster
+    - displayName: LicenseMaster
+      kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+      version: v1beta1
+    - displayName: SearchHeadCluster
+      kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+      version: v1alpha3
+    - kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+      version: v1alpha2
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
@@ -85,65 +135,78 @@ spec:
         version: v1
       - kind: Secrets
         version: v1
-      displayName: LicenseMaster
+      displayName: Standalone
+    - kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v1beta1
+    - kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v1alpha3
+    - kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v1alpha2
     - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
       version: v1
-      resources:
-      - kind: StatefulSets
-        version: apps/v1
-      - kind: Deployments
-        version: apps/v1
-      - kind: Pods
-        version: v1
-      - kind: Services
-        version: v1
-      - kind: ConfigMaps
-        version: v1
-      - kind: Secrets
-        version: v1
-      displayName: SearchHeadCluster
+    - kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
+      version: v1beta1
+    - kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
+      version: v1alpha3
+    - kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
+      version: v1alpha2
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v1
-      resources:
-      - kind: StatefulSets
-        version: apps/v1
-      - kind: Deployments
-        version: apps/v1
-      - kind: Pods
-        version: v1
-      - kind: Services
-        version: v1
-      - kind: ConfigMaps
-        version: v1
-      - kind: Secrets
-        version: v1
+    - kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v1beta1
+    - kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v1alpha3
+    - kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v1alpha2
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v1
-      resources:
-      - kind: StatefulSets
-        version: apps/v1
-      - kind: Deployments
-        version: apps/v1
-      - kind: Pods
-        version: v1
-      - kind: Services
-        version: v1
-      - kind: ConfigMaps
-        version: v1
-      - kind: Secrets
-        version: v1
-      displayName: Standalone
+    - kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v1beta1
+    - kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v1alpha3
+    - kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v1alpha2
   description: Placeholder description
   displayName: Splunk
   install:
     spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          - statefulsets
+          verbs:
+          - list
+          - get
+          - watch
+        serviceAccountName: splunk:operator:resource-manager
       deployments:
       - name: splunk-operator
         spec:
@@ -226,6 +289,11 @@ spec:
           - enterprise.splunk.com
           resources:
           - '*'
+          - indexerclusters
+          - clustermasters
+          - licensemasters
+          - searchheadclusters
+          - standalones
           verbs:
           - '*'
         serviceAccountName: splunk-operator

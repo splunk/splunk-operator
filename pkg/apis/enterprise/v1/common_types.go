@@ -33,6 +33,8 @@ const (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
+//CAUTION: Do not change json field tags, otherwise the configuration will not be backward compatible with the existing CRs
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
@@ -212,7 +214,6 @@ type AppSourceSpec struct {
 
 // AppFrameworkSpec defines the application package remote store repository
 type AppFrameworkSpec struct {
-
 	// Defines default configuration settings for App sources
 	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 

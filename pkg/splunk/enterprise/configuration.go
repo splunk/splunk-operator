@@ -32,6 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+//ToDo sgontla: Move it to a common place
 const (
 	defaultAppsRepoPollInterval uint = 60 * 60      // one hour
 	minAppsRepoPollInterval     uint = 60           // one minute
@@ -786,21 +787,26 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 
 // validateSplunkAppSources validates the App source config in App Framework spec
 func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
+
 	duplicateAppSourceStorageChecker := make(map[string]bool)
 	duplicateAppSourceNameChecker := make(map[string]bool)
 	var vol string
+
 	// Make sure that all the App Sources are provided with the mandatory config values.
 	for i, appSrc := range appFramework.AppSources {
 		if appSrc.Name == "" {
 			return fmt.Errorf("App Source name is missing for AppSource at: %d", i)
 		}
+
 		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
 			return fmt.Errorf("Multiple app sources with the name %s is not allowed", appSrc.Name)
 		}
 		duplicateAppSourceNameChecker[appSrc.Name] = true
+
 		if appSrc.Location == "" {
 			return fmt.Errorf("App Source location is missing for AppSource: %s", appSrc.Name)
 		}
+
 		if appSrc.VolName != "" {
 			_, err := checkIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
@@ -831,8 +837,8 @@ func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, local
 		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
 			return fmt.Errorf("Duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
-
 		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
+
 	}
 
 	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" {
@@ -842,6 +848,7 @@ func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, local
 	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" && appFramework.Defaults.Scope != "cluster" {
 		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
+
 	if appFramework.Defaults.VolName != "" {
 		_, err := checkIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
@@ -860,7 +867,6 @@ func isAppFrameworkConfigured(appFramework *enterprisev1.AppFrameworkSpec) bool 
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
 func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
-
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -905,6 +911,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec) error {
 
 	duplicateChecker := make(map[string]bool)
+
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {

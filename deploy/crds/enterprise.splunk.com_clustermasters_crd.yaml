@@ -934,6 +934,15 @@ spec:
                         description: ServicePort contains information on service's
                           port.
                         properties:
+                          appProtocol:
+                            description: The application protocol for this port. This
+                              field follows standard Kubernetes label syntax. Un-prefixed
+                              names are reserved for IANA standard service names (as
+                              per RFC-6335 and http://www.iana.org/assignments/service-names).
+                              Non-standard protocols should use prefixed names such
+                              as mycompany.com/my-custom-protocol. Field can be enabled
+                              with ServiceAppProtocol feature gate.
+                            type: string
                           name:
                             description: The name of this port within the service.
                               This must be a DNS_LABEL. All ports within a ServiceSpec
@@ -1019,6 +1028,23 @@ spec:
                               type: integer
                           type: object
                       type: object
+                    topologyKeys:
+                      description: topologyKeys is a preference-order list of topology
+                        keys which implementations of services should use to preferentially
+                        sort endpoints when accessing this Service, it can not be
+                        used at the same time as externalTrafficPolicy=Local. Topology
+                        keys must be valid label keys and at most 16 keys may be specified.
+                        Endpoints are chosen based on the first topology key with
+                        available backends. If this field is specified and all entries
+                        have no backends that match the topology of the client, the
+                        service has no backends for that client and connections should
+                        fail. The special value "*" may be used to mean "any topology".
+                        This catch-all value, if used, only makes sense as the last
+                        value in the list. If this is not specified or empty, no topology
+                        constraints will be applied.
+                      items:
+                        type: string
+                      type: array
                     type:
                       description: 'type determines how the Service is exposed. Defaults
                         to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort,
@@ -2640,9 +2666,27 @@ spec:
   - name: v1beta1
     served: true
     storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
   - name: v1alpha3
     served: true
     storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
   - name: v1alpha2
     served: true
     storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string

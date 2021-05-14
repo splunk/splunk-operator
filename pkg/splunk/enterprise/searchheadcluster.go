@@ -47,7 +47,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		return result, err
 	}
 
-	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]*splclient.S3Response
 
 		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
