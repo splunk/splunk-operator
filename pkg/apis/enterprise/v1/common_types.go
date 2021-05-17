@@ -146,6 +146,12 @@ type VolumeSpec struct {
 
 	// Remote Storage type.
 	Type string `json:"storageType"`
+
+	// App Package Remote Store provider.
+	// For e.g. aws, azure, minio, etc.
+	// Currently we are only supporting aws.
+	// TODO: Support minio as well.
+	Provider string `json:"provider"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation

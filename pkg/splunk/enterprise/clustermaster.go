@@ -76,22 +76,35 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		return result, err
 	}
 
-	// ToDo sgontla: Handle
-	// 1. Spec update
-	// 2. S3 credentails change
-	// 3. Probe times expired
-	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		// TBD: Probe the remote store, and handle any changes on remote store
-
-		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
-	}
-
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
 			scopedLog.Error(err, "Status update failed")
 		}
 	}()
+
+	//check if the apps need to be downloaded from remote storage
+	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		var sourceToAppsList map[string]splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+				splclient.RegisterS3Client(vol.Provider)
+			}
+		}
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get apps list from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
+
+		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	}
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
