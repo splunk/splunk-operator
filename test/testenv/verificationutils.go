@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"strings"
 	"time"
 
@@ -557,4 +558,14 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 			VerifyPVC(deployment, testenvInstance, testenvInstance.GetName(), PvcName, expectedtoExist, verificationTimeout)
 		}
 	}
+}
+
+// VerifyAppFrameworkDeployment verifies for a given deployment if App Framework is enabled
+func VerifyAppFrameworkDeployment(standalone *enterprisev1.Standalone) {
+	if reflect.DeepEqual(standalone.Status.AppContext.AppFrameworkConfig, standalone.Spec.AppFrameworkConfig) {
+		logf.Log.Info("Standalone with App Framework correctly deployed")
+	} else {
+		logf.Log.Info("Issue when deploying Standalone with App Framework")
+	}
+
 }

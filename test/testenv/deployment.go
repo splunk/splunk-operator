@@ -457,6 +457,53 @@ func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev
 	return deployed.(*enterprisev1.Standalone), err
 }
 
+// DeployStandalonewithAppFrameworkSpec deploys a standalone with given spec
+func (d *Deployment) DeployStandalonewithAppFrameworkSpec(name string, s3IndexSecret string) (*enterprisev1.Standalone, error) {
+	// Create App framework Spec
+	// volumeSpec: Volume name, Endpoint, Path and SecretRef
+	volumeName := "appframework-test-volume-" + RandomDNSName(3)
+	volumeSpec := []enterprisev1.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), s3IndexSecret)}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+		VolName: volumeName,
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterprisev1.AppSourceSpec{GenerateAppSourceSpec("appframework", "appframework/", appSourceDefaultSpec)}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: 60,
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	spec := enterprisev1.StandaloneSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+		},
+		AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+			Defaults:             appFrameworkSpec.Defaults,
+			AppsRepoPollInterval: appFrameworkSpec.AppsRepoPollInterval,
+			VolList:              appFrameworkSpec.VolList,
+			AppSources:           appFrameworkSpec.AppSources,
+		},
+	}
+
+	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.Standalone), err
+}
+
 // DeployStandaloneWithGivenSmartStoreSpec deploys a standalone give smartstore spec
 func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(name string, smartStoreSpec enterprisev1.SmartStoreSpec) (*enterprisev1.Standalone, error) {
 
