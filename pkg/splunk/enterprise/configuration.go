@@ -873,7 +873,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 	}
 
 	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
-		"localScope: %t", localScope)
+		"localScope", localScope)
 
 	// Todo: sgontla: Enable later. For now, allowing multiple volumes and app sources for UT purpose
 	if len(appFramework.VolList) > 1 || len(appFramework.AppSources) > 2 {
@@ -918,25 +918,26 @@ func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec) error {
 			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
 		}
 		duplicateChecker[volume.Name] = true
-
 		// Make sure that the smartstore volume info is correct
 		if volume.Name == "" {
 			return fmt.Errorf("Volume name is missing for volume at : %d", i)
 		}
-
 		if volume.Endpoint == "" {
 			return fmt.Errorf("Volume Endpoint URI is missing")
 		}
-
 		if volume.Path == "" {
 			return fmt.Errorf("Volume Path is missing")
 		}
-
 		if volume.SecretRef == "" {
 			return fmt.Errorf("Volume SecretRef is missing")
 		}
+		if volume.Type == "" {
+			return fmt.Errorf("Remote volume Type is missing")
+		}
+		if volume.Provider == "" {
+			return fmt.Errorf("S3 Provider is missing")
+		}
 	}
-
 	return nil
 }
 
@@ -955,7 +956,6 @@ func validateSplunkIndexesSpec(smartstore *enterprisev1.SmartStoreSpec) error {
 			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
 		}
 		duplicateChecker[index.Name] = true
-
 		if index.VolName == "" && smartstore.Defaults.VolName == "" {
 			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
 		}
