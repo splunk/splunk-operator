@@ -703,6 +703,11 @@ spec:
                         path:
                           description: Remote volume path
                           type: string
+                        provider:
+                          description: 'App Package Remote Store provider. For e.g.
+                            aws, azure, minio, etc. Currently we are only supporting
+                            aws. TODO: Support minio as well.'
+                          type: string
                         secretRef:
                           description: Secret object name
                           type: string
@@ -1026,7 +1031,7 @@ spec:
                               x-kubernetes-int-or-string: true
                           required:
                           - port
-                          - protocol
+			  - protocol
                           type: object
                         type: array
                         x-kubernetes-list-map-keys:
@@ -1235,6 +1240,11 @@ spec:
                           type: string
                         path:
                           description: Remote volume path
+                          type: string
+                        provider:
+                          description: 'App Package Remote Store provider. For e.g.
+                            aws, azure, minio, etc. Currently we are only supporting
+                            aws. TODO: Support minio as well.'
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2576,6 +2586,11 @@ spec:
                             path:
                               description: Remote volume path
                               type: string
+                            provider:
+                              description: 'App Package Remote Store provider. For
+                                e.g. aws, azure, minio, etc. Currently we are only
+                                supporting aws. TODO: Support minio as well.'
+                              type: string
                             secretRef:
                               description: Secret object name
                               type: string
@@ -2716,6 +2731,11 @@ spec:
                           type: string
                         path:
                           description: Remote volume path
+                          type: string
+                        provider:
+                          description: 'App Package Remote Store provider. For e.g.
+                            aws, azure, minio, etc. Currently we are only supporting
+                            aws. TODO: Support minio as well.'
                           type: string
                         secretRef:
                           description: Secret object name

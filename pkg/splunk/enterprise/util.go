@@ -16,14 +16,16 @@ package enterprise
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	//"github.com/go-logr/stdr"
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -31,6 +33,54 @@ import (
 
 // kubernetes logger used by splunk.enterprise package
 var log = logf.Log.WithName("splunk.enterprise")
+
+// regex to extract the region from the s3 endpoint
+var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
+
+//getRegion extracts the region from the endpoint field
+func getRegion(endpoint string) string {
+	pattern := regexp.MustCompile(regionRegex)
+	return pattern.FindStringSubmatch(endpoint)[1]
+}
+
+// GetRemoteStorageClient returns the corresponding S3Client
+func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string) (splclient.S3Client, error) {
+
+	scopedLog := log.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	//use the provider name to get the corresponding function pointer
+	getClient, _ := splclient.S3Clients[vol.Provider]
+
+	appSecretRef := vol.SecretRef
+	s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get access keys
+	accessKeyID := string(s3ClientSecret.Data["s3_access_key"])
+	secretAccessKey := string(s3ClientSecret.Data["s3_secret_key"])
+
+	if accessKeyID == "" {
+		scopedLog.Error(err, "accessKey missing")
+		return nil, err
+	}
+	if secretAccessKey == "" {
+		scopedLog.Error(err, "S3 Secret Key is missing")
+		return nil, err
+	}
+
+	// Get region from "endpoint" field
+	region := getRegion(vol.Endpoint)
+
+	// Get the bucket name form the "path" field
+	bucket := strings.Split(vol.Path, "/")[0]
+
+	//Get the prefix from the "path" field
+	prefix := strings.TrimPrefix(vol.Path, bucket+"/") + location
+
+	return getClient(region, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/), nil
+}
 
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
 func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
@@ -291,4 +341,54 @@ func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, 
 	}
 
 	return err
+}
+
+// GetAppListFromS3Bucket gets the list of apps from remote storage.
+func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
+
+	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	sourceToAppListMap := make(map[string]splclient.S3Response)
+
+	volMap := make(map[string]enterprisev1.VolumeSpec)
+
+	for _, vol := range appFrameworkRef.VolList {
+		volMap[vol.Name] = vol
+	}
+
+	scopedLog.Info("Getting the list of apps from remote storage...")
+
+	var s3Response splclient.S3Response
+	var vol enterprisev1.VolumeSpec
+	var err error
+	var s3Client splclient.S3Client
+
+	for _, appSource := range appFrameworkRef.AppSources {
+		// get the volume spec from the volume name
+		if appSource.AppSourceDefaultSpec.VolName != "" {
+			vol = volMap[appSource.AppSourceDefaultSpec.VolName]
+		} else {
+			vol = volMap[appFrameworkRef.Defaults.VolName]
+		}
+
+		//get the corresponding S3 client
+		s3Client, err = GetRemoteStorageClient(client, cr, appFrameworkRef, &vol, appSource.Location)
+		if err != nil {
+			// move on to the next appSource if we are not able to get the rquired client
+			scopedLog.Error(err, "Unable to get remote storage client", "appSource", appSource.Name)
+			continue
+		}
+
+		// Now, get the apps list from remote storage
+		s3Response, err = s3Client.GetAppsList()
+		if err != nil {
+			// move on to the next appSource if we are not able to get apps list
+			scopedLog.Error(err, "Unable to get apps list", "appSource", appSource.Name)
+			continue
+		}
+
+		sourceToAppListMap[appSource.Name] = s3Response
+	}
+
+	return sourceToAppListMap, nil
 }

@@ -967,7 +967,7 @@ spec:
                               x-kubernetes-int-or-string: true
                           required:
                           - port
-                          - protocol
+			  - protocol
                           type: object
                         type: array
                         x-kubernetes-list-map-keys:

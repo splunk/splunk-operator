@@ -189,7 +189,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
@@ -423,7 +423,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	}
 }
 
-func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
+func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -432,7 +432,7 @@ func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
 				AppSources: []enterprisev1.AppSourceSpec{
 					{Name: "adminApps",
@@ -454,6 +454,11 @@ func TestAppFrameworkClusterMasterShouldNotFail(t *testing.T) {
 							Scope:   "local"},
 					},
 				},
+			},
+			// TODO gaurav: Remove this dependency on mock setting and try to use
+			// mock client for S3 responses.
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Mock: true,
 			},
 		},
 	}
