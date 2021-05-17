@@ -269,7 +269,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
@@ -300,7 +300,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Valid smartstore config
 	SmartStore := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
@@ -415,7 +415,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	//Smartstore config Index with VolName, but missing RemotePath errors out
 	SmartStoreWithMissingIndexLocation := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1",
@@ -445,7 +445,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 				VolName: "msos_s2s3_vol"},
 		},
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1"},
@@ -595,13 +595,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
 }
+
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
-
-	// Valid App Framework config
+	// Valid app framework config
 	AppFramework := enterprisev1.AppFrameworkSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
 		AppSources: []enterprisev1.AppSourceSpec{
 			{Name: "adminApps",
