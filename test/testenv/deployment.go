@@ -532,3 +532,33 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
 	return err
 }
+
+// DeployClusterMasterWithGivenSpec deploys the cluster master with given SPEC
+func (d *Deployment) DeployClusterMasterWithGivenSpec(name, licenseMasterName string, ansibleConfig string, spec enterprisev1.ClusterMasterSpec) (*enterprisev1.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name)
+	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, licenseMasterName, ansibleConfig, spec)
+	deployed, err := d.deployCR(name, cm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.ClusterMaster), err
+}
+
+// DeploySearchHeadClusterWithGivenSpec deploys a search head cluster
+func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name, clusterMasterRef, licenseMasterName string, ansibleConfig string, spec enterprisev1.SearchHeadClusterSpec) (*enterprisev1.SearchHeadCluster, error) {
+	d.testenv.Log.Info("Deploying search head cluster", "name", name)
+	indexer := newSearchHeadClusterWithGivenSpec(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig, spec)
+	deployed, err := d.deployCR(name, indexer)
+	return deployed.(*enterprisev1.SearchHeadCluster), err
+}
+
+// DeployLicenseMasterWithGivenSpec deploys the license master with given SPEC
+func (d *Deployment) DeployLicenseMasterWithGivenSpec(name, licenseMasterName string, ansibleConfig string, spec enterprisev1.LicenseMasterSpec) (*enterprisev1.LicenseMaster, error) {
+	d.testenv.Log.Info("Deploying license-master", "name", name)
+	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, lm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.LicenseMaster), err
+}
