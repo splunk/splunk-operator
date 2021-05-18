@@ -688,9 +688,6 @@ spec:
                       volumeName:
                         description: Remote Storage Volume name
                         type: string
-                      storageType:
-                        description: Remote Storage type.
-                        type: string
                     type: object
                   volumes:
                     description: List of remote storage volumes
