@@ -447,7 +447,7 @@ func newSecretSpec(ns string, secretName string, data map[string][]byte) *corev1
 }
 
 // newStandaloneWithSpec creates and initializes CR for Standalone Kind with given spec
-func newStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+func NewStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
 
 	new := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{

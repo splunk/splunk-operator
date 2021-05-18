@@ -17,7 +17,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/splunk/splunk-operator/test/testenv"
+	testenv "github.com/splunk/splunk-operator/test/testenv"
+
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("appframework test", func() {
@@ -42,9 +46,46 @@ var _ = Describe("appframework test", func() {
 
 	Context("Standalone deployment (S1) with App Framework", func() {
 		It("appframework: can deploy a standalone instance with App Framework enabled", func() {
+			// Create App framework Spec
+			// volumeSpec: Volume name, Endpoint, Path and SecretRef
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName())}
+
+			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   "local",
+			}
+
+			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec("appframework", "appframework/", appSourceDefaultSpec)}
+
+			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+				Defaults:             appSourceDefaultSpec,
+				AppsRepoPollInterval: 60,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			spec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+					Defaults:             appFrameworkSpec.Defaults,
+					AppsRepoPollInterval: appFrameworkSpec.AppsRepoPollInterval,
+					VolList:              appFrameworkSpec.VolList,
+					AppSources:           appFrameworkSpec.AppSources,
+				},
+			}
+
 			// Create Standalone Deployment with App Framework
-			s3IndexSecret := testenvInstance.GetIndexSecretName()
-			standalone, err := deployment.DeployStandalonewithAppFrameworkSpec(deployment.GetName(), s3IndexSecret)
+			standalone := testenv.NewStandaloneWithSpec(deployment.GetName(), testenvInstance.GetName(), spec)
+			_, err := deployment.DeployCR(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status

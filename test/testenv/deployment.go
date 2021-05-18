@@ -93,7 +93,7 @@ func (d *Deployment) Teardown() error {
 // DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv
 func (d *Deployment) DeployStandalone(name string) (*enterprisev1.Standalone, error) {
 	standalone := newStandalone(name, d.testenv.namespace)
-	deployed, err := d.deployCR(name, standalone)
+	deployed, err := d.DeployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMast
 	}
 
 	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
-	deployed, err := d.deployCR(name, lm)
+	deployed, err := d.DeployCR(name, lm)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMast
 func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansibleConfig string) (*enterprisev1.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
-	deployed, err := d.deployCR(name, cm)
+	deployed, err := d.DeployCR(name, cm)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMasterName string, ansibleConfig string, smartstorespec enterprisev1.SmartStoreSpec) (*enterprisev1.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
-	deployed, err := d.deployCR(name, cm)
+	deployed, err := d.DeployCR(name, cm)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMaste
 func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
 	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
-	deployed, err := d.deployCR(name, indexer)
+	deployed, err := d.DeployCR(name, indexer)
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +209,11 @@ func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count 
 func (d *Deployment) DeploySearchHeadCluster(name, clusterMasterRef, licenseMasterName string, ansibleConfig string) (*enterprisev1.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
 	indexer := newSearchHeadCluster(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig)
-	deployed, err := d.deployCR(name, indexer)
+	deployed, err := d.DeployCR(name, indexer)
 	return deployed.(*enterprisev1.SearchHeadCluster), err
 }
 
-func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, error) {
+func (d *Deployment) DeployCR(name string, cr runtime.Object) (runtime.Object, error) {
 
 	err := d.testenv.GetKubeClient().Create(context.TODO(), cr)
 	if err != nil {
@@ -440,7 +440,7 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 	}
 
 	standalone := newStandaloneWithLM(name, d.testenv.namespace, licenseMaster)
-	deployed, err := d.deployCR(name, standalone)
+	deployed, err := d.DeployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -450,54 +450,7 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 // DeployStandalonewithGivenSpec deploys a standalone with given spec
 func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev1.StandaloneSpec) (*enterprisev1.Standalone, error) {
 	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
-	deployed, err := d.deployCR(name, standalone)
-	if err != nil {
-		return nil, err
-	}
-	return deployed.(*enterprisev1.Standalone), err
-}
-
-// DeployStandalonewithAppFrameworkSpec deploys a standalone with given spec
-func (d *Deployment) DeployStandalonewithAppFrameworkSpec(name string, s3IndexSecret string) (*enterprisev1.Standalone, error) {
-	// Create App framework Spec
-	// volumeSpec: Volume name, Endpoint, Path and SecretRef
-	volumeName := "appframework-test-volume-" + RandomDNSName(3)
-	volumeSpec := []enterprisev1.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), s3IndexSecret)}
-
-	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-	appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
-		VolName: volumeName,
-		Scope:   "local",
-	}
-
-	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-	appSourceSpec := []enterprisev1.AppSourceSpec{GenerateAppSourceSpec("appframework", "appframework/", appSourceDefaultSpec)}
-
-	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-	appFrameworkSpec := enterprisev1.AppFrameworkSpec{
-		Defaults:             appSourceDefaultSpec,
-		AppsRepoPollInterval: 60,
-		VolList:              volumeSpec,
-		AppSources:           appSourceSpec,
-	}
-
-	spec := enterprisev1.StandaloneSpec{
-		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-			Spec: splcommon.Spec{
-				ImagePullPolicy: "Always",
-			},
-			Volumes: []corev1.Volume{},
-		},
-		AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-			Defaults:             appFrameworkSpec.Defaults,
-			AppsRepoPollInterval: appFrameworkSpec.AppsRepoPollInterval,
-			VolList:              appFrameworkSpec.VolList,
-			AppSources:           appFrameworkSpec.AppSources,
-		},
-	}
-
-	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
-	deployed, err := d.deployCR(name, standalone)
+	deployed, err := d.DeployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -517,8 +470,8 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(name string, smartS
 		SmartStore: smartStoreSpec,
 	}
 
-	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
-	deployed, err := d.deployCR(name, standalone)
+	standalone := NewStandaloneWithSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.DeployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
