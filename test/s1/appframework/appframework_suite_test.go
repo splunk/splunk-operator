@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package s1appframework
+package s1appfw
 
 import (
 	"testing"
@@ -35,7 +35,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "s1appframework-" + testenv.RandomDNSName(3)
+	testSuiteName   = "s1appfw-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point

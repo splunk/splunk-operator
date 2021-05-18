@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.s
-package s1appframework
+package s1appfw
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -24,7 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("s1appframework test", func() {
+var _ = Describe("s1appfw test", func() {
 
 	var deployment *testenv.Deployment
 
