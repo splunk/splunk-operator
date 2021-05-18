@@ -93,7 +93,7 @@ func (d *Deployment) Teardown() error {
 // DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv
 func (d *Deployment) DeployStandalone(name string) (*enterprisev1.Standalone, error) {
 	standalone := newStandalone(name, d.testenv.namespace)
-	deployed, err := d.DeployCR(name, standalone)
+	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMast
 	}
 
 	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
-	deployed, err := d.DeployCR(name, lm)
+	deployed, err := d.deployCR(name, lm)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMast
 func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansibleConfig string) (*enterprisev1.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
-	deployed, err := d.DeployCR(name, cm)
+	deployed, err := d.deployCR(name, cm)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMasterName string, ansibleConfig string, smartstorespec enterprisev1.SmartStoreSpec) (*enterprisev1.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
-	deployed, err := d.DeployCR(name, cm)
+	deployed, err := d.deployCR(name, cm)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMaste
 func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterprisev1.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
 	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
-	deployed, err := d.DeployCR(name, indexer)
+	deployed, err := d.deployCR(name, indexer)
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +209,11 @@ func (d *Deployment) DeployIndexerCluster(name, licenseMasterName string, count 
 func (d *Deployment) DeploySearchHeadCluster(name, clusterMasterRef, licenseMasterName string, ansibleConfig string) (*enterprisev1.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
 	indexer := newSearchHeadCluster(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig)
-	deployed, err := d.DeployCR(name, indexer)
+	deployed, err := d.deployCR(name, indexer)
 	return deployed.(*enterprisev1.SearchHeadCluster), err
 }
 
-func (d *Deployment) DeployCR(name string, cr runtime.Object) (runtime.Object, error) {
+func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, error) {
 
 	err := d.testenv.GetKubeClient().Create(context.TODO(), cr)
 	if err != nil {
@@ -440,7 +440,7 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 	}
 
 	standalone := newStandaloneWithLM(name, d.testenv.namespace, licenseMaster)
-	deployed, err := d.DeployCR(name, standalone)
+	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterprisev1.Standalo
 // DeployStandalonewithGivenSpec deploys a standalone with given spec
 func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterprisev1.StandaloneSpec) (*enterprisev1.Standalone, error) {
 	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
-	deployed, err := d.DeployCR(name, standalone)
+	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -470,8 +470,8 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(name string, smartS
 		SmartStore: smartStoreSpec,
 	}
 
-	standalone := NewStandaloneWithSpec(name, d.testenv.namespace, spec)
-	deployed, err := d.DeployCR(name, standalone)
+	standalone := newStandaloneWithSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, standalone)
 	if err != nil {
 		return nil, err
 	}
@@ -531,4 +531,34 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 `, name)
 	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
 	return err
+}
+
+// DeployClusterMasterWithGivenSpec deploys the cluster master with given SPEC
+func (d *Deployment) DeployClusterMasterWithGivenSpec(name, licenseMasterName string, ansibleConfig string, spec enterprisev1.ClusterMasterSpec) (*enterprisev1.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name)
+	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, licenseMasterName, ansibleConfig, spec)
+	deployed, err := d.deployCR(name, cm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.ClusterMaster), err
+}
+
+// DeploySearchHeadClusterWithGivenSpec deploys a search head cluster
+func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name, clusterMasterRef, licenseMasterName string, ansibleConfig string, spec enterprisev1.SearchHeadClusterSpec) (*enterprisev1.SearchHeadCluster, error) {
+	d.testenv.Log.Info("Deploying search head cluster", "name", name)
+	indexer := newSearchHeadClusterWithGivenSpec(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig, spec)
+	deployed, err := d.deployCR(name, indexer)
+	return deployed.(*enterprisev1.SearchHeadCluster), err
+}
+
+// DeployLicenseMasterWithGivenSpec deploys the license master with given SPEC
+func (d *Deployment) DeployLicenseMasterWithGivenSpec(name, licenseMasterName string, ansibleConfig string, spec enterprisev1.LicenseMasterSpec) (*enterprisev1.LicenseMaster, error) {
+	d.testenv.Log.Info("Deploying license-master", "name", name)
+	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(name, lm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.LicenseMaster), err
 }

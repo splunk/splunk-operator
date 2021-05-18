@@ -447,7 +447,7 @@ func newSecretSpec(ns string, secretName string, data map[string][]byte) *corev1
 }
 
 // newStandaloneWithSpec creates and initializes CR for Standalone Kind with given spec
-func NewStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+func newStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
 
 	new := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -550,4 +550,70 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
+}
+
+// newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
+func newClusterMasterWithGivenSpec(name, ns, licenseMasterName string, ansibleConfig string, spec enterprisev1.ClusterMasterSpec) *enterprisev1.ClusterMaster {
+	new := enterprisev1.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: spec,
+	}
+	return &new
+}
+
+// newIndexerClusterWithGivenSpec creates and initialize the CR for IndexerCluster Kind
+func newIndexerClusterWithGivenSpec(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string, spec enterprisev1.IndexerClusterSpec) *enterprisev1.IndexerCluster {
+	new := enterprisev1.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: spec,
+	}
+	return &new
+}
+
+// newSearchHeadClusterWithGivenSpec create and initializes CR for Search Cluster Kind with Given Spec
+func newSearchHeadClusterWithGivenSpec(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string, spec enterprisev1.SearchHeadClusterSpec) *enterprisev1.SearchHeadCluster {
+	new := enterprisev1.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: spec,
+	}
+	return &new
+}
+
+// newLicenseMasterWithGivenSpec create and initializes CR for License Master Kind with Given Spec
+func newLicenseMasterWithGivenSpec(name, ns string, spec enterprisev1.LicenseMasterSpec) *enterprisev1.LicenseMaster {
+	new := enterprisev1.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+
+	return &new
 }
