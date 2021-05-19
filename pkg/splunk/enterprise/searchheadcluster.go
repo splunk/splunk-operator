@@ -47,12 +47,24 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		return result, err
 	}
 
-	// ToDo sgontla: Handle
-	// 1. Spec update
-	// 2. S3 credentails change
-	// 3. Probe times expired
-	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		// TBD: Probe the remote store, and handle any changes on remote store
+	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		var sourceToAppsList map[string]splclient.S3Response
+
+		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
+			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+				splclient.RegisterS3Client(vol.Provider)
+			}
+		}
+
+		sourceToAppsList = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
+			scopedLog.Error(err, "Unable to get apps list for all the app sources from remote storage")
+			return result, err
+		}
+
+		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+		}
 
 		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}

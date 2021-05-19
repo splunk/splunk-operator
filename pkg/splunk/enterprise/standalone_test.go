@@ -124,7 +124,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",
@@ -246,7 +246,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",
@@ -303,7 +303,7 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 			Replicas: 1,
 			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
 				AppSources: []enterprisev1.AppSourceSpec{
 					{Name: "adminApps",
@@ -325,6 +325,11 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 							Scope:   "local"},
 					},
 				},
+			},
+			// TODO gaurav: Remove this dependency on mock setting and try to use
+			// mock client for S3 responses.
+			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+				Mock: true,
 			},
 		},
 	}
