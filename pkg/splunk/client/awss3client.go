@@ -22,8 +22,8 @@ type AWSS3Client struct {
 	StartAfter         string
 }
 
-// GetAWSS3Client returns an AWS S3 client
-func GetAWSS3Client(region string, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string) S3Client {
+// NewAWSS3Client returns an AWS S3 client
+func NewAWSS3Client(region string, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string) S3Client {
 	return &AWSS3Client{
 		Region:             region,
 		BucketName:         bucketName,
@@ -36,12 +36,12 @@ func GetAWSS3Client(region string, bucketName string, accessKeyID string, secret
 
 //RegisterAWSS3Client will add the corresponding function pointer to the map
 func RegisterAWSS3Client() {
-	S3Clients["aws"] = GetAWSS3Client
+	S3Clients["aws"] = NewAWSS3Client
 }
 
 // GetAppsList get the list of apps from remote storage
 func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
-	scopedLog := log.WithName("GetRemoteStorageClient")
+	scopedLog := log.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
 	s3Resp := S3Response{}
