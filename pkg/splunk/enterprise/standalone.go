@@ -73,12 +73,14 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		var sourceToAppsList map[string]splclient.S3Response
 
 		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
-			splclient.RegisterS3Client(vol.Provider)
+			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+				splclient.RegisterS3Client(vol.Provider)
+			}
 		}
 
-		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get apps list from remote storage")
+		sourceToAppsList = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
+			scopedLog.Error(err, "Unable to get apps list for all the app sources from remote storage")
 			return result, err
 		}
 

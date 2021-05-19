@@ -344,17 +344,11 @@ func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, 
 }
 
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
-func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
+func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) map[string]splclient.S3Response {
 
 	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	sourceToAppListMap := make(map[string]splclient.S3Response)
-
-	volMap := make(map[string]enterprisev1.VolumeSpec)
-
-	for _, vol := range appFrameworkRef.VolList {
-		volMap[vol.Name] = vol
-	}
 
 	scopedLog.Info("Getting the list of apps from remote storage...")
 
@@ -362,14 +356,23 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var vol enterprisev1.VolumeSpec
 	var err error
 	var s3Client splclient.S3Client
+	var index int
 
 	for _, appSource := range appFrameworkRef.AppSources {
+		var volName string
 		// get the volume spec from the volume name
-		if appSource.AppSourceDefaultSpec.VolName != "" {
-			vol = volMap[appSource.AppSourceDefaultSpec.VolName]
+		if appSource.VolName != "" {
+			volName = appSource.VolName
 		} else {
-			vol = volMap[appFrameworkRef.Defaults.VolName]
+			volName = appFrameworkRef.Defaults.VolName
 		}
+
+		index, err = checkIfVolumeExists(appFrameworkRef.VolList, volName)
+		if err != nil {
+			scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
+			continue
+		}
+		vol = appFrameworkRef.VolList[index]
 
 		//get the corresponding S3 client
 		s3Client, err = GetRemoteStorageClient(client, cr, appFrameworkRef, &vol, appSource.Location)
@@ -390,5 +393,5 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 		sourceToAppListMap[appSource.Name] = s3Response
 	}
 
-	return sourceToAppListMap, nil
+	return sourceToAppListMap
 }

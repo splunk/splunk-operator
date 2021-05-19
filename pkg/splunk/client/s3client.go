@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -36,5 +37,6 @@ func RegisterS3Client(provider string) {
 	case "aws":
 		RegisterAWSS3Client()
 	default:
+		fmt.Println("ERROR: Invalid provider specified: ", provider)
 	}
 }

@@ -93,9 +93,9 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 			}
 		}
 
-		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get apps list from remote storage")
+		sourceToAppsList = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
+			scopedLog.Error(err, "Unable to get apps list for all the app sources from remote storage")
 			return result, err
 		}
 
