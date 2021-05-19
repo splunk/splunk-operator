@@ -678,7 +678,8 @@ spec:
                       App changes
                     type: integer
                   defaults:
-                    description: Defines default configuration settings for App sources
+                    description: Defines the default configuration settings for App
+                      sources
                     properties:
                       scope:
                         description: 'Scope of the App deployment: cluster, local.
@@ -2560,8 +2561,8 @@ spec:
                           for App changes
                         type: integer
                       defaults:
-                        description: Defines default configuration settings for App
-                          sources
+                        description: Defines the default configuration settings for
+                          App sources
                         properties:
                           scope:
                             description: 'Scope of the App deployment: cluster, local.
@@ -2600,9 +2601,41 @@ spec:
                           type: object
                         type: array
                     type: object
+                  appSrcDeployStatus:
+                    additionalProperties:
+                      description: AppSrcDeployInfo represents deployment info for
+                        list of Apps
+                      properties:
+                        appDeploymentInfo:
+                          items:
+                            description: AppDeploymentInfo represents a single App
+                              deployment information
+                            properties:
+                              Size:
+                                format: int64
+                                type: integer
+                              appName:
+                                type: string
+                              deployStatus:
+                                description: AppDeploymentStatus represents the status
+                                  of an App on the Pod
+                                type: integer
+                              lastModifiedTime:
+                                type: string
+                              objectHash:
+                                type: string
+                              repoState:
+                                description: AppRepoState represent the App state
+                                  on remote store
+                                type: integer
+                            type: object
+                          type: array
+                      type: object
+                    description: Represents the Apps deployment status
+                    type: object
                   isDeploymentInProgress:
-                    description: IsDeploymentInProgress indicates if the App deployment
-                      in progress
+                    description: IsDeploymentInProgress indicates if the Apps deployment
+                      is in progress
                     type: boolean
                   version:
                     description: App Framework version info for future use

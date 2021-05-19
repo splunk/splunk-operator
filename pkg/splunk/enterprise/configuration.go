@@ -785,6 +785,16 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
+// CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
+func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterprisev1.AppFrameworkSpec, appSrcName string) bool {
+	for _, appSrc := range appFrameworkConf.AppSources {
+		if appSrc.Name == appSrcName {
+			return true
+		}
+	}
+	return false
+}
+
 // validateSplunkAppSources validates the App source config in App Framework spec
 func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
 
@@ -900,10 +910,10 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 	}
 
 	err = validateSplunkAppSources(appFramework, localScope)
-	if err != nil {
-		return err
-	}
 
+	if err == nil {
+		scopedLog.Info("App framework configuration is valid")
+	}
 	return err
 }
 
