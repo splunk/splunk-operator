@@ -395,3 +395,238 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 
 	return sourceToAppListMap
 }
+
+// checkIfAnAppIsActiveOnRemoteStore checks if the App is listed as part of the AppSrc listing
+func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splclient.RemoteObject) bool {
+	for i := range list {
+		if strings.HasSuffix(*list[i].Key, appName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// checkIfAppSrcExistsWithRemoteListing checks if a given AppSrc is part of the remote listing
+func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map[string]splclient.S3Response) bool {
+	if _, ok := remoteObjListingMap[appSrc]; ok {
+		return true
+	}
+
+	return false
+}
+
+// changeAppSrcDeployInfoStatus sets the new status to all the apps in an AppSrc if the given repo state and deploy status matches
+// primarly used in Phase-3
+func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, repoState enterprisev1.AppRepoState, oldDeployStatus enterprisev1.AppDeploymentStatus, newDeployStatus enterprisev1.AppDeploymentStatus) {
+	scopedLog := log.WithName("changeAppSrcDeployInfoStatus").WithValues("Called for AppSource: ", appSrc, "repoState", repoState, "oldDeployStatus", oldDeployStatus, "newDeployStatus", newDeployStatus)
+
+	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
+		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
+		for _, appDeployInfo := range appDeployInfoList {
+			// Modify the app status if the state and status matches
+			if appDeployInfo.RepoState == repoState && appDeployInfo.DeployStatus == oldDeployStatus {
+				appDeployInfo.DeployStatus = newDeployStatus
+			}
+		}
+
+		// Update the Map entry again
+		appSrcDeployStatus[appSrc] = appSrcDeploymentInfo
+		scopedLog.Info("Complete")
+	} else {
+		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
+		scopedLog.Error(nil, "Could not find the App Source in App context")
+	}
+}
+
+// setStateAndStatusForAppDeployInfo sets the state and status for an App
+func setStateAndStatusForAppDeployInfo(appDeployInfo enterprisev1.AppDeploymentInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) {
+	appDeployInfo.RepoState = repoState
+	appDeployInfo.DeployStatus = deployStatus
+}
+
+// setStateAndStatusForAppDeployInfoList sets the state and status for a given list of Apps
+// Do not change the list lenth in this. ToDo: sgontla: just to be safe return the list
+func setStateAndStatusForAppDeployInfoList(appDeployList []enterprisev1.AppDeploymentInfo, state enterprisev1.AppRepoState, status enterprisev1.AppDeploymentStatus) bool {
+	var modified bool
+	for _, appInfo := range appDeployList {
+		setStateAndStatusForAppDeployInfo(appInfo, state, status)
+		modified = true
+	}
+
+	return modified
+}
+
+// handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
+// clinet and cr are used when we put the glue logic to hand-off to the side car
+func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	appDeployContext *enterprisev1.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterprisev1.AppFrameworkSpec) error {
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+	scopedLog := log.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+	var err error
+
+	scopedLog.Info("received App listing for %d app sources", len(remoteObjListingMap))
+	if remoteObjListingMap == nil || len(remoteObjListingMap) == 0 {
+		scopedLog.Error(nil, "remoteObjectList is empty. Any apps that are already deployed will be disabled")
+	}
+
+	// Check if the appSource is still valid in the config
+	for appSrc := range remoteObjListingMap {
+		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
+			err = fmt.Errorf("App source: %s no more exists, this should never happen", appSrc)
+			return err
+		}
+	}
+
+	// ToDo: sgontla: Ideally, this check should go to the reconcile entry point once the glue logic in place.
+	if appDeployContext.AppsSrcDeployStatus == nil {
+		appDeployContext.AppsSrcDeployStatus = make(map[string]enterprisev1.AppSrcDeployInfo)
+	}
+
+	// 1. Check if the AppSrc is deleted in latest config, OR missing with the remote listing.
+	for appSrc, appSrcDeploymentInfo := range appDeployContext.AppsSrcDeployStatus {
+		// If the AppSrc is missing mark all the corresponding apps for deletion
+		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) ||
+			!checkIfAppSrcExistsWithRemoteListing(appSrc, remoteObjListingMap) {
+			scopedLog.Info("App change", "deleting/disabling all the apps for App source: ", appSrc, "Reason: App source is mising in config or remote listing")
+			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
+			if setStateAndStatusForAppDeployInfoList(curAppDeployList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending) {
+				appDeployContext.IsDeploymentInProgress = true
+			}
+		}
+
+		// Finally update the Map entry with latest info
+		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
+	}
+
+	// 2. Go through each AppSrc from the remote listing
+	for appSrc, s3Response := range remoteObjListingMap {
+		// 2.1 Mark Apps for deletion if they are missing in remote listing
+		appSrcDeploymentInfo, appSrcExistsLocally := appDeployContext.AppsSrcDeployStatus[appSrc]
+
+		if appSrcExistsLocally {
+			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
+			for appIdx := range currentList {
+				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
+					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing")
+					setStateAndStatusForAppDeployInfo(currentList[appIdx], enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+					appDeployContext.IsDeploymentInProgress = true
+				}
+			}
+		}
+
+		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
+		if createOrUpdateAppSrcDeploymentInfo(&appSrcDeploymentInfo, s3Response.Objects) {
+			appDeployContext.IsDeploymentInProgress = true
+		}
+
+		// Finally update the Map entry with latest info
+		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
+	}
+
+	return err
+}
+
+// isAppExtentionValid checks if an app extention is supported or not
+func isAppExtentionValid(receivedKey string) bool {
+	appExtIdx := strings.LastIndex(receivedKey, ".")
+	if appExtIdx < 0 {
+		return false
+	}
+
+	switch appExt := receivedKey[appExtIdx+1:]; appExt {
+	case "spl":
+		return true
+
+	case "tgz":
+		return true
+
+	default:
+		return false
+	}
+}
+
+// createOrUpdateAppSrcDeploymentInfo  modifies the App deployment status as perceived from the remote object listing
+func createOrUpdateAppSrcDeploymentInfo(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
+	scopedLog := log.WithName("createOrUpdateAppSrcDeploymentInfo").WithValues("Called with length: ", len(remoteS3ObjList))
+
+	var found bool
+	var appName string
+	var newAppInfoList []enterprisev1.AppDeploymentInfo
+	var appChangesDetected bool
+	var appDeployInfo enterprisev1.AppDeploymentInfo
+
+	for _, remoteObj := range remoteS3ObjList {
+		receivedKey := *remoteObj.Key
+		if !isAppExtentionValid(receivedKey) {
+			scopedLog.Error(nil, "App name Parsing: Ignoring the key: ", receivedKey, "with invalid extention")
+			continue
+		}
+
+		nameAt := strings.LastIndex(receivedKey, "/")
+		appName = receivedKey[nameAt+1:]
+
+		// Now update App status as seen in the remote listing
+		found = false
+		for _, appDeployInfo = range appSrcDeploymentInfo.AppDeploymentInfoList {
+			if appDeployInfo.AppName == appName {
+				found = true
+				if appDeployInfo.ObjectHash != *remoteObj.Etag || appDeployInfo.RepoState == enterprisev1.RepoStateDeleted {
+					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
+					appDeployInfo.ObjectHash = *remoteObj.Etag
+					appDeployInfo.DeployStatus = enterprisev1.DeployStatusPending
+
+					// Make the state active for an app that was deleted earlier, and got activated again
+					if appDeployInfo.RepoState == enterprisev1.RepoStateDeleted {
+						scopedLog.Info("App change", "enabling the App name: ", appName, "that was previously disabled/deleted")
+						appDeployInfo.RepoState = enterprisev1.RepoStateActive
+					}
+					appChangesDetected = true
+				}
+
+				// Found the App and finished the needed work. we can break here
+				break
+			}
+		}
+
+		// Update our local list if it is a new app
+		if !found {
+			scopedLog.Info("New App", "found: ", appName)
+			appDeployInfo.AppName = appName
+			appDeployInfo.ObjectHash = *remoteObj.Etag
+			appDeployInfo.RepoState = enterprisev1.RepoStateActive
+			appDeployInfo.DeployStatus = enterprisev1.DeployStatusPending
+			appChangesDetected = true
+
+			// Add it to a seperate list so that we don't loop through the newly added entries
+			newAppInfoList = append(newAppInfoList, appDeployInfo)
+		}
+	}
+
+	// Add the newly discovered Apps to the App source group
+	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, newAppInfoList...)
+
+	return appChangesDetected
+}
+
+// markAppsStatusToComplete sets the required status for a given state.
+// Gets called from glue logic based on how we want to hand-off to init/side car, and look for the return status
+// For now, two possible cases:
+// 1. Completing the changes for Deletes. Called with state=AppStateDeleted, and status=DeployStatusPending
+// 2. Completing the changes for Active(Apps newly added, apps modified, Apps previously deleted, and now active).
+// Note:- Used in only for Phase-2
+func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterprisev1.AppSrcDeployInfo) error {
+	var err error
+	scopedLog := log.WithName("markAppsStatusToComplete")
+
+	// ToDo: sgontla: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
+	for appSrc := range appSrcDeplymentStatus {
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
+	}
+
+	scopedLog.Info("Marked the App deployment status to complete")
+	// ToDo: sgontla: Caller of this API also needs to set "IsDeploymentInProgress = false" once after completing this function call for all the app sources
+
+	return err
+}

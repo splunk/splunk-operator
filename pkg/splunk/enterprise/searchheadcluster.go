@@ -66,6 +66,12 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
 		}
 
+		err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+			return result, err
+		}
+
 		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 

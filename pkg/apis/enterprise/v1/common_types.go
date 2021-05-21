@@ -35,6 +35,34 @@ const (
 
 //CAUTION: Do not change json field tags, otherwise the configuration will not be backward compatible with the existing CRs
 
+// AppRepoState represent the App state on remote store
+type AppRepoState uint8
+
+// Values to represent the App Repo status
+const (
+	RepoStateActive AppRepoState = iota + 1
+	RepoStateDeleted
+	RepoStatePassive
+)
+
+// AppDeploymentStatus represents the status of an App on the Pod
+type AppDeploymentStatus uint8
+
+// Values to represent the Pod App deployment status
+const (
+	// Indicates there is a change on remote store, but yet to start propogating that to the Pod
+	DeployStatusPending AppDeploymentStatus = iota + 1
+
+	// App update on the Pod is in progress
+	DeployStatusInProgress //sgontla: Mostly transient  state for Phase-2, more of Phase-3 status
+
+	// App is update is complete on the Pod
+	DeployStatusComplete
+
+	// Failed to update the App on the Pod
+	DeployStatusError
+)
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
@@ -216,7 +244,7 @@ type AppSourceSpec struct {
 
 // AppFrameworkSpec defines the application package remote store repository
 type AppFrameworkSpec struct {
-	// Defines default configuration settings for App sources
+	// Defines the default configuration settings for App sources
 	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 
 	// Interval in seconds to check the Remote Storage for App changes
@@ -229,14 +257,32 @@ type AppFrameworkSpec struct {
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
 }
 
-// AppDeploymentContext for storing the App deployment state
+// AppDeploymentInfo represents a single App deployment information
+type AppDeploymentInfo struct {
+	AppName          string              `json:"appName"`
+	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
+	ObjectHash       string              `json:"objectHash"`
+	Size             uint64              `json:"Size,omitempty"`
+	RepoState        AppRepoState        `json:"repoState"`
+	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+}
+
+// AppSrcDeployInfo represents deployment info for list of Apps
+type AppSrcDeployInfo struct {
+	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
+}
+
+// AppDeploymentContext for storing the Apps deployment information
 type AppDeploymentContext struct {
 	// App Framework version info for future use
 	Version uint16 `json:"version"`
 
-	// IsDeploymentInProgress indicates if the App deployment in progress
+	// IsDeploymentInProgress indicates if the Apps deployment is in progress
 	IsDeploymentInProgress bool `json:"isDeploymentInProgress"`
 
 	// List of App package (*.spl, *.tgz) locations on remote volume
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Represents the Apps deployment status
+	AppsSrcDeployStatus map[string]AppSrcDeployInfo `json:"appSrcDeployStatus,omitempty"`
 }
