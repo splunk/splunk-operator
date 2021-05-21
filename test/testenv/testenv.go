@@ -77,7 +77,7 @@ const (
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
-	// MonitoringConsolePod Monitoring Console Statefulset Template
+	// MonitoringConsolePod Monitoring Console Pod Template String
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
 	// ClusterMasterPod ClusterMaster Pod Template String

@@ -91,11 +91,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
-		}
-
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -132,11 +127,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
-		}
-
 		// Master apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(client, cr)

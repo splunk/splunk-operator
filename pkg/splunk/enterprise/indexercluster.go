@@ -136,10 +136,6 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
-		if err != nil {
-			return result, err
-		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(client, cr, false, false)
