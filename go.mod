@@ -6,6 +6,7 @@ require (
 	github.com/Azure/go-autorest/autorest/adal v0.9.13 // indirect
 	github.com/aws/aws-sdk-go v1.37.24
 	github.com/go-logr/logr v0.1.0
+	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
 	github.com/operator-framework/operator-sdk v0.18.2

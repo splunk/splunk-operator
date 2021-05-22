@@ -539,7 +539,15 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return ss, err
+	}
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	return ss, err
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.

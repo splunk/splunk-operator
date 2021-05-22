@@ -209,6 +209,9 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
 	}
 
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
 	return ss, err
 }
 
