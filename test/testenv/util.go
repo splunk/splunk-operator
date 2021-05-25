@@ -20,6 +20,8 @@ import (
 	"math/rand"
 	"os/exec"
 	"path"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -550,4 +552,39 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
+}
+
+// GetSubDirsOnPod returns subdirectory under given path on the given POD
+func GetSubDirsOnPod(deployment *Deployment, podName string, path string) ([]string, error) {
+	cmd := fmt.Sprintf("cd %s; ls -d */", path)
+	stdout, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	if err != nil {
+		return nil, err
+	}
+	dirList := strings.Fields(stdout)
+	// Directory are returned with trailing /. The below loop removes the trailing /
+	for i, dirName := range dirList {
+		dirList[i] = strings.TrimSuffix(dirName, "/")
+	}
+	return strings.Fields(stdout), err
+}
+
+// CompareStringSlices checks if two string slices are matching
+func CompareStringSlices(stringOne []string, stringTwo []string) bool {
+	if len(stringOne) != len(stringTwo) {
+		return false
+	}
+	sort.Strings(stringOne)
+	sort.Strings(stringTwo)
+	return reflect.DeepEqual(stringOne, stringTwo)
+}
+
+// CheckStringInSlice check if string is present in a slice
+func CheckStringInSlice(stringSlice []string, compString string) bool {
+	for _, item := range stringSlice {
+		if item == compString {
+			return true
+		}
+	}
+	return false
 }
