@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"os"
+	"path"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -99,8 +100,8 @@ func UploadFileToS3(dataBucket string, filename string, filepath string, file *o
 		uploader := s3manager.NewUploader(sess)
 		numBytes, err := uploader.Upload(&s3manager.UploadInput{
 			Bucket: aws.String(dataBucket),
-			Key:    aws.String(filename), // Name of the file to be saved
-			Body:   file,                 // File
+			Key:    aws.String(path.Join(filepath, filename)), // Name of the file to be saved
+			Body:   file,                                      // File
 		})
 		if err != nil {
 			logf.Log.Error(err, "Error in file upload")
