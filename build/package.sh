@@ -41,9 +41,9 @@ cat release-${VERSION}/splunk-operator-crds.yaml deploy/namespace.yaml > release
 echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
 yq w deploy/service_account.yaml metadata.namespace splunk-operator >> release-${VERSION}/splunk-operator-cluster.yaml
 echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/role.yaml metadata.namespace splunk-operator | yq w - kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
+yq w deploy/role.yaml kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
 echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/role_binding.yaml metadata.namespace splunk-operator | yq w - roleRef.kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
+yq w deploy/role_binding.yaml "subjects[0].namespace" splunk-operator | yq w - roleRef.kind ClusterRole | yq w - kind ClusterRoleBinding >> release-${VERSION}/splunk-operator-cluster.yaml
 cat deploy/cluster_role.yaml deploy/cluster_role_binding.yaml >> release-${VERSION}/splunk-operator-cluster.yaml
 echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
 yq w deploy/operator.yaml metadata.namespace splunk-operator | yq w - "spec.template.spec.containers[0].image" $IMAGE | yq w - "spec.template.spec.containers[0].env[0].value" "" | yq d - "spec.template.spec.containers[0].env[0].valueFrom" >> release-${VERSION}/splunk-operator-cluster.yaml
