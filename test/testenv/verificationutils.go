@@ -569,3 +569,12 @@ func VerifyAppFrameworkDeployment(standalone *enterprisev1.Standalone) {
 	}
 
 }
+
+// VerifyAppInstall verify that app is installed
+func VerifyAppInstall(deployment *Deployment, testenvInstance *TestEnv, ns string, podname string, apps []string) {
+	for _, appName := range apps {
+		status, _, err := GetAppStatus(deployment, podname, ns, appName)
+		gomega.Expect(status).Should(gomega.Equal("enabled"))
+		gomega.Expect(err).Should(gomega.Equal(""))
+	}
+}
