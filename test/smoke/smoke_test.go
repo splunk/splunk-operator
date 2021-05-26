@@ -65,7 +65,7 @@ var _ = Describe("Smoke test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -85,7 +85,7 @@ var _ = Describe("Smoke test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -112,7 +112,7 @@ var _ = Describe("Smoke test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -136,7 +136,7 @@ var _ = Describe("Smoke test", func() {
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -167,7 +167,7 @@ var _ = Describe("Smoke test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)

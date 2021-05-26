@@ -71,7 +71,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -97,7 +97,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
@@ -151,7 +151,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -173,7 +173,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
@@ -216,7 +216,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -235,7 +235,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
