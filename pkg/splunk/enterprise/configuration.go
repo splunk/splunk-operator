@@ -506,7 +506,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 
 	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
-	if spec.Volumes != nil && instanceType != SplunkMonitoringConsole {
+	if spec.Volumes != nil {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
 			for v := range spec.Volumes {
@@ -531,7 +531,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
-	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+	if spec.Defaults != "" {
 		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -718,10 +718,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
-		//Used pre-defined resource values for MC
-		if instanceType != SplunkMonitoringConsole {
-			podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
-		}
+		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
