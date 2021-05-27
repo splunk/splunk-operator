@@ -70,7 +70,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)

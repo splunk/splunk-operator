@@ -76,7 +76,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -111,7 +111,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
