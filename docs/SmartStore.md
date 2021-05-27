@@ -255,4 +255,4 @@ path = <remote_volume_path>
 remote.s3.encryption = sse-s3
 ```
 2. Apply the CR with the necessary & supported Smartstore and Index related configs
-3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps)
+3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps) (*Note: This can be combined with the previous step*)
