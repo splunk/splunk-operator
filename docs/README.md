@@ -10,7 +10,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Known Issues for the Splunk Operator](#known-issues-for-the-splunk-operator)
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
-* [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
+* [Creating Splunk Enterprise Deployments](#creating-a-splunk-enterprise-deployment)
 * [Securing Splunk Deployments in Kubernetes](Security.md)
 * [Contacting Support](#contacting-support)
 

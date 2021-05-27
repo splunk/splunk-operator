@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is recommended for Demo & Testing purposes.  For Production deployments of Splunk and the SmartStore feature, it is recommended to configure indexes and SmartStore in a Splunk App and distribute accordingly.*
+*NOTE: The below method is recommended as a temporary way of installing SmartStore configuration & indexes. In the upcoming releases, an enhanced App Installation method will be introduced which is expected to help install SmartStore indexes & configuration using Apps. The new approach, once released, will become the preferred method moving ahead*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
@@ -242,3 +242,16 @@ See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Ind
 | maxCacheSize | max_cache_size  | [cachemanager] |
 | evictionPolicy |eviction_policy  |[cachemanager] |
 | evictionPadding | eviction_padding  |[cachemanager] |
+
+## Additional configuration
+
+If there is a need to configure Smartstore or Index related configs in addition to the above, this can be achieved by including the additional configs via Apps:
+1. Create an App with the additional configuration
+For example, in order to set the remote S3 encryption scheme as `sse-s3`, create an app with the config in indexes.conf file under default/local sub-directory as follows:
+```
+[volume:\<remote_volume_name\>]]
+path = <remote_volume_path>
+remote.s3.encryption = sse-s3
+```
+2. Apply the CR with the necessary & supported Smartstore and Index related configs
+3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps)
