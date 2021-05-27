@@ -228,7 +228,7 @@ smartstore:
 
 See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf), and [server.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Serverconf) for more information about these configuration details.
 
-| Custome Resource Spec | Splunk Config| Splunk Stanza |
+| Custom Resource Spec | Splunk Config| Splunk Stanza |
 | :--- | :--- | :--- |
 | volumeName + remotePath | remotePath | [\<index name\>], [default] in indexes.conf |
 | maxGlobalDataSizeMB | maxGlobalDataSizeMB  | [\<index name\>], [default] in indexes.conf |
@@ -245,7 +245,8 @@ See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Ind
 
 ## Additional configuration
 
-If there is a need to configure Smartstore or Index related configs in addition to the above, this can be achieved by including the additional configs via Apps:
+There are SmartStore/Index config settings that are not covered by the Custom Resource SmartStore spec.
+If there is a need to configure additional settings, this can be achieved by configuring the same via Apps:
 1. Create an App with the additional configuration
 For example, in order to set the remote S3 encryption scheme as `sse-s3`, create an app with the config in indexes.conf file under default/local sub-directory as follows:
 ```
