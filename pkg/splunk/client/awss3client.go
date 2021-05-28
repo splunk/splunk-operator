@@ -2,6 +2,8 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -20,10 +22,21 @@ type AWSS3Client struct {
 	AWSSecretAccessKey string
 	Prefix             string
 	StartAfter         string
+	Endpoint           string
+}
+
+// regex to extract the region from the s3 endpoint
+var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
+
+//getRegion extracts the region from the endpoint field
+func getRegion(endpoint string) string {
+	pattern := regexp.MustCompile(regionRegex)
+	return pattern.FindStringSubmatch(endpoint)[1]
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(region string, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string) S3Client {
+func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string) S3Client {
+	region := getRegion(endpoint)
 	return &AWSS3Client{
 		Region:             region,
 		BucketName:         bucketName,
@@ -31,6 +44,7 @@ func NewAWSS3Client(region string, bucketName string, accessKeyID string, secret
 		AWSSecretAccessKey: secretAccessKey,
 		Prefix:             prefix,
 		StartAfter:         startAfter,
+		Endpoint:           endpoint,
 	}
 }
 
@@ -89,4 +103,14 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	}
 
 	return s3Resp, nil
+}
+
+// GetInitContainerImage returns the initContainer image to be used with this s3 client
+func (awsclient *AWSS3Client) GetInitContainerImage() string {
+	return ("amazon/aws-cli")
+}
+
+// GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
+func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
+	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s/%s", bucket, path), fmt.Sprintf("%s/%s", appMnt, appSrcName)})
 }

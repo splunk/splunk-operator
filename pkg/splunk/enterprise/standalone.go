@@ -177,6 +177,9 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
 
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
 	return ss, nil
 }
 

@@ -41,6 +41,9 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
+	// init container name
+	initContainerTemplate = "%s-init-%d-%s"
+
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
@@ -79,6 +82,12 @@ const (
 	protoHTTP  = "http"
 	protoHTTPS = "https"
 	protoTCP   = "tcp"
+
+	// Volume name for shared volume between init and splunk containers
+	appVolumeMntName = "init-apps"
+
+	// Mount location for the shared app package volume
+	appBktMnt = "/init-apps/"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

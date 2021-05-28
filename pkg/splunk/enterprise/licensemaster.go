@@ -134,7 +134,15 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 
 // getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.LicenseMaster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
+	if err != nil {
+		return ss, err
+	}
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	return ss, err
 }
 
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
