@@ -42,7 +42,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(&cr.Spec)
+	err := validateSearchHeadClusterSpec(cr)
 	if err != nil {
 		return result, err
 	}
@@ -551,15 +551,17 @@ func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
-func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) error {
-	if spec.Replicas < 3 {
-		spec.Replicas = 3
+func validateSearchHeadClusterSpec(cr *enterprisev1.SearchHeadCluster) error {
+	if cr.Spec.Replicas < 3 {
+		cr.Spec.Replicas = 3
 	}
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, false)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		if err != nil {
+			return err
+		}
 	}
 
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

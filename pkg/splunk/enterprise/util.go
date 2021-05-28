@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,7 +65,13 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 	bucket := strings.Split(vol.Path, "/")[0]
 
 	//Get the prefix from the "path" field
-	prefix := strings.TrimPrefix(vol.Path, bucket+"/") + location
+	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
+
+	// Join takes care of merging two paths and returns a clean result
+	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
+	prefix := filepath.Join(basePrefix, location) + "/"
+
+	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
 	return getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint), nil
 }
@@ -410,10 +417,10 @@ func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]e
 
 	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
 		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
-		for _, appDeployInfo := range appDeployInfoList {
+		for idx := range appDeployInfoList {
 			// Modify the app status if the state and status matches
-			if appDeployInfo.RepoState == repoState && appDeployInfo.DeployStatus == oldDeployStatus {
-				appDeployInfo.DeployStatus = newDeployStatus
+			if appDeployInfoList[idx].RepoState == repoState && appDeployInfoList[idx].DeployStatus == oldDeployStatus {
+				appDeployInfoList[idx].DeployStatus = newDeployStatus
 			}
 		}
 
@@ -427,32 +434,31 @@ func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]e
 }
 
 // setStateAndStatusForAppDeployInfo sets the state and status for an App
-func setStateAndStatusForAppDeployInfo(appDeployInfo enterprisev1.AppDeploymentInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) {
+func setStateAndStatusForAppDeployInfo(appDeployInfo *enterprisev1.AppDeploymentInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) {
 	appDeployInfo.RepoState = repoState
 	appDeployInfo.DeployStatus = deployStatus
 }
 
 // setStateAndStatusForAppDeployInfoList sets the state and status for a given list of Apps
-// Do not change the list lenth in this. ToDo: sgontla: just to be safe return the list
-func setStateAndStatusForAppDeployInfoList(appDeployList []enterprisev1.AppDeploymentInfo, state enterprisev1.AppRepoState, status enterprisev1.AppDeploymentStatus) bool {
+func setStateAndStatusForAppDeployInfoList(appDeployList []enterprisev1.AppDeploymentInfo, state enterprisev1.AppRepoState, status enterprisev1.AppDeploymentStatus) (bool, []enterprisev1.AppDeploymentInfo) {
 	var modified bool
-	for _, appInfo := range appDeployList {
-		setStateAndStatusForAppDeployInfo(appInfo, state, status)
+	for idx := range appDeployList {
+		setStateAndStatusForAppDeployInfo(&appDeployList[idx], state, status)
 		modified = true
 	}
 
-	return modified
+	return modified, appDeployList
 }
 
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
-// clinet and cr are used when we put the glue logic to hand-off to the side car
+// client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	appDeployContext *enterprisev1.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterprisev1.AppFrameworkSpec) error {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	scopedLog := log.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	var err error
 
-	scopedLog.Info("received App listing for %d app sources", len(remoteObjListingMap))
+	scopedLog.Info("received App listing", "for App sources", len(remoteObjListingMap))
 	if remoteObjListingMap == nil || len(remoteObjListingMap) == 0 {
 		scopedLog.Error(nil, "remoteObjectList is empty. Any apps that are already deployed will be disabled")
 	}
@@ -477,13 +483,16 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			!checkIfAppSrcExistsWithRemoteListing(appSrc, remoteObjListingMap) {
 			scopedLog.Info("App change", "deleting/disabling all the apps for App source: ", appSrc, "Reason: App source is mising in config or remote listing")
 			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
-			if setStateAndStatusForAppDeployInfoList(curAppDeployList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending) {
+			var modified bool
+
+			modified, appSrcDeploymentInfo.AppDeploymentInfoList = setStateAndStatusForAppDeployInfoList(curAppDeployList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+
+			if modified {
 				appDeployContext.IsDeploymentInProgress = true
+				// Finally update the Map entry with latest info
+				appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 			}
 		}
-
-		// Finally update the Map entry with latest info
-		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 	}
 
 	// 2. Go through each AppSrc from the remote listing
@@ -495,15 +504,15 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
 				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
-					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing")
-					setStateAndStatusForAppDeployInfo(currentList[appIdx], enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
+					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 					appDeployContext.IsDeploymentInProgress = true
 				}
 			}
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
-		if createOrUpdateAppSrcDeploymentInfo(&appSrcDeploymentInfo, s3Response.Objects) {
+		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
 			appDeployContext.IsDeploymentInProgress = true
 		}
 
@@ -533,8 +542,8 @@ func isAppExtentionValid(receivedKey string) bool {
 	}
 }
 
-// createOrUpdateAppSrcDeploymentInfo  modifies the App deployment status as perceived from the remote object listing
-func createOrUpdateAppSrcDeploymentInfo(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
+// AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
+func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
 	scopedLog := log.WithName("createOrUpdateAppSrcDeploymentInfo").WithValues("Called with length: ", len(remoteS3ObjList))
 
 	var found bool
@@ -555,18 +564,19 @@ func createOrUpdateAppSrcDeploymentInfo(appSrcDeploymentInfo *enterprisev1.AppSr
 
 		// Now update App status as seen in the remote listing
 		found = false
-		for _, appDeployInfo = range appSrcDeploymentInfo.AppDeploymentInfoList {
-			if appDeployInfo.AppName == appName {
+		appList := appSrcDeploymentInfo.AppDeploymentInfoList
+		for idx := range appList {
+			if appList[idx].AppName == appName {
 				found = true
-				if appDeployInfo.ObjectHash != *remoteObj.Etag || appDeployInfo.RepoState == enterprisev1.RepoStateDeleted {
+				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterprisev1.RepoStateDeleted {
 					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
-					appDeployInfo.ObjectHash = *remoteObj.Etag
-					appDeployInfo.DeployStatus = enterprisev1.DeployStatusPending
+					appList[idx].ObjectHash = *remoteObj.Etag
+					appList[idx].DeployStatus = enterprisev1.DeployStatusPending
 
 					// Make the state active for an app that was deleted earlier, and got activated again
-					if appDeployInfo.RepoState == enterprisev1.RepoStateDeleted {
+					if appList[idx].RepoState == enterprisev1.RepoStateDeleted {
 						scopedLog.Info("App change", "enabling the App name: ", appName, "that was previously disabled/deleted")
-						appDeployInfo.RepoState = enterprisev1.RepoStateActive
+						appList[idx].RepoState = enterprisev1.RepoStateActive
 					}
 					appChangesDetected = true
 				}
@@ -583,10 +593,10 @@ func createOrUpdateAppSrcDeploymentInfo(appSrcDeploymentInfo *enterprisev1.AppSr
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterprisev1.RepoStateActive
 			appDeployInfo.DeployStatus = enterprisev1.DeployStatusPending
-			appChangesDetected = true
 
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
+			appChangesDetected = true
 		}
 	}
 

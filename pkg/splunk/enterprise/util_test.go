@@ -420,7 +420,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unexpected app status. Error: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unable to delete/disable Apps, when the AppSource is deleted. Unexpected app status. Error: %v", err)
 	}
@@ -447,14 +447,14 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 	appFramworkConf.AppSources[0].Name = tmpAppSrcName
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unable to delete/disable Apps, when the AppSource is deleted from the config. Unexpected app status. Error: %v", err)
 	}
 
 	// Test-5: Changing the AppSource deployment info should change for all the Apps in the list
 	changeAppSrcDeployInfoStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusInProgress)
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
 	if err != nil {
 		t.Errorf("Invalid AppSrc deployment info detected. Error: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unable to delete/disable an app when the App is deleted from remote store. Error: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unable to detect the change, when the object changed. Error: %v", err)
 	}
@@ -501,7 +501,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
 
-	err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
+	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 	if err != nil {
 		t.Errorf("Unable to delete/disable the Apps when the Apps are deleted from remote store. Error: %v", err)
 	}
@@ -523,12 +523,17 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
-	}
-	markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
-	for appSrc := range appDeployContext.AppsSrcDeployStatus {
-		err = validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusComplete)
-		if err == nil {
+
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+
+		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
+
+		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusComplete)
+		if err != nil {
 			t.Errorf("Unable to change the Apps status to complete, once the changes are reflecting on the Pod. Error: %v", err)
+		}
+		if expectedMatchCount != matchCount {
+			t.Errorf("App status change failed. Expected count %v, returned count %v", expectedMatchCount, matchCount)
 		}
 	}
 
@@ -536,15 +541,19 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
-	}
-	markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
-	for appSrc := range appDeployContext.AppsSrcDeployStatus {
-		err = validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusComplete)
+
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+
+		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
+
+		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusComplete)
 		if err != nil {
 			t.Errorf("Unable to delete/disable an app when the App is deleted from remote store. Error: %v", err)
 		}
+		if expectedMatchCount != matchCount {
+			t.Errorf("App status change failed. Expected count %v, returned count %v", expectedMatchCount, matchCount)
+		}
 	}
-
 }
 
 func TestIsAppExtentionValid(t *testing.T) {
@@ -581,18 +590,35 @@ func createRemoteObjectList(etag string, key string, Size int64, lastModified *t
 	return remoteObjList
 }
 
-func validateAppSrcDeployInfoByStateAndStatus(appSrc string, appSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) error {
+func validateAppSrcDeployInfoByStateAndStatus(appSrc string, appSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) (int, error) {
+	var matchCount int
 	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
 		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
 		for _, appDeployInfo := range appDeployInfoList {
 			// Check if the app status is as expected
 			if appDeployInfo.RepoState == repoState && appDeployInfo.DeployStatus != deployStatus {
-				return fmt.Errorf("Invalid app status for appSrc %s, appName: %s", appSrc, appDeployInfo.AppName)
+				return matchCount, fmt.Errorf("Invalid app status for appSrc %s, appName: %s", appSrc, appDeployInfo.AppName)
 			}
+			matchCount++
 		}
 	} else {
-		return fmt.Errorf("Missing app source %s, shouldn't not happen", appSrc)
+		return matchCount, fmt.Errorf("Missing app source %s, shouldn't not happen", appSrc)
 	}
 
-	return nil
+	return matchCount, nil
+}
+
+func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) int {
+	var matchCount int
+	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
+		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
+		for _, appDeployInfo := range appDeployInfoList {
+			// Check if the app status is as expected
+			if appDeployInfo.RepoState == repoState && appDeployInfo.DeployStatus == deployStatus {
+				matchCount++
+			}
+		}
+	}
+
+	return matchCount
 }

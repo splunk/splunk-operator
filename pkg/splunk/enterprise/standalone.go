@@ -45,7 +45,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	}
 
 	// validate and updates defaults for CR
-	err := validateStandaloneSpec(&cr.Spec)
+	err := validateStandaloneSpec(cr)
 	if err != nil {
 		return result, err
 	}
@@ -184,20 +184,24 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
-	if spec.Replicas == 0 {
-		spec.Replicas = 1
+func validateStandaloneSpec(cr *enterprisev1.Standalone) error {
+	if cr.Spec.Replicas == 0 {
+		cr.Spec.Replicas = 1
 	}
 
-	err := ValidateSplunkSmartstoreSpec(&spec.SmartStore)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		if err != nil {
+			return err
+		}
 	}
 
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

@@ -93,7 +93,7 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseMasterSpec(&cr.Spec); err != nil {
+			if err := validateLicenseMasterSpec(&cr); err != nil {
 				t.Errorf("validateLicenseMasterSpec() returned error: %v", err)
 			}
 			return getLicenseMasterStatefulSet(c, &cr)

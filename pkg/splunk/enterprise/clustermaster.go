@@ -182,14 +182,19 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
 func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
-	err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
-	if err != nil {
-		return err
+
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, false)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		if err != nil {
+			return err
+		}
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
