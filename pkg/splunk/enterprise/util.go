@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
@@ -35,17 +37,19 @@ import (
 var log = logf.Log.WithName("splunk.enterprise")
 
 // GetRemoteStorageClient returns the corresponding S3Client
-func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string) (splclient.S3Client, error) {
+func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn func(string, string, string, *bool) interface{}) (splclient.SplunkS3Client, error) {
 
 	scopedLog := log.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	s3Client := splclient.SplunkS3Client{}
 	//use the provider name to get the corresponding function pointer
-	getClient, _ := splclient.S3Clients[vol.Provider]
+	getClientWrapper := splclient.S3Clients[vol.Provider]
+	getClient := getClientWrapper.GetS3Client
 
 	appSecretRef := vol.SecretRef
 	s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
 	if err != nil {
-		return nil, err
+		return s3Client, err
 	}
 
 	// Get access keys
@@ -53,12 +57,12 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 	secretAccessKey := string(s3ClientSecret.Data["s3_secret_key"])
 
 	if accessKeyID == "" {
-		scopedLog.Error(err, "accessKey missing")
-		return nil, err
+		err = fmt.Errorf("accessKey missing")
+		return s3Client, err
 	}
 	if secretAccessKey == "" {
-		scopedLog.Error(err, "S3 Secret Key is missing")
-		return nil, err
+		err = fmt.Errorf("S3 Secret Key is missing")
+		return s3Client, err
 	}
 
 	// Get the bucket name form the "path" field
@@ -66,14 +70,19 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//Get the prefix from the "path" field
 	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
-
 	// Join takes care of merging two paths and returns a clean result
 	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
 	prefix := filepath.Join(basePrefix, location) + "/"
 
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
-	return getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint), nil
+	s3Client.Client, err = getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint, fn)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get the S3 client")
+		return s3Client, err
+	}
+
+	return s3Client, nil
 }
 
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
@@ -337,8 +346,63 @@ func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, 
 	return err
 }
 
+// S3ClientManager is used to manage all the S3 storage clients and their connections.
+type S3ClientManager struct {
+	client          splcommon.ControllerClient
+	cr              splcommon.MetaObject
+	appFrameworkRef *enterprisev1.AppFrameworkSpec
+	vol             *enterprisev1.VolumeSpec
+	location        string
+	initFn          func(string, string, string, *bool) interface{}
+	getS3Client     func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+		appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+		location string, fp func(string, string, string, *bool) interface{}) (splclient.SplunkS3Client, error)
+}
+
+// GetAppsList gets the apps list
+func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
+	var s3Response splclient.S3Response
+
+	c, err := s3mgr.getS3Client(s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	if err != nil {
+		return s3Response, err
+	}
+
+	s3Response, err = c.Client.GetAppsList()
+	if err != nil {
+		return s3Response, err
+	}
+	return s3Response, nil
+}
+
+// GetVolume gets the volume defintion for an app source
+func GetVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
+	var volName string
+	var index int
+	var err error
+	var vol enterprisev1.VolumeSpec
+
+	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// get the volume spec from the volume name
+	if appSource.VolName != "" {
+		volName = appSource.VolName
+	} else {
+		volName = appFrameworkRef.Defaults.VolName
+	}
+
+	index, err = checkIfVolumeExists(appFrameworkRef.VolList, volName)
+	if err != nil {
+		scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
+		return vol, err
+	}
+
+	vol = appFrameworkRef.VolList[index]
+	return vol, err
+}
+
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
-func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) map[string]splclient.S3Response {
+func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
 	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -349,45 +413,43 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var s3Response splclient.S3Response
 	var vol enterprisev1.VolumeSpec
 	var err error
-	var s3Client splclient.S3Client
-	var index int
+	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		var volName string
-		// get the volume spec from the volume name
-		if appSource.VolName != "" {
-			volName = appSource.VolName
-		} else {
-			volName = appFrameworkRef.Defaults.VolName
-		}
-
-		index, err = checkIfVolumeExists(appFrameworkRef.VolList, volName)
+		vol, err = GetVolume(client, cr, appSource, appFrameworkRef)
 		if err != nil {
-			scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
+			allSuccess = false
 			continue
 		}
-		vol = appFrameworkRef.VolList[index]
 
-		//get the corresponding S3 client
-		s3Client, err = GetRemoteStorageClient(client, cr, appFrameworkRef, &vol, appSource.Location)
-		if err != nil {
-			// move on to the next appSource if we are not able to get the rquired client
-			scopedLog.Error(err, "Unable to get remote storage client", "appSource", appSource.Name)
-			continue
+		initFunc := splclient.S3Clients[vol.Provider].GetInitFunc
+		s3ClientMgr := S3ClientManager{
+			client:          client,
+			cr:              cr,
+			appFrameworkRef: appFrameworkRef,
+			vol:             &vol,
+			location:        appSource.Location,
+			initFn:          initFunc,
+			getS3Client:     GetRemoteStorageClient,
 		}
 
 		// Now, get the apps list from remote storage
-		s3Response, err = s3Client.GetAppsList()
+		s3Response, err = s3ClientMgr.GetAppsList()
 		if err != nil {
 			// move on to the next appSource if we are not able to get apps list
 			scopedLog.Error(err, "Unable to get apps list", "appSource", appSource.Name)
+			allSuccess = false
 			continue
 		}
 
 		sourceToAppListMap[appSource.Name] = s3Response
 	}
 
-	return sourceToAppListMap
+	if allSuccess == false {
+		err = fmt.Errorf("Unable to get apps list from remote storage list for all the apps")
+	}
+
+	return sourceToAppListMap, err
 }
 
 // checkIfAnAppIsActiveOnRemoteStore checks if the App is listed as part of the AppSrc listing
@@ -666,8 +728,9 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			}
 			appRepoVol := appFrameworkConfig.VolList[volSpecPos]
 
+			initFunc := splclient.S3Clients[appRepoVol.Provider].GetInitFunc
 			// Use the provider name to get the corresponding function pointer
-			s3Client, err := GetRemoteStorageClient(client, cr, appFrameworkConfig, &appRepoVol, appSrc.Location)
+			s3Client, err := GetRemoteStorageClient(client, cr, appFrameworkConfig, &appRepoVol, appSrc.Location, initFunc)
 			if err != nil {
 				// move on to the next appSource if we are not able to get the required client
 				scopedLog.Info("Invalid Remote Storage Client", "appRepoVol.Name", appRepoVol.Name, "err", err)
@@ -685,10 +748,10 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 
 			// Setup init container
 			initContainerSpec := corev1.Container{
-				Image:           s3Client.GetInitContainerImage(),
+				Image:           s3Client.Client.GetInitContainerImage(),
 				ImagePullPolicy: "IfNotPresent",
 				Name:            initContainerName,
-				Args:            s3Client.GetInitContainerCmd(appS3Endpoint, appBkt, appSrcPath, appSrcName, appBktMnt),
+				Args:            s3Client.Client.GetInitContainerCmd(appS3Endpoint, appBkt, appSrcPath, appSrcName, appBktMnt),
 				Env: []corev1.EnvVar{
 					{
 						Name: "AWS_ACCESS_KEY_ID",
@@ -725,4 +788,25 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, initContainerSpec)
 		}
 	}
+}
+
+// ConvertS3Response converts S3 Response to a mock client response
+func ConvertS3Response(s3Response splclient.S3Response) (spltest.MockAWSS3Client, error) {
+	scopedLog := log.WithName("ConvertS3Response")
+
+	var mockResponse spltest.MockAWSS3Client
+
+	tmp, err := json.Marshal(s3Response)
+	if err != nil {
+		scopedLog.Error(err, "Unable to marshal s3 response")
+		return mockResponse, err
+	}
+
+	err = json.Unmarshal(tmp, &mockResponse)
+	if err != nil {
+		scopedLog.Error(err, "Unable to unmarshal s3 response")
+		return mockResponse, err
+	}
+
+	return mockResponse, err
 }

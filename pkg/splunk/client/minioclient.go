@@ -12,6 +12,11 @@ import (
 // blank assignment to verify that MinioClient implements S3Client
 var _ S3Client = &MinioClient{}
 
+// SplunkMinioClient is an interface to Minio S3 client
+type SplunkMinioClient interface {
+	ListObjects(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+}
+
 // MinioClient is a client to implement S3 specific APIs
 type MinioClient struct {
 	BucketName        string
@@ -20,10 +25,28 @@ type MinioClient struct {
 	Prefix            string
 	StartAfter        string
 	Endpoint          string
+	Client            SplunkMinioClient
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string) S3Client {
+func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn func(string, string, string, *bool) interface{}) (S3Client, error) {
+	var isNotInTestContext bool
+	var s3SplunkClient SplunkMinioClient
+	var err error
+
+	region := getRegion(endpoint)
+	cl := fn(region, accessKeyID, secretAccessKey, &isNotInTestContext)
+	if cl == nil {
+		err = fmt.Errorf("Failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	if isNotInTestContext == true {
+		s3SplunkClient = cl.(*minio.Client)
+	} else {
+		s3SplunkClient = cl.(SplunkMinioClient)
+	}
+
 	return &MinioClient{
 		BucketName:        bucketName,
 		S3AccessKeyID:     accessKeyID,
@@ -31,16 +54,23 @@ func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey strin
 		Prefix:            prefix,
 		StartAfter:        startAfter,
 		Endpoint:          endpoint,
-	}
+		Client:            s3SplunkClient,
+	}, nil
 }
 
 //RegisterMinioClient will add the corresponding function pointer to the map
 func RegisterMinioClient() {
-	S3Clients["minio"] = NewMinioClient
+	wrapperObject := GetS3ClientWrapper{GetS3Client: NewMinioClient, GetInitFunc: InitMinioClientWrapper}
+	S3Clients["minio"] = wrapperObject
+}
+
+// InitMinioClientWrapper is a wrapper around InitMinioClientSession
+func InitMinioClientWrapper(appS3Endpoint string, accessKeyID string, secretAccessKey string, isNotInTestContext *bool) interface{} {
+	return InitMinioClientSession(appS3Endpoint, accessKeyID, secretAccessKey, isNotInTestContext)
 }
 
 // InitMinioClientSession initializes and returns a client session object
-func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAccessKey string, isNotInTestContext *bool) (*minio.Client, error) {
+func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAccessKey string, isNotInTestContext *bool) SplunkMinioClient {
 	scopedLog := log.WithName("InitMinioClientSession")
 	*isNotInTestContext = true
 
@@ -54,7 +84,7 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 	} else {
 		// Unsupported endpoint
 		scopedLog.Info("Unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
-		return nil, nil
+		return nil
 	}
 
 	// New returns an Minio compatible client object. API compatibility (v2 or v4) is automatically
@@ -66,9 +96,10 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 	})
 	if err != nil {
 		scopedLog.Info("Error creating new Minio Client Session", "err", err)
+		return nil
 	}
 
-	return s3Client, err
+	return s3Client
 }
 
 // GetAppsList get the list of apps from remote storage
@@ -77,14 +108,7 @@ func (client *MinioClient) GetAppsList() (S3Response, error) {
 
 	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName)
 	s3Resp := S3Response{}
-	appS3Endpoint := client.Endpoint
-
-	isNotInTestContext := true
-	s3Client, err := InitMinioClientSession(appS3Endpoint, client.S3AccessKeyID, client.S3SecretAccessKey, &isNotInTestContext)
-	if err != nil {
-		scopedLog.Info("Error creating new Minio Client Session", "err", err)
-		return s3Resp, err
-	}
+	s3Client := client.Client
 
 	// Create a bucket list command for all files in bucket
 	opts := minio.ListObjectsOptions{
