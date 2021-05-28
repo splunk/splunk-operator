@@ -240,7 +240,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr.Spec); err != nil {
+			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getMonitoringConsoleStatefulSet(c, &cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, "splunk-test-secret")

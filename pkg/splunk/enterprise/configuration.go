@@ -882,25 +882,24 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 		return nil
 	}
 
-	scopedLog := log.WithName("ValidateAppFrameworkSpec").WithValues(
-		"localScope", localScope)
+	scopedLog := log.WithName("ValidateAppFrameworkSpec")
 
 	// Todo: sgontla: Enable later. For now, allowing multiple volumes and app sources for UT purpose
 	if len(appFramework.VolList) > 1 || len(appFramework.AppSources) > 2 {
 		//return fmt.Errorf("Invalid App Framework config. Only one Volume, and a max. of two App sources supported")
 	}
 
-	scopedLog.Info("Validating app framework spec")
+	scopedLog.Info("configCheck", "scope", localScope)
 
 	// Todo: sgontla: Best place to store the final value as part of the status, so that the config change detection will be easy
 	if appFramework.AppsRepoPollInterval == 0 {
-		scopedLog.Error(err, "AppsRepoPollInterval is not configured. Setting it to the default value of %d seconds", defaultAppsRepoPollInterval)
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", defaultAppsRepoPollInterval)
 		appFramework.AppsRepoPollInterval = defaultAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
-		scopedLog.Error(err, "AppsRepoPollInterval configured value %d is too small. Setting it to the default min. value of %d seconds", appFramework.AppsRepoPollInterval, minAppsRepoPollInterval)
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", minAppsRepoPollInterval)
 		appFramework.AppsRepoPollInterval = minAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
-		scopedLog.Error(err, "AppsRepoPollInterval configured value %d is too high. Setting it to the default max. value of %d seconds", appFramework.AppsRepoPollInterval, minAppsRepoPollInterval)
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", maxAppsRepoPollInterval, "seconds", nil)
 		appFramework.AppsRepoPollInterval = maxAppsRepoPollInterval
 	}
 

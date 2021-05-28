@@ -41,7 +41,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
-	err := validateLicenseMasterSpec(&cr.Spec)
+	err := validateLicenseMasterSpec(cr)
 	if err != nil {
 		return result, err
 	}
@@ -146,12 +146,14 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 }
 
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseMasterSpec(spec *enterprisev1.LicenseMasterSpec) error {
+func validateLicenseMasterSpec(cr *enterprisev1.LicenseMaster) error {
 
-	err := ValidateAppFrameworkSpec(&spec.AppFrameworkConfig, true)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		if err != nil {
+			return err
+		}
 	}
 
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

@@ -532,7 +532,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr.Spec); err != nil {
+			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getSearchHeadStatefulSet(c, &cr)
@@ -589,7 +589,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr.Spec); err != nil {
+			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getDeployerStatefulSet(c, &cr)
