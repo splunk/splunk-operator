@@ -538,7 +538,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	splclient.RegisterS3Client("aws")
 
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
 	StorageClass := "STANDARD"
