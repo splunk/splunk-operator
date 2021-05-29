@@ -232,7 +232,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
 	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.Now().Location())
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
 
 	mockAwsHandler := spltest.MockAWSS3Handler{}
 
@@ -374,7 +374,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	Keys := []string{"admin_app.tgz"}
 	Sizes := []int64{10}
 	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.Now().Location())
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
 
 	mockAwsHandler := spltest.MockAWSS3Handler{}
 

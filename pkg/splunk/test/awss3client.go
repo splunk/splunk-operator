@@ -65,7 +65,23 @@ func (c *MockAWSS3Handler) CheckAwsS3Response(t *testing.T, testMethod string) {
 	for appSourceName, gotObjects := range c.GotSourceAppListResponseMap {
 		wantObjects := c.WantSourceAppListResponseMap[appSourceName]
 		if !reflect.DeepEqual(gotObjects.Objects, wantObjects.Objects) {
-			t.Errorf("%s GotResponse[%s]=%v; want %v", testMethod, appSourceName, gotObjects.Objects, wantObjects.Objects)
+			for n, gotObject := range gotObjects.Objects {
+				if *gotObject.Etag != *wantObjects.Objects[n].Etag {
+					t.Errorf("%s GotResponse[%s] Etag=%s; want %s", testMethod, appSourceName, *gotObject.Etag, *wantObjects.Objects[n].Etag)
+				}
+				if *gotObject.Key != *wantObjects.Objects[n].Key {
+					t.Errorf("%s GotResponse[%s] Key=%s; want %s", testMethod, appSourceName, *gotObject.Key, *wantObjects.Objects[n].Key)
+				}
+				if *gotObject.StorageClass != *wantObjects.Objects[n].StorageClass {
+					t.Errorf("%s GotResponse[%s] StorageClass=%s; want %s", testMethod, appSourceName, *gotObject.StorageClass, *wantObjects.Objects[n].StorageClass)
+				}
+				if *gotObject.Size != *wantObjects.Objects[n].Size {
+					t.Errorf("%s GotResponse[%s] Size=%d; want %d", testMethod, appSourceName, *gotObject.Size, *wantObjects.Objects[n].Size)
+				}
+				if *gotObject.LastModified != *wantObjects.Objects[n].LastModified {
+					t.Errorf("%s GotResponse[%s] LastModified=%s; want %s", testMethod, appSourceName, gotObject.LastModified.String(), wantObjects.Objects[n].LastModified.String())
+				}
+			}
 		}
 	}
 }
