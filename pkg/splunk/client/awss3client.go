@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package client
 
 import (
@@ -14,6 +28,11 @@ import (
 // blank assignment to verify that AWSS3Client implements S3Client
 var _ S3Client = &AWSS3Client{}
 
+// SplunkAWSS3Client is an interface to AWS S3 client
+type SplunkAWSS3Client interface {
+	ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
+}
+
 // AWSS3Client is a client to implement S3 specific APIs
 type AWSS3Client struct {
 	Region             string
@@ -23,20 +42,55 @@ type AWSS3Client struct {
 	Prefix             string
 	StartAfter         string
 	Endpoint           string
+	Client             SplunkAWSS3Client
 }
 
 // regex to extract the region from the s3 endpoint
 var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
 
-//getRegion extracts the region from the endpoint field
-func getRegion(endpoint string) string {
+// GetRegion extracts the region from the endpoint field
+func GetRegion(endpoint string) string {
 	pattern := regexp.MustCompile(regionRegex)
 	return pattern.FindStringSubmatch(endpoint)[1]
 }
 
+// InitAWSClientWrapper is a wrapper around InitClientSession
+func InitAWSClientWrapper(region, accessKeyID, secretAccessKey string) interface{} {
+	return InitAWSClientSession(region, accessKeyID, secretAccessKey)
+}
+
+// InitAWSClientSession initializes and returns a client session object
+func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+	scopedLog := log.WithName("InitAWSClientSession")
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(region),
+		Credentials: credentials.NewStaticCredentials(
+			accessKeyID,     // id
+			secretAccessKey, // secret
+			"")},            // token
+	)
+	if err != nil {
+		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
+		return nil
+	}
+
+	return s3.New(sess)
+}
+
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string) S3Client {
-	region := getRegion(endpoint)
+func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+	var s3SplunkClient SplunkAWSS3Client
+	var err error
+	region := GetRegion(endpoint)
+	cl := fn(region, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("Failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(*s3.S3)
+
 	return &AWSS3Client{
 		Region:             region,
 		BucketName:         bucketName,
@@ -45,12 +99,14 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 		Prefix:             prefix,
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
-	}
+		Client:             s3SplunkClient,
+	}, nil
 }
 
-//RegisterAWSS3Client will add the corresponding function pointer to the map
+// RegisterAWSS3Client will add the corresponding function pointer to the map
 func RegisterAWSS3Client() {
-	S3Clients["aws"] = NewAWSS3Client
+	wrapperObject := GetS3ClientWrapper{GetS3Client: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
+	S3Clients["aws"] = wrapperObject
 }
 
 // GetAppsList get the list of apps from remote storage
@@ -60,21 +116,6 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
 	s3Resp := S3Response{}
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(awsclient.Region),
-		Credentials: credentials.NewStaticCredentials(
-			awsclient.AWSAccessKeyID,     // id
-			awsclient.AWSSecretAccessKey, // secret
-			"")},                         // token
-	)
-	if err != nil {
-		scopedLog.Error(err, "Unable to create a new aws s3 session", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
-	}
-
-	// Create S3 service client
-	svc := s3.New(sess)
-
 	options := &s3.ListObjectsV2Input{
 		Bucket:     aws.String(awsclient.BucketName),
 		Prefix:     aws.String(awsclient.Prefix),
@@ -83,8 +124,8 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 		Delimiter:  aws.String("/"),                  // limit the listing to 1 level only
 	}
 
-	// List the bucket contents
-	resp, err := svc.ListObjectsV2(options)
+	client := awsclient.Client
+	resp, err := client.ListObjectsV2(options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName)
 		return s3Resp, err

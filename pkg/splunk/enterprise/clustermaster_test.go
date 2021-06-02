@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -423,8 +424,8 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	}
 }
 
-func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
-	cr := enterprisev1.ClusterMaster{
+func TestAppFrameworkApplyClusterMasterShouldFail(t *testing.T) {
+	cm := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -432,7 +433,12 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
 				},
 				AppSources: []enterprisev1.AppSourceSpec{
 					{Name: "adminApps",
@@ -455,10 +461,219 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 					},
 				},
 			},
-			// TODO gaurav: Remove this dependency on mock setting and try to use
-			// mock client for S3 responses.
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-				Mock: true,
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	client.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// ApplyClusterMaster below should return error as we are not using mock AWS client here
+	// and hence it will call the AWS SDK library to fetch the bucket content which will obviously
+	// return error.
+	_, err = ApplyClusterMaster(client, &cm)
+	if err == nil {
+		t.Errorf("ApplyClusterMaster should have returned error here.")
+	}
+}
+
+func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+	cm := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterprisev1.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	client.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	splclient.RegisterS3Client("aws")
+
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
+	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
+	Sizes := []int64{10, 20, 30}
+	StorageClass := "STANDARD"
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
+
+	mockAwsHandler := spltest.MockAWSS3Handler{}
+
+	mockAwsObjects := []spltest.MockAWSS3Client{
+		{
+			Objects: []*spltest.MockAWSS3Object{
+				{
+					Etag:         &Etags[0],
+					Key:          &Keys[0],
+					LastModified: &randomTime,
+					Size:         &Sizes[0],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockAWSS3Object{
+				{
+					Etag:         &Etags[1],
+					Key:          &Keys[1],
+					LastModified: &randomTime,
+					Size:         &Sizes[1],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockAWSS3Object{
+				{
+					Etag:         &Etags[2],
+					Key:          &Keys[2],
+					LastModified: &randomTime,
+					Size:         &Sizes[2],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+	}
+
+	appFrameworkRef := cm.Spec.AppFrameworkConfig
+
+	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
+
+	var vol enterprisev1.VolumeSpec
+	var allSuccess bool = true
+	for index, appSource := range appFrameworkRef.AppSources {
+
+		vol, err = GetVolume(client, &cm, appSource, &appFrameworkRef)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		// Update the GetS3Client with our mock call which initializes mock AWS client
+		getClientWrapper := splclient.S3Clients[vol.Provider]
+		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+
+		s3ClientMgr := &S3ClientManager{
+			client:          client,
+			cr:              &cm,
+			appFrameworkRef: &cm.Spec.AppFrameworkConfig,
+			vol:             &vol,
+			location:        appSource.Location,
+			initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+				cl := spltest.MockAWSS3Client{}
+				cl.Objects = mockAwsObjects[index].Objects
+				return cl
+			},
+			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+				appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+				location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+				// Get the mock client
+				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+				return c, err
+			},
+		}
+
+		s3Response, err := s3ClientMgr.GetAppsList()
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		var mockResponse spltest.MockAWSS3Client
+		mockResponse, err = ConvertS3Response(s3Response)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		if mockAwsHandler.GotSourceAppListResponseMap == nil {
+			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
+		}
+
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = mockResponse
+	}
+
+	if allSuccess == false {
+		t.Errorf("Unable to get apps list for all the app sources")
+	}
+	method := "GetAppsList"
+	mockAwsHandler.CheckAWSS3Response(t, method)
+}
+
+func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+	cm := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterprisev1.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
 			},
 		},
 	}
@@ -471,8 +686,118 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyClusterMaster(client, &cr)
+	splclient.RegisterS3Client("aws")
+
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
+	Keys := []string{"admin_app.tgz"}
+	Sizes := []int64{10}
+	StorageClass := "STANDARD"
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
+
+	mockAwsHandler := spltest.MockAWSS3Handler{}
+
+	mockAwsObjects := []spltest.MockAWSS3Client{
+		{
+			Objects: []*spltest.MockAWSS3Object{
+				{
+					Etag:         &Etags[0],
+					Key:          &Keys[0],
+					LastModified: &randomTime,
+					Size:         &Sizes[0],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+	}
+
+	appFrameworkRef := cm.Spec.AppFrameworkConfig
+
+	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
+
+	var vol enterprisev1.VolumeSpec
+
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err = GetVolume(client, &cm, appSource, &appFrameworkRef)
 	if err != nil {
-		t.Errorf("ApplyClusterMaster with valid App Framework config should be successful, but got error: %v", err)
+		t.Errorf("Unable to get Volume due to error=%s", err)
+	}
+
+	// Update the GetS3Client with our mock call which initializes mock AWS client
+	getClientWrapper := splclient.S3Clients[vol.Provider]
+	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+
+	s3ClientMgr := &S3ClientManager{
+		client:          client,
+		cr:              &cm,
+		appFrameworkRef: &cm.Spec.AppFrameworkConfig,
+		vol:             &vol,
+		location:        appSource.Location,
+		initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+			// Purposefully return nil here so that we test the error scenario
+			return nil
+		},
+		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+			appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			// Get the mock client
+			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			return c, err
+		},
+	}
+
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
+	}
+
+	// Create empty S3 secret
+	s3Secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s3-secret",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{},
+	}
+
+	client.AddObject(&s3Secret)
+
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
+	}
+
+	s3AccessKey := []byte{'1'}
+	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
+	}
+
+	s3SecretKey := []byte{'2'}
+	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
+	}
+
+	// Create S3 secret
+	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
+
+	// This should return an error as we have initialized initFn for s3ClientMgr
+	// to return a nil client.
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
+	}
+
+	s3ClientMgr.initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+		// To test the error scenario, do no set the Objects member yet
+		cl := spltest.MockAWSS3Client{}
+		return cl
+	}
+
+	_, err = s3ClientMgr.GetAppsList()
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
 	}
 }

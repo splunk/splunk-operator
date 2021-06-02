@@ -56,9 +56,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 			}
 		}
 
-		sourceToAppsList = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
 		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
-			scopedLog.Error(err, "Unable to get apps list for all the app sources from remote storage")
+			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
 			return result, err
 		}
 
@@ -557,7 +557,7 @@ func validateSearchHeadClusterSpec(cr *enterprisev1.SearchHeadCluster) error {
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, false)
 		if err != nil {
 			return err
 		}

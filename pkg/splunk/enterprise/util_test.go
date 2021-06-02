@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"testing"
@@ -621,4 +622,51 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 	}
 
 	return matchCount
+}
+
+// ConvertS3Response converts S3 Response to a mock client response
+func ConvertS3Response(s3Response splclient.S3Response) (spltest.MockAWSS3Client, error) {
+	scopedLog := log.WithName("ConvertS3Response")
+
+	var mockResponse spltest.MockAWSS3Client
+
+	tmp, err := json.Marshal(s3Response)
+	if err != nil {
+		scopedLog.Error(err, "Unable to marshal s3 response")
+		return mockResponse, err
+	}
+
+	err = json.Unmarshal(tmp, &mockResponse)
+	if err != nil {
+		scopedLog.Error(err, "Unable to unmarshal s3 response")
+		return mockResponse, err
+	}
+
+	return mockResponse, err
+}
+
+// NewMockAWSS3Client returns an AWS S3 mock client for testing
+func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn splclient.GetInitFunc) (splclient.S3Client, error) {
+	var s3SplunkClient splclient.SplunkAWSS3Client
+	var err error
+	region := splclient.GetRegion(endpoint)
+
+	cl := fn(region, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("Failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(splclient.SplunkAWSS3Client)
+
+	return &splclient.AWSS3Client{
+		Region:             region,
+		BucketName:         bucketName,
+		AWSAccessKeyID:     accessKeyID,
+		AWSSecretAccessKey: secretAccessKey,
+		Prefix:             prefix,
+		StartAfter:         startAfter,
+		Endpoint:           endpoint,
+		Client:             s3SplunkClient,
+	}, nil
 }
