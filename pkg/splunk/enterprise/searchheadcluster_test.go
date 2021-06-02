@@ -776,7 +776,6 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		vol, err = GetVolume(client, &cr, appSource, &appFrameworkRef)
 		if err != nil {
-			_ = fmt.Errorf("Unable to get Volume")
 			allSuccess = false
 			continue
 		}
@@ -802,7 +801,6 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		s3Response, err := s3ClientMgr.GetAppsList()
 		if err != nil {
-			_ = fmt.Errorf("Unable to get apps list")
 			allSuccess = false
 			continue
 		}
@@ -810,7 +808,6 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		var mockResponse spltest.MockAWSS3Client
 		mockResponse, err = ConvertS3Response(s3Response)
 		if err != nil {
-			_ = fmt.Errorf("Unable to convert s3 response")
 			allSuccess = false
 			continue
 		}
