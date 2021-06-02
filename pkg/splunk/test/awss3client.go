@@ -57,8 +57,8 @@ func (c *MockAWSS3Handler) AddObjects(appFrameworkRef enterprisev1.AppFrameworkS
 	}
 }
 
-// CheckAwsS3Response checks if the received objects are same as the one we expect
-func (c *MockAWSS3Handler) CheckAwsS3Response(t *testing.T, testMethod string) {
+// CheckAWSS3Response checks if the received objects are same as the one we expect
+func (c *MockAWSS3Handler) CheckAWSS3Response(t *testing.T, testMethod string) {
 	if len(c.WantSourceAppListResponseMap) != len(c.GotSourceAppListResponseMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotSourceAppListResponseMap), len(c.WantSourceAppListResponseMap))
 	}

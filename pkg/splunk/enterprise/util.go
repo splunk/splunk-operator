@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -29,7 +28,6 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
@@ -37,14 +35,14 @@ import (
 var log = logf.Log.WithName("splunk.enterprise")
 
 // GetRemoteStorageClient returns the corresponding S3Client
-func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn func(string, string, string, *bool) interface{}) (splclient.SplunkS3Client, error) {
+func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 
 	scopedLog := log.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	s3Client := splclient.SplunkS3Client{}
 	//use the provider name to get the corresponding function pointer
 	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClient := getClientWrapper.GetS3Client
+	getClient := getClientWrapper.GetS3ClientFuncPtr()
 
 	appSecretRef := vol.SecretRef
 	s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
@@ -353,10 +351,10 @@ type S3ClientManager struct {
 	appFrameworkRef *enterprisev1.AppFrameworkSpec
 	vol             *enterprisev1.VolumeSpec
 	location        string
-	initFn          func(string, string, string, *bool) interface{}
+	initFn          splclient.GetInitFunc
 	getS3Client     func(client splcommon.ControllerClient, cr splcommon.MetaObject,
 		appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
-		location string, fp func(string, string, string, *bool) interface{}) (splclient.SplunkS3Client, error)
+		location string, fp splclient.GetInitFunc) (splclient.SplunkS3Client, error)
 }
 
 // GetAppsList gets the apps list
@@ -422,7 +420,8 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 			continue
 		}
 
-		initFunc := splclient.S3Clients[vol.Provider].GetInitFunc
+		s3ClientWrapper := splclient.S3Clients[vol.Provider]
+		initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
 		s3ClientMgr := S3ClientManager{
 			client:          client,
 			cr:              cr,
@@ -728,7 +727,8 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			}
 			appRepoVol := appFrameworkConfig.VolList[volSpecPos]
 
-			initFunc := splclient.S3Clients[appRepoVol.Provider].GetInitFunc
+			s3ClientWrapper := splclient.S3Clients[appRepoVol.Provider]
+			initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
 			// Use the provider name to get the corresponding function pointer
 			s3Client, err := GetRemoteStorageClient(client, cr, appFrameworkConfig, &appRepoVol, appSrc.Location, initFunc)
 			if err != nil {
@@ -788,25 +788,4 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, initContainerSpec)
 		}
 	}
-}
-
-// ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(s3Response splclient.S3Response) (spltest.MockAWSS3Client, error) {
-	scopedLog := log.WithName("ConvertS3Response")
-
-	var mockResponse spltest.MockAWSS3Client
-
-	tmp, err := json.Marshal(s3Response)
-	if err != nil {
-		scopedLog.Error(err, "Unable to marshal s3 response")
-		return mockResponse, err
-	}
-
-	err = json.Unmarshal(tmp, &mockResponse)
-	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal s3 response")
-		return mockResponse, err
-	}
-
-	return mockResponse, err
 }

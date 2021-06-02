@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package client
 
 import (
@@ -11,12 +25,34 @@ type GetS3ClientWrapper struct {
 	GetInitFunc
 }
 
-// GetInitFunc gets the init func
-type GetInitFunc func(string, string, string, *bool) interface{}
+// SetS3ClientFuncPtr sets the GetS3Client function pointer member of GetS3ClientWrapper struct
+func (c *GetS3ClientWrapper) SetS3ClientFuncPtr(volName string, fn GetS3Client) {
+	c.GetS3Client = fn
+	S3Clients[volName] = *c
+}
+
+// GetS3ClientFuncPtr gets the GetS3Client function pointer member of GetS3ClientWrapper struct
+func (c *GetS3ClientWrapper) GetS3ClientFuncPtr() GetS3Client {
+	return c.GetS3Client
+}
+
+// SetS3ClientInitFuncPtr sets the GetS3Client function pointer member of GetS3ClientWrapper struct
+func (c *GetS3ClientWrapper) SetS3ClientInitFuncPtr(volName string, fn GetInitFunc) {
+	c.GetInitFunc = fn
+	S3Clients[volName] = *c
+}
+
+// GetS3ClientInitFuncPtr gets the GetS3Client function pointer member of GetS3ClientWrapper struct
+func (c *GetS3ClientWrapper) GetS3ClientInitFuncPtr() GetInitFunc {
+	return c.GetInitFunc
+}
+
+// GetInitFunc gets the init function pointer which returns the new S3 session client object
+type GetInitFunc func(string, string, string) interface{}
 
 //GetS3Client gets the required S3Client based on the provider
 type GetS3Client func(string /* bucket */, string, /* AWS access key ID */
-	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Endpoint */, func(string, string, string, *bool) interface{}) (S3Client, error)
+	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Endpoint */, GetInitFunc) (S3Client, error)
 
 // S3Clients is a map of provider name to init functions
 var S3Clients = make(map[string]GetS3ClientWrapper)

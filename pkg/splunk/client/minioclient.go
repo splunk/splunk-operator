@@ -1,3 +1,17 @@
+// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package client
 
 import (
@@ -29,23 +43,18 @@ type MinioClient struct {
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn func(string, string, string, *bool) interface{}) (S3Client, error) {
-	var isNotInTestContext bool
+func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
-	region := getRegion(endpoint)
-	cl := fn(region, accessKeyID, secretAccessKey, &isNotInTestContext)
+	region := GetRegion(endpoint)
+	cl := fn(region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("Failed to create an AWS S3 client")
 		return nil, err
 	}
 
-	if isNotInTestContext == true {
-		s3SplunkClient = cl.(*minio.Client)
-	} else {
-		s3SplunkClient = cl.(SplunkMinioClient)
-	}
+	s3SplunkClient = cl.(*minio.Client)
 
 	return &MinioClient{
 		BucketName:        bucketName,
@@ -65,14 +74,13 @@ func RegisterMinioClient() {
 }
 
 // InitMinioClientWrapper is a wrapper around InitMinioClientSession
-func InitMinioClientWrapper(appS3Endpoint string, accessKeyID string, secretAccessKey string, isNotInTestContext *bool) interface{} {
-	return InitMinioClientSession(appS3Endpoint, accessKeyID, secretAccessKey, isNotInTestContext)
+func InitMinioClientWrapper(appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
+	return InitMinioClientSession(appS3Endpoint, accessKeyID, secretAccessKey)
 }
 
 // InitMinioClientSession initializes and returns a client session object
-func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAccessKey string, isNotInTestContext *bool) SplunkMinioClient {
+func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
 	scopedLog := log.WithName("InitMinioClientSession")
-	*isNotInTestContext = true
 
 	// Check if SSL is needed
 	useSSL := true
