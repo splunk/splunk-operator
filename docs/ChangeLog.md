@@ -1,5 +1,21 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 1.0.1 GA(2021-06-01)
+* This is the GA 1.0.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2 image with it
+
+* Upgraded operator-sdk version from v0.15.1 to v0.18.2
+
+* CSPL-633 - Added new 'ExtraEnv' parameter in CR spec. This enables customers to pass 'ExtraEnv' variables to the Splunk instance containers
+
+* Documentation updates to include
+  * Updated documentation for Multisite example
+  * Additional information for using multiple license files
+  * Clarify how admins can setup additional Smartstore & Index configuration on top of the existing CR method via Apps
+
+* Functional Test automation increased parallelism
+
 ## 1.0.0 GA(2021-04-19)
 * This is the GA 1.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
 
