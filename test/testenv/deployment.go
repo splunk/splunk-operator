@@ -161,7 +161,7 @@ func (d *Deployment) PodExecCommand(podName string, cmd []string, stdin string, 
 func (d *Deployment) DeployLicenseMaster(name string) (*enterprisev1.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
-		return nil, fmt.Errorf("No license file path specified")
+		return nil, fmt.Errorf("no license file path specified")
 	}
 
 	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
@@ -534,9 +534,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 }
 
 // DeployClusterMasterWithGivenSpec deploys the cluster master with given SPEC
-func (d *Deployment) DeployClusterMasterWithGivenSpec(name, licenseMasterName string, ansibleConfig string, spec enterprisev1.ClusterMasterSpec) (*enterprisev1.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMasterWithGivenSpec(name string, spec enterprisev1.ClusterMasterSpec) (*enterprisev1.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
-	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, licenseMasterName, ansibleConfig, spec)
+	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, cm)
 	if err != nil {
 		return nil, err
@@ -545,9 +545,9 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(name, licenseMasterName st
 }
 
 // DeploySearchHeadClusterWithGivenSpec deploys a search head cluster
-func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name, clusterMasterRef, licenseMasterName string, ansibleConfig string, spec enterprisev1.SearchHeadClusterSpec) (*enterprisev1.SearchHeadCluster, error) {
+func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name string, spec enterprisev1.SearchHeadClusterSpec) (*enterprisev1.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
-	indexer := newSearchHeadClusterWithGivenSpec(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig, spec)
+	indexer := newSearchHeadClusterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, indexer)
 	return deployed.(*enterprisev1.SearchHeadCluster), err
 }
@@ -561,4 +561,164 @@ func (d *Deployment) DeployLicenseMasterWithGivenSpec(name, licenseMasterName st
 		return nil, err
 	}
 	return deployed.(*enterprisev1.LicenseMaster), err
+}
+
+// DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterprisev1.AppFrameworkSpec) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster master
+	cmSpec := enterprisev1.ClusterMasterSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+		},
+		AppFrameworkConfig: appFrameworkSpec,
+	}
+	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy the indexer cluster
+	_, err = d.DeployIndexerCluster(name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	if err != nil {
+		return err
+	}
+
+	shSpec := enterprisev1.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterMasterRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+		},
+		Replicas:           3,
+		AppFrameworkConfig: appFrameworkSpec,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-master, indexers in multiple sites (SHC LM Optional) with app framework spec
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterprisev1.AppFrameworkSpec, shc bool) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster-master
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+
+	// Cluster Master Spec
+	cmSpec := enterprisev1.ClusterMasterSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			Defaults: defaults,
+		},
+		AppFrameworkConfig: appFrameworkSpec,
+	}
+
+	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: %s
+`, name, siteName)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: site0
+`, name)
+	// Deploy the SH cluster
+	shSpec := enterprisev1.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterMasterRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			Defaults: siteDefaults,
+		},
+		Replicas:           3,
+		AppFrameworkConfig: appFrameworkSpec,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

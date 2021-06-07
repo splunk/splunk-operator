@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package s1appfw
+package c3appfw
 
 import (
 	"os"
@@ -37,7 +37,7 @@ const (
 
 var (
 	testenvInstance  *testenv.TestEnv
-	testSuiteName    = "s1appfw-" + testenv.RandomDNSName(3)
+	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
 	appListV1        []string
 	appListV2        []string
 	testDataS3Bucket = os.Getenv("TEST_BUCKET")
@@ -45,8 +45,8 @@ var (
 	s3AppDirV1       = "appframework/regressionappsv1/"
 	s3AppDirV2       = "appframework/regressionappsv2/"
 	currDir, _       = os.Getwd()
-	downloadDirV1    = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2    = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
+	downloadDirV1    = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2    = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
 )
 
 // TestBasic is the main entry point
@@ -82,6 +82,10 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	}
+
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
