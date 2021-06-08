@@ -68,6 +68,12 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//Get the prefix from the "path" field
 	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
+	// if vol.Path contains just the bucket name(i.e without ending "/"), TrimPrefix returns the vol.Path
+	// So, just reset the basePrefix to null
+	if basePrefix == bucket {
+		basePrefix = ""
+	}
+
 	// Join takes care of merging two paths and returns a clean result
 	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
 	prefix := filepath.Join(basePrefix, location) + "/"
@@ -211,6 +217,85 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client spl
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
+// ApplyAppListingConfigMap creates the configMap  with two entries:
+// (1) app-list-local.yaml
+// (2) app-list-cluster.yaml
+// Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
+func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
+
+	var err error
+	var crKind string
+	var configMapDataChanged bool
+	crKind = cr.GetObjectKind().GroupVersionKind().Kind
+
+	scopedLog := log.WithName("ApplyAppListingConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	mapAppListing := make(map[string]string)
+
+	// ToDo: sgontla/Jeff: Adapt to any Ansible changes(if required) for differentiating local vs. cluster scope (?)
+	yamlConfHeader := fmt.Sprintf(`splunk:
+  apps_location:`)
+
+	var localAppsConf, clusterAppsConf string
+	localAppsConf = yamlConfHeader
+	clusterAppsConf = yamlConfHeader
+
+	for appSrc, appSrcDeployInfo := range appsSrcDeployStatus {
+		appDeployList := appSrcDeployInfo.AppDeploymentInfoList
+
+		switch scope := getAppSrcScope(appConf, appSrc); scope {
+		case "local":
+			for idx := range appDeployList {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+					localAppsConf = fmt.Sprintf(`%s
+    - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
+				}
+			}
+
+		case "cluster":
+			for idx := range appDeployList {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+					clusterAppsConf = fmt.Sprintf(`%s
+    - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
+				}
+			}
+
+		default:
+			scopedLog.Error(nil, "Invalid scope detected")
+		}
+	}
+
+	if localAppsConf != yamlConfHeader {
+		mapAppListing["app-list-local.yaml"] = localAppsConf
+	}
+
+	if clusterAppsConf != yamlConfHeader {
+		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
+	}
+
+	// Create App list config map
+	configMapName := GetSplunkAppsConfigMapName(cr.GetName(), crKind)
+	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
+
+	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+	configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+	if err != nil {
+		return nil, configMapDataChanged, err
+	} else if configMapDataChanged {
+		// Create a token to check if the app list is on the pod is latest or not
+		appListingConfigMap.Data[appsUpdateToken] = fmt.Sprintf(`%d`, time.Now().Unix())
+
+		// Apply the configMap with a fresh token, if there is a change
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+		if err != nil {
+			return nil, configMapDataChanged, err
+		}
+	}
+
+	return appListingConfigMap, configMapDataChanged, nil
+}
+
 // ApplySmartstoreConfigMap creates the configMap with Smartstore config in INI format
 func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	smartstore *enterprisev1.SmartStoreSpec) (*corev1.ConfigMap, bool, error) {
@@ -253,7 +338,8 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	mapSplunkConfDetails["server.conf"] = iniServerConf
 
 	// Create smartstore config consisting indexes.conf
-	SplunkOperatorAppConfigMap := prepareSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, mapSplunkConfDetails)
+	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)
+	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
@@ -264,7 +350,6 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapSplunkConfDetails[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// Apply the configMap with a fresh token
-		SplunkOperatorAppConfigMap = prepareSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, mapSplunkConfDetails)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
 		if err != nil {
 			return nil, configMapDataChanged, err
@@ -373,8 +458,8 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 	return s3Response, nil
 }
 
-// GetVolume gets the volume defintion for an app source
-func GetVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
+// GetAppSrcVolume gets the volume defintion for an app source
+func GetAppSrcVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
 	var volName string
 	var index int
 	var err error
@@ -414,7 +499,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = GetVolume(client, cr, appSource, appFrameworkRef)
+		vol, err = GetAppSrcVolume(client, cr, appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -719,7 +804,15 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 		// Add app framework init containers per app source and attach the init volume
 		for i, appSrc := range appFrameworkConfig.AppSources {
 			// Get volume info from appSrc
-			volSpecPos, err := checkIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+
+			var volSpecPos int
+			var err error
+			if appSrc.VolName != "" {
+				volSpecPos, err = checkIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+			} else {
+				volSpecPos, err = checkIfVolumeExists(appFrameworkConfig.VolList, appFrameworkConfig.Defaults.VolName)
+			}
+
 			if err != nil {
 				// Invalid appFramework config.  This shouldn't happen
 				scopedLog.Info("Invalid appSrc volume spec, moving to the next one", "appSrc.VolName", appSrc.VolName, "err", err)
@@ -743,8 +836,8 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			appSecretRef := appRepoVol.SecretRef
 			appSrcName := appSrc.Name
 			appSrcPath := appSrc.Location
-			appSrcScope := appSrc.Scope
-			initContainerName := fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope)
+			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
+			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
 
 			// Setup init container
 			initContainerSpec := corev1.Container{

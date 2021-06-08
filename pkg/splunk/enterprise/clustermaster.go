@@ -83,15 +83,13 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 	}()
 
-	//check if the apps need to be downloaded from remote storage
+	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+
+	// check if the apps need to be downloaded from remote storage
+	// ToDo: sgontla: Once after we have the flow, move the following logic into a seperate function(Note:- all errors should not cause a return in that function)
+	// ToDo: also take care of the Mock
 	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]splclient.S3Response
-
-		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
-			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-				splclient.RegisterS3Client(vol.Provider)
-			}
-		}
 
 		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
 		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
@@ -106,6 +104,11 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
 		if err != nil {
 			scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+			return result, err
+		}
+
+		_, _, err := ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+		if err != nil {
 			return result, err
 		}
 
@@ -208,9 +211,9 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	if err != nil {
 		return ss, err
 	}
-	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
+	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
-	if exists {
+	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
 	}
 
@@ -233,9 +236,9 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
-	configMap, exists := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
-	if exists {
-		tokenFromConfigMap := configMap.Data[configToken]
+	smartStoreConfigMap := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
+	if smartStoreConfigMap != nil {
+		tokenFromConfigMap := smartStoreConfigMap.Data[configToken]
 		if tokenFromConfigMap == stdOut {
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
