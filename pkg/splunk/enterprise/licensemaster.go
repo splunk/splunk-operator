@@ -54,7 +54,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		RegisterS3ClientsForProviders(cr.Spec.AppFrameworkConfig.VolList)
 	}
 
-	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 
 		var sourceToAppsList map[string]splclient.S3Response
 

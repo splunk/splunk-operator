@@ -92,7 +92,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	}
 
 	//check if the apps need to be downloaded from remote storage
-	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")

@@ -17,6 +17,7 @@ package enterprise
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -799,7 +800,9 @@ func SetAppInfoStatus(appInfoStatus *enterprisev1.AppInfoStatus) {
 }
 
 func hasAppRepoCheckTimerExpired(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoStatus enterprisev1.AppInfoStatus) bool {
+	scopedLog := log.WithName("hasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
+	scopedLog.Info("Checking if the app repo polling interval has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoStatus.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
 	return appInfoStatus.LastAppInfoCheckTime+int64(appFrameworkRef.AppsRepoPollInterval) < currentEpoch
 }
 
