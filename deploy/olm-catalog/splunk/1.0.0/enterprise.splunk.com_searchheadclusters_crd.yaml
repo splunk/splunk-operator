@@ -710,9 +710,9 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: 'App Package Remote Store provider. For e.g.
+                          description: App Package Remote Store provider. For e.g.
                             aws, azure, minio, etc. Currently we are only supporting
-                            aws. TODO: Support minio as well.'
+                            aws.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2433,6 +2433,23 @@ spec:
               appContext:
                 description: App Framework Context
                 properties:
+                  appInfoStatus:
+                    description: This represents whether we need to check the status
+                      of apps on remote storage
+                    properties:
+                      lastAppInfoCheckTime:
+                        description: This is set to the time when we get the list
+                          of apps from remote storage.
+                        format: int64
+                        type: integer
+                      needToCheckAfterPollInterval:
+                        description: This is false for the first time when we enter
+                          the reconcile loop. For all other consequent times, this
+                          will be set to true. This will help in checking for the
+                          apps status either right away(for the first time case) or
+                          after the polling interval.
+                        type: boolean
+                    type: object
                   appRepo:
                     description: List of App package (*.spl, *.tgz) locations on remote
                       volume
@@ -2493,9 +2510,9 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: 'App Package Remote Store provider. For
+                              description: App Package Remote Store provider. For
                                 e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws. TODO: Support minio as well.'
+                                supporting aws.
                               type: string
                             secretRef:
                               description: Secret object name

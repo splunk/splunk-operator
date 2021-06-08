@@ -17,6 +17,7 @@ package enterprise
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -564,6 +565,128 @@ func TestIsAppExtentionValid(t *testing.T) {
 
 	if isAppExtentionValid("testapp.aspl") || isAppExtentionValid("testapp.ttgz") {
 		t.Errorf("failed to detect invalid app extension")
+	}
+}
+
+func TestGetVolume(t *testing.T) {
+	appFrameworkRef := enterprisev1.AppFrameworkSpec{
+		AppsRepoPollInterval: 60,
+		Defaults: enterprisev1.AppSourceDefaultSpec{
+			VolName: "vol2",
+			Scope:   "cluster",
+		},
+
+		VolList: []enterprisev1.VolumeSpec{
+			{
+				Name:      "vol1",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "vol2",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london-2",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterprisev1.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "vol1",
+					Scope:   "local",
+				},
+			},
+			{
+				Name:     "securityApps",
+				Location: "securityAppsRepo",
+			},
+		},
+	}
+
+	// test for valid volumes
+	for index, appSource := range appFrameworkRef.AppSources {
+		vol, err := GetVolume(appSource, &appFrameworkRef)
+		if err != nil {
+			t.Errorf("GetVolume should not have returned error")
+		}
+
+		if !reflect.DeepEqual(vol, appFrameworkRef.VolList[index]) {
+			t.Errorf("returned volume spec is not correct")
+		}
+	}
+
+	// test for an invalid volume
+	appFrameworkRef.AppSources = []enterprisev1.AppSourceSpec{
+		{
+			Name:     "adminApps",
+			Location: "adminAppsRepo",
+			AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+				VolName: "invalid_volume",
+				Scope:   "local",
+			},
+		},
+	}
+
+	_, err := GetVolume(appFrameworkRef.AppSources[0], &appFrameworkRef)
+	if err == nil {
+		t.Errorf("GetVolume should have returned error for an invalid volume name")
+	}
+}
+
+func TestShouldCheckAppStatus(t *testing.T) {
+	appFrameworkRef := enterprisev1.AppFrameworkSpec{
+		AppsRepoPollInterval: 60,
+		VolList: []enterprisev1.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterprisev1.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+		},
+	}
+
+	// Case 1. This is the case when we first enter the reconcile loop.
+	appInfoStatus := enterprisev1.AppInfoStatus{
+		NeedToCheckAfterPollInterval: false,
+		LastAppInfoCheckTime:         0,
+	}
+
+	if !ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+		t.Errorf("ShouldCheckAppStatus should have returned true")
+	}
+
+	// Case 2. We just checked the apps status
+	SetAppInfoStatus(&appInfoStatus)
+
+	if ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
+	}
+
+	// Case 3. Lets check after AppsRepoPollInterval has elapsed.
+	// We do this by setting some random past timestamp.
+	appInfoStatus.LastAppInfoCheckTime = 1591464060
+
+	if !ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
 

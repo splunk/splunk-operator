@@ -374,13 +374,13 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 }
 
 // GetVolume gets the volume defintion for an app source
-func GetVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
+func GetVolume(appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
 	var volName string
 	var index int
 	var err error
 	var vol enterprisev1.VolumeSpec
 
-	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("GetVolume")
 
 	// get the volume spec from the volume name
 	if appSource.VolName != "" {
@@ -414,7 +414,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = GetVolume(client, cr, appSource, appFrameworkRef)
+		vol, err = GetVolume(appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -786,6 +786,39 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 				},
 			}
 			podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, initContainerSpec)
+		}
+	}
+}
+
+// SetAppInfoStatus sets the last check interval to current time and
+// sets the flag to check the apps status in the next interval
+func SetAppInfoStatus(appInfoStatus *enterprisev1.AppInfoStatus) {
+	currentEpoch := time.Now().Unix()
+	appInfoStatus.LastAppInfoCheckTime = currentEpoch
+	appInfoStatus.NeedToCheckAfterPollInterval = true
+}
+
+func hasAppRepoCheckTimerExpired(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoStatus enterprisev1.AppInfoStatus) bool {
+	currentEpoch := time.Now().Unix()
+	return appInfoStatus.LastAppInfoCheckTime+int64(appFrameworkRef.AppsRepoPollInterval) < currentEpoch
+}
+
+// ShouldCheckAppStatus checks whether we need to check the app status in the current reconcile
+func ShouldCheckAppStatus(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoStatus enterprisev1.AppInfoStatus) bool {
+	scopedLog := log.WithName("ShouldCheckAppStatus")
+
+	scopedLog.Info("Checking to see if we need to probe the status of apps on remote storage")
+
+	// check if its the first time or we are coming after appsRepoPollInterval secs.
+	return appInfoStatus.NeedToCheckAfterPollInterval == false ||
+		(appInfoStatus.NeedToCheckAfterPollInterval == true && hasAppRepoCheckTimerExpired(appFrameworkRef, appInfoStatus))
+}
+
+// RegisterS3ClientsForProviders registers the S3 Client corresponding to the provider
+func RegisterS3ClientsForProviders(volList []enterprisev1.VolumeSpec) {
+	for _, vol := range volList {
+		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+			splclient.RegisterS3Client(vol.Provider)
 		}
 	}
 }

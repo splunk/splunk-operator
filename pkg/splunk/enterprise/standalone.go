@@ -69,32 +69,41 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
-	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	// Register the S3 clients specific to providers if not done already
+	// This is done to prevent the null pointer dereference in case when
+	// operator crashes and comes back up and the status of app context was updated
+	// to match the spec in the previous run.
+	if cr.Spec.AppFrameworkConfig.VolList != nil {
+		RegisterS3ClientsForProviders(cr.Spec.AppFrameworkConfig.VolList)
+	}
+
+	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]splclient.S3Response
 
-		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
-			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-				splclient.RegisterS3Client(vol.Provider)
-			}
-		}
-
+		shouldHandleAppChanges := true
 		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
 		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
 			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
-			return result, err
+			shouldHandleAppChanges = false
 		}
 
 		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
 			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
 		}
 
-		err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
-		if err != nil {
-			scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
-			return result, err
+		// Only handle the app repo changes if we were able to successfully get the apps list
+		if shouldHandleAppChanges == true {
+			err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
+			if err != nil {
+				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+				return result, err
+			}
+
+			cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 		}
 
-		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+		// set the app info status to check the apps status after polling interval
+		SetAppInfoStatus(&cr.Status.AppContext.AppInfoStatus)
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
@@ -158,7 +167,13 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		if err != nil {
 			return result, err
 		}
-		result.Requeue = false
+
+		// requeue the reconcile after polling interval if we had set the flag before
+		if cr.Status.AppContext.AppInfoStatus.NeedToCheckAfterPollInterval == true {
+			result.RequeueAfter = time.Second * time.Duration(cr.Spec.AppFrameworkConfig.AppsRepoPollInterval)
+		} else {
+			result.Requeue = false
+		}
 	}
 	return result, nil
 }

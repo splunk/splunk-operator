@@ -424,7 +424,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	}
 }
 
-func TestAppFrameworkApplyClusterMasterShouldFail(t *testing.T) {
+func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	cm := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -477,12 +477,9 @@ func TestAppFrameworkApplyClusterMasterShouldFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	// ApplyClusterMaster below should return error as we are not using mock AWS client here
-	// and hence it will call the AWS SDK library to fetch the bucket content which will obviously
-	// return error.
 	_, err = ApplyClusterMaster(client, &cm)
-	if err == nil {
-		t.Errorf("ApplyClusterMaster should have returned error here.")
+	if err != nil {
+		t.Errorf("ApplyClusterMaster should not have returned error here.")
 	}
 }
 
@@ -593,7 +590,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetVolume(client, &cm, appSource, &appFrameworkRef)
+		vol, err = GetVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -717,7 +714,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterprisev1.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = GetVolume(client, &cm, appSource, &appFrameworkRef)
+	vol, err = GetVolume(appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}

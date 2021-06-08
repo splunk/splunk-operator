@@ -68,8 +68,9 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 		Credentials: credentials.NewStaticCredentials(
 			accessKeyID,     // id
 			secretAccessKey, // secret
-			"")},            // token
-	)
+			""),
+		MaxRetries: aws.Int(3),
+	})
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
 		return nil
@@ -128,6 +129,11 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	resp, err := client.ListObjectsV2(options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName)
+		return s3Resp, err
+	}
+
+	if resp.Contents == nil {
+		err = fmt.Errorf("Empty objects list in the bucket: %s", awsclient.BucketName)
 		return s3Resp, err
 	}
 

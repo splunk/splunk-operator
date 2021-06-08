@@ -294,7 +294,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 	}
 }
 
-func TestAppFrameworkApplyStandaloneShouldFail(t *testing.T) {
+func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	cr := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -344,8 +344,8 @@ func TestAppFrameworkApplyStandaloneShouldFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	_, err = ApplyStandalone(client, &cr)
-	if err == nil {
-		t.Errorf("ApplyStandalone should not be successful")
+	if err != nil {
+		t.Errorf("ApplyStandalone should be successful")
 	}
 }
 
@@ -452,7 +452,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetVolume(client, &cr, appSource, &appFrameworkRef)
+		vol, err = GetVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -571,7 +571,7 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterprisev1.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = GetVolume(client, &cr, appSource, &appFrameworkRef)
+	vol, err = GetVolume(appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
