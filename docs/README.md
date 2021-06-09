@@ -10,7 +10,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 * [Known Issues for the Splunk Operator](#known-issues-for-the-splunk-operator)
 * [Prerequisites for the Splunk Operator](#prerequisites-for-the-splunk-operator)
 * [Installing the Splunk Operator](#installing-the-splunk-operator)
-* [Creating Splunk Enterprise Deployments](#creating-splunk-enterprise-deployments)
+* [Creating Splunk Enterprise Deployments](#creating-a-splunk-enterprise-deployment)
 * [Securing Splunk Deployments in Kubernetes](Security.md)
 * [Contacting Support](#contacting-support)
 
@@ -59,8 +59,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.0 RC or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.1.3 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.1 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.0 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -102,14 +102,14 @@ information.
 The Kubernetes infrastructure must have access to storage that meets or exceeds the recommendations provided in the Splunk Enterprise storage type recommendations at [Reference Hardware documentation - what storage type to use for a given role?](https://docs.splunk.com/Documentation/Splunk/latest/Capacity/Referencehardware#What_storage_type_should_I_use_for_a_role.3F) In summary, Indexers with SmartStore need NVMe or SSD storage to provide the necessary IOPs for a successful Splunk Enterprise environment.
 
 
-### Mandatory Use of Splunk SmartStore
+### Splunk SmartStore Required
 For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
  
 ## Installing the Splunk Operator
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.0/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-install.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.

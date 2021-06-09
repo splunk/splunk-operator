@@ -15,7 +15,9 @@
 package controller
 
 import (
+	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -107,7 +109,7 @@ var _ client.FieldIndexer = &MockFieldIndexer{}
 type MockFieldIndexer struct{}
 
 // IndexField for MockFieldIndexer just returns nil
-func (idx MockFieldIndexer) IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func (idx MockFieldIndexer) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
 	return nil
 }
 
@@ -120,6 +122,14 @@ type MockManager struct{}
 // Add for MockManager just returns nil
 func (mgr MockManager) Add(r manager.Runnable) error {
 	return mgr.SetFields(r)
+}
+
+func (mgr MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+
+func (mgr MockManager) Elected() <-chan struct{} {
+	return nil
 }
 
 // SetFields for MockManager just returns nil
