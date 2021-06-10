@@ -14,7 +14,7 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
 SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custome Resource with SmartStore volume spec, through `SecretRef`
 
 ## Storing Smartstore Secrets
-Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal='s3_access_key=<access_key>' --from-literal='s3_secret_key=<secret_key>'`
+Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal=s3_access_key=<access_key> --from-literal=s3_secret_key=<secret_key>`
   
 
 ## Creating a SmartStore-enabled Standalone instance
