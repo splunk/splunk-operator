@@ -138,4 +138,57 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", true, true)
 		})
 	})
+
+	Context("Clustered deployment (M4 - clustered indexer, search head cluster)", func() {
+		It("m4, appframework: can deploy a M4 SVA and have apps installed locally on CM and SHC Deployer", func() {
+
+			// Create App framework Spec
+			// volumeSpec: Volume name, Endpoint, Path and SecretRef
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   "local",
+			}
+
+			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+			appSourceName := "appframework-" + testenv.RandomDNSName(3)
+			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+
+			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+				Defaults:             appSourceDefaultSpec,
+				AppsRepoPollInterval: 60,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			// Create Multi site Cluster and SHC, with App Framework enabled on CM and SHC Deployer
+			siteCount := 3
+			indexersPerSite := 1
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true)
+			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
+
+			// Ensure that the CM goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Ensure SHC go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
+			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
+
+			// Verify apps are installed locally on CM and on SHC Deployer
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
+
+			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
+		})
+	})
 })
