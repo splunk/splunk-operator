@@ -19,6 +19,7 @@ import (
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -74,4 +75,51 @@ func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedNa
 		return "", err
 	}
 	return configMap.ResourceVersion, nil
+}
+
+// GetMCConfigMap gets the MC ConfigMap resource required for that MC
+func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
+	var configMap corev1.ConfigMap
+	err := client.Get(context.TODO(), namespacedName, &configMap)
+	if err != nil {
+		//if we don't find mc configmap create and return an empty configmap
+		var configMap corev1.ConfigMap
+		configMap = corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      namespacedName.Name,
+				Namespace: namespacedName.Namespace,
+			},
+			Data: make(map[string]string),
+		}
+		err = splutil.CreateResource(client, &configMap)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = SetConfigMapOwnerRef(client, cr, namespacedName)
+	if err != nil {
+		return nil, err
+	}
+	return &configMap, nil
+}
+
+// SetConfigMapOwnerRef sets owner references for configMap
+func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+	configMap, err := GetConfigMap(client, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	currentOwnerRef := configMap.GetOwnerReferences()
+	// Check if owner ref exists
+	for i := 0; i < len(currentOwnerRef); i++ {
+		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}
+	}
+
+	// Owner ref doesn't exist, update configmap with owner references
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	return splutil.UpdateResource(client, configMap)
 }

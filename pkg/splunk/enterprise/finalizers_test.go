@@ -43,6 +43,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "indexer"
 	case "ClusterMaster":
 		component = "cluster-master"
+	case "MonitoringConsole":
+		component = "monitoring-console"
 	}
 
 	labelsB := map[string]string{
@@ -104,6 +106,16 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			mockCalls["Create"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
+			if component == "monitoring-console" {
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				}
+				mockCalls["Update"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+				}
+			}
 		} else {
 			mockCalls["Update"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -155,6 +167,8 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 		component = "indexer"
 	case "ClusterMaster":
 		component = "cluster-master"
+	case "MonitoringConsole":
+		component = "monitoring-console"
 	}
 
 	labels := map[string]string{

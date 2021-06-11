@@ -16,12 +16,69 @@ package enterprise
 
 import (
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
+
+func TestApplyMonitoringConsole(t *testing.T) {
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
+		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+	}
+	labels := map[string]string{
+		"app.kubernetes.io/component":  "versionedSecrets",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+	}
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels(labels),
+	}
+	listmockCall := []spltest.MockFuncCall{
+		{ListOpts: listOpts}}
+
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0], funcCalls[7]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8]}, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
+	current := enterprisev1.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.Image = "splunk/test"
+	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+		_, err := ApplyMonitoringConsole(c, cr.(*enterprisev1.MonitoringConsole))
+		return err
+	}
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &current, revised, createCalls, updateCalls, reconcile, true)
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	revised.ObjectMeta.DeletionTimestamp = &currentTime
+	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
+		_, err := ApplyMonitoringConsole(c, cr.(*enterprisev1.MonitoringConsole))
+		return true, err
+	}
+	splunkDeletionTester(t, revised, deleteFunc)
+}
 
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
