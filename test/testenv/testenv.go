@@ -62,6 +62,9 @@ const (
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
 
+	// DeployerPod Template String for deployer pod
+	DeployerPod = "splunk-%s-shc-deployer-0"
+
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 

@@ -525,7 +525,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 			continue
 		}
 		// Look for given config name in file
-		if stanzaFound == false {
+		if !stanzaFound {
 			if strings.HasPrefix(line, stanzaString) {
 				stanzaFound = true
 			}
@@ -537,7 +537,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 		}
 	}
 	if config == "" {
-		err = fmt.Errorf("Failed to find config %s under stanza %s", configName, stanza)
+		err = fmt.Errorf("failed to find config %s under stanza %s", configName, stanza)
 	}
 	return config, err
 }
@@ -555,7 +555,7 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 }
 
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenSpec(name, ns, licenseMasterName string, ansibleConfig string, spec enterprisev1.ClusterMasterSpec) *enterprisev1.ClusterMaster {
+func newClusterMasterWithGivenSpec(name string, ns string, spec enterprisev1.ClusterMasterSpec) *enterprisev1.ClusterMaster {
 	new := enterprisev1.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -570,24 +570,8 @@ func newClusterMasterWithGivenSpec(name, ns, licenseMasterName string, ansibleCo
 	return &new
 }
 
-// newIndexerClusterWithGivenSpec creates and initialize the CR for IndexerCluster Kind
-func newIndexerClusterWithGivenSpec(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string, spec enterprisev1.IndexerClusterSpec) *enterprisev1.IndexerCluster {
-	new := enterprisev1.IndexerCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "IndexerCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  ns,
-			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
-		},
-		Spec: spec,
-	}
-	return &new
-}
-
 // newSearchHeadClusterWithGivenSpec create and initializes CR for Search Cluster Kind with Given Spec
-func newSearchHeadClusterWithGivenSpec(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string, spec enterprisev1.SearchHeadClusterSpec) *enterprisev1.SearchHeadCluster {
+func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterprisev1.SearchHeadClusterSpec) *enterprisev1.SearchHeadCluster {
 	new := enterprisev1.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -620,9 +604,14 @@ func newLicenseMasterWithGivenSpec(name, ns string, spec enterprisev1.LicenseMas
 	return &new
 }
 
-// GetSubDirsOnPod returns subdirectory under given path on the given POD
-func GetSubDirsOnPod(deployment *Deployment, podName string, path string) ([]string, error) {
-	cmd := fmt.Sprintf("cd %s; ls -d */", path)
+// GetDirsOrFilesInPath returns subdirectory under given path on the given POD
+func GetDirsOrFilesInPath(deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+	var cmd string
+	if dirOnly {
+		cmd = fmt.Sprintf("cd %s; ls -d */", path)
+	} else {
+		cmd = fmt.Sprintf("cd %s; ls ", path)
+	}
 	stdout, err := ExecuteCommandOnPod(deployment, podName, cmd)
 	if err != nil {
 		return nil, err
