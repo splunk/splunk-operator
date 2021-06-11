@@ -247,7 +247,7 @@ type AppFrameworkSpec struct {
 	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 
 	// Interval in seconds to check the Remote Storage for App changes
-	AppsRepoPollInterval uint `json:"appsRepoPollIntervalSeconds,omitempty"`
+	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// List of remote storage volumes
 	VolList []VolumeSpec `json:"volumes,omitempty"`
@@ -271,18 +271,6 @@ type AppSrcDeployInfo struct {
 	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
 }
 
-// AppInfoStatus indicates if bundle push required
-type AppInfoStatus struct {
-	// This is false for the first time when we enter the reconcile loop.
-	// For all other consequent times, this will be set to true.
-	// This will help in checking for the apps status either right away(for the first time case)
-	// or after the polling interval.
-	NeedToCheckAfterPollInterval bool `json:"needToCheckAfterPollInterval"`
-
-	// This is set to the time when we get the list of apps from remote storage.
-	LastAppInfoCheckTime int64 `json:"lastAppInfoCheckTime"`
-}
-
 // AppDeploymentContext for storing the Apps deployment information
 type AppDeploymentContext struct {
 	// App Framework version info for future use
@@ -297,6 +285,6 @@ type AppDeploymentContext struct {
 	// Represents the Apps deployment status
 	AppsSrcDeployStatus map[string]AppSrcDeployInfo `json:"appSrcDeployStatus,omitempty"`
 
-	// This represents whether we need to check the status of apps on remote storage
-	AppInfoStatus AppInfoStatus `json:"appInfoStatus"`
+	// This is set to the time when we get the list of apps from remote storage.
+	LastAppInfoCheckTime int64 `json:"lastAppInfoCheckTime"`
 }

@@ -976,45 +976,6 @@ maxGlobalRawDataSizeMB = 61440
 
 }
 
-func TestCheckIfVolumeExists(t *testing.T) {
-	SmartStoreConfig := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
-		},
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-		},
-	}
-
-	// Volume that doesn't should error out
-	_, err := checkIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
-
-	if err == nil {
-		t.Errorf("if the volume doesn't exists, error should be reported")
-	}
-
-	// Volume that exists should not error out
-	index := len(SmartStoreConfig.VolList) - 1
-	returnedIndex, err := checkIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
-
-	if err != nil {
-		t.Errorf("existing volume should not error out. index id: %d, error: %s", index, err.Error())
-	} else if index != returnedIndex {
-		t.Errorf("Expected index: %d, but returned index id: %d", index, returnedIndex)
-	}
-}
-
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	cr := enterprisev1.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{

@@ -15,9 +15,7 @@
 package enterprise
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -568,79 +566,7 @@ func TestIsAppExtentionValid(t *testing.T) {
 	}
 }
 
-func TestGetVolume(t *testing.T) {
-	appFrameworkRef := enterprisev1.AppFrameworkSpec{
-		AppsRepoPollInterval: 60,
-		Defaults: enterprisev1.AppSourceDefaultSpec{
-			VolName: "vol2",
-			Scope:   "cluster",
-		},
-
-		VolList: []enterprisev1.VolumeSpec{
-			{
-				Name:      "vol1",
-				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-				Path:      "testbucket-rs-london",
-				SecretRef: "s3-secret",
-				Type:      "s3",
-				Provider:  "aws",
-			},
-			{
-				Name:      "vol2",
-				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-				Path:      "testbucket-rs-london-2",
-				SecretRef: "s3-secret",
-				Type:      "s3",
-				Provider:  "aws",
-			},
-		},
-		AppSources: []enterprisev1.AppSourceSpec{
-			{
-				Name:     "adminApps",
-				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
-					VolName: "vol1",
-					Scope:   "local",
-				},
-			},
-			{
-				Name:     "securityApps",
-				Location: "securityAppsRepo",
-			},
-		},
-	}
-
-	// test for valid volumes
-	for index, appSource := range appFrameworkRef.AppSources {
-		vol, err := GetVolume(appSource, &appFrameworkRef)
-		if err != nil {
-			t.Errorf("GetVolume should not have returned error")
-		}
-
-		if !reflect.DeepEqual(vol, appFrameworkRef.VolList[index]) {
-			t.Errorf("returned volume spec is not correct")
-		}
-	}
-
-	// test for an invalid volume
-	appFrameworkRef.AppSources = []enterprisev1.AppSourceSpec{
-		{
-			Name:     "adminApps",
-			Location: "adminAppsRepo",
-			AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
-				VolName: "invalid_volume",
-				Scope:   "local",
-			},
-		},
-	}
-
-	_, err := GetVolume(appFrameworkRef.AppSources[0], &appFrameworkRef)
-	if err == nil {
-		t.Errorf("GetVolume should have returned error for an invalid volume name")
-	}
-}
-
-func TestShouldCheckAppStatus(t *testing.T) {
+func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	appFrameworkRef := enterprisev1.AppFrameworkSpec{
 		AppsRepoPollInterval: 60,
 		VolList: []enterprisev1.VolumeSpec{
@@ -665,27 +591,26 @@ func TestShouldCheckAppStatus(t *testing.T) {
 	}
 
 	// Case 1. This is the case when we first enter the reconcile loop.
-	appInfoStatus := enterprisev1.AppInfoStatus{
-		NeedToCheckAfterPollInterval: false,
-		LastAppInfoCheckTime:         0,
+	appInfoContext := enterprisev1.AppDeploymentContext{
+		LastAppInfoCheckTime: 0,
 	}
 
-	if !ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+	if !HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 
 	// Case 2. We just checked the apps status
-	SetAppInfoStatus(&appInfoStatus)
+	SetLastAppInfoCheckTime(&appInfoContext)
 
-	if ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+	if HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
 	}
 
 	// Case 3. Lets check after AppsRepoPollInterval has elapsed.
 	// We do this by setting some random past timestamp.
-	appInfoStatus.LastAppInfoCheckTime = 1591464060
+	appInfoContext.LastAppInfoCheckTime = 1591464060
 
-	if !ShouldCheckAppStatus(appFrameworkRef, appInfoStatus) {
+	if !HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
@@ -747,49 +672,20 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 	return matchCount
 }
 
-// ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(s3Response splclient.S3Response) (spltest.MockAWSS3Client, error) {
-	scopedLog := log.WithName("ConvertS3Response")
+func TestSetLastAppInfoCheckTime(t *testing.T) {
+	appInfoStatus := &enterprisev1.AppDeploymentContext{}
+	SetLastAppInfoCheckTime(appInfoStatus)
 
-	var mockResponse spltest.MockAWSS3Client
-
-	tmp, err := json.Marshal(s3Response)
-	if err != nil {
-		scopedLog.Error(err, "Unable to marshal s3 response")
-		return mockResponse, err
+	if appInfoStatus.LastAppInfoCheckTime != time.Now().Unix() {
+		t.Errorf("LastAppInfoCheckTime should have been set to current time")
 	}
-
-	err = json.Unmarshal(tmp, &mockResponse)
-	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal s3 response")
-		return mockResponse, err
-	}
-
-	return mockResponse, err
 }
 
-// NewMockAWSS3Client returns an AWS S3 mock client for testing
-func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn splclient.GetInitFunc) (splclient.S3Client, error) {
-	var s3SplunkClient splclient.SplunkAWSS3Client
-	var err error
-	region := splclient.GetRegion(endpoint)
-
-	cl := fn(region, accessKeyID, secretAccessKey)
-	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
-		return nil, err
+func TestGetNextRequeueTime(t *testing.T) {
+	appFrameworkRef := enterprisev1.AppFrameworkSpec{}
+	appFrameworkRef.AppsRepoPollInterval = 60
+	nextRequeueTime := GetNextRequeueTime(appFrameworkRef.AppsRepoPollInterval, (time.Now().Unix() - int64(40)))
+	if nextRequeueTime > time.Second*20 {
+		t.Errorf("Got wrong next requeue time")
 	}
-
-	s3SplunkClient = cl.(splclient.SplunkAWSS3Client)
-
-	return &splclient.AWSS3Client{
-		Region:             region,
-		BucketName:         bucketName,
-		AWSAccessKeyID:     accessKeyID,
-		AWSSecretAccessKey: secretAccessKey,
-		Prefix:             prefix,
-		StartAfter:         startAfter,
-		Endpoint:           endpoint,
-		Client:             s3SplunkClient,
-	}, nil
 }

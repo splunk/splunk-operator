@@ -374,32 +374,6 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 	return s3Response, nil
 }
 
-// GetVolume gets the volume defintion for an app source
-func GetVolume(appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
-	var volName string
-	var index int
-	var err error
-	var vol enterprisev1.VolumeSpec
-
-	scopedLog := log.WithName("GetVolume")
-
-	// get the volume spec from the volume name
-	if appSource.VolName != "" {
-		volName = appSource.VolName
-	} else {
-		volName = appFrameworkRef.Defaults.VolName
-	}
-
-	index, err = checkIfVolumeExists(appFrameworkRef.VolList, volName)
-	if err != nil {
-		scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
-		return vol, err
-	}
-
-	vol = appFrameworkRef.VolList[index]
-	return vol, err
-}
-
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
 func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
@@ -415,7 +389,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = GetVolume(appSource, appFrameworkRef)
+		vol, err = splclient.GetVolume(appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -720,7 +694,7 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 		// Add app framework init containers per app source and attach the init volume
 		for i, appSrc := range appFrameworkConfig.AppSources {
 			// Get volume info from appSrc
-			volSpecPos, err := checkIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+			volSpecPos, err := splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
 			if err != nil {
 				// Invalid appFramework config.  This shouldn't happen
 				scopedLog.Info("Invalid appSrc volume spec, moving to the next one", "appSrc.VolName", appSrc.VolName, "err", err)
@@ -791,30 +765,38 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 	}
 }
 
-// SetAppInfoStatus sets the last check interval to current time and
-// sets the flag to check the apps status in the next interval
-func SetAppInfoStatus(appInfoStatus *enterprisev1.AppInfoStatus) {
+// SetLastAppInfoCheckTime sets the last check time to current time
+func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
+	scopedLog := log.WithName("SetLastAppInfoCheckTime")
 	currentEpoch := time.Now().Unix()
+
+	scopedLog.Info("Setting the LastAppInfoCheckTime to current time", "current epoch time", currentEpoch)
+
 	appInfoStatus.LastAppInfoCheckTime = currentEpoch
-	appInfoStatus.NeedToCheckAfterPollInterval = true
 }
 
-func hasAppRepoCheckTimerExpired(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoStatus enterprisev1.AppInfoStatus) bool {
+// HasAppRepoCheckTimerExpired checks if the polling interval has expired
+func HasAppRepoCheckTimerExpired(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoContext enterprisev1.AppDeploymentContext) bool {
 	scopedLog := log.WithName("hasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
-	scopedLog.Info("Checking if the app repo polling interval has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoStatus.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
-	return appInfoStatus.LastAppInfoCheckTime+int64(appFrameworkRef.AppsRepoPollInterval) < currentEpoch
+	scopedLog.Info("Checking if the app repo polling interval has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
+	return appInfoContext.LastAppInfoCheckTime+int64(appFrameworkRef.AppsRepoPollInterval) <= currentEpoch
 }
 
-// ShouldCheckAppStatus checks whether we need to check the app status in the current reconcile
-func ShouldCheckAppStatus(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoStatus enterprisev1.AppInfoStatus) bool {
-	scopedLog := log.WithName("ShouldCheckAppStatus")
+// GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
+// There can be some time elapsed between when we frst set lastAppInfoCheckTime and when the CR is in Ready state.
+// Hence we need to subtracct the delta time elapsed from the actual polling interval,
+// so that the next reconile would happen at the right time.
+func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
+	scopedLog := log.WithName("GetNextRequeueTime")
+	currentEpoch := time.Now().Unix()
 
-	scopedLog.Info("Checking to see if we need to probe the status of apps on remote storage")
+	var nextRequeueTimeInSec int64
+	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
 
-	// check if its the first time or we are coming after appsRepoPollInterval secs.
-	return appInfoStatus.NeedToCheckAfterPollInterval == false ||
-		(appInfoStatus.NeedToCheckAfterPollInterval == true && hasAppRepoCheckTimerExpired(appFrameworkRef, appInfoStatus))
+	scopedLog.Info("Getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
+
+	return time.Second * (time.Duration(nextRequeueTimeInSec))
 }
 
 // RegisterS3ClientsForProviders registers the S3 Client corresponding to the provider

@@ -92,24 +92,21 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 	}
 
 	//check if the apps need to be downloaded from remote storage
-	if ShouldCheckAppStatus(cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppInfoStatus) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+	if HasAppRepoCheckTimerExpired(cr.Spec.AppFrameworkConfig, cr.Status.AppContext) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
-		shouldHandleAppChanges := true
 		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
 		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
 			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
-			shouldHandleAppChanges = false
-		}
+		} else {
 
-		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
-			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
-		}
+			for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
+				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+			}
 
-		// Only handle the app repo changes if we were able to successfully get the apps list
-		if shouldHandleAppChanges == true {
+			// Only handle the app repo changes if we were able to successfully get the apps list
 			err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
 			if err != nil {
 				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
@@ -119,8 +116,8 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 			cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 		}
 
-		// set the app info status to check the apps status after polling interval
-		SetAppInfoStatus(&cr.Status.AppContext.AppInfoStatus)
+		// set the last check time to current time
+		SetLastAppInfoCheckTime(&cr.Status.AppContext)
 	}
 
 	// create or update general config resources
@@ -185,9 +182,9 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 
 		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
-			// requeue the reconcile after polling interval if we had set the flag before
-			if cr.Status.AppContext.AppInfoStatus.NeedToCheckAfterPollInterval == true {
-				result.RequeueAfter = time.Second * time.Duration(cr.Spec.AppFrameworkConfig.AppsRepoPollInterval)
+			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+				result.RequeueAfter = GetNextRequeueTime(cr.Spec.AppFrameworkConfig.AppsRepoPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 			} else {
 				result.Requeue = false
 			}

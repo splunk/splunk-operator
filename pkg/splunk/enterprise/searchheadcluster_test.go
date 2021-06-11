@@ -680,27 +680,48 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		Spec: enterprisev1.SearchHeadClusterSpec{
 			Replicas: 3,
 			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				Defaults: enterprisev1.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol2",
+					Scope:   "local",
+				},
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+					{
+						Name:      "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
+					{
+						Name:      "msos_s2s3_vol2",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london2",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
 				},
 				AppSources: []enterprisev1.AppSourceSpec{
-					{Name: "adminApps",
+					{
+						Name:     "adminApps",
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   "local",
+						},
 					},
-					{Name: "securityApps",
+					{
+						Name:     "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   "local",
+						},
 					},
-					{Name: "authenticationApps",
+					{
+						Name:     "authenticationApps",
 						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
 					},
 				},
 			},
@@ -774,7 +795,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetVolume(appSource, &appFrameworkRef)
+		vol, err = splclient.GetVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -782,7 +803,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
 
 		s3ClientMgr := &S3ClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
@@ -806,7 +827,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		}
 
 		var mockResponse spltest.MockAWSS3Client
-		mockResponse, err = ConvertS3Response(s3Response)
+		mockResponse, err = splclient.ConvertS3Response(s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -892,14 +913,14 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterprisev1.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = GetVolume(appSource, &appFrameworkRef)
+	vol, err = splclient.GetVolume(appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
 
 	s3ClientMgr := &S3ClientManager{
 		client:          client,
