@@ -185,7 +185,7 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 		configTester(t, "ApplySmartstoreConfigMap()", f, want)
 	}
 
-	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null},"data":{"conftoken":"1601945361","indexes.conf":"[default]\nrepFactor = auto\nmaxDataSize = auto\nhomePath = $SPLUNK_DB/$_index_name/db\ncoldPath = $SPLUNK_DB/$_index_name/colddb\nthawedPath = $SPLUNK_DB/$_index_name/thaweddb\n \n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n \n[salesdata1]\nremotePath = volume:msos_s2s3_vol/remotepath1\n\n[salesdata2]\nremotePath = volume:msos_s2s3_vol/remotepath2\n\n[salesdata3]\nremotePath = volume:msos_s2s3_vol/remotepath3\n","server.conf":""}}`)
+	test(client, &cr, &cr.Spec.SmartStore, `{"metadata":{"name":"splunk-idxCluster--smartstore","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"idxCluster","uid":"","controller":true}]},"data":{"conftoken":"1601945361","indexes.conf":"[default]\nrepFactor = auto\nmaxDataSize = auto\nhomePath = $SPLUNK_DB/$_index_name/db\ncoldPath = $SPLUNK_DB/$_index_name/colddb\nthawedPath = $SPLUNK_DB/$_index_name/thaweddb\n \n[volume:msos_s2s3_vol]\nstorageType = remote\npath = s3://testbucket-rs-london\nremote.s3.access_key = abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa\nremote.s3.secret_key = g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy\nremote.s3.endpoint = https://s3-eu-west-2.amazonaws.com\n \n[salesdata1]\nremotePath = volume:msos_s2s3_vol/remotepath1\n\n[salesdata2]\nremotePath = volume:msos_s2s3_vol/remotepath2\n\n[salesdata3]\nremotePath = volume:msos_s2s3_vol/remotepath3\n","server.conf":""}}`)
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
@@ -193,6 +193,98 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}
+}
+
+func TestApplyAppListingConfigMap(t *testing.T) {
+	cr := enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "clusterMaster",
+			//Name:      "idxCluster",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.ClusterMasterSpec{
+			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterprisev1.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	var S3Response splclient.S3Response
+
+	remoteObjListMap := make(map[string]splclient.S3Response)
+
+	// Fill appSrc adminApps
+	startAppPathAndName := "adminCategoryOne.tgz"
+	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 30)
+	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[0].Name] = S3Response
+
+	// set the status context
+	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+
+	err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
+
+	if err != nil {
+		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
+	}
+
+	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, want string) {
+		f := func() (interface{}, error) {
+			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus)
+			// Make the config token as predictable
+			configMap.Data[appsUpdateToken] = "1601945361"
+			return configMap, err
+		}
+		configTester(t, "(ApplyAppListingConfigMap)", f, want)
+	}
+
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  apps_location:\n    - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/11_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/12_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/13_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/14_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/15_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/16_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/17_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/18_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/19_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/20_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/21_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/22_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/23_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/24_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/25_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/26_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/27_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/28_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/29_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/30_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
+
+	// Now test the Cluster master stateful set, to validate the Pod updates with the app listing config map
+	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf("Failed to create namespace scoped object")
+	}
+
+	testStsWithAppListVolMounts := func(want string) {
+		f := func() (interface{}, error) {
+			if err := validateClusterMasterSpec(&cr); err != nil {
+				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
+			}
+			return getClusterMasterStatefulSet(client, &cr)
+		}
+		configTester(t, fmt.Sprintf("getClusterMasterStatefulSet"), f, want)
+	}
+
+	testStsWithAppListVolMounts(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-clusterMaster-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"},"annotations":{"appListingRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-clusterMaster-cluster-master-secret-v1","defaultMode":420}},{"name":"mnt-app-listing","configMap":{"name":"splunk-clusterMaster--app-list","items":[{"key":"app-list-local.yaml","path":"app-list-local.yaml","mode":420},{"key":"appsUpdateToken","path":"appsUpdateToken","mode":420}],"defaultMode":420}},{"name":"init-apps","emptyDir":{}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/app-listing/app-list-local.yaml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-app-listing","mountPath":"/mnt/app-listing/"},{"name":"init-apps","mountPath":"/init-apps/"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-clusterMaster-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-clusterMaster-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
 }
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {

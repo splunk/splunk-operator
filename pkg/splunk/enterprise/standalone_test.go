@@ -39,6 +39,7 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
@@ -53,8 +54,8 @@ func TestApplyStandalone(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8]}, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[9]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -96,6 +97,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
@@ -110,8 +112,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12]}, "Update": {funcCalls[11], funcCalls[12]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[13]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[12], funcCalls[13]}, "List": {listmockCall[0]}}
 
 	current := enterprisev1.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -452,7 +454,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetVolume(client, &cr, appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(client, &cr, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -571,7 +573,7 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterprisev1.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = GetVolume(client, &cr, appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(client, &cr, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}

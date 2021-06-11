@@ -69,14 +69,10 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
+	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+
 	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		var sourceToAppsList map[string]splclient.S3Response
-
-		for _, vol := range cr.Spec.AppFrameworkConfig.VolList {
-			if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-				splclient.RegisterS3Client(vol.Provider)
-			}
-		}
 
 		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
 		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
@@ -91,6 +87,11 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
 		if err != nil {
 			scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+			return result, err
+		}
+
+		_, _, err := ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+		if err != nil {
 			return result, err
 		}
 
@@ -171,9 +172,9 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 		return nil, err
 	}
 
-	_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
+	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkStandalone)
 
-	if needToSetupSplunkOperatorApp {
+	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
 
