@@ -89,7 +89,7 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 	defer file.Close()
 
 	sess, err := S3Session()
-	if err == nil {
+	if err != nil {
 		return "", err
 	}
 
