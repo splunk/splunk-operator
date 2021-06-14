@@ -59,6 +59,25 @@ type PodDetailsStruct struct {
 	} `json:"status"`
 }
 
+// VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
+func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string, monitoringConsole *enterprisev1.MonitoringConsole, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(deploymentName, monitoringConsole)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Monitoring Console STATUS to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return monitoringConsole.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() splcommon.Phase {
+		_ = deployment.GetInstance(deployment.GetName(), monitoringConsole)
+		return monitoringConsole.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+}
+
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
 func StandaloneReady(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {

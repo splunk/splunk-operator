@@ -100,6 +100,17 @@ func (d *Deployment) DeployStandalone(name string) (*enterprisev1.Standalone, er
 	return deployed.(*enterprisev1.Standalone), err
 }
 
+// DeployMonitoringConsole deploys MC instance on specified testenv,
+// licenseMasterRef is optional, pass empty string if MC should not be attached to a LM
+func (d *Deployment) DeployMonitoringConsole(name string, licenseMasterRef string) (*enterprisev1.MonitoringConsole, error) {
+	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, licenseMasterRef)
+	deployed, err := d.deployCR(name, mc)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterprisev1.MonitoringConsole), err
+}
+
 // GetInstance retrieves the standalone, indexer, searchhead, licensemaster instance
 func (d *Deployment) GetInstance(name string, instance runtime.Object) error {
 	key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
