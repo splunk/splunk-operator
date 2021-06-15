@@ -1187,3 +1187,25 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 }
+
+func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
+	var configMapName = "testConfgMap"
+	var namespace = "testNameSpace"
+
+	dataMap := make(map[string]string)
+	dataMap["a"] = "x"
+	dataMap["b"] = "y"
+	dataMap["z"] = "z"
+	cm := splctrl.PrepareConfigMap(configMapName, namespace, dataMap)
+	var mode int32 = 755
+
+	test := func(cm *corev1.ConfigMap, mode *int32, want string) {
+		f := func() (interface{}, error) {
+			return getVolumeSourceMountFromConfigMapData(cm, mode), nil
+		}
+		configTester(t, "getVolumeSourceMountFromConfigMapData()", f, want)
+
+	}
+
+	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
+}

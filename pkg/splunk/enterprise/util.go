@@ -17,6 +17,7 @@ package enterprise
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -69,6 +70,12 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 
 	//Get the prefix from the "path" field
 	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
+	// if vol.Path contains just the bucket name(i.e without ending "/"), TrimPrefix returns the vol.Path
+	// So, just reset the basePrefix to null
+	if basePrefix == bucket {
+		basePrefix = ""
+	}
+
 	// Join takes care of merging two paths and returns a clean result
 	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
 	prefix := filepath.Join(basePrefix, location) + "/"
@@ -212,6 +219,85 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client spl
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
+// ApplyAppListingConfigMap creates the configMap  with two entries:
+// (1) app-list-local.yaml
+// (2) app-list-cluster.yaml
+// Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
+func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
+
+	var err error
+	var crKind string
+	var configMapDataChanged bool
+	crKind = cr.GetObjectKind().GroupVersionKind().Kind
+
+	scopedLog := log.WithName("ApplyAppListingConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	mapAppListing := make(map[string]string)
+
+	// ToDo: sgontla/Jeff: Adapt to any Ansible changes(if required) for differentiating local vs. cluster scope (?)
+	yamlConfHeader := fmt.Sprintf(`splunk:
+  apps_location:`)
+
+	var localAppsConf, clusterAppsConf string
+	localAppsConf = yamlConfHeader
+	clusterAppsConf = yamlConfHeader
+
+	for appSrc, appSrcDeployInfo := range appsSrcDeployStatus {
+		appDeployList := appSrcDeployInfo.AppDeploymentInfoList
+
+		switch scope := getAppSrcScope(appConf, appSrc); scope {
+		case "local":
+			for idx := range appDeployList {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+					localAppsConf = fmt.Sprintf(`%s
+    - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
+				}
+			}
+
+		case "cluster":
+			for idx := range appDeployList {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+					clusterAppsConf = fmt.Sprintf(`%s
+    - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
+				}
+			}
+
+		default:
+			scopedLog.Error(nil, "Invalid scope detected")
+		}
+	}
+
+	if localAppsConf != yamlConfHeader {
+		mapAppListing["app-list-local.yaml"] = localAppsConf
+	}
+
+	if clusterAppsConf != yamlConfHeader {
+		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
+	}
+
+	// Create App list config map
+	configMapName := GetSplunkAppsConfigMapName(cr.GetName(), crKind)
+	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
+
+	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+	configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+	if err != nil {
+		return nil, configMapDataChanged, err
+	} else if configMapDataChanged {
+		// Create a token to check if the app list is on the pod is latest or not
+		appListingConfigMap.Data[appsUpdateToken] = fmt.Sprintf(`%d`, time.Now().Unix())
+
+		// Apply the configMap with a fresh token, if there is a change
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+		if err != nil {
+			return nil, configMapDataChanged, err
+		}
+	}
+
+	return appListingConfigMap, configMapDataChanged, nil
+}
+
 // ApplySmartstoreConfigMap creates the configMap with Smartstore config in INI format
 func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	smartstore *enterprisev1.SmartStoreSpec) (*corev1.ConfigMap, bool, error) {
@@ -254,7 +340,8 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	mapSplunkConfDetails["server.conf"] = iniServerConf
 
 	// Create smartstore config consisting indexes.conf
-	SplunkOperatorAppConfigMap := prepareSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, mapSplunkConfDetails)
+	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)
+	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
@@ -265,7 +352,6 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapSplunkConfDetails[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// Apply the configMap with a fresh token
-		SplunkOperatorAppConfigMap = prepareSplunkSmartstoreConfigMap(cr.GetName(), cr.GetNamespace(), crKind, mapSplunkConfDetails)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
 		if err != nil {
 			return nil, configMapDataChanged, err
@@ -580,7 +666,7 @@ func isAppExtentionValid(receivedKey string) bool {
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
 func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
-	scopedLog := log.WithName("createOrUpdateAppSrcDeploymentInfo").WithValues("Called with length: ", len(remoteS3ObjList))
+	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length: ", len(remoteS3ObjList))
 
 	var found bool
 	var appName string
@@ -694,7 +780,15 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 		// Add app framework init containers per app source and attach the init volume
 		for i, appSrc := range appFrameworkConfig.AppSources {
 			// Get volume info from appSrc
-			volSpecPos, err := splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+
+			var volSpecPos int
+			var err error
+			if appSrc.VolName != "" {
+				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+			} else {
+				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appFrameworkConfig.Defaults.VolName)
+			}
+
 			if err != nil {
 				// Invalid appFramework config.  This shouldn't happen
 				scopedLog.Info("Invalid appSrc volume spec, moving to the next one", "appSrc.VolName", appSrc.VolName, "err", err)
@@ -718,8 +812,8 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			appSecretRef := appRepoVol.SecretRef
 			appSrcName := appSrc.Name
 			appSrcPath := appSrc.Location
-			appSrcScope := appSrc.Scope
-			initContainerName := fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope)
+			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
+			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
 
 			// Setup init container
 			initContainerSpec := corev1.Container{
@@ -776,7 +870,7 @@ func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
 }
 
 // HasAppRepoCheckTimerExpired checks if the polling interval has expired
-func HasAppRepoCheckTimerExpired(appFrameworkRef enterprisev1.AppFrameworkSpec, appInfoContext enterprisev1.AppDeploymentContext) bool {
+func HasAppRepoCheckTimerExpired(appFrameworkRef *enterprisev1.AppFrameworkSpec, appInfoContext *enterprisev1.AppDeploymentContext) bool {
 	scopedLog := log.WithName("hasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
 	scopedLog.Info("Checking if the app repo polling interval has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
@@ -799,11 +893,50 @@ func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration 
 	return time.Second * (time.Duration(nextRequeueTimeInSec))
 }
 
-// RegisterS3ClientsForProviders registers the S3 Client corresponding to the provider
-func RegisterS3ClientsForProviders(volList []enterprisev1.VolumeSpec) {
-	for _, vol := range volList {
-		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-			splclient.RegisterS3Client(vol.Provider)
+// initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
+func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterprisev1.AppFrameworkSpec, appStatusContext *enterprisev1.AppDeploymentContext) error {
+	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	var err error
+	// Register the S3 clients specific to providers if not done already
+	// This is done to prevent the null pointer dereference in case when
+	// operator crashes and comes back up and the status of app context was updated
+	// to match the spec in the previous run.
+	initAppFrameWorkContext(appFrameworkConf, appStatusContext)
+
+	//check if the apps need to be downloaded from remote storage
+	if HasAppRepoCheckTimerExpired(appFrameworkConf, appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+		var sourceToAppsList map[string]splclient.S3Response
+
+		scopedLog.Info("Checking status of apps on remote storage...")
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, appFrameworkConf)
+		if len(sourceToAppsList) != len(appFrameworkConf.AppSources) {
+			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
+		} else {
+
+			for _, appSource := range appFrameworkConf.AppSources {
+				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+			}
+
+			// Only handle the app repo changes if we were able to successfully get the apps list
+			err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+			if err != nil {
+				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+				return err
+			}
+
+			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus)
+			if err != nil {
+				return err
+			}
+
+			appStatusContext.AppFrameworkConfig = *appFrameworkConf
 		}
+
+		// set the last check time to current time
+		SetLastAppInfoCheckTime(appStatusContext)
 	}
+
+	return nil
 }

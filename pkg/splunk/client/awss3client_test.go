@@ -15,6 +15,7 @@
 package client
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -53,6 +54,16 @@ func TestGetInitContainerImage(t *testing.T) {
 
 	if awsClient.GetInitContainerImage() != "amazon/aws-cli" {
 		t.Errorf("Got invalid init container image for AWS client.")
+	}
+}
+
+func TestGetAWSInitContainerCmd(t *testing.T) {
+	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
+
+	awsClient := &AWSS3Client{}
+	gotCmd := awsClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin/", "admin", "/mnt/apps-local/")
+	if !reflect.DeepEqual(wantCmd, gotCmd) {
+		t.Errorf("Got incorrect Init container cmd")
 	}
 }
 

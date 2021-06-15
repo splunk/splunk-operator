@@ -17,6 +17,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -159,5 +160,8 @@ func (awsclient *AWSS3Client) GetInitContainerImage() string {
 
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
 func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
-	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s/%s", bucket, path), fmt.Sprintf("%s/%s", appMnt, appSrcName)})
+	s3AppSrcPath := filepath.Join(bucket, path) + "/"
+	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
+
+	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s", s3AppSrcPath), podSyncPath})
 }

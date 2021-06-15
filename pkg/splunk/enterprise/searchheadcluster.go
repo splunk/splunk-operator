@@ -47,38 +47,14 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		return result, err
 	}
 
-	// Register the S3 clients specific to providers if not done already
-	// This is done to prevent the null pointer dereference in case when
-	// operator crashes and comes back up and the status of app context was updated
-	// to match the spec in the previous run.
-	if cr.Spec.AppFrameworkConfig.VolList != nil {
-		RegisterS3ClientsForProviders(cr.Spec.AppFrameworkConfig.VolList)
-	}
-
-	if HasAppRepoCheckTimerExpired(cr.Spec.AppFrameworkConfig, cr.Status.AppContext) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		var sourceToAppsList map[string]splclient.S3Response
-
-		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
-		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
-			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
-		} else {
-
-			for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
-				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
-			}
-
-			// Only handle the app repo changes if we were able to successfully get the apps list
-			err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
-			if err != nil {
-				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
-				return result, err
-			}
-
-			cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
 		}
-
-		// set the last check time to current time
-		SetLastAppInfoCheckTime(&cr.Status.AppContext)
 	}
 
 	// updates status after function completes

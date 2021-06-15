@@ -15,6 +15,7 @@
 package client
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -54,5 +55,15 @@ func TestMinioGetInitContainerImage(t *testing.T) {
 
 	if minioClient.GetInitContainerImage() != "amazon/aws-cli" {
 		t.Errorf("Got invalid init container image for Minio client.")
+	}
+}
+
+func TestGetMinioInitContainerCmd(t *testing.T) {
+	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin", "/mnt/apps-local//admin"}
+
+	minioClient := &MinioClient{}
+	gotCmd := minioClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
+	if !reflect.DeepEqual(wantCmd, gotCmd) {
+		t.Errorf("Got incorrect Init container cmd")
 	}
 }

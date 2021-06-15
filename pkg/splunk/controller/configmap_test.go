@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -99,5 +100,28 @@ func TestGetConfigMapResourceVersion(t *testing.T) {
 	_, err = GetConfigMapResourceVersion(client, namespacedName)
 	if err != nil {
 		t.Errorf("Should not return an error, when the configMap exists")
+	}
+}
+
+func TestPrepareConfigMap(t *testing.T) {
+	var configMapName = "testConfgMap"
+	var namespace = "testNameSpace"
+	expectedCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+	}
+
+	dataMap := make(map[string]string)
+	dataMap["a"] = "x"
+	dataMap["b"] = "y"
+	dataMap["z"] = "z"
+	expectedCm.Data = dataMap
+
+	returnedCM := PrepareConfigMap(configMapName, namespace, dataMap)
+
+	if !reflect.DeepEqual(expectedCm, returnedCM) {
+		t.Errorf("configMap preparation failed")
 	}
 }

@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.s
-package s1appfw
+package c3appfw
 
 import (
 	"fmt"
@@ -22,11 +22,9 @@ import (
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("s1appfw test", func() {
+var _ = Describe("c3appfw test", func() {
 
 	var deployment *testenv.Deployment
 	var s3TestDir string
@@ -38,7 +36,7 @@ var _ = Describe("s1appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		// Upload V1 apps to S3
-		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+		s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appListV1, downloadDirV1)
 		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 		uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -59,8 +57,8 @@ var _ = Describe("s1appfw test", func() {
 		}
 	})
 
-	Context("appframework Standalone deployment (S1) with App Framework", func() {
-		It("s1, appframework: can deploy a standalone instance with App Framework enabled", func() {
+	Context("Single Site Indexer Cluster with SHC (C3) with App Framework", func() {
+		It("integration, c3, appframework: can deploy a C3 SVA with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -69,7 +67,7 @@ var _ = Describe("s1appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   "cluster",
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
@@ -84,30 +82,30 @@ var _ = Describe("s1appfw test", func() {
 				AppSources:           appSourceSpec,
 			}
 
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
-					Spec: splcommon.Spec{
-						ImagePullPolicy: "Always",
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpec,
-			}
+			indexerReplicas := 3
 
-			// Create Standalone Deployment with App Framework
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
 
-			// Wait for Standalone to be in READY status
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify MC Pod is Ready
 			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, initContDownloadLocation)
+			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, initContDownloadLocation)
 		})
 	})
 })

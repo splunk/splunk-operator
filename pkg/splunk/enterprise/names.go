@@ -41,6 +41,9 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
+	// identifier
+	appListingTemplateStr = "splunk-%s-%s-app-list"
+
 	// init container name
 	initContainerTemplate = "%s-init-%d-%s"
 
@@ -59,6 +62,12 @@ const (
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
+	// ToDo: sgontla: Used only for Phase-2, to be removed later
+	appListingRev = "appListingRev"
+
+	// Pod location for app related config
+	appConfLocationOnPod = "/mnt/app-listing/"
+
 	// command merger
 	commandMerger = " && "
 
@@ -68,8 +77,11 @@ const (
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
 
-	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
+	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
+
+	// appsUpdateToken used to track if the if the latest app list is reflecting on pod or not
+	appsUpdateToken = "appsUpdateToken"
 
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
@@ -131,6 +143,11 @@ func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType Ins
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
 	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
+}
+
+// GetSplunkAppsConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
+func GetSplunkAppsConfigMapName(identifier string, crKind string) string {
+	return fmt.Sprintf(appListingTemplateStr, identifier, strings.ToLower(crKind))
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.

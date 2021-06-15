@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"reflect"
 	"strings"
 	"time"
 
@@ -294,7 +293,7 @@ func VerifyIndexConfigsMatch(deployment *Deployment, podName string, indexName s
 	gomega.Consistently(func() bool {
 		indexFound, data := GetIndexOnPod(deployment, podName, indexName)
 		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
-		if indexFound == true {
+		if indexFound {
 			if data.Content.MaxGlobalDataSizeMB == maxGlobalDataSizeMB && data.Content.MaxGlobalRawDataSizeMB == maxGlobalRawDataSizeMB {
 				logf.Log.Info("Checking index configs", "MaxGlobalDataSizeMB", data.Content.MaxGlobalDataSizeMB, "MaxGlobalRawDataSizeMB", data.Content.MaxGlobalRawDataSizeMB)
 				return true
@@ -560,12 +559,50 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 	}
 }
 
-// VerifyAppFrameworkDeployment verifies for a given deployment if App Framework is enabled
-func VerifyAppFrameworkDeployment(standalone *enterprisev1.Standalone) {
-	if reflect.DeepEqual(standalone.Status.AppContext.AppFrameworkConfig, standalone.Spec.AppFrameworkConfig) {
-		logf.Log.Info("Standalone with App Framework correctly deployed")
-	} else {
-		logf.Log.Info("Issue when deploying Standalone with App Framework")
+// VerifyAppInstall verify that app of specific version is installed
+func VerifyAppInstall(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps map[string]string, versionCheck bool, statusCheck string) {
+	for appName, version := range apps {
+		status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName)
+		logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
+		gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
+		gomega.Expect(strings.ToLower(status)).Should(gomega.Equal(strings.ToLower(statusCheck)))
+		if versionCheck {
+			gomega.Expect(versionInstalled).Should(gomega.Equal(version))
+		}
 	}
+}
 
+// VerifyAppsCopied verify that apps are copied to correct location based on POD
+func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string) {
+	path := "etc/apps"
+	if strings.Contains(podName, "cluster-master") {
+		path = "etc/master-apps/_cluster"
+	}
+	if strings.Contains(podName, "-deployer-") {
+		path = "etc/shcluster/apps"
+	}
+	VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path)
+}
+
+// VerifyAppsInFolder verify that apps are present in folder
+func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string) {
+	appList, err := GetDirsOrFilesInPath(deployment, podName, path, true)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
+	for _, app := range apps {
+		found := CheckStringInSlice(appList, app)
+		logf.Log.Info("Copy Status for app", "App-name", app, "status", found)
+		gomega.Expect(found).Should(gomega.Equal(true))
+	}
+}
+
+// VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container
+func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
+	for _, podName := range pods {
+		appList, err := GetDirsOrFilesInPath(deployment, podName, path, false)
+		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
+		for _, app := range apps {
+			found := CheckStringInSlice(appList, app)
+			gomega.Expect(found).Should(gomega.Equal(true))
+		}
+	}
 }

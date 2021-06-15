@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
@@ -47,6 +46,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(cr)
 	if err != nil {
+		scopedLog.Error(err, "Failed to validate standalone spec")
 		return result, err
 	}
 
@@ -69,43 +69,22 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
-	// Register the S3 clients specific to providers if not done already
-	// This is done to prevent the null pointer dereference in case when
-	// operator crashes and comes back up and the status of app context was updated
-	// to match the spec in the previous run.
-	if cr.Spec.AppFrameworkConfig.VolList != nil {
-		RegisterS3ClientsForProviders(cr.Spec.AppFrameworkConfig.VolList)
-	}
-
-	if HasAppRepoCheckTimerExpired(cr.Spec.AppFrameworkConfig, cr.Status.AppContext) || !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		var sourceToAppsList map[string]splclient.S3Response
-
-		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
-		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
-			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
-		} else {
-
-			for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
-				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
-			}
-
-			// Only handle the app repo changes if we were able to successfully get the apps list
-			err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
-			if err != nil {
-				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
-				return result, err
-			}
-
-			cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
 		}
-
-		// set the last check time to current time
-		SetLastAppInfoCheckTime(&cr.Status.AppContext)
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
 	}()
 
 	// create or update general config resources
@@ -183,9 +162,9 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 		return nil, err
 	}
 
-	_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
+	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkStandalone)
 
-	if needToSetupSplunkOperatorApp {
+	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
 

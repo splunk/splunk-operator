@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -232,19 +233,6 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 			"default.yml": defaults,
 		},
 	}
-}
-
-// prepareSplunkSmartstoreConfigMap returns a K8 ConfigMap containing Splunk smartstore config in INI format
-func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind string, dataIniMap map[string]string) *corev1.ConfigMap {
-	configMapIni := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkSmartstoreConfigMapName(identifier, crKind),
-			Namespace: namespace,
-		},
-	}
-	configMapIni.Data = dataIniMap
-
-	return configMapIni
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
@@ -473,26 +461,31 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
+// getAppListingConfigMap returns the App listing configMap, if it exists and applicable for that instanceType
+func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+	var configMap *corev1.ConfigMap
+
+	// ToDo: sgontla: Exclude MC, once it's own CR is available
+	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead && instanceType != SplunkMonitoringConsole {
+		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
+		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
+	}
+
+	return configMap
+}
+
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
-func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (*corev1.ConfigMap, bool) {
-	var smartStoreConfigMapName string
+func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+	var configMap *corev1.ConfigMap
+
 	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
-		smartStoreConfigMapName = GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
-	}
-
-	if smartStoreConfigMapName != "" {
+		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
-		configMap, err := splctrl.GetConfigMap(client, namespacedName)
-		if err != nil {
-			// Do not return configMap name, unless the configMap really exists
-			return nil, false
-		}
-
-		return configMap, true
+		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
 	}
 
-	// Do not return configMap name, unless the configMap really exists
-	return nil, false
+	return configMap
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
@@ -562,8 +555,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	smartstoreConfigMap, exists := getSmartstoreConfigMap(client, cr, instanceType)
-	if exists {
+	smartstoreConfigMap := getSmartstoreConfigMap(client, cr, instanceType)
+	if smartstoreConfigMap != nil {
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -585,7 +578,15 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		if instanceType == SplunkStandalone {
 			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = smartstoreConfigMap.ResourceVersion
 		}
+	}
 
+	appListingConfigMap := getAppListingConfigMap(client, cr, instanceType)
+	if appListingConfigMap != nil {
+		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
+
+		// ToDo: sgontla: for Phase-2, we always reset the pod, need to change the behavior for phase-3
+		podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
 	}
 
 	// update security context
@@ -642,6 +643,20 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+	if appListingConfigMap != nil {
+		var appListingFiles []string
+		for key := range appListingConfigMap.Data {
+			if key != appsUpdateToken {
+				appListingFiles = append(appListingFiles, key)
+			}
+		}
+		// Always sort the slice, so that map entries are ordered, to avoid pod resets
+		sort.Strings(appListingFiles)
+
+		for _, fileName := range appListingFiles {
+			splunkDefaults = fmt.Sprintf("%s%s,%s", appConfLocationOnPod, fileName, splunkDefaults)
+		}
 	}
 
 	// prepare container env variables
@@ -731,6 +746,26 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 }
 
+// getVolumeSourceMountFromConfigMapData returns a volume source with the configMap Data entries
+func getVolumeSourceMountFromConfigMapData(configMap *corev1.ConfigMap, mode *int32) corev1.VolumeSource {
+	volumeSource := corev1.VolumeSource{
+		ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: configMap.GetName(),
+			},
+			DefaultMode: mode,
+		},
+	}
+
+	for key := range configMap.Data {
+		volumeSource.ConfigMap.Items = append(volumeSource.ConfigMap.Items, corev1.KeyToPath{Key: key, Path: key, Mode: mode})
+	}
+	//  Map traversal order is not guaranteed. Always sort the slice to avoid (random) pod resets due to the ordering
+	splcommon.SortSlice(volumeSource.ConfigMap.Items, splcommon.SortFieldKey)
+
+	return volumeSource
+}
+
 // isSmartstoreEnabled checks and returns true if smartstore is configured
 func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 	if smartstore == nil {
@@ -773,6 +808,34 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	}
 
 	return false
+}
+
+// initAppFrameWorkContext used to initialize the app frame work context
+func initAppFrameWorkContext(appFrameworkConf *enterprisev1.AppFrameworkSpec, appStatusContext *enterprisev1.AppDeploymentContext) {
+	if appStatusContext.AppsSrcDeployStatus == nil {
+		appStatusContext.AppsSrcDeployStatus = make(map[string]enterprisev1.AppSrcDeployInfo)
+	}
+
+	for _, vol := range appFrameworkConf.VolList {
+		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+			splclient.RegisterS3Client(vol.Provider)
+		}
+	}
+}
+
+// getAppSrcScope returns the scope of a given appSource
+func getAppSrcScope(appFrameworkConf *enterprisev1.AppFrameworkSpec, appSrcName string) string {
+	for _, appSrc := range appFrameworkConf.AppSources {
+		if appSrc.Name == appSrcName {
+			if appSrc.Scope != "" {
+				return appSrc.Scope
+			}
+
+			break
+		}
+	}
+
+	return appFrameworkConf.Defaults.Scope
 }
 
 // CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
