@@ -243,8 +243,16 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	// Fill appSrc adminApps
 	startAppPathAndName := "adminCategoryOne.tgz"
-	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 30)
+	S3Response.Objects = createRemoteObjectList("b41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[0].Name] = S3Response
+
+	startAppPathAndName = "securityCategoryOne.tgz"
+	S3Response.Objects = createRemoteObjectList("c41d8cd98f00", startAppPathAndName, 3322, nil, 10)
+	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[1].Name] = S3Response
+
+	startAppPathAndName = "authenticationCategoryOne.tgz"
+	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 4322, nil, 10)
+	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
 	// set the status context
 	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
@@ -265,7 +273,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		configTester(t, "(ApplyAppListingConfigMap)", f, want)
 	}
 
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  apps_location:\n    - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/11_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/12_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/13_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/14_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/15_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/16_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/17_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/18_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/19_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/20_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/21_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/22_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/23_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/24_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/25_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/26_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/27_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/28_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/29_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/30_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  apps_location:\n    - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/1_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/2_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/3_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/4_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/5_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/6_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/7_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/8_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/9_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/10_authenticationCategoryOne.tgz\"\n    - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
 
 	// Now test the Cluster master stateful set, to validate the Pod updates with the app listing config map
 	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
@@ -613,10 +621,14 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-10: Setting  all apps in AppSrc to complete should mark all the apps status as complete irrespective of their state
 	// 10.1 Check for state=Active and status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 
 		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
 
@@ -631,10 +643,14 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// 10.2 Check for state=Deleted status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 
 		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
 

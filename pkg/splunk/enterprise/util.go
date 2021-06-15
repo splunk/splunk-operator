@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -223,6 +224,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client spl
 // (1) app-list-local.yaml
 // (2) app-list-cluster.yaml
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
+// ToDo: sgontla: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
 
@@ -242,14 +244,22 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	var localAppsConf, clusterAppsConf string
 	localAppsConf = yamlConfHeader
 	clusterAppsConf = yamlConfHeader
+	var mapKeys []string
 
-	for appSrc, appSrcDeployInfo := range appsSrcDeployStatus {
-		appDeployList := appSrcDeployInfo.AppDeploymentInfoList
+	// Map order is not guaranteed, so use the sorted keys to go through the map entries
+	for appSrc := range appsSrcDeployStatus {
+		mapKeys = append(mapKeys, appSrc)
+	}
+	sort.Strings(mapKeys)
+
+	for _, appSrc := range mapKeys {
+		appDeployList := appsSrcDeployStatus[appSrc].AppDeploymentInfoList
 
 		switch scope := getAppSrcScope(appConf, appSrc); scope {
 		case "local":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					localAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -257,7 +267,8 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 		case "cluster":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -281,15 +292,12 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
 
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-	configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
-	if err != nil {
-		return nil, configMapDataChanged, err
-	} else if configMapDataChanged {
-		// Create a token to check if the app list is on the pod is latest or not
-		appListingConfigMap.Data[appsUpdateToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
-		// Apply the configMap with a fresh token, if there is a change
+	// ToDo: sgontla: For phase-2, there delete is not supported. We will leave the configMap to the last deploy state,
+	// to avoid unnecessary resets
+	if len(appListingConfigMap.Data) > 0 {
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+
 		if err != nil {
 			return nil, configMapDataChanged, err
 		}
@@ -740,8 +748,8 @@ func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterprisev1.AppS
 
 	// ToDo: sgontla: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
 	for appSrc := range appSrcDeplymentStatus {
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
 	}
 
 	scopedLog.Info("Marked the App deployment status to complete")
