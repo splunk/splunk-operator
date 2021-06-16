@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is recommended for Demo & Testing purposes.  For Production deployments of Splunk and the SmartStore feature, it is recommended to configure indexes and SmartStore in a Splunk App and distribute accordingly.*
+*NOTE: The below method is recommended as a temporary way of installing SmartStore configuration & indexes. In the upcoming releases, an enhanced App Installation method will be introduced which is expected to help install SmartStore indexes & configuration using Apps. The new approach, once released, will become the preferred method moving ahead*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
@@ -14,7 +14,7 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
 SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custome Resource with SmartStore volume spec, through `SecretRef`
 
 ## Storing Smartstore Secrets
-Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal='s3_access_key=<access_key>' --from-literal='s3_secret_key=<secret_key>'`
+Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal=s3_access_key=<access_key> --from-literal=s3_secret_key=<secret_key>`
   
 
 ## Creating a SmartStore-enabled Standalone instance
@@ -228,7 +228,7 @@ smartstore:
 
 See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf), and [server.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Serverconf) for more information about these configuration details.
 
-| Custome Resource Spec | Splunk Config| Splunk Stanza |
+| Custom Resource Spec | Splunk Config| Splunk Stanza |
 | :--- | :--- | :--- |
 | volumeName + remotePath | remotePath | [\<index name\>], [default] in indexes.conf |
 | maxGlobalDataSizeMB | maxGlobalDataSizeMB  | [\<index name\>], [default] in indexes.conf |
@@ -242,3 +242,17 @@ See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Ind
 | maxCacheSize | max_cache_size  | [cachemanager] |
 | evictionPolicy |eviction_policy  |[cachemanager] |
 | evictionPadding | eviction_padding  |[cachemanager] |
+
+## Additional configuration
+
+There are SmartStore/Index config settings that are not covered by the Custom Resource SmartStore spec.
+If there is a need to configure additional settings, this can be achieved by configuring the same via Apps:
+1. Create an App with the additional configuration
+For example, in order to set the remote S3 encryption scheme as `sse-s3`, create an app with the config in indexes.conf file under default/local sub-directory as follows:
+```
+[volume:\<remote_volume_name\>]]
+path = <remote_volume_path>
+remote.s3.encryption = sse-s3
+```
+2. Apply the CR with the necessary & supported Smartstore and Index related configs
+3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps) (*Note: This can be combined with the previous step*)
