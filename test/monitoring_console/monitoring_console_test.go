@@ -42,12 +42,20 @@ var _ = Describe("Monitoring Console test", func() {
 		if CurrentGinkgoTestDescription().Failed {
 			testenvInstance.SkipTeardown = true
 		}
-		if !testenvInstance.SkipTeardown {
-			testenv.DeleteMCPod(testenvInstance.GetName())
-		}
+
 		if deployment != nil {
 			deployment.Teardown()
 		}
+	})
+
+	Context("Deploy Monitoring Console", func() {
+		It("smoke, monitoring_console: can deploy MC CR", func() {
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+		})
 	})
 
 	XContext("Standalone deployment (S1)", func() {
