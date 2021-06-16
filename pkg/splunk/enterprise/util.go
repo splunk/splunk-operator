@@ -879,10 +879,15 @@ func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
 
 // HasAppRepoCheckTimerExpired checks if the polling interval has expired
 func HasAppRepoCheckTimerExpired(appFrameworkRef *enterprisev1.AppFrameworkSpec, appInfoContext *enterprisev1.AppDeploymentContext) bool {
-	scopedLog := log.WithName("hasAppRepoCheckTimerExpired")
+	scopedLog := log.WithName("HasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
-	scopedLog.Info("Checking if the app repo polling interval has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
-	return appInfoContext.LastAppInfoCheckTime+int64(appFrameworkRef.AppsRepoPollInterval) <= currentEpoch
+
+	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appFrameworkRef.AppsRepoPollInterval <= currentEpoch
+	if isTimerExpired == true {
+		scopedLog.Info("App repo polling interval timer has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
+	}
+
+	return isTimerExpired
 }
 
 // GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
