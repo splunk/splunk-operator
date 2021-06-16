@@ -233,12 +233,20 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 	mapAppListing := make(map[string]string)
 
-	// ToDo: sgontla/Jeff: Adapt to any Ansible changes(if required) for differentiating local vs. cluster scope (?)
+	// Locally scoped apps for CM/Deployer require the latest splunk-ansible with apps_location_local.  Prior to this,
+	// there was no method to install local apps for these roles.  If the apps_location_local variable is not available,
+	// it will be ignored and revert back to no locally scoped apps for CM/Deployer.
 	yamlConfHeader := fmt.Sprintf(`splunk:
   apps_location:`)
+	yamlConfLocalHeader := fmt.Sprintf(`splunk:
+  apps_location_local:`)
 
 	var localAppsConf, clusterAppsConf string
-	localAppsConf = yamlConfHeader
+	if crKind == "ClusterMaster" || crKind == "SearchHeadCluster" {
+		localAppsConf = yamlConfLocalHeader
+	} else {
+		localAppsConf = yamlConfHeader
+	}
 	clusterAppsConf = yamlConfHeader
 
 	for appSrc, appSrcDeployInfo := range appsSrcDeployStatus {
