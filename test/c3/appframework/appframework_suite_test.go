@@ -63,17 +63,18 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// List V1 apps on S3
-	appListV1 = testenv.GetFilesInPathOnS3(testDataS3Bucket, s3AppDirV1)
-	testenvInstance.Log.Info("V1 Apps found on S3", "App List", appListV1)
+	// Parse Applist1 to create Valid Apps1
+	appListV1 = testenv.BasicApps
 
 	// Download V1 Apps from S3
 	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appListV1)
 	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// List V2 apps on S3
-	appListV2 = testenv.GetFilesInPathOnS3(testDataS3Bucket, s3AppDirV2)
-	testenvInstance.Log.Info("V2 Apps found on S3", "App List", appListV2)
+	// Parse ValidAppsV1 to create Valid Apps2
+	appListV2 = make([]string, 0, len(appListV1))
+	for _, app := range appListV1 {
+		appListV2 = append(appListV2, testenv.AppInfo[app]["V2filename"])
+	}
 
 	// Download V2 Apps from S3
 	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appListV2)

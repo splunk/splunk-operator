@@ -559,39 +559,74 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 	}
 }
 
-// VerifyAppInstall verify that app of specific version is installed
-func VerifyAppInstall(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps map[string]string, versionCheck bool, statusCheck string) {
-	for appName, version := range apps {
-		status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName)
-		logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
-		gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
-		gomega.Expect(strings.ToLower(status)).Should(gomega.Equal(strings.ToLower(statusCheck)))
-		if versionCheck {
-			gomega.Expect(versionInstalled).Should(gomega.Equal(version))
+// VerifyAppInstalled verify that app of specific version is installed. Method assumes that app is installed in all CR's in namespace
+func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
+	for _, podName := range pods {
+		if !strings.Contains(podName, "monitoring-console") {
+			for _, app := range apps {
+				appName := AppInfo[app]["App-name"]
+				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName)
+				logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
+				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
+				comparsion := strings.EqualFold(status, statusCheck)
+				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
+				if clusterWideInstall {
+					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+						gomega.Expect(comparsion).Should(gomega.Equal(true))
+					} else {
+						gomega.Expect(comparsion).Should(gomega.Equal(false))
+					}
+				} else {
+					// For local install check pods individually
+					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+						gomega.Expect(comparsion).Should(gomega.Equal(false))
+					} else {
+						gomega.Expect(comparsion).Should(gomega.Equal(true))
+					}
+				}
+				if versionCheck {
+					if checkupdated {
+						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[app]["V2"]))
+					} else {
+						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[app]["V1"]))
+					}
+				}
+			}
 		}
 	}
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD
-func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string) {
-	path := "etc/apps"
-	if strings.Contains(podName, "cluster-master") {
-		path = "etc/master-apps/_cluster"
+func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+	for _, podName := range pods {
+		if !strings.Contains(podName, "monitoring-console") {
+			path := "etc/apps"
+			//For cluster-wide install the apps are extracted to different locations
+			if clusterWideInstall {
+				if strings.Contains(podName, "cluster-master") {
+					path = "etc/master-apps/"
+				}
+				if strings.Contains(podName, "-deployer-") {
+					path = "etc/shcluster/apps"
+				}
+				if strings.Contains(podName, "-indexer-") {
+					path = "etc/slave-apps/"
+				}
+			}
+			VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path, checkAppDirectory)
+		}
 	}
-	if strings.Contains(podName, "-deployer-") {
-		path = "etc/shcluster/apps"
-	}
-	VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path)
 }
 
 // VerifyAppsInFolder verify that apps are present in folder
-func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string) {
+func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
 	appList, err := GetDirsOrFilesInPath(deployment, podName, path, true)
 	gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 	for _, app := range apps {
-		found := CheckStringInSlice(appList, app)
-		logf.Log.Info("Copy Status for app", "App-name", app, "status", found)
-		gomega.Expect(found).Should(gomega.Equal(true))
+		folderName := AppInfo[app]["App-name"] + "/"
+		found := CheckStringInSlice(appList, folderName)
+		logf.Log.Info("Copy Status for app", "App-name", folderName, "status", found)
+		gomega.Expect(found).Should(gomega.Equal(checkAppDirectory))
 	}
 }
 
