@@ -49,7 +49,7 @@ replace (
 
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad // Required until https://github.com/operator-framework/operator-lifecycle-manager/pull/1241 is resolved
 
-	golang.org/x/net => golang.org/x/net v0.0.0-20210614182718-04defd469f4e // CVE-2021-33194
+	golang.org/x/net => golang.org/x/net v0.0.0-20210614182718-04defd469f4e // CVE-2021-33194 and CVE-2021-31525
 
 	golang.org/x/text => golang.org/x/text v0.3.5 // Fix CVE-2020-14040 and CVE-2020-28852
 )
