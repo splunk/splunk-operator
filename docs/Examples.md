@@ -553,6 +553,7 @@ a license file named `enterprise.lic` by running:
 ```
 kubectl create configmap splunk-licenses --from-file=enterprise.lic
 ```
+Your ConfigMap can contain multiple licenses ```--from-file=enterprise1.lic,enterprise2.lic```
 
 You can create a `LicenseMaster` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
@@ -575,6 +576,11 @@ spec:
 `volumes` will mount the ConfigMap in your `LicenseMaster` pod under the
 `/mnt/licenses` directory, and `licenseUrl` will configure Splunk to use
 the `enterprise.lic` file within it.
+
+`licenseUrl` can reference more than one license.
+```
+licenseUrl: "/mnt/licenses/enterprise1.lic,/mnt/licenses/enterprise2.lic"
+```
 
 Note that `licenseUrl` may specify a local path or URL such as
 "https://myco.com/enterprise.lic", and the `volumes` parameter can

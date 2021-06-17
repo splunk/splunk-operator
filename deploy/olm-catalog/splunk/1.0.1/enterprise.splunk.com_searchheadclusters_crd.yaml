@@ -1,31 +1,44 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: licensemasters.enterprise.splunk.com
+  name: searchheadclusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: LicenseMaster
-    listKind: LicenseMasterList
-    plural: licensemasters
+    kind: SearchHeadCluster
+    listKind: SearchHeadClusterList
+    plural: searchheadclusters
     shortNames:
-    - lm
-    singular: licensemaster
+    - shc
+    singular: searchheadcluster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of license master
+    - description: Status of search head cluster
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of license master
+    - description: Status of the deployer
+      jsonPath: .status.deployerPhase
+      name: Deployer
+      type: string
+    - description: Desired number of search head cluster members
+      jsonPath: .status.replicas
+      name: Desired
+      type: integer
+    - description: Current number of ready search head cluster members
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Age of search head cluster
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+        description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+          head cluster
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -40,8 +53,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-              license master.
+            description: SearchHeadClusterSpec defines the desired state of a Splunk
+              Enterprise search head cluster
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -638,78 +651,6 @@ spec:
                         type: array
                     type: object
                 type: object
-              appRepo:
-                description: Splunk enterprise App repository. Specifies remote App
-                  location and scope for Splunk App management
-                properties:
-                  appSources:
-                    description: List of App sources on remote storage
-                    items:
-                      description: AppSourceSpec defines list of App package (*.spl,
-                        *.tgz) locations on remote volumes
-                      properties:
-                        location:
-                          description: Location relative to the volume path
-                          type: string
-                        name:
-                          description: Logical name for the set of apps placed in
-                            this location. Logical name must be unique to the appRepo
-                          type: string
-                        scope:
-                          description: 'Scope of the App deployment: cluster, local.
-                            Scope determines whether the App(s) is/are installed locally
-                            or cluster-wide'
-                          type: string
-                        volumeName:
-                          description: Remote Storage Volume name
-                          type: string
-                      type: object
-                    type: array
-                  appsRepoPollIntervalSeconds:
-                    description: Interval in seconds to check the Remote Storage for
-                      App changes
-                    type: integer
-                  defaults:
-                    description: Defines the default configuration settings for App
-                      sources
-                    properties:
-                      scope:
-                        description: 'Scope of the App deployment: cluster, local.
-                          Scope determines whether the App(s) is/are installed locally
-                          or cluster-wide'
-                        type: string
-                      volumeName:
-                        description: Remote Storage Volume name
-                        type: string
-                    type: object
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws. TODO: Support minio as well.'
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: Remote Storage type.
-                          type: string
-                      type: object
-                    type: array
-                type: object
               clusterMasterRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -933,6 +874,11 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              replicas:
+                description: Number of search head pods; a search head cluster will
+                  be created if > 1
+                format: int32
+                type: integer
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -2504,127 +2450,29 @@ spec:
                 type: array
             type: object
           status:
-            description: LicenseMasterStatus defines the observed state of a Splunk
-              Enterprise license master.
+            description: SearchHeadClusterStatus defines the observed state of a Splunk
+              Enterprise search head cluster
             properties:
-              appContext:
-                description: App Framework Context
-                properties:
-                  appRepo:
-                    description: List of App package (*.spl, *.tgz) locations on remote
-                      volume
-                    properties:
-                      appSources:
-                        description: List of App sources on remote storage
-                        items:
-                          description: AppSourceSpec defines list of App package (*.spl,
-                            *.tgz) locations on remote volumes
-                          properties:
-                            location:
-                              description: Location relative to the volume path
-                              type: string
-                            name:
-                              description: Logical name for the set of apps placed
-                                in this location. Logical name must be unique to the
-                                appRepo
-                              type: string
-                            scope:
-                              description: 'Scope of the App deployment: cluster,
-                                local. Scope determines whether the App(s) is/are
-                                installed locally or cluster-wide'
-                              type: string
-                            volumeName:
-                              description: Remote Storage Volume name
-                              type: string
-                          type: object
-                        type: array
-                      appsRepoPollIntervalSeconds:
-                        description: Interval in seconds to check the Remote Storage
-                          for App changes
-                        type: integer
-                      defaults:
-                        description: Defines the default configuration settings for
-                          App sources
-                        properties:
-                          scope:
-                            description: 'Scope of the App deployment: cluster, local.
-                              Scope determines whether the App(s) is/are installed
-                              locally or cluster-wide'
-                            type: string
-                          volumeName:
-                            description: Remote Storage Volume name
-                            type: string
-                        type: object
-                      volumes:
-                        description: List of remote storage volumes
-                        items:
-                          description: VolumeSpec defines remote volume config
-                          properties:
-                            endpoint:
-                              description: Remote volume URI
-                              type: string
-                            name:
-                              description: Remote volume name
-                              type: string
-                            path:
-                              description: Remote volume path
-                              type: string
-                            provider:
-                              description: 'App Package Remote Store provider. For
-                                e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws. TODO: Support minio as well.'
-                              type: string
-                            secretRef:
-                              description: Secret object name
-                              type: string
-                            storageType:
-                              description: Remote Storage type.
-                              type: string
-                          type: object
-                        type: array
-                    type: object
-                  appSrcDeployStatus:
-                    additionalProperties:
-                      description: AppSrcDeployInfo represents deployment info for
-                        list of Apps
-                      properties:
-                        appDeploymentInfo:
-                          items:
-                            description: AppDeploymentInfo represents a single App
-                              deployment information
-                            properties:
-                              Size:
-                                format: int64
-                                type: integer
-                              appName:
-                                type: string
-                              deployStatus:
-                                description: AppDeploymentStatus represents the status
-                                  of an App on the Pod
-                                type: integer
-                              lastModifiedTime:
-                                type: string
-                              objectHash:
-                                type: string
-                              repoState:
-                                description: AppRepoState represent the App state
-                                  on remote store
-                                type: integer
-                            type: object
-                          type: array
-                      type: object
-                    description: Represents the Apps deployment status
-                    type: object
-                  isDeploymentInProgress:
-                    description: IsDeploymentInProgress indicates if the Apps deployment
-                      is in progress
-                    type: boolean
-                  version:
-                    description: App Framework version info for future use
-                    type: integer
+              adminPasswordChangedSecrets:
+                additionalProperties:
+                  type: boolean
+                description: Holds secrets whose admin password has changed
                 type: object
-              phase:
-                description: current phase of the license master
+              adminSecretChangedFlag:
+                description: Indicates when the admin password has been changed for
+                  a peer
+                items:
+                  type: boolean
+                type: array
+              captain:
+                description: name or label of the search head captain
+                type: string
+              captainReady:
+                description: true if the search head cluster's captain is ready to
+                  service requests
+                type: boolean
+              deployerPhase:
+                description: current phase of the deployer
                 enum:
                 - Pending
                 - Ready
@@ -2634,11 +2482,84 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              initialized:
+                description: true if the search head cluster has finished initialization
+                type: boolean
+              maintenanceMode:
+                description: true if the search head cluster is in maintenance mode
+                type: boolean
+              members:
+                description: status of each search head cluster member
+                items:
+                  description: SearchHeadClusterMemberStatus is used to track the
+                    status of each search head cluster member
+                  properties:
+                    active_historical_search_count:
+                      description: Number of currently running historical searches.
+                      type: integer
+                    active_realtime_search_count:
+                      description: Number of currently running realtime searches.
+                      type: integer
+                    adhoc_searchhead:
+                      description: Flag that indicates if this member can run scheduled
+                        searches.
+                      type: boolean
+                    is_registered:
+                      description: Indicates if this member is registered with the
+                        searchhead cluster captain.
+                      type: boolean
+                    name:
+                      description: Name of the search head cluster member
+                      type: string
+                    status:
+                      description: Indicates the status of the member.
+                      type: string
+                  type: object
+                type: array
+              minPeersJoined:
+                description: true if the minimum number of search head cluster members
+                  have joined
+                type: boolean
+              namespace_scoped_secret_resource_version:
+                description: Indicates resource version of namespace scoped secret
+                type: string
+              phase:
+                description: current phase of the search head cluster
+                enum:
+                - Pending
+                - Ready
+                - Updating
+                - ScalingUp
+                - ScalingDown
+                - Terminating
+                - Error
+                type: string
+              readyReplicas:
+                description: current number of ready search head cluster members
+                format: int32
+                type: integer
+              replicas:
+                description: desired number of search head cluster members
+                format: int32
+                type: integer
+              selector:
+                description: selector for pods, used by HorizontalPodAutoscaler
+                type: string
+              shcSecretChangedFlag:
+                description: Indicates when the shc_secret has been changed for a
+                  peer
+                items:
+                  type: boolean
+                type: array
             type: object
         type: object
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}
   - name: v1beta1
     served: true
