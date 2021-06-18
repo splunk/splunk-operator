@@ -7,11 +7,18 @@ metadata:
   name: splunk:operator:resource-manager
 rules:
 - apiGroups:
-    - enterprise.splunk.com
+  - ""
   resources:
-    - '*'
+  - secrets
   verbs:
-    - '*'
+  - watch
+  - list
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
 - apiGroups:
   - apps
   resources:
