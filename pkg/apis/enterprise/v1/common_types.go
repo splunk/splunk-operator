@@ -287,4 +287,9 @@ type AppDeploymentContext struct {
 
 	// This is set to the time when we get the list of apps from remote storage.
 	LastAppInfoCheckTime int64 `json:"lastAppInfoCheckTime"`
+
+	// Interval in seconds to check the Remote Storage for App changes
+	// This is introduced here so that we dont do spec validation in every reconcile just
+	// because the spec and status are different.
+	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
 }

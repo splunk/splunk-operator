@@ -878,11 +878,11 @@ func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
 }
 
 // HasAppRepoCheckTimerExpired checks if the polling interval has expired
-func HasAppRepoCheckTimerExpired(appFrameworkRef *enterprisev1.AppFrameworkSpec, appInfoContext *enterprisev1.AppDeploymentContext) bool {
+func HasAppRepoCheckTimerExpired(appInfoContext *enterprisev1.AppDeploymentContext) bool {
 	scopedLog := log.WithName("HasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
 
-	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appFrameworkRef.AppsRepoPollInterval <= currentEpoch
+	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appInfoContext.AppsRepoStatusPollInterval <= currentEpoch
 	if isTimerExpired == true {
 		scopedLog.Info("App repo polling interval timer has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
 	}
@@ -918,12 +918,15 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	initAppFrameWorkContext(appFrameworkConf, appStatusContext)
 
 	//check if the apps need to be downloaded from remote storage
-	if HasAppRepoCheckTimerExpired(appFrameworkConf, appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+	if HasAppRepoCheckTimerExpired(appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
 		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, appFrameworkConf)
+		// TODO: gaurav, we need to handle this case better in Phase-3. There can be a possibility
+		// where if an appSource is missing in remote store, we mark it for deletion. But if it comes up
+		// next time, we will recycle the pod to install the app. We need to find a way to reduce the pod recycles.
 		if len(sourceToAppsList) != len(appFrameworkConf.AppSources) {
 			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
 		} else {

@@ -549,7 +549,7 @@ func validateSearchHeadClusterSpec(cr *enterprisev1.SearchHeadCluster) error {
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, false)
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
 		if err != nil {
 			return err
 		}

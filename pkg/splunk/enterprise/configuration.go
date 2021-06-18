@@ -933,7 +933,7 @@ func isAppFrameworkConfigured(appFramework *enterprisev1.AppFrameworkSpec) bool 
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
+func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appContext *enterprisev1.AppDeploymentContext, localScope bool) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -948,16 +948,18 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 
 	scopedLog.Info("configCheck", "scope", localScope)
 
-	// Todo: sgontla: Best place to store the final value as part of the status, so that the config change detection will be easy
-	if appFramework.AppsRepoPollInterval == 0 {
+	// Set the value in status field to be same as that in spec.
+	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
+
+	if appContext.AppsRepoStatusPollInterval == 0 {
 		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", defaultAppsRepoPollInterval)
-		appFramework.AppsRepoPollInterval = defaultAppsRepoPollInterval
+		appContext.AppsRepoStatusPollInterval = defaultAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", minAppsRepoPollInterval)
-		appFramework.AppsRepoPollInterval = minAppsRepoPollInterval
+		appContext.AppsRepoStatusPollInterval = minAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", maxAppsRepoPollInterval, "seconds", nil)
-		appFramework.AppsRepoPollInterval = maxAppsRepoPollInterval
+		appContext.AppsRepoStatusPollInterval = maxAppsRepoPollInterval
 	}
 
 	err = validateRemoteVolumeSpec(appFramework.VolList)

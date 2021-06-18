@@ -675,42 +675,22 @@ func TestIsAppExtentionValid(t *testing.T) {
 }
 
 func TestHasAppRepoCheckTimerExpired(t *testing.T) {
-	appFrameworkRef := &enterprisev1.AppFrameworkSpec{
-		AppsRepoPollInterval: 60,
-		VolList: []enterprisev1.VolumeSpec{
-			{
-				Name:      "msos_s2s3_vol",
-				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-				Path:      "testbucket-rs-london",
-				SecretRef: "s3-secret",
-				Type:      "s3",
-				Provider:  "aws",
-			},
-		},
-		AppSources: []enterprisev1.AppSourceSpec{
-			{
-				Name:     "adminApps",
-				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
-			},
-		},
-	}
 
 	// Case 1. This is the case when we first enter the reconcile loop.
 	appInfoContext := &enterprisev1.AppDeploymentContext{
 		LastAppInfoCheckTime: 0,
 	}
 
-	if !HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
+
+	appInfoContext.AppsRepoStatusPollInterval = 60
 
 	// Case 2. We just checked the apps status
 	SetLastAppInfoCheckTime(appInfoContext)
 
-	if HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
+	if HasAppRepoCheckTimerExpired(appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
 	}
 
@@ -718,7 +698,7 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	// We do this by setting some random past timestamp.
 	appInfoContext.LastAppInfoCheckTime = 1591464060
 
-	if !HasAppRepoCheckTimerExpired(appFrameworkRef, appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }

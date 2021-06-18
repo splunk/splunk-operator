@@ -192,7 +192,7 @@ func validateStandaloneSpec(cr *enterprisev1.Standalone) error {
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, true)
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
 		if err != nil {
 			return err
 		}

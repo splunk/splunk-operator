@@ -2635,6 +2635,13 @@ spec:
                       type: object
                     description: Represents the Apps deployment status
                     type: object
+                  appsRepoStatusPollIntervalSeconds:
+                    description: Interval in seconds to check the Remote Storage for
+                      App changes This is introduced here so that we dont do spec
+                      validation in every reconcile just because the spec and status
+                      are different.
+                    format: int64
+                    type: integer
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment
                       is in progress
