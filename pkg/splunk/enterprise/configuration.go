@@ -34,13 +34,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//ToDo sgontla: Move it to a common place
-const (
-	defaultAppsRepoPollInterval int64 = 60 * 60      // one hour
-	minAppsRepoPollInterval     int64 = 60           // one minute
-	maxAppsRepoPollInterval     int64 = 60 * 60 * 24 // one day
-)
-
 var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
@@ -952,14 +945,14 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appCo
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
 
 	if appContext.AppsRepoStatusPollInterval == 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", defaultAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = defaultAppsRepoPollInterval
-	} else if appFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", minAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = minAppsRepoPollInterval
-	} else if appFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", maxAppsRepoPollInterval, "seconds", nil)
-		appContext.AppsRepoStatusPollInterval = maxAppsRepoPollInterval
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
 	err = validateRemoteVolumeSpec(appFramework.VolList)

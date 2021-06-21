@@ -810,33 +810,33 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// AppsRepoPollInterval should be in between the minAppsRepoPollInterval and maxAppsRepoPollInterval
 	// Default Poll interval
-	if defaultAppsRepoPollInterval < minAppsRepoPollInterval || defaultAppsRepoPollInterval > maxAppsRepoPollInterval {
-		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", minAppsRepoPollInterval, maxAppsRepoPollInterval)
+	if splcommon.DefaultAppsRepoPollInterval < splcommon.MinAppsRepoPollInterval || splcommon.DefaultAppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", splcommon.MinAppsRepoPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
 	appFrameworkContext.AppsRepoStatusPollInterval = 0
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval != defaultAppsRepoPollInterval {
-		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", defaultAppsRepoPollInterval)
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
+		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", splcommon.DefaultAppsRepoPollInterval)
 	}
 
 	// Check for minAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = minAppsRepoPollInterval - 1
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval < minAppsRepoPollInterval {
+	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
 		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
 	}
 
 	// Check for maxAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = maxAppsRepoPollInterval + 1
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval > maxAppsRepoPollInterval {
+	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
 		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
 	}
 

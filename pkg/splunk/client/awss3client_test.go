@@ -164,7 +164,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetVolume(appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -264,7 +264,7 @@ func TestGetAppsListShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetVolume(appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}

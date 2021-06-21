@@ -483,7 +483,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = splclient.GetVolume(appSource, appFrameworkRef)
+		vol, err = splclient.GetAppSrcVolume(appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -891,8 +891,8 @@ func HasAppRepoCheckTimerExpired(appInfoContext *enterprisev1.AppDeploymentConte
 }
 
 // GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
-// There can be some time elapsed between when we frst set lastAppInfoCheckTime and when the CR is in Ready state.
-// Hence we need to subtracct the delta time elapsed from the actual polling interval,
+// There can be some time elapsed between when we first set lastAppInfoCheckTime and when the CR is in Ready state.
+// Hence we need to subtract the delta time elapsed from the actual polling interval,
 // so that the next reconile would happen at the right time.
 func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
 	scopedLog := log.WithName("GetNextRequeueTime")

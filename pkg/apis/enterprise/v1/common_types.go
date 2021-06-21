@@ -246,7 +246,13 @@ type AppFrameworkSpec struct {
 	// Defines the default configuration settings for App sources
 	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 
-	// Interval in seconds to check the Remote Storage for App changes
+	// Interval in seconds to check the Remote Storage for App changes.
+	// The default value for this config is 1 hour(3600 sec),
+	// minimum value is 1 minute(60sec) and maximum value is 1 day(86400 sec).
+	// We assign the value based on following conditions -
+	//    1. If no value or 0 is specified then it will be defaulted to 1 hour.
+	//    2. If anything less than min is specified then we set it to 1 min.
+	//    3. If anything more than the max value is specified then we set it to 1 day.
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// List of remote storage volumes

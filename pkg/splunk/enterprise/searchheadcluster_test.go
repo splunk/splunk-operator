@@ -796,7 +796,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = splclient.GetVolume(appSource, &appFrameworkRef)
+		vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -914,7 +914,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterprisev1.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetVolume(appSource, &appFrameworkRef)
+	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}

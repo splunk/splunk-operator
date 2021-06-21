@@ -127,7 +127,7 @@ func TestGetVolume(t *testing.T) {
 
 	// test for valid volumes
 	for index, appSource := range appFrameworkRef.AppSources {
-		vol, err := GetVolume(appSource, &appFrameworkRef)
+		vol, err := GetAppSrcVolume(appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("GetVolume should not have returned error")
 		}
@@ -149,7 +149,7 @@ func TestGetVolume(t *testing.T) {
 		},
 	}
 
-	_, err := GetVolume(appFrameworkRef.AppSources[0], &appFrameworkRef)
+	_, err := GetAppSrcVolume(appFrameworkRef.AppSources[0], &appFrameworkRef)
 	if err == nil {
 		t.Errorf("GetVolume should have returned error for an invalid volume name")
 	}
