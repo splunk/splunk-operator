@@ -90,7 +90,7 @@ func GetAppSrcVolume(appSource enterprisev1.AppSourceSpec, appFrameworkRef *ente
 	var err error
 	var vol enterprisev1.VolumeSpec
 
-	scopedLog := log.WithName("GetVolume")
+	scopedLog := log.WithName("GetAppSrcVolume")
 
 	// get the volume spec from the volume name
 	if appSource.VolName != "" {
