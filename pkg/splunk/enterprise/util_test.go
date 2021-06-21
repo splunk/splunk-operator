@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"testing"
@@ -244,8 +243,16 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	// Fill appSrc adminApps
 	startAppPathAndName := "adminCategoryOne.tgz"
-	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 30)
+	S3Response.Objects = createRemoteObjectList("b41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[0].Name] = S3Response
+
+	startAppPathAndName = "securityCategoryOne.tgz"
+	S3Response.Objects = createRemoteObjectList("c41d8cd98f00", startAppPathAndName, 3322, nil, 10)
+	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[1].Name] = S3Response
+
+	startAppPathAndName = "authenticationCategoryOne.tgz"
+	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 4322, nil, 10)
+	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
 	// set the status context
 	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
@@ -266,7 +273,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		configTester(t, "(ApplyAppListingConfigMap)", f, want)
 	}
 
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  apps_location:\n    - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/11_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/12_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/13_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/14_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/15_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/16_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/17_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/18_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/19_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/20_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/21_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/22_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/23_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/24_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/25_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/26_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/27_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/28_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/29_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/30_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  apps_location:\n    - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n    - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/1_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/2_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/3_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/4_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/5_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/6_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/7_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/8_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/9_authenticationCategoryOne.tgz\"\n    - \"/init-apps/authenticationApps/10_authenticationCategoryOne.tgz\"\n    - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n    - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
 
 	// Now test the Cluster master stateful set, to validate the Pod updates with the app listing config map
 	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
@@ -614,10 +621,14 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-10: Setting  all apps in AppSrc to complete should mark all the apps status as complete irrespective of their state
 	// 10.1 Check for state=Active and status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending)
 
 		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
 
@@ -632,10 +643,14 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// 10.2 Check for state=Deleted status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress)
+		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		// ToDo: sgontla: Enable for Phase3
+		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress)
+		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
 
 		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
 
@@ -656,6 +671,35 @@ func TestIsAppExtentionValid(t *testing.T) {
 
 	if isAppExtentionValid("testapp.aspl") || isAppExtentionValid("testapp.ttgz") {
 		t.Errorf("failed to detect invalid app extension")
+	}
+}
+
+func TestHasAppRepoCheckTimerExpired(t *testing.T) {
+
+	// Case 1. This is the case when we first enter the reconcile loop.
+	appInfoContext := &enterprisev1.AppDeploymentContext{
+		LastAppInfoCheckTime: 0,
+	}
+
+	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+		t.Errorf("ShouldCheckAppStatus should have returned true")
+	}
+
+	appInfoContext.AppsRepoStatusPollInterval = 60
+
+	// Case 2. We just checked the apps status
+	SetLastAppInfoCheckTime(appInfoContext)
+
+	if HasAppRepoCheckTimerExpired(appInfoContext) {
+		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
+	}
+
+	// Case 3. Lets check after AppsRepoPollInterval has elapsed.
+	// We do this by setting some random past timestamp.
+	appInfoContext.LastAppInfoCheckTime = 1591464060
+
+	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
 
@@ -716,49 +760,20 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 	return matchCount
 }
 
-// ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(s3Response splclient.S3Response) (spltest.MockAWSS3Client, error) {
-	scopedLog := log.WithName("ConvertS3Response")
+func TestSetLastAppInfoCheckTime(t *testing.T) {
+	appInfoStatus := &enterprisev1.AppDeploymentContext{}
+	SetLastAppInfoCheckTime(appInfoStatus)
 
-	var mockResponse spltest.MockAWSS3Client
-
-	tmp, err := json.Marshal(s3Response)
-	if err != nil {
-		scopedLog.Error(err, "Unable to marshal s3 response")
-		return mockResponse, err
+	if appInfoStatus.LastAppInfoCheckTime != time.Now().Unix() {
+		t.Errorf("LastAppInfoCheckTime should have been set to current time")
 	}
-
-	err = json.Unmarshal(tmp, &mockResponse)
-	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal s3 response")
-		return mockResponse, err
-	}
-
-	return mockResponse, err
 }
 
-// NewMockAWSS3Client returns an AWS S3 mock client for testing
-func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn splclient.GetInitFunc) (splclient.S3Client, error) {
-	var s3SplunkClient splclient.SplunkAWSS3Client
-	var err error
-	region := splclient.GetRegion(endpoint)
-
-	cl := fn(region, accessKeyID, secretAccessKey)
-	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
-		return nil, err
+func TestGetNextRequeueTime(t *testing.T) {
+	appFrameworkRef := enterprisev1.AppFrameworkSpec{}
+	appFrameworkRef.AppsRepoPollInterval = 60
+	nextRequeueTime := GetNextRequeueTime(appFrameworkRef.AppsRepoPollInterval, (time.Now().Unix() - int64(40)))
+	if nextRequeueTime > time.Second*20 {
+		t.Errorf("Got wrong next requeue time")
 	}
-
-	s3SplunkClient = cl.(splclient.SplunkAWSS3Client)
-
-	return &splclient.AWSS3Client{
-		Region:             region,
-		BucketName:         bucketName,
-		AWSAccessKeyID:     accessKeyID,
-		AWSSecretAccessKey: secretAccessKey,
-		Prefix:             prefix,
-		StartAfter:         startAfter,
-		Endpoint:           endpoint,
-		Client:             s3SplunkClient,
-	}, nil
 }

@@ -16,7 +16,6 @@ package test
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -89,10 +88,6 @@ func (c *MockAWSS3Handler) CheckAWSS3Response(t *testing.T, testMethod string) {
 // ListObjectsV2 is a mock call to ListObjectsV2
 func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
 	output := &s3.ListObjectsV2Output{}
-
-	if mockClient.Objects == nil {
-		return nil, fmt.Errorf("Empty Objects")
-	}
 
 	tmp, err := json.Marshal(mockClient.Objects)
 	if err != nil {

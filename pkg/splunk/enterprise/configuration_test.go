@@ -625,13 +625,17 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	appFrameworkContext := enterprisev1.AppDeploymentContext{
+		AppsRepoStatusPollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
 	}
 
 	AppFramework.VolList[0].SecretRef = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Missing Secret Object reference should error out")
 	}
@@ -640,7 +644,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// App Framework config with missing App Source name
 	AppFramework.AppSources[0].Name = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Should not accept an app source with missing name ")
 	}
@@ -648,7 +652,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	//App Framework config app source config with missing location(withot default location) should errro out
 	AppFramework.AppSources[0].Name = "adminApps"
 	AppFramework.AppSources[0].Location = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
 	}
@@ -659,14 +663,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	AppFramework.AppSources[0].Scope = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
 
 	// Empty App Repo config should not cause an error
-	err = ValidateAppFrameworkSpec(nil, false)
+	err = ValidateAppFrameworkSpec(nil, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("App Repo config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -695,7 +699,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, false)
+	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("App Repo config without volume details should return error")
 	}
@@ -703,7 +707,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Defaults with invalid volume reference should return error
 	AppFramework.Defaults.VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Volume referred in the defaults should be a valid volume")
 	}
@@ -715,7 +719,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
 	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Duplicate app sources should return an error")
 	}
@@ -727,7 +731,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	tmpAppSourceName := AppFramework.AppSources[1].Name
 	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Failed to detect duplicate app source names")
 	}
@@ -738,14 +742,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].VolName = ""
 	AppFramework.Defaults.VolName = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("If no default volume, App Source with missing volume info should return an error")
 	}
 
 	// If the AppSource doesn't have VolName, and if the defaults have it, shouldn't cause an error
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
 	}
@@ -753,7 +757,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Volume referenced from an index must be a valid volume
 	AppFramework.AppSources[0].VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
@@ -761,14 +765,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
 	AppFramework.AppSources[0].Scope = "cluster"
-	err = ValidateAppFrameworkSpec(&AppFramework, true)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
 	}
 
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
@@ -780,7 +784,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	AppFramework.Defaults.Scope = "cluster"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, true)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
@@ -788,7 +792,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
@@ -797,7 +801,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Missing scope, if the default scope is not specified should return error
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
@@ -806,39 +810,39 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// AppsRepoPollInterval should be in between the minAppsRepoPollInterval and maxAppsRepoPollInterval
 	// Default Poll interval
-	if defaultAppsRepoPollInterval < minAppsRepoPollInterval || defaultAppsRepoPollInterval > maxAppsRepoPollInterval {
-		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", minAppsRepoPollInterval, maxAppsRepoPollInterval)
+	if splcommon.DefaultAppsRepoPollInterval < splcommon.MinAppsRepoPollInterval || splcommon.DefaultAppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", splcommon.MinAppsRepoPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
-	AppFramework.AppsRepoPollInterval = 0
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	appFrameworkContext.AppsRepoStatusPollInterval = 0
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if AppFramework.AppsRepoPollInterval != defaultAppsRepoPollInterval {
-		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", defaultAppsRepoPollInterval)
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
+		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", splcommon.DefaultAppsRepoPollInterval)
 	}
 
 	// Check for minAppsRepoPollInterval
-	AppFramework.AppsRepoPollInterval = minAppsRepoPollInterval - 1
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if AppFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
+	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
 		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
 	}
 
 	// Check for maxAppsRepoPollInterval
-	AppFramework.AppsRepoPollInterval = maxAppsRepoPollInterval + 1
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if AppFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
+	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
 		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
 	}
 
 	// Invalid volume name in defaults should return an error
 	AppFramework.Defaults.VolName = "unknownVolume"
-	err = ValidateAppFrameworkSpec(&AppFramework, false)
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
@@ -974,45 +978,6 @@ maxGlobalRawDataSizeMB = 61440
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, SmartstoreDefaultIniConfig)
 	}
 
-}
-
-func TestCheckIfVolumeExists(t *testing.T) {
-	SmartStoreConfig := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
-		},
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-		},
-	}
-
-	// Volume that doesn't should error out
-	_, err := checkIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
-
-	if err == nil {
-		t.Errorf("if the volume doesn't exists, error should be reported")
-	}
-
-	// Volume that exists should not error out
-	index := len(SmartStoreConfig.VolList) - 1
-	returnedIndex, err := checkIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
-
-	if err != nil {
-		t.Errorf("existing volume should not error out. index id: %d, error: %s", index, err.Error())
-	} else if index != returnedIndex {
-		t.Errorf("Expected index: %d, but returned index id: %d", index, returnedIndex)
-	}
 }
 
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {

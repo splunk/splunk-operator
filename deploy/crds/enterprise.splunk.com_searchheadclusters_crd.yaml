@@ -680,7 +680,14 @@ spec:
                     type: array
                   appsRepoPollIntervalSeconds:
                     description: Interval in seconds to check the Remote Storage for
-                      App changes
+                      App changes. The default value for this config is 1 hour(3600
+                      sec), minimum value is 1 minute(60sec) and maximum value is
+                      1 day(86400 sec). We assign the value based on following conditions
+                      -    1. If no value or 0 is specified then it will be defaulted
+                      to 1 hour.    2. If anything less than min is specified then
+                      we set it to 1 min.    3. If anything more than the max value
+                      is specified then we set it to 1 day.
+                    format: int64
                     type: integer
                   defaults:
                     description: Defines the default configuration settings for App
@@ -710,9 +717,9 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: 'App Package Remote Store provider. For e.g.
+                          description: App Package Remote Store provider. For e.g.
                             aws, azure, minio, etc. Currently we are only supporting
-                            aws. TODO: Support minio as well.'
+                            aws.
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2570,7 +2577,15 @@ spec:
                         type: array
                       appsRepoPollIntervalSeconds:
                         description: Interval in seconds to check the Remote Storage
-                          for App changes
+                          for App changes. The default value for this config is 1
+                          hour(3600 sec), minimum value is 1 minute(60sec) and maximum
+                          value is 1 day(86400 sec). We assign the value based on
+                          following conditions -    1. If no value or 0 is specified
+                          then it will be defaulted to 1 hour.    2. If anything less
+                          than min is specified then we set it to 1 min.    3. If
+                          anything more than the max value is specified then we set
+                          it to 1 day.
+                        format: int64
                         type: integer
                       defaults:
                         description: Defines the default configuration settings for
@@ -2600,9 +2615,9 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: 'App Package Remote Store provider. For
+                              description: App Package Remote Store provider. For
                                 e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws. TODO: Support minio as well.'
+                                supporting aws.
                               type: string
                             secretRef:
                               description: Secret object name
@@ -2645,10 +2660,22 @@ spec:
                       type: object
                     description: Represents the Apps deployment status
                     type: object
+                  appsRepoStatusPollIntervalSeconds:
+                    description: Interval in seconds to check the Remote Storage for
+                      App changes This is introduced here so that we dont do spec
+                      validation in every reconcile just because the spec and status
+                      are different.
+                    format: int64
+                    type: integer
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment
                       is in progress
                     type: boolean
+                  lastAppInfoCheckTime:
+                    description: This is set to the time when we get the list of apps
+                      from remote storage.
+                    format: int64
+                    type: integer
                   version:
                     description: App Framework version info for future use
                     type: integer

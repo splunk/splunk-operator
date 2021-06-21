@@ -34,13 +34,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//ToDo sgontla: Move it to a common place
-const (
-	defaultAppsRepoPollInterval uint = 60 * 60      // one hour
-	minAppsRepoPollInterval     uint = 60           // one minute
-	maxAppsRepoPollInterval     uint = 60 * 60 * 24 // one day
-)
-
 var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
@@ -585,8 +578,12 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
 
-		// ToDo: sgontla: for Phase-2, we always reset the pod, need to change the behavior for phase-3
-		podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
+		// ToDo: sgontla: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
+		// Once the apps are installed, and on a reconcile entry triggered by polling interval expirty, if there is no new
+		// App changes on remote store, then the config map data is erased. In such case, no need to reset the Pod
+		if len(appListingConfigMap.Data) > 0 {
+			podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
+		}
 	}
 
 	// update security context
@@ -780,17 +777,6 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
 }
 
-// checkIfVolumeExists checks if the volume is configured or not
-func checkIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
-	for i, volume := range volumeList {
-		if volume.Name == volName {
-			return i, nil
-		}
-	}
-
-	return -1, fmt.Errorf("Volume: %s, doesn't exist", volName)
-}
-
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
 func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterprisev1.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
@@ -887,7 +873,7 @@ func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, local
 		}
 
 		if appSrc.VolName != "" {
-			_, err := checkIfVolumeExists(appFramework.VolList, appSrc.VolName)
+			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
 				return fmt.Errorf("Invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
 			}
@@ -929,7 +915,7 @@ func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, local
 	}
 
 	if appFramework.Defaults.VolName != "" {
-		_, err := checkIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
+		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("Invalid Volume Name for Defaults. Error: %s", err)
 		}
@@ -945,7 +931,7 @@ func isAppFrameworkConfigured(appFramework *enterprisev1.AppFrameworkSpec) bool 
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
+func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appContext *enterprisev1.AppDeploymentContext, localScope bool) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -960,16 +946,18 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, local
 
 	scopedLog.Info("configCheck", "scope", localScope)
 
-	// Todo: sgontla: Best place to store the final value as part of the status, so that the config change detection will be easy
-	if appFramework.AppsRepoPollInterval == 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", defaultAppsRepoPollInterval)
-		appFramework.AppsRepoPollInterval = defaultAppsRepoPollInterval
-	} else if appFramework.AppsRepoPollInterval < minAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", minAppsRepoPollInterval)
-		appFramework.AppsRepoPollInterval = minAppsRepoPollInterval
-	} else if appFramework.AppsRepoPollInterval > maxAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", maxAppsRepoPollInterval, "seconds", nil)
-		appFramework.AppsRepoPollInterval = maxAppsRepoPollInterval
+	// Set the value in status field to be same as that in spec.
+	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
+
+	if appContext.AppsRepoStatusPollInterval == 0 {
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
 	err = validateRemoteVolumeSpec(appFramework.VolList)
@@ -1039,7 +1027,7 @@ func validateSplunkIndexesSpec(smartstore *enterprisev1.SmartStoreSpec) error {
 		}
 
 		if index.VolName != "" {
-			_, err := checkIfVolumeExists(smartstore.VolList, index.VolName)
+			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
 				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
 			}
@@ -1072,7 +1060,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 	defaults := smartstore.Defaults
 	// When volName is configured, bucket remote path should also be configured
 	if defaults.VolName != "" {
-		_, err = checkIfVolumeExists(smartstore.VolList, defaults.VolName)
+		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
 		}
