@@ -208,3 +208,94 @@ func TestGetStatefulSetByName(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 }
+
+func TestVerfiyMCStatefulSetOwnerRef(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	cr1 := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+
+	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err.Error() != "NotFound" {
+		t.Errorf("Couldn't detect resource %s", current.GetName())
+	}
+
+	// Create statefulset
+	err = splutil.CreateResource(c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	// Test existing owner reference
+	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = SetStatefulSetOwnerRef(c, &cr1, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// multiple owner ref
+	err = VerfiyMCStatefulSetOwnerRef(c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't delete resource %s", current.GetName())
+	}
+
+	//single owner
+	// Create statefulset
+	err = splutil.CreateResource(c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//set owner reference
+	err = SetStatefulSetOwnerRef(c, &cr1, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// multiple owner ref
+	err = VerfiyMCStatefulSetOwnerRef(c, &cr1, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't delete resource %s", current.GetName())
+	}
+}

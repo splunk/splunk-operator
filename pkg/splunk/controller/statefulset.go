@@ -282,3 +282,37 @@ func GetStatefulSetByName(c splcommon.ControllerClient, namespacedName types.Nam
 
 	return &statefulset, nil
 }
+
+// VerfiyMCStatefulSetOwnerRef deletes the automated MC sts. This is when customer migrates from automated MC to MC CRD
+// Check if MC CR is not the owner of the MC statefulset then delete that Statefulset
+func VerfiyMCStatefulSetOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+	statefulset, err := GetStatefulSetByName(client, namespacedName)
+	if err != nil {
+		// if MC Sts doesn't exist return nil, may have been deleted by other CR
+		return nil
+	}
+	//2. Retrive all the owners of the MC statefulset
+	currentOwnerRef := statefulset.GetOwnerReferences()
+	//3. if Multiple owners of the MC statefulset then delete the MC statefulset
+	if len(currentOwnerRef) > 1 {
+		err := splutil.DeleteResource(client, statefulset)
+		if err != nil {
+			return err
+		}
+	} else if len(currentOwnerRef) == 1 {
+		//check if current cr is the owner of the mc sts
+		if reflect.DeepEqual(currentOwnerRef[0], splcommon.AsOwner(cr, false)) {
+			err := splutil.DeleteResource(client, statefulset)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	//delete corresponding mc configmap
+	configmap, err := GetConfigMap(client, namespacedName)
+	if err != nil {
+		return err
+	}
+	err = splutil.DeleteResource(client, configmap)
+	return err
+}
