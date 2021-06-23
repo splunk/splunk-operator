@@ -150,7 +150,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Spec.AppFrameworkConfig.AppsRepoPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 		} else {
 			result.Requeue = false
 		}
