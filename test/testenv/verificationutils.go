@@ -620,7 +620,7 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 
 // VerifyAppsInFolder verify that apps are present in folder
 func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
-	appList, err := GetDirsOrFilesInPath(deployment, podName, path, true)
+	appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
 	gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 	for _, app := range apps {
 		folderName := AppInfo[app]["App-name"] + "/"
