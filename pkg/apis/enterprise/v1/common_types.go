@@ -104,6 +104,10 @@ type CommonSplunkSpec struct {
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
 	ServiceAccount string `json:"serviceAccount"`
+
+	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
+	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
+	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
@@ -178,7 +182,6 @@ type VolumeSpec struct {
 	// App Package Remote Store provider.
 	// For e.g. aws, azure, minio, etc.
 	// Currently we are only supporting aws.
-	// TODO: Support minio as well.
 	Provider string `json:"provider"`
 }
 
@@ -247,8 +250,14 @@ type AppFrameworkSpec struct {
 	// Defines the default configuration settings for App sources
 	Defaults AppSourceDefaultSpec `json:"defaults,omitempty"`
 
-	// Interval in seconds to check the Remote Storage for App changes
-	AppsRepoPollInterval uint `json:"appsRepoPollIntervalSeconds,omitempty"`
+	// Interval in seconds to check the Remote Storage for App changes.
+	// The default value for this config is 1 hour(3600 sec),
+	// minimum value is 1 minute(60sec) and maximum value is 1 day(86400 sec).
+	// We assign the value based on following conditions -
+	//    1. If no value or 0 is specified then it will be defaulted to 1 hour.
+	//    2. If anything less than min is specified then we set it to 1 min.
+	//    3. If anything more than the max value is specified then we set it to 1 day.
+	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// List of remote storage volumes
 	VolList []VolumeSpec `json:"volumes,omitempty"`
@@ -285,4 +294,12 @@ type AppDeploymentContext struct {
 
 	// Represents the Apps deployment status
 	AppsSrcDeployStatus map[string]AppSrcDeployInfo `json:"appSrcDeployStatus,omitempty"`
+
+	// This is set to the time when we get the list of apps from remote storage.
+	LastAppInfoCheckTime int64 `json:"lastAppInfoCheckTime"`
+
+	// Interval in seconds to check the Remote Storage for App changes
+	// This is introduced here so that we dont do spec validation in every reconcile just
+	// because the spec and status are different.
+	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
 }

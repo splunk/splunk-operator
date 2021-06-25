@@ -105,8 +105,9 @@ executors:
       # Set cluster workers to 5 (5 cluster nodes)
       # NUM_NODES represent number of parallel test executions
       # NUM_WORKERS represent number of nodes in a k8 cluster
-      NUM_NODES: 8
-      NUM_WORKERS: 10
+      NUM_NODES: 5 
+      NUM_WORKERS: 8
+      CLUSTER_NAME: eks-integration-test-cluster
       ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
       IMAGE_NAME: splunk/splunk-operator
       IMAGE_FILENAME: splunk-operator

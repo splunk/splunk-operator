@@ -47,8 +47,7 @@ func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey strin
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
-	region := GetRegion(endpoint)
-	cl := fn(region, accessKeyID, secretAccessKey)
+	cl := fn(endpoint, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("Failed to create an AWS S3 client")
 		return nil, err

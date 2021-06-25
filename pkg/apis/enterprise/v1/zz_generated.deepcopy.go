@@ -284,6 +284,13 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 	}
 	out.LicenseMasterRef = in.LicenseMasterRef
 	out.ClusterMasterRef = in.ClusterMasterRef
+	if in.ExtraEnv != nil {
+		in, out := &in.ExtraEnv, &out.ExtraEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	return
 }
 

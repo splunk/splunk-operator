@@ -613,3 +613,8 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 
 	return &d, nil
 }
+
+// GetLMConfigMap Return name of license config map
+func (testenv *TestEnv) GetLMConfigMap() string {
+	return testenv.licenseCMName
+}

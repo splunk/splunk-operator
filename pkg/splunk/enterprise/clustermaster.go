@@ -83,36 +83,14 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 	}()
 
-	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
-
-	// check if the apps need to be downloaded from remote storage
-	// ToDo: sgontla: Once after we have the flow, move the following logic into a seperate function(Note:- all errors should not cause a return in that function)
-	// ToDo: also take care of the Mock
-	if cr.Spec.CommonSplunkSpec.Mock != true && !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		var sourceToAppsList map[string]splclient.S3Response
-
-		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, &cr.Spec.AppFrameworkConfig)
-		if len(sourceToAppsList) != len(cr.Spec.AppFrameworkConfig.AppSources) {
-			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
-			return result, err
-		}
-
-		for _, appSource := range cr.Spec.AppFrameworkConfig.AppSources {
-			scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
-		}
-
-		err = handleAppRepoChanges(client, cr, &cr.Status.AppContext, sourceToAppsList, &cr.Spec.AppFrameworkConfig)
-		if err != nil {
-			scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
-			return result, err
-		}
-
-		_, _, err := ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			return result, err
 		}
-
-		cr.Status.AppContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 	}
 
 	// create or update general config resources
@@ -164,6 +142,10 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(cr.Status.AppContext.AppsSrcDeployStatus)
+		}
+
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
 		if err != nil {
 			return result, err
@@ -177,7 +159,12 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 
 		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
-			result.Requeue = false
+			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+				result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			} else {
+				result.Requeue = false
+			}
 		}
 	}
 	return result, nil
@@ -194,7 +181,7 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, false)
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
 		if err != nil {
 			return err
 		}

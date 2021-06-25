@@ -17,6 +17,9 @@ package enterprise
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,6 +224,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client spl
 // (1) app-list-local.yaml
 // (2) app-list-cluster.yaml
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
+// ToDo: sgontla: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
 
@@ -248,14 +252,22 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		localAppsConf = yamlConfHeader
 	}
 	clusterAppsConf = yamlConfHeader
+	var mapKeys []string
 
-	for appSrc, appSrcDeployInfo := range appsSrcDeployStatus {
-		appDeployList := appSrcDeployInfo.AppDeploymentInfoList
+	// Map order is not guaranteed, so use the sorted keys to go through the map entries
+	for appSrc := range appsSrcDeployStatus {
+		mapKeys = append(mapKeys, appSrc)
+	}
+	sort.Strings(mapKeys)
+
+	for _, appSrc := range mapKeys {
+		appDeployList := appsSrcDeployStatus[appSrc].AppDeploymentInfoList
 
 		switch scope := getAppSrcScope(appConf, appSrc); scope {
 		case "local":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					localAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -263,7 +275,8 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 		case "cluster":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending {
+				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -274,7 +287,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		}
 	}
 
-	if localAppsConf != yamlConfHeader {
+	if localAppsConf != yamlConfHeader && localAppsConf != yamlConfLocalHeader {
 		mapAppListing["app-list-local.yaml"] = localAppsConf
 	}
 
@@ -287,15 +300,12 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
 
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-	configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
-	if err != nil {
-		return nil, configMapDataChanged, err
-	} else if configMapDataChanged {
-		// Create a token to check if the app list is on the pod is latest or not
-		appListingConfigMap.Data[appsUpdateToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
-		// Apply the configMap with a fresh token, if there is a change
+	// ToDo: sgontla: For phase-2, there delete is not supported. We will leave the configMap to the last deploy state,
+	// to avoid unnecessary resets
+	if len(appListingConfigMap.Data) > 0 {
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+
 		if err != nil {
 			return nil, configMapDataChanged, err
 		}
@@ -466,32 +476,6 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 	return s3Response, nil
 }
 
-// GetAppSrcVolume gets the volume defintion for an app source
-func GetAppSrcVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
-	var volName string
-	var index int
-	var err error
-	var vol enterprisev1.VolumeSpec
-
-	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// get the volume spec from the volume name
-	if appSource.VolName != "" {
-		volName = appSource.VolName
-	} else {
-		volName = appFrameworkRef.Defaults.VolName
-	}
-
-	index, err = checkIfVolumeExists(appFrameworkRef.VolList, volName)
-	if err != nil {
-		scopedLog.Error(err, "Invalid volume name provided. Please specify a valid volume name.", "App source", appSource.Name, "Volume name", volName)
-		return vol, err
-	}
-
-	vol = appFrameworkRef.VolList[index]
-	return vol, err
-}
-
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
 func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
@@ -507,7 +491,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	var allSuccess bool = true
 
 	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = GetAppSrcVolume(client, cr, appSource, appFrameworkRef)
+		vol, err = splclient.GetAppSrcVolume(appSource, appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -698,7 +682,7 @@ func isAppExtentionValid(receivedKey string) bool {
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
 func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
-	scopedLog := log.WithName("createOrUpdateAppSrcDeploymentInfo").WithValues("Called with length: ", len(remoteS3ObjList))
+	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length: ", len(remoteS3ObjList))
 
 	var found bool
 	var appName string
@@ -772,8 +756,8 @@ func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterprisev1.AppS
 
 	// ToDo: sgontla: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
 	for appSrc := range appSrcDeplymentStatus {
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusInProgress, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
 	}
 
 	scopedLog.Info("Marked the App deployment status to complete")
@@ -816,9 +800,9 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			var volSpecPos int
 			var err error
 			if appSrc.VolName != "" {
-				volSpecPos, err = checkIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
+				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
 			} else {
-				volSpecPos, err = checkIfVolumeExists(appFrameworkConfig.VolList, appFrameworkConfig.Defaults.VolName)
+				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appFrameworkConfig.Defaults.VolName)
 			}
 
 			if err != nil {
@@ -889,4 +873,94 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, initContainerSpec)
 		}
 	}
+}
+
+// SetLastAppInfoCheckTime sets the last check time to current time
+func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
+	scopedLog := log.WithName("SetLastAppInfoCheckTime")
+	currentEpoch := time.Now().Unix()
+
+	scopedLog.Info("Setting the LastAppInfoCheckTime to current time", "current epoch time", currentEpoch)
+
+	appInfoStatus.LastAppInfoCheckTime = currentEpoch
+}
+
+// HasAppRepoCheckTimerExpired checks if the polling interval has expired
+func HasAppRepoCheckTimerExpired(appInfoContext *enterprisev1.AppDeploymentContext) bool {
+	scopedLog := log.WithName("HasAppRepoCheckTimerExpired")
+	currentEpoch := time.Now().Unix()
+
+	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appInfoContext.AppsRepoStatusPollInterval <= currentEpoch
+	if isTimerExpired == true {
+		scopedLog.Info("App repo polling interval timer has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
+	}
+
+	return isTimerExpired
+}
+
+// GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
+// There can be some time elapsed between when we first set lastAppInfoCheckTime and when the CR is in Ready state.
+// Hence we need to subtract the delta time elapsed from the actual polling interval,
+// so that the next reconile would happen at the right time.
+func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
+	scopedLog := log.WithName("GetNextRequeueTime")
+	currentEpoch := time.Now().Unix()
+
+	var nextRequeueTimeInSec int64
+	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
+
+	scopedLog.Info("Getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
+
+	return time.Second * (time.Duration(nextRequeueTimeInSec))
+}
+
+// initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
+func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterprisev1.AppFrameworkSpec, appStatusContext *enterprisev1.AppDeploymentContext) error {
+	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	var err error
+	// Register the S3 clients specific to providers if not done already
+	// This is done to prevent the null pointer dereference in case when
+	// operator crashes and comes back up and the status of app context was updated
+	// to match the spec in the previous run.
+	initAppFrameWorkContext(appFrameworkConf, appStatusContext)
+
+	//check if the apps need to be downloaded from remote storage
+	if HasAppRepoCheckTimerExpired(appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+		var sourceToAppsList map[string]splclient.S3Response
+
+		scopedLog.Info("Checking status of apps on remote storage...")
+
+		sourceToAppsList, err = GetAppListFromS3Bucket(client, cr, appFrameworkConf)
+		// TODO: gaurav, we need to handle this case better in Phase-3. There can be a possibility
+		// where if an appSource is missing in remote store, we mark it for deletion. But if it comes up
+		// next time, we will recycle the pod to install the app. We need to find a way to reduce the pod recycles.
+		if len(sourceToAppsList) != len(appFrameworkConf.AppSources) {
+			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
+		} else {
+
+			for _, appSource := range appFrameworkConf.AppSources {
+				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
+			}
+
+			// Only handle the app repo changes if we were able to successfully get the apps list
+			err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+			if err != nil {
+				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
+				return err
+			}
+
+			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus)
+			if err != nil {
+				return err
+			}
+
+			appStatusContext.AppFrameworkConfig = *appFrameworkConf
+		}
+
+		// set the last check time to current time
+		SetLastAppInfoCheckTime(appStatusContext)
+	}
+
+	return nil
 }
