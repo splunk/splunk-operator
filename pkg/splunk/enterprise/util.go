@@ -1134,6 +1134,9 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 //
 // TODO: These should be moved to a separate file and used from there
 //
+
+// InstallAppLocal uses PodExec to issue a splunk install app <app_name> command against
+// a local app package path.  This cmd is syncronous and does minimal error checking.
 func InstallAppLocal(c splcommon.ControllerClient, namespace string, podName string, appPath string, isNewApp bool) (string, error) {
 	scopedLog := log.WithName("InstallAppLocal")
 
@@ -1158,6 +1161,10 @@ func InstallAppLocal(c splcommon.ControllerClient, namespace string, podName str
 	return stdout, nil
 }
 
+// ExtractAppToClusterDir extracts an app package from a local path to the default
+// master-apps or shcluster/apps location to prepare it for bundle push.  This does
+// not take into account if these paths are changed from the default locations. It
+// Also does not perform any error checking.
 func ExtractAppToClusterDir(c splcommon.ControllerClient, namespace string, podName string, appPath string) (string, error) {
 	scopedLog := log.WithName("ExtractAppToClusterDir")
 
@@ -1179,6 +1186,11 @@ func ExtractAppToClusterDir(c splcommon.ControllerClient, namespace string, podN
 	return stdout, nil
 }
 
+// ExecuteBundlePush executes a bundle push, either SHC or IDX based on the podName.  It
+// does not perform any error checking.  Also note that SHC bundle pushes are syncronous
+// so this function will block until it is complete.  IDC bundle pushes are async.  This
+// function only perfomrs the bundle push command and does NOT monitor if the push is
+// successful or not.
 func ExecuteBundlePush(c splcommon.ControllerClient, namespace string, podName string) (string, error) {
 	scopedLog := log.WithName("ExecuteBundlePush")
 

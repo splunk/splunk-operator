@@ -172,7 +172,7 @@ func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string
 	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s", s3AppSrcPath), podSyncPath})
 }
 
-// GetAppsList get the list of apps from remote storage
+// DownloadFile downloads an app packages from remote storage
 func (awsclient *AWSS3Client) DownloadFile(remoteFile string, localFile string) error {
 	scopedLog := log.WithName("DownloadFile")
 

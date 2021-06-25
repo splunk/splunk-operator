@@ -150,7 +150,7 @@ func (client *MinioClient) GetInitContainerCmd(endpoint string, bucket string, p
 	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s/%s", bucket, path), fmt.Sprintf("%s/%s", appMnt, appSrcName)})
 }
 
-// GetAppsList get the list of apps from remote storage
+// DownloadFile downloads an app package from remote storage
 func (client *MinioClient) DownloadFile(remoteFile string, localFile string) error {
 	scopedLog := log.WithName("DownloadFile")
 
