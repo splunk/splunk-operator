@@ -137,9 +137,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.VerfiyMCStatefulSetOwnerRef(client, cr, namespacedName)
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
 		if err != nil {
-			return result, err
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		result.Requeue = false
 

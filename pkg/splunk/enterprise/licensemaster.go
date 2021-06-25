@@ -36,6 +36,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
+	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := validateLicenseMasterSpec(&cr.Spec)
@@ -89,9 +90,9 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.VerfiyMCStatefulSetOwnerRef(client, cr, namespacedName)
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
 		if err != nil {
-			return result, err
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		result.Requeue = false
 	}

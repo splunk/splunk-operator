@@ -209,7 +209,7 @@ func TestGetStatefulSetByName(t *testing.T) {
 	}
 }
 
-func TestVerfiyMCStatefulSetOwnerRef(t *testing.T) {
+func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
 	cr := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -269,7 +269,7 @@ func TestVerfiyMCStatefulSetOwnerRef(t *testing.T) {
 	}
 
 	// multiple owner ref
-	err = VerfiyMCStatefulSetOwnerRef(c, &cr, namespacedName)
+	err = DeleteReferencesToAutomatedMCIfExists(c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't delete resource %s", current.GetName())
 	}
@@ -294,7 +294,7 @@ func TestVerfiyMCStatefulSetOwnerRef(t *testing.T) {
 	}
 
 	// multiple owner ref
-	err = VerfiyMCStatefulSetOwnerRef(c, &cr1, namespacedName)
+	err = DeleteReferencesToAutomatedMCIfExists(c, &cr1, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't delete resource %s", current.GetName())
 	}
