@@ -17,6 +17,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -29,6 +31,7 @@ var _ S3Client = &MinioClient{}
 // SplunkMinioClient is an interface to Minio S3 client
 type SplunkMinioClient interface {
 	ListObjects(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	GetObject(ctx context.Context, bucketName string, fileName string, opts minio.GetObjectOptions) (*minio.Object, error)
 }
 
 // MinioClient is a client to implement S3 specific APIs
@@ -145,4 +148,38 @@ func (client *MinioClient) GetInitContainerImage() string {
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
 func (client *MinioClient) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
 	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s/%s", bucket, path), fmt.Sprintf("%s/%s", appMnt, appSrcName)})
+}
+
+// GetAppsList get the list of apps from remote storage
+func (client *MinioClient) DownloadFile(remoteFile string, localFile string) error {
+	scopedLog := log.WithName("DownloadFile")
+
+	s3Client := client.Client
+	reader, err := s3Client.GetObject(context.Background(), client.BucketName, remoteFile, minio.GetObjectOptions{})
+	if err != nil {
+		scopedLog.Error(err, "Unable to download item", "remoteFile", remoteFile)
+		return err
+	}
+	defer reader.Close()
+
+	file, err := os.Create(localFile)
+	if err != nil {
+		scopedLog.Error(err, "Unable to create local item", "localFile", localFile)
+		return err
+	}
+	defer file.Close()
+
+	stat, err := reader.Stat()
+	if err != nil {
+		scopedLog.Error(err, "Unable to stat local reader", "localFile", localFile)
+		return err
+	}
+
+	if _, err := io.CopyN(file, reader, stat.Size); err != nil {
+		scopedLog.Error(err, "Unable to copy remote to local", "remoteFile", remoteFile, "localFile", localFile)
+		return err
+	}
+	scopedLog.Info("File Downloaded", "remoteFile", remoteFile, "stat.Size", stat.Size, "localFile", localFile)
+
+	return nil
 }

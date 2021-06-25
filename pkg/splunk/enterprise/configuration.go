@@ -581,7 +581,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		// ToDo: sgontla: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
 		// Once the apps are installed, and on a reconcile entry triggered by polling interval expirty, if there is no new
 		// App changes on remote store, then the config map data is erased. In such case, no need to reset the Pod
-		if len(appListingConfigMap.Data) > 0 {
+		if len(appListingConfigMap.Data) > 0 && 1 == 0 /* TODO jryb: turn this off for now*/ {
 			podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
 		}
 	}

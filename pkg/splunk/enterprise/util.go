@@ -15,7 +15,13 @@
 package enterprise
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -25,6 +31,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubectl/pkg/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
@@ -32,6 +44,12 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+
+	// Used to move files between pods
+	_ "unsafe"
+
+	// Import kubectl cmd cp utils
+	_ "k8s.io/kubernetes/pkg/kubectl/cmd/cp"
 )
 
 // kubernetes logger used by splunk.enterprise package
@@ -240,18 +258,27 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	// Locally scoped apps for CM/Deployer require the latest splunk-ansible with apps_location_local.  Prior to this,
 	// there was no method to install local apps for these roles.  If the apps_location_local variable is not available,
 	// it will be ignored and revert back to no locally scoped apps for CM/Deployer.
-	yamlConfHeader := fmt.Sprintf(`splunk:
-  apps_location:`)
+	// TODO jryb:  This change requires this ansible PR to be merged: https://github.com/splunk/splunk-ansible/pull/632
+	yamlConfIdcHeader := fmt.Sprintf(`splunk:
+  app_paths_install:
+    idxc:`)
+	yamlConfShcHeader := fmt.Sprintf(`splunk:
+  app_paths_install:
+    shc:`)
 	yamlConfLocalHeader := fmt.Sprintf(`splunk:
-  apps_location_local:`)
+  app_paths_install:
+    default:`)
 
 	var localAppsConf, clusterAppsConf string
-	if crKind == "ClusterMaster" || crKind == "SearchHeadCluster" {
-		localAppsConf = yamlConfLocalHeader
+	if crKind == "ClusterMaster" {
+		clusterAppsConf = yamlConfIdcHeader
+	} else if crKind == "SearchHeadCluster" {
+		clusterAppsConf = yamlConfShcHeader
 	} else {
-		localAppsConf = yamlConfHeader
+		clusterAppsConf = ""
 	}
-	clusterAppsConf = yamlConfHeader
+	localAppsConf = yamlConfLocalHeader
+
 	var mapKeys []string
 
 	// Map order is not guaranteed, so use the sorted keys to go through the map entries
@@ -269,7 +296,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					localAppsConf = fmt.Sprintf(`%s
-    - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
+      - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
 				}
 			}
 
@@ -278,7 +305,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
-    - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
+      - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
 				}
 			}
 
@@ -287,12 +314,17 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		}
 	}
 
-	if localAppsConf != yamlConfHeader {
+	// TODO jryb Always add these file, even when empty, so we don't restart when the apps change
+	if localAppsConf != yamlConfLocalHeader {
 		mapAppListing["app-list-local.yaml"] = localAppsConf
+	} else {
+		mapAppListing["app-list-local.yaml"] = ""
 	}
 
-	if clusterAppsConf != yamlConfHeader {
+	if clusterAppsConf != yamlConfShcHeader || clusterAppsConf != yamlConfIdcHeader {
 		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
+	} else {
+		mapAppListing["app-list-cluster.yaml"] = ""
 	}
 
 	// Create App list config map
@@ -476,6 +508,21 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 	return s3Response, nil
 }
 
+// DownloadFile gets the apps list
+func (s3mgr *S3ClientManager) DownloadFile(remoteFile string, localFile string) error {
+
+	c, err := s3mgr.getS3Client(s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	if err != nil {
+		return err
+	}
+
+	err = c.Client.DownloadFile(remoteFile, localFile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
 func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
@@ -650,7 +697,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
-		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
+		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects, appFrameworkConfig, appSrc, cr, client) {
 			appDeployContext.IsDeploymentInProgress = true
 		}
 
@@ -681,7 +728,7 @@ func isAppExtentionValid(receivedKey string) bool {
 }
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
-func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
+func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject, appFrameworkConfig *enterprisev1.AppFrameworkSpec, appSrc string, cr splcommon.MetaObject, client splcommon.ControllerClient) bool {
 	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length: ", len(remoteS3ObjList))
 
 	var found bool
@@ -689,6 +736,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 	var newAppInfoList []enterprisev1.AppDeploymentInfo
 	var appChangesDetected bool
 	var appDeployInfo enterprisev1.AppDeploymentInfo
+	bundlePushRequired := false
 
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
@@ -699,6 +747,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 
 		nameAt := strings.LastIndex(receivedKey, "/")
 		appName = receivedKey[nameAt+1:]
+		prevDeployStatus := enterprisev1.DeployStatusComplete
 
 		// Now update App status as seen in the remote listing
 		found = false
@@ -707,7 +756,8 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 			if appList[idx].AppName == appName {
 				found = true
 				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterprisev1.RepoStateDeleted {
-					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
+					scopedLog.Info("App change detected.", "App name", appName, "marking for an update for appSrc", appSrc)
+					prevDeployStatus = appList[idx].DeployStatus
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterprisev1.DeployStatusPending
 
@@ -735,6 +785,119 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
 			appChangesDetected = true
+		}
+
+		// Did an app change?  Let's do something about it... vvvv-Maybe remove this check-vvvv or make it "if pod is ready"
+		if appChangesDetected == true && prevDeployStatus == enterprisev1.DeployStatusComplete {
+			// TODO JR: See if we can download the app here
+			var appSrcSpecIdx enterprisev1.AppSourceSpec
+			for _, appSrcSpecIdx = range appFrameworkConfig.AppSources {
+				if appSrcSpecIdx.Name == appSrc {
+					scopedLog.Info("Found appSource", "appSrc", appSrc, " for app name", appName)
+					break
+				}
+			}
+			vol, err := splclient.GetAppSrcVolume(appSrcSpecIdx, appFrameworkConfig)
+			if err != nil {
+				scopedLog.Info("Failed to GetAppSrcVolume", "appSource", appSrc, "for app name", appName)
+				continue
+			}
+
+			s3ClientWrapper := splclient.S3Clients[vol.Provider]
+			initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
+			s3ClientMgr := S3ClientManager{
+				client:          client,
+				cr:              cr,
+				appFrameworkRef: appFrameworkConfig,
+				vol:             &vol,
+				location:        appSrcSpecIdx.Location,
+				initFn:          initFunc,
+				getS3Client:     GetRemoteStorageClient,
+			}
+
+			// Now, get the apps list from remote storage
+			remoteFile := *remoteObj.Key
+			localFile := fmt.Sprintf("/tmp/%s", appName)
+			err = s3ClientMgr.DownloadFile(remoteFile, localFile)
+			if err != nil {
+				// move on to the next appSource if we are not able to get apps list
+				scopedLog.Error(err, "Unable to download file for appSrcSpec: ", "appSrc", appSrcSpecIdx.Name)
+				continue
+			}
+
+			// Now copy it to the running Pod/Splunk container.....
+			podFile := fmt.Sprintf("/init-apps/%s/%s", appSrc, appName)
+			//TODO jryb: Fix me for all sorts of types
+			var podType string
+			switch cr.GetObjectKind().GroupVersionKind().Kind {
+			case "Standalone":
+				podType = SplunkStandalone.ToString()
+			case "ClusterMaster":
+				podType = SplunkClusterMaster.ToString()
+			case "SearchHeadCluster":
+				podType = SplunkDeployer.ToString()
+			default:
+				continue // Invalid type.  Bail
+			}
+			replica := 0 // TODO: Fix me!
+			podName := fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, replica)
+
+			resp, stderr, cpErr := CopyFileToPod(client, cr.GetNamespace(), podName, localFile, podFile)
+			if cpErr != nil {
+				scopedLog.Error(cpErr, "Failed File Copy to pod", "localFile", localFile, "podName", podName, "stderr", stderr)
+			}
+			scopedLog.Info("File Copied Successfully.", "localFile", localFile, "podFile", podFile, "resp", resp, "kind", cr.GetObjectKind().GroupVersionKind().Kind)
+
+			// Kick off app install for this app
+			// TODO jryb: Check scope here.  Currently this assume local.
+			switch scope := getAppSrcScope(appFrameworkConfig, appSrc); scope {
+			case "local":
+				desiredOutput := fmt.Sprintf("App '%s' installed", podFile)
+				stdout, appInstallErr := InstallAppLocal(client, cr.GetNamespace(), podName, podFile, !found)
+				if appInstallErr != nil {
+					scopedLog.Error(appInstallErr, "Local App install failed.", "appPackage", podFile, "podName", podName)
+				}
+				if strings.TrimSpace(stdout) == strings.TrimSpace(desiredOutput) {
+					scopedLog.Info("Local App installed successful", "appPackage", podFile, "podName", podName)
+				} else {
+					scopedLog.Info("Local App installed may have failed", "appPackage", podFile, "podName", podName, "stdout", stdout)
+				}
+
+			case "cluster":
+				stdout, extractErr := ExtractAppToClusterDir(client, cr.GetNamespace(), podName, podFile)
+				if extractErr != nil {
+					scopedLog.Error(extractErr, "Untar App to cluster dir failed.", "appPackage", podFile, "podName", podName, "stdout", stdout)
+				}
+				bundlePushRequired = true
+			}
+			// Clean up operator /tmp so it doesn't fill up
+			err = os.Remove(localFile)
+			if err != nil {
+				scopedLog.Error(err, "Failed to remove local tmp file", "localAppPackage", localFile)
+			}
+		}
+	}
+
+	if bundlePushRequired == true {
+		//TODO jryb: Fix me for all sorts of types
+		var podType string
+		switch cr.GetObjectKind().GroupVersionKind().Kind {
+		case "Standalone":
+			podType = SplunkStandalone.ToString()
+		case "ClusterMaster":
+			podType = SplunkClusterMaster.ToString()
+		case "SearchHeadCluster":
+			podType = SplunkDeployer.ToString()
+		default:
+			scopedLog.Info("Invalid podType for bundle push.  This shouldn't hapen", "kind", cr.GetObjectKind().GroupVersionKind().Kind) // Invalid type.  Bail
+		}
+		replica := 0 // TODO: Fix me!
+		podName := fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, replica)
+		stdout, bundlePushErr := ExecuteBundlePush(client, cr.GetNamespace(), podName)
+		if bundlePushErr != nil {
+			scopedLog.Error(bundlePushErr, "Cluster bundle pushcommand failed.", "podName", podName, "stdout", stdout)
+		} else {
+			scopedLog.Info("Cluster bundle push initiated", "podName", podName, "stdout", stdout)
 		}
 	}
 
@@ -964,3 +1127,158 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 	return nil
 }
+
+//////////////////////////
+//
+// App Framework Action Functions
+//
+// TODO: These should be moved to a separate file and used from there
+//
+func InstallAppLocal(c splcommon.ControllerClient, namespace string, podName string, appPath string, isNewApp bool) (string, error) {
+	scopedLog := log.WithName("InstallAppLocal")
+
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, podName, namespace, "password")
+	if err != nil {
+		return "", err
+	}
+
+	var command string
+	if isNewApp == true {
+		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:%s", appPath, adminPwd)
+	} else {
+		// Update case
+		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -update 1 -auth admin:%s", appPath, adminPwd)
+	}
+	stdout, stderr, podExecErr := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, command, false, false)
+	if podExecErr != nil {
+		scopedLog.Error(err, "Error installing local app", "command", command, "stdout", stdout, "stderr", stderr)
+		return stdout, podExecErr
+	}
+
+	return stdout, nil
+}
+
+func ExtractAppToClusterDir(c splcommon.ControllerClient, namespace string, podName string, appPath string) (string, error) {
+	scopedLog := log.WithName("ExtractAppToClusterDir")
+
+	var command string
+	if strings.Contains(podName, "cluster-master") {
+		command = fmt.Sprintf("tar -xf %s -C /opt/splunk/etc/master-apps/", appPath)
+	} else if strings.Contains(podName, "deployer") {
+		command = fmt.Sprintf("tar -xf %s -C /opt/splunk/etc/shcluster/apps/", appPath)
+	} else {
+		scopedLog.Info("Not a valid Instance Type. Do nothing", "podName", podName)
+		return "", nil
+	}
+	stdout, stderr, podExecErr := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, command, false, false)
+	if podExecErr != nil {
+		scopedLog.Error(podExecErr, "Error executing App extract command", "command", command, "stdout", stdout, "stderr", stderr)
+		return stdout, podExecErr
+	}
+
+	return stdout, nil
+}
+
+func ExecuteBundlePush(c splcommon.ControllerClient, namespace string, podName string) (string, error) {
+	scopedLog := log.WithName("ExecuteBundlePush")
+
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, podName, namespace, "password")
+	if err != nil {
+		return "", err
+	}
+
+	var command string
+	// TODO: The IDC bundle is async and this command only kicks it off, so tracking via status is needed
+	//   The SHC bundle is syncronous, so it could take a while (though hopefully not since its a delta bundle)
+	//   so this may need to be addressed in the future.
+	if strings.Contains(podName, "cluster-master") {
+		command = fmt.Sprintf("/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes", adminPwd)
+	} else if strings.Contains(podName, "deployer") {
+		// TODO jryb Make http|s and mgmt port of the captain configurable based of CR or env variables, dealers choice
+		command = fmt.Sprintf("/opt/splunk/bin/splunk apply shcluster-bundle -target https://${SPLUNK_SEARCH_HEAD_CAPTAIN_URL}:8089 -auth admin:%s --answer-yes -push-default-apps true", adminPwd)
+	} else {
+		scopedLog.Info("Not a valid Instance Type. Do nothing", "podName", podName)
+		return "", nil
+	}
+	stdout, stderr, podExecErr := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, command, false, false)
+	if podExecErr != nil {
+		scopedLog.Error(podExecErr, "Error executing App extract command", "command", command, "stdout", stdout, "stderr", stderr)
+		return stdout, podExecErr
+	}
+
+	return stdout, nil
+}
+
+// CopyFileToPod copies a file locally from srcPath to the destPath on the pod specified in podName
+func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName string, srcPath string, destPath string) (string, string, error) {
+	// Create tar file stream
+	reader, writer := io.Pipe()
+	if destPath != "/" && strings.HasSuffix(string(destPath[len(destPath)-1]), "/") {
+		destPath = destPath[:len(destPath)-1]
+	}
+	go func() {
+		defer writer.Close()
+		err := cpMakeTar(srcPath, destPath, writer)
+		if err != nil {
+			return
+		}
+	}()
+	var cmdArr []string
+
+	cmdArr = []string{"tar", "-xf", "-"}
+	destDir := path.Dir(destPath)
+	if len(destDir) > 0 {
+		cmdArr = append(cmdArr, "-C", destDir)
+	}
+
+	// Setup exec  command for pod
+	pod := corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: namespace, Name: podName}
+	err := c.Get(context.TODO(), namespacedName, &pod)
+	if err != nil {
+		return "", "", err
+	}
+
+	gvk, _ := apiutil.GVKForObject(&pod, scheme.Scheme)
+	restConfig, err := config.GetConfig()
+	if err != nil {
+		return "", "", err
+	}
+	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	if err != nil {
+		return "", "", err
+	}
+
+	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(namespace).SubResource("exec")
+	option := &corev1.PodExecOptions{
+		Command: cmdArr,
+		Stdin:   true,
+		Stdout:  true,
+		Stderr:  true,
+		TTY:     false,
+	}
+
+	execReq.VersionedParams(
+		option,
+		scheme.ParameterCodec,
+	)
+	exec, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
+	if err != nil {
+		return "", "", err
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	err = exec.Stream(remotecommand.StreamOptions{
+		Stdin:  reader,
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return stdout.String(), stderr.String(), nil
+}
+
+//go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
+func cpMakeTar(srcPath, destPath string, writer io.Writer) error

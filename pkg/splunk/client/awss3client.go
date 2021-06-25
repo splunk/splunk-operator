@@ -17,6 +17,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 
@@ -24,10 +25,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 // blank assignment to verify that AWSS3Client implements S3Client
 var _ S3Client = &AWSS3Client{}
+var gSess *session.Session
 
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
@@ -76,6 +79,9 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
 		return nil
 	}
+
+	// TODO: Fix this and store it in the SplunkAWSS3Client
+	gSess = sess
 
 	return s3.New(sess)
 }
@@ -164,4 +170,34 @@ func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string
 	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
 
 	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s", s3AppSrcPath), podSyncPath})
+}
+
+// GetAppsList get the list of apps from remote storage
+func (awsclient *AWSS3Client) DownloadFile(remoteFile string, localFile string) error {
+	scopedLog := log.WithName("DownloadFile")
+
+	file, err := os.Create(localFile)
+	if err != nil {
+		scopedLog.Error(err, "Unable to open file", "localFile", localFile)
+		return err
+	}
+	defer file.Close()
+
+	// TODO: Fix the sess get to make it from the AWSS3Client
+	sess := gSess
+	downloader := s3manager.NewDownloader(sess)
+
+	numBytes, err := downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(awsclient.BucketName),
+			Key:    aws.String(remoteFile),
+		})
+	if err != nil {
+		scopedLog.Error(err, "Unable to download item %q, %v", remoteFile, err)
+		return err
+	}
+
+	scopedLog.Info("File Downloaded", "remoteFile: ", remoteFile, "numBytes: ", numBytes, "localFile: ", localFile)
+
+	return nil
 }
