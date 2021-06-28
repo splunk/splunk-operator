@@ -63,21 +63,20 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Parse Applist1 to create Valid Apps1
+	// Create a list of apps to upload to S3
 	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1, 1)
 
 	// Download V1 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appListV1)
+	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// Parse ValidAppsV1 to create Valid Apps2
-	appListV2 = make([]string, 0, len(appListV1))
-	for _, app := range appListV1 {
-		appListV2 = append(appListV2, testenv.AppInfo[app]["V2filename"])
-	}
+	// Create a list of apps to upload to S3 after poll period
+	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+	appFileList = testenv.GetAppFileList(appListV2, 2)
 
 	// Download V2 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appListV2)
+	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V2 app files")
 
 })
