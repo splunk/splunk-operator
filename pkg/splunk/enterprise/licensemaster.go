@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
@@ -35,6 +36,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
+	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
 	err := validateLicenseMasterSpec(&cr.Spec)
@@ -86,6 +88,12 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		//upgrade fron automated MC to MC CRD
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
 		result.Requeue = false
 	}
 	return result, nil
