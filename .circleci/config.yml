@@ -34,6 +34,7 @@ workflows:
             branches:
               only:
                 - develop
+                - feature-appframework
     jobs:
       - build-image
       - unit-tests
@@ -316,7 +317,7 @@ jobs:
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
             # TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster|scaling_test|crcrud|secret"
-            TEST_FOCUS: "integration"
+            TEST_FOCUS: "integration|appframework|feature-MC/CRD"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results
