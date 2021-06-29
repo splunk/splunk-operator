@@ -92,6 +92,16 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(instanceName, shc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Deployer STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.DeployerPhase)
+		DumpGetPods(testenvInstance.GetName())
+		return shc.Status.DeployerPhase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(deployment.GetName(), shc)
@@ -563,8 +573,7 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
 	for _, podName := range pods {
 		if !strings.Contains(podName, "monitoring-console") {
-			for _, app := range apps {
-				appName := AppInfo[app]["App-name"]
+			for _, appName := range apps {
 				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName)
 				logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
 				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
@@ -586,9 +595,9 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 				}
 				if versionCheck {
 					if checkupdated {
-						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[app]["V2"]))
+						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V2"]))
 					} else {
-						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[app]["V1"]))
+						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V1"]))
 					}
 				}
 			}
@@ -605,11 +614,9 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 			if clusterWideInstall {
 				if strings.Contains(podName, "cluster-master") {
 					path = "etc/master-apps/"
-				}
-				if strings.Contains(podName, "-deployer-") {
+				} else if strings.Contains(podName, "-deployer-") {
 					path = "etc/shcluster/apps"
-				}
-				if strings.Contains(podName, "-indexer-") {
+				} else if strings.Contains(podName, "-indexer-") {
 					path = "etc/slave-apps/"
 				}
 			}
@@ -623,7 +630,7 @@ func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns str
 	appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
 	gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 	for _, app := range apps {
-		folderName := AppInfo[app]["App-name"] + "/"
+		folderName := app + "/"
 		found := CheckStringInSlice(appList, folderName)
 		logf.Log.Info("Copy Status for app", "App-name", folderName, "status", found)
 		gomega.Expect(found).Should(gomega.Equal(checkAppDirectory))

@@ -40,7 +40,8 @@ var _ = Describe("s1appfw test", func() {
 
 		// Upload V1 apps to S3
 		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appListV1, downloadDirV1)
+		appFileList := testenv.GetAppFileList(appListV1, 1)
+		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 		uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -108,7 +109,8 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, initContDownloadLocation)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, true)
@@ -121,15 +123,19 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = nil
 
 			//Upload new Versioned Apps to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appListV2, downloadDirV2)
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
 			// Verify Apps are downloaded by init-container
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, true)
