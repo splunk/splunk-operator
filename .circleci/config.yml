@@ -44,6 +44,21 @@ workflows:
       - vulnerability-scan:
           requires:
             - build-image     
+  appframework-integration-test:          
+    jobs:
+      - build-image
+      - unit-tests
+      - integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+          filters:
+              branches:
+                only:
+                  - feature-appframework
+      - vulnerability-scan:
+          requires:
+            - build-image
   build-and-push:
     jobs:
       - build-image
@@ -316,7 +331,7 @@ jobs:
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
             # TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster|scaling_test|crcrud|secret"
-            TEST_FOCUS: "integration"
+            TEST_FOCUS: "integration|appframework"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results
