@@ -102,6 +102,16 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		return shc.Status.DeployerPhase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(instanceName, shc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for search head cluster STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return shc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(deployment.GetName(), shc)
