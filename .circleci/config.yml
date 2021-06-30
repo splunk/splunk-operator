@@ -44,14 +44,7 @@ workflows:
       - vulnerability-scan:
           requires:
             - build-image     
-  appframework-integration-test:
-    triggers:
-      - schedule:
-          cron: "0 11 * * *"
-          filters:
-            branches:
-              only:
-                - feature-appframework
+  appframework-integration-test:          
     jobs:
       - build-image
       - unit-tests
@@ -59,6 +52,10 @@ workflows:
           requires:
             - build-image
             - unit-tests
+          filters:
+              branches:
+                only:
+                  - feature-appframework
       - vulnerability-scan:
           requires:
             - build-image
