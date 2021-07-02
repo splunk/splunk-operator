@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -208,6 +209,14 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 			corev1.ResourceCPU:    resource.MustParse("4"),
 			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
+	}
+
+	if spec.LivenessInitialDelaySeconds < 0 {
+		return fmt.Errorf("Negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+	}
+
+	if spec.ReadinessInitialDelaySeconds < 0 {
+		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
 	setVolumeDefaults(spec)
@@ -594,36 +603,23 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		FSGroup:   &fsGroup,
 	}
 
-	// use script provided by enterprise container to check if pod is alive
-	livenessProbe := &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/sbin/checkstate.sh",
-				},
-			},
-		},
-		InitialDelaySeconds: 300,
-		TimeoutSeconds:      30,
-		PeriodSeconds:       30,
+	var numberOfApps int
+	var appListingFiles []string
+	if appListingConfigMap != nil {
+		for key, appListingentry := range appListingConfigMap.Data {
+			if key != appsUpdateToken {
+				// One(to accomodate header) less than number of entries
+				numberOfApps += strings.Count(appListingentry, "\n") - 1
+				appListingFiles = append(appListingFiles, key)
+			}
+		}
+		// Always sort the slice, so that map entries are ordered, to avoid pod resets
+		sort.Strings(appListingFiles)
 	}
 
-	// pod is ready if container artifact file is created with contents of "started".
-	// this indicates that all the the ansible plays executed at startup have completed.
-	readinessProbe := &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/bin/grep",
-					"started",
-					"/opt/container_artifact/splunk-container.state",
-				},
-			},
-		},
-		InitialDelaySeconds: 10,
-		TimeoutSeconds:      5,
-		PeriodSeconds:       5,
-	}
+	livenessProbe := getLivenessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
+
+	readinessProbe := getReadinessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -641,16 +637,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
 	}
-	if appListingConfigMap != nil {
-		var appListingFiles []string
-		for key := range appListingConfigMap.Data {
-			if key != appsUpdateToken {
-				appListingFiles = append(appListingFiles, key)
-			}
-		}
-		// Always sort the slice, so that map entries are ordered, to avoid pod resets
-		sort.Strings(appListingFiles)
 
+	if appListingConfigMap != nil {
 		for _, fileName := range appListingFiles {
 			splunkDefaults = fmt.Sprintf("%s%s,%s", appConfLocationOnPod, fileName, splunkDefaults)
 		}
@@ -745,6 +733,61 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
+	}
+}
+
+// getLivenessProbe the probe for checking the liveness of the Pod
+// uses script provided by enterprise container to check if pod is alive
+func getLivenessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	livenessDelay := livenessProbeDefaultDelaySec + additionalDelay
+	if spec.LivenessInitialDelaySeconds > livenessDelay {
+		livenessDelay = spec.LivenessInitialDelaySeconds
+	}
+
+	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
+
+	livenessCommand := []string{
+		"/sbin/checkstate.sh",
+	}
+
+	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeoutSec, livenessProbePeriodSec)
+}
+
+// getReadinessProbe provides the probe for checking the readiness of the Pod
+// pod is ready if container artifact file is created with contents of "started".
+// this indicates that all the the ansible plays executed at startup have completed.
+func getReadinessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	readinessDelay := readinessProbeDefaultDelaySec + additionalDelay
+	if spec.ReadinessInitialDelaySeconds > readinessDelay {
+		readinessDelay = spec.ReadinessInitialDelaySeconds
+	}
+
+	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
+
+	readinessCommand := []string{
+		"/bin/grep",
+		"started",
+		"/opt/container_artifact/splunk-container.state",
+	}
+
+	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
+}
+
+// getProbe returns the Probe for given values.
+func getProbe(command []string, delay, timeout, period int32) *corev1.Probe {
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: command,
+			},
+		},
+		InitialDelaySeconds: delay,
+		TimeoutSeconds:      timeout,
+		PeriodSeconds:       period,
 	}
 }
 
