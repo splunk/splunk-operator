@@ -948,6 +948,18 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              livenessInitialDelaySeconds:
+                description: LivenessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command)
+                  for the Liveness probe
+                format: int32
+                type: integer
+              readinessInitialDelaySeconds:
+                description: ReadinessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
+                  for Readiness probe
+                format: int32
+                type: integer
               replicas:
                 description: Number of standalone pods
                 format: int32

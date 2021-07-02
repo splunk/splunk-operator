@@ -1213,3 +1213,69 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 
 	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
 }
+
+func TestGetLivenessProbe(t *testing.T) {
+	spec := &enterprisev1.CommonSplunkSpec{}
+
+	// Test if default delay works always
+	livenessProbe := getLivenessProbe(spec, 0)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelay {
+		t.Errorf("Failed to set Liveness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelay + 10
+	livenessProbe = getLivenessProbe(spec, 0)
+	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
+		t.Errorf("Failed to set Liveness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	livenessProbe = getLivenessProbe(spec, 20)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelay+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+func TestGetReadinessProbe(t *testing.T) {
+	spec := &enterprisev1.CommonSplunkSpec{}
+
+	// Test if default delay works always
+	readinessProbe := getReadinessProbe(spec, 0)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelay {
+		t.Errorf("Failed to set Readiness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelay + 10
+	readinessProbe = getReadinessProbe(spec, 0)
+	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
+		t.Errorf("Failed to set Readiness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	readinessProbe = getReadinessProbe(spec, 20)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelay+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+// getProbe returns the Probe for given values.
+func TestGetProbe(t *testing.T) {
+
+	command := []string{
+		"grep",
+		"ready",
+		"file.txt",
+	}
+
+	test := func(command []string, delay, timeout, period int32, want string) {
+		f := func() (interface{}, error) {
+			return getProbe(command, delay, timeout, period), nil
+		}
+		configTester(t, "getProbe()", f, want)
+
+	}
+
+	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
+}
