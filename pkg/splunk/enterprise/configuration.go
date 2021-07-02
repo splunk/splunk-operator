@@ -617,9 +617,9 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		sort.Strings(appListingFiles)
 	}
 
-	livenessProbe := getLivenessProbe(spec, int32(numberOfApps*avgAppInstallationTime))
+	livenessProbe := getLivenessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
 
-	readinessProbe := getReadinessProbe(spec, int32(numberOfApps*avgAppInstallationTime))
+	readinessProbe := getReadinessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -738,27 +738,35 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	livenessDelay := livenessProbeDefaultDelay + additionalDelay
+func getLivenessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	livenessDelay := livenessProbeDefaultDelaySec + additionalDelay
 	if spec.LivenessInitialDelaySeconds > livenessDelay {
 		livenessDelay = spec.LivenessInitialDelaySeconds
 	}
+
+	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
 
 	livenessCommand := []string{
 		"/sbin/checkstate.sh",
 	}
 
-	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeout, livenessProbePeriod)
+	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeoutSec, livenessProbePeriodSec)
 }
 
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
 // this indicates that all the the ansible plays executed at startup have completed.
-func getReadinessProbe(spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	readinessDelay := readinessProbeDefaultDelay + additionalDelay
+func getReadinessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	readinessDelay := readinessProbeDefaultDelaySec + additionalDelay
 	if spec.ReadinessInitialDelaySeconds > readinessDelay {
 		readinessDelay = spec.ReadinessInitialDelaySeconds
 	}
+
+	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
 
 	readinessCommand := []string{
 		"/bin/grep",
@@ -766,7 +774,7 @@ func getReadinessProbe(spec *enterprisev1.CommonSplunkSpec, additionalDelay int3
 		"/opt/container_artifact/splunk-container.state",
 	}
 
-	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeout, readinessProbePeriod)
+	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
 }
 
 // getProbe returns the Probe for given values.

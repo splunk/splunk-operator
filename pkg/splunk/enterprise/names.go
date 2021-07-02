@@ -105,14 +105,14 @@ const (
 	avgAppInstallationTime = 5
 
 	// Readiness probe time values
-	readinessProbeDefaultDelay = 10
-	readinessProbeTimeout      = 5
-	readinessProbePeriod       = 5
+	readinessProbeDefaultDelaySec = 10
+	readinessProbeTimeoutSec      = 5
+	readinessProbePeriodSec       = 5
 
 	// Liveness probe time values
-	livenessProbeDefaultDelay = 300
-	livenessProbeTimeout      = 30
-	livenessProbePeriod       = 30
+	livenessProbeDefaultDelaySec = 300
+	livenessProbeTimeoutSec      = 30
+	livenessProbePeriodSec       = 30
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

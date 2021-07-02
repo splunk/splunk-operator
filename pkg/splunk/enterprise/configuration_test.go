@@ -1215,52 +1215,63 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 }
 
 func TestGetLivenessProbe(t *testing.T) {
-	spec := &enterprisev1.CommonSplunkSpec{}
+	cr := &enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(spec, 0)
-	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelay {
+	livenessProbe := getLivenessProbe(cr, spec, 0)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
-	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelay + 10
-	livenessProbe = getLivenessProbe(spec, 0)
+	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
+	livenessProbe = getLivenessProbe(cr, spec, 0)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(spec, 20)
-	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelay+20 {
+	livenessProbe = getLivenessProbe(cr, spec, 20)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set additional delay overriding the default and configured")
 	}
 }
 
 func TestGetReadinessProbe(t *testing.T) {
-	spec := &enterprisev1.CommonSplunkSpec{}
+	cr := &enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(spec, 0)
-	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelay {
+	readinessProbe := getReadinessProbe(cr, spec, 0)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
-	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelay + 10
-	readinessProbe = getReadinessProbe(spec, 0)
+	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
+	readinessProbe = getReadinessProbe(cr, spec, 0)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(spec, 20)
-	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelay+20 {
+	readinessProbe = getReadinessProbe(cr, spec, 20)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set additional delay overriding the default and configured")
 	}
 }
 
-// getProbe returns the Probe for given values.
 func TestGetProbe(t *testing.T) {
 
 	command := []string{

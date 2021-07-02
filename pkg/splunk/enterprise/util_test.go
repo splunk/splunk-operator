@@ -770,9 +770,9 @@ func TestSetLastAppInfoCheckTime(t *testing.T) {
 }
 
 func TestGetNextRequeueTime(t *testing.T) {
-	appFrameworkRef := enterprisev1.AppFrameworkSpec{}
-	appFrameworkRef.AppsRepoPollInterval = 60
-	nextRequeueTime := GetNextRequeueTime(appFrameworkRef.AppsRepoPollInterval, (time.Now().Unix() - int64(40)))
+	appFrameworkContext := enterprisev1.AppDeploymentContext{}
+	appFrameworkContext.AppsRepoStatusPollInterval = 60
+	nextRequeueTime := GetNextRequeueTime(appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
 	}
