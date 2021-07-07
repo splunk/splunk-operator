@@ -90,8 +90,9 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	}
 
 	newURLsAdded := true
+	monitoringConsoleRef := "test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyMonitoringConsoleEnvConfigMap(c, "test", "test", env, newURLsAdded)
+		_, err := ApplyMonitoringConsoleEnvConfigMap(c, "test", "test", monitoringConsoleRef, env, newURLsAdded)
 		return err
 	}
 

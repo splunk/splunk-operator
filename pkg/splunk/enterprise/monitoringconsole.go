@@ -145,12 +145,12 @@ func validateMonitoringConsoleSpec(spec *enterprisev1.MonitoringConsoleSpec) err
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)
 
-	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
+	configMap := GetSplunkMonitoringconsoleConfigMapName(monitoringConsoleRef, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
 	err := client.Get(context.TODO(), namespacedName, &current)
 
