@@ -50,37 +50,131 @@ var _ = Describe("Monitoring Console test", func() {
 
 	Context("Deploy Monitoring Console", func() {
 		It("smoke, monitoring_console: can deploy MC CR", func() {
+			/*
+				Test Steps
+				1. Deploy Monitoring Console
+				2. Deploy Standalone
+				3. Wait for Monitoring Console status to go back to READY
+				4. Verify Standalone configured in Monitoring Console Config Map
+				5. Verify Monitoring Console Pod has correct peers in Peer List
+			*/
+
+			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
-			// Verify MC is Ready and stays in ready state
+			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
-		})
-	})
 
-	XContext("Standalone deployment (S1)", func() {
-		It("monitoring_console, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
-
+			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
-			standaloneOne, err := deployment.DeployStandalone(standaloneOneName)
+			mcName := deployment.GetName()
+			spec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
+			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(standaloneOneName, spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standaloneOne, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err := testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone is configure in MC Config Map
+			podName := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
+			Expect(testenv.CheckPodNameInString(podName, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Only 1 peer expected in MC peer list
 			Expect(len(peerList)).To(Equal(1))
 
-			podName := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
 			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName, "Peer in peer list", peerList[0])
 			Expect(strings.Contains(peerList[0], podName)).To(Equal(true))
+
+		})
+	})
+
+	Context("Standalone deployment (S1)", func() {
+		It("monitoring_console, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+			/*
+				Test Steps
+				1.  Deploy Standalone
+				2.  Wait for Standalone to go to READY
+				3.  Deploy Monitoring Console
+				4.  Wait for Monitoring Console status to be READY
+				5.  Verify Standalone configured in Monitoring Console Config Map
+				6.  Verify Monitoring Console Pod has correct peers in Peer List
+				7.  Deploy 2nd Standalone
+				8.  Wait for Second Standalone to be READY
+				9.  Wait for Monitoring Console status to go UPDATING then READY
+				10. Verify both Standalone configured in Monitoring Console Config Map
+				11. Verify both Standalone configured in Monitoring Console Pod Peers String
+				12. Delete 2nd Standalone
+				13. Wait for Monitoring Console to go to UPDATING then READY
+				14. Verify only first Standalone configured in Monitoring Console Config Map
+				15. Verify only first Standalone configured in Monitoring Console Pod Peers String
+			*/
+
+			standaloneOneName := deployment.GetName()
+			mcName := deployment.GetName()
+			spec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
+			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(standaloneOneName, spec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+
+			// Wait for standalone to be in READY Status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standaloneOne, testenvInstance)
+
+			// Deploy MC and wait for MC to be READY
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err := testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone is configured in MC Config Map
+			podName := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
+			Expect(testenv.CheckPodNameInString(podName, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
+
+			// Check Monitoring console is configured with all standalone instances in namespace
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
+			testenvInstance.Log.Info("Peer List", "instance", peerList)
+
+			// Only 1 peer expected in MC peer list
+			Expect(len(peerList)).To(Equal(1))
+			Expect(testenv.CheckPodNameInString(podName, peerList[0])).To(Equal(true))
 
 			// Add another standalone instance in namespace
 			testenvInstance.Log.Info("Adding second standalone deployment to namespace")
@@ -103,31 +197,43 @@ var _ = Describe("Monitoring Console test", func() {
 						},
 					},
 					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
 				},
 			}
-			standaloneTwo, err := deployment.DeployStandalonewithGivenSpec(standaloneTwoName, standaloneTwoSpec)
+			standaloneTwo, err := deployment.DeployStandaloneWithGivenSpec(standaloneTwoName, standaloneTwoSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone two to be in READY status
 			testenv.StandaloneReady(deployment, standaloneTwoName, standaloneTwo, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err = testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone is configure in MC Config Map
+			podNameOne := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
+			podNameTwo := fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0)
+			Expect(testenv.CheckPodNameInString(podNameOne, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
+			Expect(testenv.CheckPodNameInString(podNameTwo, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Only 2 peers expected in MC peer list
 			Expect(len(peerList)).To(Equal(2))
 
-			// Verify Pod Name in Peer List
-			podNameOne := fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
-			podNameTwo := fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0)
-			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameOne)
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameOne), true)
-			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameTwo)
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameTwo), true)
+			// Verify both standalone Pod Name in Peer List
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podNameOne), true)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podNameTwo), true)
 
 			// Delete Standlone TWO of the standalone and ensure MC is updated
 			testenvInstance.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
@@ -135,45 +241,96 @@ var _ = Describe("Monitoring Console test", func() {
 			err = deployment.DeleteCR(standaloneTwo)
 			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err = testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone One is configure in MC Config Map
+			Expect(testenv.CheckPodNameInString(podNameOne, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
+
+			// Check standalone two is removed from MC Config Map
+			Expect(testenv.CheckPodNameInString(podNameTwo, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(false))
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Only 1 peer expected in MC peer list
 			Expect(len(peerList)).To(Equal(1))
 
-			podName = fmt.Sprintf(testenv.StandalonePod, standaloneOneName, 0)
-			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName, "Peer in peer list", peerList[0])
-			Expect(strings.Contains(peerList[0], podName)).To(Equal(true))
+			// Check Only one standalone configured on MC Pod peer list
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podNameOne), true)
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podNameTwo), false)
 		})
 	})
 
-	XContext("Standalone deployment with Scale up", func() {
+	Context("Standalone deployment with Scale up", func() {
 		It("monitoring_console: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+			/*
+				Test Steps
+				1.  Deploy Standalone
+				2.  Wait for Standalone to go to READY
+				3.  Deploy Monitoring Console
+				4.  Wait for Monitoring Console status to be READY
+				5.  Verify Standalone configured in Monitoring Console Config Map
+				6.  Verify Monitoring Console Pod has correct peers in Peer List
+				7.  Scale Standalone to 2 REPLICAS
+				8.  Wait for Second Standalone POD to come up and PHASE to be READY
+				9.  Wait for Monitoring Console status to go UPDATING then READY
+				10. Verify both Standalone PODS configured in Monitoring Console Config Map
+				11. Verify both Standalone configured in Monitoring Console Pod Peers String
+			*/
 
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
+			standaloneName := deployment.GetName()
+			mcName := deployment.GetName()
+			spec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
 
-			// Wait for Standalone to be in READY status
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(standaloneName, spec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+
+			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy MC and wait for MC to be READY
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err := testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone is configure in MC Config Map
+			podName := fmt.Sprintf(testenv.StandalonePod, standaloneName, 0)
+			Expect(testenv.CheckPodNameInString(podName, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Only 1 peer expected in MC peer list
 			Expect(len(peerList)).To(Equal(1))
 
 			// Check spluk standlone pods are configured in MC peer list
-			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName, "Peer in peer list", peerList[0])
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)).To(Equal(true))
+			Expect(testenv.CheckPodNameInString(podName, peerList[0])).To(Equal(true))
 
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Standalone CR")
@@ -193,20 +350,32 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get contents of MC config map
+			mcConfigMap, err = testenv.GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+			Expect(err).To(Succeed(), "Unable to get MC config map")
+
+			// Check Standalone is configured in MC Config Map
+			for i := range []int{0, 1} {
+				podName := fmt.Sprintf(testenv.StandalonePod, standaloneName, i)
+				Expect(testenv.CheckPodNameInString(podName, mcConfigMap.Data["SPLUNK_STANDALONE_URL"])).To(Equal(true))
+			}
 
 			// Only 2 peer expected in MC peer list
-			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList = testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peers in configuredPeer List", "count", len(peerList))
 			Expect(len(peerList)).To(Equal(2))
 
 			// Verify Pod Name in Peer List
-			podNameTwo := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)
-			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podName)
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName), true)
-			testenvInstance.Log.Info("Checking Standalone on MC", "Standalone POD Name", podNameTwo)
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podNameTwo), true)
+			for i := range []int{0, 1} {
+				podName := fmt.Sprintf(testenv.StandalonePod, standaloneName, i)
+				Expect(testenv.CheckPodNameInString(podName, peerList[i])).To(Equal(true))
+			}
 		})
 	})
 
@@ -234,7 +403,7 @@ var _ = Describe("Monitoring Console test", func() {
 			for i := 0; i < defaultSHReplicas; i++ {
 				podName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				testenvInstance.Log.Info("Checking for Search Head on MC", "Search Head Name", podName)
-				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podName)
 				Expect(found).To(Equal(true))
 			}
 
@@ -243,7 +412,7 @@ var _ = Describe("Monitoring Console test", func() {
 				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
 				podIP := testenv.GetPodIP(testenvInstance.GetName(), podName)
 				testenvInstance.Log.Info("Checking for Indexer Pod on MC", "Search Head Name", podName, "IP Address", podIP)
-				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podIP)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podIP)
 				Expect(found).To(Equal(true))
 			}
 
@@ -303,13 +472,13 @@ var _ = Describe("Monitoring Console test", func() {
 			// Check Standalone configured on Monitoring Console
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info("Check standalone instance in MC Peer list", "Standalone Pod", podName)
-			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)).To(Equal(true))
+			Expect(testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podName)).To(Equal(true))
 
 			// Verify all Search Head Members are configured on Monitoring Console
 			for i := 0; i < scaledSHReplicas; i++ {
 				podName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				testenvInstance.Log.Info("Checking for Search Head on MC after adding Standalone", "Search Head Name", podName)
-				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podName)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podName)
 				Expect(found).To(Equal(true))
 			}
 
@@ -318,7 +487,7 @@ var _ = Describe("Monitoring Console test", func() {
 				podName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
 				podIP := testenv.GetPodIP(testenvInstance.GetName(), podName)
 				testenvInstance.Log.Info("Checking for Indexer Pod on MC", "Search Head Name", podName, "IP Address", podIP)
-				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), podIP)
+				found := testenv.CheckPodNameOnMC(testenvInstance.GetName(), deployment.GetName(), podIP)
 				Expect(found).To(Equal(true))
 			}
 		})

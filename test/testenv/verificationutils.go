@@ -405,6 +405,20 @@ func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crN
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
+// VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
+func VerifyMonitoringConsolePhase(deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
+	gomega.Eventually(func() splcommon.Phase {
+		mc := &enterprisev1.MonitoringConsole{}
+		err := deployment.GetInstance(crName, mc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for monitoring console CR status", "instance", mc.ObjectMeta.Name, "Expected", phase, " Actual Phase", mc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return mc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
 // VerifyCPULimits verifies value of CPU limits is as expected
 func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
 	gomega.Eventually(func() bool {

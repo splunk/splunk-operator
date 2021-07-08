@@ -160,7 +160,7 @@ var _ = Describe("Smoke test", func() {
 			}
 
 			// Create standalone Deployment with License Master
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), standaloneSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), standaloneSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for Standalone to be in READY status

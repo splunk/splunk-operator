@@ -20,6 +20,9 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	corev1 "k8s.io/api/core/v1"
+
 	gomega "github.com/onsi/gomega"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -73,8 +76,8 @@ func CheckMCPodReady(ns string) bool {
 }
 
 // GetConfiguredPeers get list of Peers Configured on Montioring Console
-func GetConfiguredPeers(ns string) []string {
-	podName := fmt.Sprintf(MonitoringConsolePod, ns, 0)
+func GetConfiguredPeers(ns string, deploymentName string) []string {
+	podName := fmt.Sprintf(MonitoringConsolePod, deploymentName, 0)
 	var peerList []string
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
@@ -132,9 +135,9 @@ func MCPodReady(ns string, deployment *Deployment) {
 }
 
 // CheckPodNameOnMC Check Standalone Pod configured on MC
-func CheckPodNameOnMC(ns string, podName string) bool {
+func CheckPodNameOnMC(ns string, deploymentName string, podName string) bool {
 	// Get Peers configured on Monitoring Console
-	peerList := GetConfiguredPeers(ns)
+	peerList := GetConfiguredPeers(ns, deploymentName)
 	logf.Log.Info("Peer List", "instance", peerList)
 	found := false
 	for _, peer := range peerList {
@@ -162,4 +165,22 @@ func GetPodIP(ns string, podName string) string {
 		return ""
 	}
 	return restResponse.Status.PodIP
+}
+
+// GetMCConfigMap gets config map for give Monitoring Console Name
+func GetMCConfigMap(deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
+	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(deployment.GetName(), enterprise.SplunkMonitoringConsole)
+	mcConfigMap, err := GetConfigMap(deployment, ns, mcConfigMapName)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
+		return mcConfigMap, err
+	}
+	logf.Log.Info("MC Config Map contents", "Data", mcConfigMap.Data)
+	return mcConfigMap, err
+}
+
+// CheckPodNameInString checks for pod name in string
+func CheckPodNameInString(podName string, configString string) bool {
+	logf.Log.Info("Check MC Config String has Pod configured", "Monitoring Console Config Map Pod Config String", configString, "POD String", podName)
+	return strings.Contains(configString, podName)
 }
