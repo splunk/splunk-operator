@@ -67,7 +67,7 @@ For more information, see the [Description of App Framework Specification fields
 
 ### How to use the App Framework on Indexer Cluster
 
-This example, describes installation of apps on Indexer Cluster as well as Cluster Master. This is achieved by deploying a ClusterMaster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
+This example describes the installation of apps on Indexer Cluster as well as Cluster Master. This is achieved by deploying a ClusterMaster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based storage volume path and URL.
 2. Create a Kubernetes Secret Object with the storage credentials. 
@@ -119,13 +119,13 @@ spec:
 
 The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the cluster master instance for local use. A Pod reset is triggered on the cluster master to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
 
-The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster master for use on the cluster. The cluster master is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initated by the App Framework.
+The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster master for use on the cluster. The cluster master is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
 ### How to use the App Framework on Search Head Cluster
 
-This example, describes installation of apps on Search Head Cluster as well as Deployer. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
+This example describes the installation of apps on Search Head Cluster as well as Deployer. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based storage volume path and URL.
 2. Create a Kubernetes Secret Object with the storage credentials. 
@@ -177,7 +177,7 @@ spec:
 
 The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the deployer instance for local use. A Pod reset is triggered on the deployer to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
 
-The apps in the `searchApps` and `machineLearningApps` folders are deployed to the deployer for use on the search head cluster. The deployer is responsible for deploying those apps to the search heads. The Splunk Search Head restarts are triggered by the contents of the Splunk apps deployed, and are not initated by the App Framework.
+The apps in the `searchApps` and `machineLearningApps` folders are deployed to the deployer for use on the search head cluster. The deployer is responsible for deploying those apps to the search heads. The Splunk Search Head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
@@ -185,7 +185,7 @@ For more information, see the [Description of App Framework Specification fields
 ## Description of App Framework Specification fields
 App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, and LicenseMaster. Configuring the App framework involves the following steps:
 
-* Remote Source of Apps: Define the remote loation including the bucket(s) and path for each bucket
+* Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
 * Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)
 * Scope of Apps: Define if the Apps need to be installed locally (such as Standalone) or cluster-wide (such as Indexer cluster
 
@@ -307,7 +307,11 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 `appsRepoPollIntervalSeconds` helps configure the polling interval(in seconds) to detect addition or modification of apps on the Remote Storage
 
+## Impact of livenessInitialDelaySeconds and readinessInitialDelaySeconds
 
+* Splunk Operator CRDs support the configuration of initialDelaySeconds(insert link to https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes 
+* Default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds
+* When Appframework is configured as part of a CR, depending on the number of Apps being configured, Operator can also override the default or configured values for both probes with internally calculated higher values. This is to ensure that optimal values are being used to allow for successful installation or update of Apps especially in large scale deployments. 
 
 ## App Framework Limitations
 

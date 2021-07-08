@@ -11,7 +11,7 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
  * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).
  
 
-SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custome Resource with SmartStore volume spec, through `SecretRef`
+SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custom Resource with SmartStore volume spec, through `SecretRef`
 
 ## Storing Smartstore Secrets
 Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal=s3_access_key=<access_key> --from-literal=s3_secret_key=<secret_key>`
@@ -55,8 +55,8 @@ spec:
 
 1. In the above example, `indexdata-s2-bucket` is the bucket name on remote storage, `standaloneNodes/s1data` is the relative path on that bucket in which the index data is stored.
 2. There are 3 indexes defined in the above config example, i.e `networkmonitor`, `salesdata` and `oslogs`. 
-3. `defaults:` section is configured with the s3 `volumeName` parameter.  An index can override with a specific volumeName, as shown for `networkmonitor` index. (Note: Unless multiple S3 volumes are used, specifying the `volumeName` in `defaults:` section makes it simple, and no need to repate it across all the indexes)
-4. If the remotePath is not explicityly specified, a default value of `$_index_name` is assumed. For the semantics of `$_index_name`, please see [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf) in Splunk docs.
+3. `defaults:` section is configured with the s3 `volumeName` parameter.  An index can override with a specific volumeName, as shown for `networkmonitor` index. (Note: Unless multiple S3 volumes are used, specifying the `volumeName` in `defaults:` section makes it simple, and no need to repeat it across all the indexes)
+4. If the remotePath is not explicitly specified, a default value of `$_index_name` is assumed. For the semantics of `$_index_name`, please see [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Indexesconf) in Splunk docs.
 
 
 The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In the case of a standalone deployment, the app is located at `/opt/splunk/etc/apps/`
