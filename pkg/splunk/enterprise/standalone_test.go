@@ -127,7 +127,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",
@@ -259,7 +259,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 			Replicas: 1,
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret", Type: "s3", Provider: "aws"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 				IndexList: []enterprisev1.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",

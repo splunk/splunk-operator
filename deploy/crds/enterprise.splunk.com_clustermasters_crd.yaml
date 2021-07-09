@@ -699,15 +699,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
@@ -1353,15 +1352,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
@@ -2705,15 +2703,15 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: App Package Remote Store provider. For
-                                e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws.
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio'
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
-                              description: Remote Storage type.
+                              description: 'Remote Storage type. Supported values:
+                                s3'
                               type: string
                           type: object
                         type: array
@@ -2896,15 +2894,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
