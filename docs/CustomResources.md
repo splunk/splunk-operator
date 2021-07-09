@@ -60,8 +60,10 @@ spec:
   livenessInitialDelaySeconds: 400
   readinessInitialDelaySeconds: 390
   extraEnv:
-  - name: SOME_COOL_ENV_VAR
-    value: "stuff"
+  - name: ADDITIONAL_ENV_VAR_1
+    value: "test_value_1"
+  - name: ADDITIONAL_ENV_VAR_2
+    value: "test_value_2"
   resources:
     requests:
       memory: "512Mi"
