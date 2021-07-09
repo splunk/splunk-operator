@@ -1003,7 +1003,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appCo
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
-	err = validateRemoteVolumeSpec(appFramework.VolList)
+	err = validateRemoteVolumeSpec(appFramework.VolList, true)
 	if err != nil {
 		return err
 	}
@@ -1017,7 +1017,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appCo
 }
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec
-func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec) error {
+func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec, isAppFramework bool) error {
 
 	duplicateChecker := make(map[string]bool)
 
@@ -1040,11 +1040,16 @@ func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec) error {
 		if volume.SecretRef == "" {
 			return fmt.Errorf("Volume SecretRef is missing")
 		}
-		if volume.Type == "" {
-			return fmt.Errorf("Remote volume Type is missing")
-		}
-		if volume.Provider == "" {
-			return fmt.Errorf("S3 Provider is missing")
+
+		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
+		// For now, Smartstore supports only S3, which is by default.
+		if isAppFramework {
+			if volume.Type == "" {
+				return fmt.Errorf("Remote volume Type is missing")
+			}
+			if volume.Provider == "" {
+				return fmt.Errorf("S3 Provider is missing")
+			}
 		}
 	}
 	return nil
@@ -1095,7 +1100,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
-	err = validateRemoteVolumeSpec(smartstore.VolList)
+	err = validateRemoteVolumeSpec(smartstore.VolList, false)
 	if err != nil {
 		return err
 	}
