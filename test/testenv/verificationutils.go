@@ -584,7 +584,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 	for _, podName := range pods {
 		if !strings.Contains(podName, "monitoring-console") {
 			for _, appName := range apps {
-				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName)
+				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
 				logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
 				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
 				comparsion := strings.EqualFold(status, statusCheck)
@@ -637,14 +637,19 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 
 // VerifyAppsInFolder verify that apps are present in folder
 func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
-	appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
-	gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
-	for _, app := range apps {
-		folderName := app + "/"
-		found := CheckStringInSlice(appList, folderName)
-		logf.Log.Info("Copy Status for app", "App-name", folderName, "status", found)
-		gomega.Expect(found).Should(gomega.Equal(checkAppDirectory))
-	}
+	gomega.Eventually(func() bool {
+		appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
+		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
+		for _, app := range apps {
+			folderName := app + "/"
+			found := CheckStringInSlice(appList, folderName)
+			logf.Log.Info("Copy Status for app", "App-name", folderName, "status", found)
+			if found != checkAppDirectory {
+				return false
+			}
+		}
+		return true
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container

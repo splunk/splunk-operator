@@ -44,23 +44,26 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 }
 
 // GetPodAppStatus Get the app install status and version number
-func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string) (string, string, error) {
+func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	output, _ := GetPodAppInstallStatus(deployment, podName, ns, appname)
 	status := strings.Fields(output)[2]
-	version, err := GetPodInstalledAppVersion(deployment, podName, ns, appname)
+	version, err := GetPodInstalledAppVersion(deployment, podName, ns, appname, clusterWideInstall)
 	return status, version, err
 
 }
 
 // GetPodInstalledAppVersion Get the version of the app installed on pod
-func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string, appname string) (string, error) {
+func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, error) {
 	path := "etc/apps"
-	if strings.Contains(podName, "-indexer-") {
-		path = "etc/slave-apps"
-	} else if strings.Contains(podName, "cluster-master") {
-		path = "etc/master-apps"
-	} else if strings.Contains(podName, "-deployer-") {
-		path = "etc/shcluster/apps"
+	//For cluster-wide install the apps are extracted to different locations
+	if clusterWideInstall {
+		if strings.Contains(podName, "-indexer-") {
+			path = "etc/slave-apps"
+		} else if strings.Contains(podName, "cluster-master") {
+			path = "etc/master-apps"
+		} else if strings.Contains(podName, "-deployer-") {
+			path = "etc/shcluster/apps"
+		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)
 	logf.Log.Info("Check Version for app", "AppName", appname, "config", filePath)
