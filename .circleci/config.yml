@@ -48,7 +48,7 @@ workflows:
     jobs:
       - build-image
       - unit-tests
-      - app-framwork-tests:
+      - app-framework-tests:
           requires:
             - build-image
             - unit-tests
@@ -58,7 +58,7 @@ workflows:
                   - feature-appframework
       - integration-tests:
           requires:
-            - app-framwork-tests
+            - app-framework-tests
           filters:
               branches:
                 only:
@@ -457,7 +457,7 @@ jobs:
             make cluster-down
           no_output_timeout: 30m
   # Runs app framework tests against a k8s cluster
-  app-framwork-tests:
+  app-framework-tests:
     executor: ubuntu-machine
     steps:
       - run: 
