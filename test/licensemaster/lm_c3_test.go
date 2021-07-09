@@ -180,7 +180,7 @@ var _ = Describe("Licensemaster test", func() {
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			podName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appFileList, true, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
 
 			// Verify apps are installed on LM
 			lmPodName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
