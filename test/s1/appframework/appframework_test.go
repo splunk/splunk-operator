@@ -143,6 +143,38 @@ var _ = Describe("s1appfw test", func() {
 			//Verify Apps are installed
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, "enabled", true, false)
 
+			// Scale Standalone instance
+			testenvInstance.Log.Info("Scaling Up Standalone CR")
+			scaledReplicaCount := 2
+			standalone = &enterprisev1.Standalone{}
+			err = deployment.GetInstance(deployment.GetName(), standalone)
+			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+
+			standalone.Spec.Replicas = int32(scaledReplicaCount)
+
+			err = deployment.UpdateCR(standalone)
+			Expect(err).To(Succeed(), "Failed to scale up Standalone")
+
+			// Ensure standalone is scaling up
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseScalingUp)
+
+			// Wait for Standalone to be in READY status
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
+
+			// Wait for Monitoring Console Pod to be in READY status
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			podNames := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0), fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
+
+			// Verify Apps are downloaded by init-container
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, true)
+
+			//Verify Apps are installed
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
+
 		})
 	})
 })
