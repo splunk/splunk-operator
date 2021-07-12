@@ -101,7 +101,7 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 	// Validate transport
 	tlsVersion := "Unknown"
 	if tr, ok := s3Client.Config.HTTPClient.Transport.(*http.Transport); ok {
-		tlsVersion = GetTLSVersion(tr)
+		tlsVersion = getTLSVersion(tr)
 	}
 
 	scopedLog.Info("AWS Client Session initialization successful.", "region", region, "TLS Version", tlsVersion)
@@ -140,7 +140,7 @@ func RegisterAWSS3Client() {
 	S3Clients["aws"] = wrapperObject
 }
 
-func GetTLSVersion(tr *http.Transport) string {
+func getTLSVersion(tr *http.Transport) string {
 	switch tr.TLSClientConfig.MinVersion {
 	case tls.VersionTLS10:
 		return "TLS 1.0"
