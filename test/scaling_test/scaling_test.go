@@ -62,7 +62,7 @@ var _ = Describe("Scaling test", func() {
 			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Scale Standalone instance

@@ -578,3 +578,13 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
+
+// GetConfigMap Gets the config map for a given k8 config map name
+func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := deployment.GetInstance(configMapName, configMap)
+	if err != nil {
+		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+	}
+	return configMap, err
+}
