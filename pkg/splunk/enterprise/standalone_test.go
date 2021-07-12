@@ -361,6 +361,68 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	}
 }
 
+func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		Spec: enterprisev1.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
+				VolList: []enterprisev1.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterprisev1.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	client.AddObject(&s3Secret)
+
+	_, err = ApplyStandalone(client, &cr)
+	if err != nil {
+		t.Errorf("ApplyStandalone should be successful")
+	}
+
+	// now scale up
+	cr.Spec.Replicas = 2
+	_, err = ApplyStandalone(client, &cr)
+	if err != nil {
+		t.Errorf("ApplyStandalone should be successful")
+	}
+}
+
 func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	cr := enterprisev1.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
