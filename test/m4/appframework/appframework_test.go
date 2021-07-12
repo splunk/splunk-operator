@@ -200,8 +200,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList := testenv.GetAppFileList(appListV1, 1)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, true, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed locally on CM and on SHC Deployer
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)

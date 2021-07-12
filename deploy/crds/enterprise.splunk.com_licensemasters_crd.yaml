@@ -704,15 +704,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
@@ -940,6 +939,20 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              livenessInitialDelaySeconds:
+                description: 'LivenessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command)
+                  for the Liveness probe Note: If needed, Operator overrides with
+                  a higher value'
+                format: int32
+                type: integer
+              readinessInitialDelaySeconds:
+                description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
+                  for Readiness probe Note: If needed, Operator overrides with a higher
+                  value'
+                format: int32
+                type: integer
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -2586,15 +2599,15 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: App Package Remote Store provider. For
-                                e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws.
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio'
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
-                              description: Remote Storage type.
+                              description: 'Remote Storage type. Supported values:
+                                s3'
                               type: string
                           type: object
                         type: array

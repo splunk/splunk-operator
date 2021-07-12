@@ -100,6 +100,19 @@ const (
 
 	// Mount location for the shared app package volume
 	appBktMnt = "/init-apps/"
+
+	// Average amount of time an app installation takes
+	avgAppInstallationTime = 5
+
+	// Readiness probe time values
+	readinessProbeDefaultDelaySec = 10
+	readinessProbeTimeoutSec      = 5
+	readinessProbePeriodSec       = 5
+
+	// Liveness probe time values
+	livenessProbeDefaultDelaySec = 300
+	livenessProbeTimeoutSec      = 30
+	livenessProbePeriodSec       = 30
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

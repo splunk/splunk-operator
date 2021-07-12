@@ -269,7 +269,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		Spec: enterprisev1.ClusterMasterSpec{
 			SmartStore: enterprisev1.SmartStoreSpec{
 				VolList: []enterprisev1.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 				},
 
 				IndexList: []enterprisev1.IndexSpec{
@@ -300,7 +300,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	// Valid smartstore config
 	SmartStore := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
@@ -415,7 +415,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	//Smartstore config Index with VolName, but missing RemotePath errors out
 	SmartStoreWithMissingIndexLocation := enterprisev1.SmartStoreSpec{
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1",
@@ -445,7 +445,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 				VolName: "msos_s2s3_vol"},
 		},
 		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
 		IndexList: []enterprisev1.IndexSpec{
 			{Name: "salesdata1"},
@@ -1212,4 +1212,81 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 	}
 
 	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
+}
+
+func TestGetLivenessProbe(t *testing.T) {
+	cr := &enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	livenessProbe := getLivenessProbe(cr, spec, 0)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
+		t.Errorf("Failed to set Liveness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
+	livenessProbe = getLivenessProbe(cr, spec, 0)
+	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
+		t.Errorf("Failed to set Liveness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	livenessProbe = getLivenessProbe(cr, spec, 20)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+func TestGetReadinessProbe(t *testing.T) {
+	cr := &enterprisev1.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	readinessProbe := getReadinessProbe(cr, spec, 0)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
+		t.Errorf("Failed to set Readiness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
+	readinessProbe = getReadinessProbe(cr, spec, 0)
+	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
+		t.Errorf("Failed to set Readiness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	readinessProbe = getReadinessProbe(cr, spec, 20)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+func TestGetProbe(t *testing.T) {
+
+	command := []string{
+		"grep",
+		"ready",
+		"file.txt",
+	}
+
+	test := func(command []string, delay, timeout, period int32, want string) {
+		f := func() (interface{}, error) {
+			return getProbe(command, delay, timeout, period), nil
+		}
+		configTester(t, "getProbe()", f, want)
+
+	}
+
+	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
 }
