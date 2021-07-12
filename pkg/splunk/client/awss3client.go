@@ -78,7 +78,6 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 	}
 	tr.ForceAttemptHTTP2 = true
 	httpClient := http.Client{Transport: tr}
-	disableSSL := false
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(region),
@@ -88,7 +87,6 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 			""),
 		MaxRetries: aws.Int(3),
 		HTTPClient: &httpClient,
-		DisableSSL: &disableSSL,
 	})
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
