@@ -133,10 +133,10 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
-		ok, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
+		isScalingUp, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
-		} else if ok {
+		} else if isScalingUp {
 			// if we are indeed scaling up, then mark the deploy status to Pending
 			// for all the app sources so that we add all the app sources in configMap.
 			appStatusContext := cr.Status.AppContext
