@@ -80,6 +80,12 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
+			if err != nil {
+				return result, err
+			}
+		}
 		DeleteOwnerReferencesForResources(client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -140,6 +146,12 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), true)
+			if err != nil {
+				return result, err
+			}
 		}
 		result.Requeue = false
 

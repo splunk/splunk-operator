@@ -67,6 +67,9 @@ type CommonSplunkSpec struct {
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
 
+	// MonitoringConsoleRef refers to a Splunk Enterprise monitoring console managed by the operator within Kubernetes
+	MonitoringConsoleRef corev1.ObjectReference `json:"monitoringConsoleRef"`
+
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
 
