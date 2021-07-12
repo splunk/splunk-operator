@@ -208,3 +208,39 @@ func TestGetStatefulSetByName(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 }
+
+func TestIsStatefulSetScalingUp(t *testing.T) {
+	var replicas int32 = 1
+	statefulSetName := "splunk-stand1-standalone"
+
+	cr := enterprisev1.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stand1",
+			Namespace: "test",
+		},
+	}
+
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	*current.Spec.Replicas = 2
+	_, err := IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	if err == nil {
+		t.Errorf("IsStatefulSetScalingUp should have returned error as we have not yet added statefulset to client.")
+	}
+
+	c.AddObject(current)
+	_, err = IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	if err != nil {
+		t.Errorf("IsStatefulSetScalingUp should not have returned error")
+	}
+}
