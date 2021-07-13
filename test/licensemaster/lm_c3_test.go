@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -98,11 +99,14 @@ var _ = Describe("Licensemaster test", func() {
 
 			var (
 				appListV1        []string
+				appListV2        []string
 				testS3Bucket     = os.Getenv("TEST_INDEXES_S3_BUCKET")
 				testDataS3Bucket = os.Getenv("TEST_BUCKET")
 				s3AppDirV1       = "appframework/regressionappsv1/"
+				s3AppDirV2       = "appframework/regressionappsv2/"
 				currDir, _       = os.Getwd()
 				downloadDirV1    = filepath.Join(currDir, "lmV1-"+testenv.RandomDNSName(4))
+				downloadDirV2    = filepath.Join(currDir, "lmV2-"+testenv.RandomDNSName(4))
 				uploadedApps     []string
 			)
 
@@ -188,9 +192,39 @@ var _ = Describe("Licensemaster test", func() {
 
 			// Delete files uploaded to S3
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// Create a list of apps to upload to S3 after poll period
+			appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+
+			// Download V2 Apps from S3
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			Expect(err).To(Succeed(), "Unable to download V2 app files")
+
+			//Upload new Versioned Apps to S3
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Wait for LM to be in READY status
+			testenv.LicenseMasterReady(deployment, testenvInstance)
+
+			// Verify apps are copied at the correct location on LM (/etc/apps/)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)
+
+			// Verify apps are installed on LM
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV2, true, "enabled", true, false)
+
+			// Delete files uploaded to S3
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 
 			// Delete locally downloaded app files
 			os.RemoveAll(downloadDirV1)
+			os.RemoveAll(downloadDirV2)
 		})
 	})
 })
