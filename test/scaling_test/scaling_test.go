@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -68,7 +68,7 @@ var _ = Describe("Scaling test", func() {
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Up Standalone CR")
 			scaledReplicaCount := 2
-			standalone = &enterprisev1.Standalone{}
+			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
 
@@ -89,7 +89,7 @@ var _ = Describe("Scaling test", func() {
 			// Scale Down Standalone
 			testenvInstance.Log.Info("Scaling Down Standalone CR")
 			scaledReplicaCount = scaledReplicaCount - 1
-			standalone = &enterprisev1.Standalone{}
+			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
 
@@ -135,7 +135,7 @@ var _ = Describe("Scaling test", func() {
 			shcName := deployment.GetName() + "-shc"
 
 			// Get instance of current SHC CR with latest config
-			shc := &enterprisev1.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
@@ -153,7 +153,7 @@ var _ = Describe("Scaling test", func() {
 			idxcName := deployment.GetName() + "-idxc"
 
 			// Get instance of current Indexer CR with latest config
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
@@ -222,7 +222,7 @@ var _ = Describe("Scaling test", func() {
 			idxcName = deployment.GetName() + "-idxc"
 
 			// Get instance of current Indexer CR with latest config
-			idxc = &enterprisev1.IndexerCluster{}
+			idxc = &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
@@ -299,7 +299,7 @@ var _ = Describe("Scaling test", func() {
 			idxcName := deployment.GetName() + "-" + "site1"
 
 			// Get instance of current Indexer CR with latest config
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
@@ -356,7 +356,7 @@ var _ = Describe("Scaling test", func() {
 			scaledIndexerReplicas = scaledIndexerReplicas - 1
 
 			// Get instance of current Indexer CR with latest config
-			idxc = &enterprisev1.IndexerCluster{}
+			idxc = &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 

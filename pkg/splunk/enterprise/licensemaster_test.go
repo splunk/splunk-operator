@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -51,7 +51,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[4], funcCalls[6]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
-	current := enterprisev1.LicenseMaster{
+	current := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
@@ -63,7 +63,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
+		_, err := ApplyLicenseMaster(c, cr.(*enterpriseApi.LicenseMaster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseMaster", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -73,14 +73,14 @@ func TestApplyLicenseMaster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseMaster(c, cr.(*enterprisev1.LicenseMaster))
+		_, err := ApplyLicenseMaster(c, cr.(*enterpriseApi.LicenseMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
 func TestGetLicenseMasterStatefulSet(t *testing.T) {
-	cr := enterprisev1.LicenseMaster{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -135,32 +135,32 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 }
 
 func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
-	cr := enterprisev1.LicenseMaster{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.LicenseMasterSpec{
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -189,18 +189,18 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 }
 
 func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	cr := enterprisev1.LicenseMaster{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.LicenseMasterSpec{
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				Defaults: enterprisev1.AppSourceDefaultSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
 					Scope:   "local",
 				},
-				VolList: []enterprisev1.VolumeSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -218,11 +218,11 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Provider:  "aws",
 					},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{
 						Name:     "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local",
 						},
@@ -230,7 +230,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 					{
 						Name:     "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local",
 						},
@@ -307,7 +307,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
@@ -330,7 +330,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
@@ -364,14 +364,14 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	lm := enterprisev1.LicenseMaster{
+	lm := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.LicenseMasterSpec{
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
 						Path:      "testbucket-rs-london",
@@ -379,10 +379,10 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 						Type:      "s3",
 						Provider:  "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -427,7 +427,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
 	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
@@ -450,7 +450,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			return nil
 		},
 		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)

@@ -3,7 +3,7 @@ package testenv
 import (
 	"encoding/json"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -85,8 +85,8 @@ func RollHotToWarm(deployment *Deployment, podName string, indexName string) boo
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values
-func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterprisev1.VolumeSpec {
-	return enterprisev1.VolumeSpec{
+func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
 		Name:      volumeName,
 		Endpoint:  endpoint,
 		Path:      testIndexesS3Bucket,
@@ -97,11 +97,11 @@ func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef strin
 }
 
 // GenerateIndexSpec return VolumeSpec struct with given values
-func GenerateIndexSpec(indexName string, volName string) enterprisev1.IndexSpec {
-	return enterprisev1.IndexSpec{
+func GenerateIndexSpec(indexName string, volName string) enterpriseApi.IndexSpec {
+	return enterpriseApi.IndexSpec{
 		Name:       indexName,
 		RemotePath: indexName,
-		IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+		IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 			VolName: volName,
 		},
 	}

@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -38,7 +38,7 @@ import (
 var log = logf.Log.WithName("splunk.enterprise")
 
 // GetRemoteStorageClient returns the corresponding S3Client
-func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 
 	scopedLog := log.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -93,7 +93,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 }
 
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
-func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
+func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
 	var err error
 
 	// Creates/updates the namespace scoped "splunk-secrets" K8S secret object
@@ -132,7 +132,7 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 }
 
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
-func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
@@ -152,7 +152,7 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 }
 
 // getLicenseMasterURL returns URL of license master
-func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec) []corev1.EnvVar {
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseMasterRef.Name != "" {
 		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
@@ -174,7 +174,7 @@ func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterprisev1.CommonSplun
 }
 
 // getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadEnv(cr *enterprisev1.SearchHeadCluster) []corev1.EnvVar {
+func getSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
 
 	// get search head env variables with deployer
 	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
@@ -200,7 +200,7 @@ func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 }
 
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
-func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) (string, string, string, error) {
+func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
 	namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
 	if err != nil {
 		return "", "", "", err
@@ -226,7 +226,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterprisev1.VolumeSpec, client spl
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
 // ToDo: sgontla: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appConf *enterprisev1.AppFrameworkSpec, appsSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
+	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
 
 	var err error
 	var crKind string
@@ -266,8 +266,8 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		switch scope := getAppSrcScope(appConf, appSrc); scope {
 		case "local":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
-					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
+				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
 					localAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -275,8 +275,8 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 		case "cluster":
 			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterprisev1.DeployStatusPending &&
-					appDeployList[idx].RepoState == enterprisev1.RepoStateActive {
+				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
     - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
 				}
@@ -316,7 +316,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 // ApplySmartstoreConfigMap creates the configMap with Smartstore config in INI format
 func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	smartstore *enterprisev1.SmartStoreSpec) (*corev1.ConfigMap, bool, error) {
+	smartstore *enterpriseApi.SmartStoreSpec) (*corev1.ConfigMap, bool, error) {
 
 	var crKind string
 	var configMapDataChanged bool
@@ -405,7 +405,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
-func DeleteOwnerReferencesForResources(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) error {
+func DeleteOwnerReferencesForResources(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
 	var err error
 	scopedLog := log.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -426,7 +426,7 @@ func DeleteOwnerReferencesForResources(client splcommon.ControllerClient, cr spl
 
 // DeleteOwnerReferencesForS3SecretObjects deletes owner references for all the secret objects referred by smartstore
 // remote volume end points
-func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec) error {
+func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
 	scopedLog := log.WithName("DeleteOwnerReferencesForS3Secrets").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error = nil
@@ -451,12 +451,12 @@ func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, 
 type S3ClientManager struct {
 	client          splcommon.ControllerClient
 	cr              splcommon.MetaObject
-	appFrameworkRef *enterprisev1.AppFrameworkSpec
-	vol             *enterprisev1.VolumeSpec
+	appFrameworkRef *enterpriseApi.AppFrameworkSpec
+	vol             *enterpriseApi.VolumeSpec
 	location        string
 	initFn          splclient.GetInitFunc
 	getS3Client     func(client splcommon.ControllerClient, cr splcommon.MetaObject,
-		appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+		appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 		location string, fp splclient.GetInitFunc) (splclient.SplunkS3Client, error)
 }
 
@@ -477,7 +477,7 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 }
 
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
-func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
+func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
 	scopedLog := log.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -486,7 +486,7 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 	scopedLog.Info("Getting the list of apps from remote storage...")
 
 	var s3Response splclient.S3Response
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var err error
 	var allSuccess bool = true
 
@@ -550,7 +550,7 @@ func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map
 
 // changeAppSrcDeployInfoStatus sets the new status to all the apps in an AppSrc if the given repo state and deploy status matches
 // primarly used in Phase-3
-func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]enterprisev1.AppSrcDeployInfo, repoState enterprisev1.AppRepoState, oldDeployStatus enterprisev1.AppDeploymentStatus, newDeployStatus enterprisev1.AppDeploymentStatus) {
+func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus) {
 	scopedLog := log.WithName("changeAppSrcDeployInfoStatus").WithValues("Called for AppSource: ", appSrc, "repoState", repoState, "oldDeployStatus", oldDeployStatus, "newDeployStatus", newDeployStatus)
 
 	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
@@ -572,13 +572,13 @@ func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]e
 }
 
 // setStateAndStatusForAppDeployInfo sets the state and status for an App
-func setStateAndStatusForAppDeployInfo(appDeployInfo *enterprisev1.AppDeploymentInfo, repoState enterprisev1.AppRepoState, deployStatus enterprisev1.AppDeploymentStatus) {
+func setStateAndStatusForAppDeployInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, repoState enterpriseApi.AppRepoState, deployStatus enterpriseApi.AppDeploymentStatus) {
 	appDeployInfo.RepoState = repoState
 	appDeployInfo.DeployStatus = deployStatus
 }
 
 // setStateAndStatusForAppDeployInfoList sets the state and status for a given list of Apps
-func setStateAndStatusForAppDeployInfoList(appDeployList []enterprisev1.AppDeploymentInfo, state enterprisev1.AppRepoState, status enterprisev1.AppDeploymentStatus) (bool, []enterprisev1.AppDeploymentInfo) {
+func setStateAndStatusForAppDeployInfoList(appDeployList []enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppRepoState, status enterpriseApi.AppDeploymentStatus) (bool, []enterpriseApi.AppDeploymentInfo) {
 	var modified bool
 	for idx := range appDeployList {
 		setStateAndStatusForAppDeployInfo(&appDeployList[idx], state, status)
@@ -591,7 +591,7 @@ func setStateAndStatusForAppDeployInfoList(appDeployList []enterprisev1.AppDeplo
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterprisev1.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterprisev1.AppFrameworkSpec) error {
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	scopedLog := log.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	var err error
@@ -611,7 +611,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 
 	// ToDo: sgontla: Ideally, this check should go to the reconcile entry point once the glue logic in place.
 	if appDeployContext.AppsSrcDeployStatus == nil {
-		appDeployContext.AppsSrcDeployStatus = make(map[string]enterprisev1.AppSrcDeployInfo)
+		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
 	// 1. Check if the AppSrc is deleted in latest config, OR missing with the remote listing.
@@ -623,7 +623,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
 			var modified bool
 
-			modified, appSrcDeploymentInfo.AppDeploymentInfoList = setStateAndStatusForAppDeployInfoList(curAppDeployList, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+			modified, appSrcDeploymentInfo.AppDeploymentInfoList = setStateAndStatusForAppDeployInfoList(curAppDeployList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
 			if modified {
 				appDeployContext.IsDeploymentInProgress = true
@@ -643,7 +643,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			for appIdx := range currentList {
 				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
-					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending)
+					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 					appDeployContext.IsDeploymentInProgress = true
 				}
 			}
@@ -681,14 +681,14 @@ func isAppExtentionValid(receivedKey string) bool {
 }
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
-func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
+func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
 	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length: ", len(remoteS3ObjList))
 
 	var found bool
 	var appName string
-	var newAppInfoList []enterprisev1.AppDeploymentInfo
+	var newAppInfoList []enterpriseApi.AppDeploymentInfo
 	var appChangesDetected bool
-	var appDeployInfo enterprisev1.AppDeploymentInfo
+	var appDeployInfo enterpriseApi.AppDeploymentInfo
 
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
@@ -706,15 +706,15 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 		for idx := range appList {
 			if appList[idx].AppName == appName {
 				found = true
-				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterprisev1.RepoStateDeleted {
+				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
 					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
 					appList[idx].ObjectHash = *remoteObj.Etag
-					appList[idx].DeployStatus = enterprisev1.DeployStatusPending
+					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 
 					// Make the state active for an app that was deleted earlier, and got activated again
-					if appList[idx].RepoState == enterprisev1.RepoStateDeleted {
+					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
 						scopedLog.Info("App change", "enabling the App name: ", appName, "that was previously disabled/deleted")
-						appList[idx].RepoState = enterprisev1.RepoStateActive
+						appList[idx].RepoState = enterpriseApi.RepoStateActive
 					}
 					appChangesDetected = true
 				}
@@ -729,8 +729,8 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 			scopedLog.Info("New App", "found: ", appName)
 			appDeployInfo.AppName = appName
 			appDeployInfo.ObjectHash = *remoteObj.Etag
-			appDeployInfo.RepoState = enterprisev1.RepoStateActive
-			appDeployInfo.DeployStatus = enterprisev1.DeployStatusPending
+			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
+			appDeployInfo.DeployStatus = enterpriseApi.DeployStatusPending
 
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
@@ -750,14 +750,14 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterprisev1.AppS
 // 1. Completing the changes for Deletes. Called with state=AppStateDeleted, and status=DeployStatusPending
 // 2. Completing the changes for Active(Apps newly added, apps modified, Apps previously deleted, and now active).
 // Note:- Used in only for Phase-2
-func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterprisev1.AppSrcDeployInfo) error {
+func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterpriseApi.AppSrcDeployInfo) error {
 	var err error
 	scopedLog := log.WithName("markAppsStatusToComplete")
 
 	// ToDo: sgontla: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
 	for appSrc := range appSrcDeplymentStatus {
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterprisev1.RepoStateDeleted, enterprisev1.DeployStatusPending, enterprisev1.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
 	}
 
 	scopedLog.Info("Marked the App deployment status to complete")
@@ -768,7 +768,7 @@ func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterprisev1.AppS
 
 // setupAppInitContainers creates the necessary shared volume and init containers to download all
 // app packages in the appSources configured and make them locally available to the Splunk instance.
-func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterprisev1.AppFrameworkSpec) {
+func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
 	scopedLog := log.WithName("setupAppInitContainers")
 	// Create shared volume and init containers for App Framework
 	if len(appFrameworkConfig.AppSources) > 0 {
@@ -876,7 +876,7 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 }
 
 // SetLastAppInfoCheckTime sets the last check time to current time
-func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
+func SetLastAppInfoCheckTime(appInfoStatus *enterpriseApi.AppDeploymentContext) {
 	scopedLog := log.WithName("SetLastAppInfoCheckTime")
 	currentEpoch := time.Now().Unix()
 
@@ -886,7 +886,7 @@ func SetLastAppInfoCheckTime(appInfoStatus *enterprisev1.AppDeploymentContext) {
 }
 
 // HasAppRepoCheckTimerExpired checks if the polling interval has expired
-func HasAppRepoCheckTimerExpired(appInfoContext *enterprisev1.AppDeploymentContext) bool {
+func HasAppRepoCheckTimerExpired(appInfoContext *enterpriseApi.AppDeploymentContext) bool {
 	scopedLog := log.WithName("HasAppRepoCheckTimerExpired")
 	currentEpoch := time.Now().Unix()
 
@@ -915,7 +915,7 @@ func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration 
 }
 
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
-func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterprisev1.AppFrameworkSpec, appStatusContext *enterprisev1.AppDeploymentContext) error {
+func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error

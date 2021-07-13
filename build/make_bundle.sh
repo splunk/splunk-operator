@@ -5,13 +5,17 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
-OLD_VERSIONS="v1beta1 v1alpha3 v1alpha2"
+OLD_VERSIONS="v1 v1beta1 v1alpha3 v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
 OLM_CATALOG=deploy/olm-catalog
 OLM_CERTIFIED=deploy/olm-certified
 YAML_SCRIPT_FILE=.yq_script.yaml
+ENTERPRISE_API_LOC=pkg/apis/enterprise
+
+# create a soft link that point to the latest Splunk Enterprise CRDs
+ln -snf `ls -lr $ENTERPRISE_API_LOC| awk 'NF > 2 {print $NF}' | head -1` $ENTERPRISE_API_LOC/latest
 
 # create yq template to append older CRD versions
 rm -f $YAML_SCRIPT_FILE
@@ -90,7 +94,7 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: metadata.annotations.alm-examples
   value: |-
     [{
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "IndexerCluster",
       "metadata": {
         "name": "example",
@@ -101,7 +105,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "LicenseMaster",
       "metadata": {
         "name": "example",
@@ -110,7 +114,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       "spec": {}
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "SearchHeadCluster",
       "metadata": {
         "name": "example",
@@ -121,7 +125,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "Standalone",
       "metadata": {
         "name": "example",

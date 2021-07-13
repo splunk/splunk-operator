@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package version
-
-var (
-	// Version of splunk-operator
-	Version = "1.0.2"
-)
+// Package v2 contains API Schema definitions for the enterprise v2 API group
+// +k8s:deepcopy-gen=package,register
+// +groupName=enterprise.splunk.com
+package v2

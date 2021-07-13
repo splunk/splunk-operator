@@ -23,7 +23,7 @@ import (
 
 	"github.com/splunk/splunk-operator/test/testenv"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -149,8 +149,8 @@ var _ = Describe("Smoke test", func() {
 			serviceAccountName := "smoke-service-account"
 			testenvInstance.CreateServiceAccount(serviceAccountName)
 
-			standaloneSpec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			standaloneSpec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},

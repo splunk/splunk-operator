@@ -26,7 +26,7 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -147,7 +147,7 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -213,7 +213,7 @@ func TestIsStatefulSetScalingUp(t *testing.T) {
 	var replicas int32 = 1
 	statefulSetName := "splunk-stand1-standalone"
 
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stand1",
 			Namespace: "test",

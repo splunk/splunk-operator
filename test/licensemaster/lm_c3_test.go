@@ -20,7 +20,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -129,28 +129,28 @@ var _ = Describe("Licensemaster test", func() {
 
 			// Create App framework Spec
 			volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "local",
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
 			appSourceName := "lm-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
 
 			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
 				AppSources:           appSourceSpec,
 			}
 
-			spec := enterprisev1.LicenseMasterSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.LicenseMasterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Volumes: []corev1.Volume{
 						{
 							Name: "licenses",

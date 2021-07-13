@@ -21,7 +21,7 @@ import (
 	"sort"
 	"strings"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -34,7 +34,7 @@ import (
 )
 
 // ApplyMonitoringConsole creates the statefulset for monitoring console statefulset of Splunk Enterprise.
-func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterprisev1.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
+func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
 	secrets, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
 	if err != nil {
 		return err
@@ -124,13 +124,13 @@ func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.Meta
 // monitoringConsolePodManager is used to manage the monitoring console pod
 type monitoringConsolePodManager struct {
 	cr              *splcommon.MetaObject
-	spec            *enterprisev1.CommonSplunkSpec
+	spec            *enterpriseApi.CommonSplunkSpec
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
 // getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
 	var partOfIdentifier string
 	var monitoringConsoleConfigMap *corev1.ConfigMap
 	// there will be always 1 replica of monitoring console

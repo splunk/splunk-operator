@@ -15,7 +15,7 @@
 package controller
 
 import (
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -39,9 +39,9 @@ type ClusterMasterController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
 func (ctrl ClusterMasterController) GetInstance() splcommon.MetaObject {
-	return &enterprisev1.ClusterMaster{
+	return &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev1.APIVersion,
+			APIVersion: enterpriseApi.APIVersion,
 			Kind:       "ClusterMaster",
 		},
 	}
@@ -54,6 +54,6 @@ func (ctrl ClusterMasterController) GetWatchTypes() []runtime.Object {
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl ClusterMasterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
-	instance := cr.(*enterprisev1.ClusterMaster)
+	instance := cr.(*enterpriseApi.ClusterMaster)
 	return enterprise.ApplyClusterMaster(client, instance)
 }

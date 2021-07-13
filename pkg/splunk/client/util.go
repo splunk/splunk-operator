@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -73,7 +73,7 @@ func ConvertS3Response(s3Response S3Response) (spltest.MockAWSS3Client, error) {
 }
 
 // CheckIfVolumeExists checks if the volume is configured or not
-func CheckIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
+func CheckIfVolumeExists(volumeList []enterpriseApi.VolumeSpec, volName string) (int, error) {
 	for i, volume := range volumeList {
 		if volume.Name == volName {
 			return i, nil
@@ -84,11 +84,11 @@ func CheckIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (
 }
 
 // GetAppSrcVolume gets the volume defintion for an app source
-func GetAppSrcVolume(appSource enterprisev1.AppSourceSpec, appFrameworkRef *enterprisev1.AppFrameworkSpec) (enterprisev1.VolumeSpec, error) {
+func GetAppSrcVolume(appSource enterpriseApi.AppSourceSpec, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (enterpriseApi.VolumeSpec, error) {
 	var volName string
 	var index int
 	var err error
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 
 	scopedLog := log.WithName("GetAppSrcVolume")
 

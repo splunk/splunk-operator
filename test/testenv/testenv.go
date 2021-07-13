@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 )
 
 const (
@@ -192,7 +192,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
 
 	// Scheme
-	enterprisev1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()

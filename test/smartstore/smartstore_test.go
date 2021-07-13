@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -47,8 +47,8 @@ var _ = Describe("Smoke test", func() {
 			}
 			testenvInstance.Log.Info("Index secret name ", "secret name ", testenvInstance.GetIndexSecretName())
 
-			var indexSpec []enterprisev1.IndexSpec
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			var indexSpec []enterpriseApi.IndexSpec
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
 			// Create index volume spec from index volume map
 			for index, volume := range indexVolumeMap {
@@ -56,7 +56,7 @@ var _ = Describe("Smoke test", func() {
 			}
 
 			// Generate smartstore spec
-			smartStoreSpec := enterprisev1.SmartStoreSpec{
+			smartStoreSpec := enterpriseApi.SmartStoreSpec{
 				VolList:   volumeSpec,
 				IndexList: indexSpec,
 			}
@@ -96,12 +96,12 @@ var _ = Describe("Smoke test", func() {
 
 			specialConfig := map[string]int{"MaxGlobalDataSizeMB": 100, "MaxGlobalRawDataSizeMB": 100}
 
-			volSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			indexSpec := []enterprisev1.IndexSpec{{Name: indexName, RemotePath: indexName}}
-			defaultSmartStoreSpec := enterprisev1.IndexConfDefaultsSpec{IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{VolName: volName, MaxGlobalDataSizeMB: uint(specialConfig["MaxGlobalDataSizeMB"]), MaxGlobalRawDataSizeMB: uint(specialConfig["MaxGlobalRawDataSizeMB"])}}
-			cacheManagerSmartStoreSpec := enterprisev1.CacheManagerSpec{MaxCacheSizeMB: 9900000, EvictionPaddingSizeMB: 1000, MaxConcurrentDownloads: 6, MaxConcurrentUploads: 6, EvictionPolicy: "lru"}
+			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			indexSpec := []enterpriseApi.IndexSpec{{Name: indexName, RemotePath: indexName}}
+			defaultSmartStoreSpec := enterpriseApi.IndexConfDefaultsSpec{IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{VolName: volName, MaxGlobalDataSizeMB: uint(specialConfig["MaxGlobalDataSizeMB"]), MaxGlobalRawDataSizeMB: uint(specialConfig["MaxGlobalRawDataSizeMB"])}}
+			cacheManagerSmartStoreSpec := enterpriseApi.CacheManagerSpec{MaxCacheSizeMB: 9900000, EvictionPaddingSizeMB: 1000, MaxConcurrentDownloads: 6, MaxConcurrentUploads: 6, EvictionPolicy: "lru"}
 
-			smartStoreSpec := enterprisev1.SmartStoreSpec{
+			smartStoreSpec := enterpriseApi.SmartStoreSpec{
 				VolList:          volSpec,
 				IndexList:        indexSpec,
 				Defaults:         defaultSmartStoreSpec,
@@ -160,9 +160,9 @@ var _ = Describe("Smoke test", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
-			volSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			indexSpec := []enterprisev1.IndexSpec{testenv.GenerateIndexSpec(indexName, volName)}
-			smartStoreSpec := enterprisev1.SmartStoreSpec{
+			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			indexSpec := []enterpriseApi.IndexSpec{testenv.GenerateIndexSpec(indexName, volName)}
+			smartStoreSpec := enterpriseApi.SmartStoreSpec{
 				VolList:   volSpec,
 				IndexList: indexSpec,
 			}

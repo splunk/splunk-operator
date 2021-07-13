@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"time"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -32,7 +32,7 @@ import (
 )
 
 // ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster master.
-func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (reconcile.Result, error) {
+func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -171,7 +171,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
+func validateClusterMasterSpec(cr *enterpriseApi.ClusterMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
 		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
@@ -191,7 +191,7 @@ func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (*appsv1.StatefulSet, error) {
+func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
@@ -211,7 +211,7 @@ func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 }
 
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	masterIdxcName := cr.GetName()
@@ -238,7 +238,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 }
 
 // PerformCmBundlePush initiates the bundle push from cluster master
-func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
 	}
@@ -276,7 +276,7 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterprisev1.ClusterM
 }
 
 // PushMasterAppsBundle issues the REST command to for cluster master bundle push
-func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())

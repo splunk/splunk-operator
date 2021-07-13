@@ -24,7 +24,7 @@ import (
 
 	gomega "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -60,7 +60,7 @@ type PodDetailsStruct struct {
 }
 
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
-func StandaloneReady(deployment *Deployment, deploymentName string, standalone *enterprisev1.Standalone, testenvInstance *TestEnv) {
+func StandaloneReady(deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deploymentName, standalone)
 		if err != nil {
@@ -80,7 +80,7 @@ func StandaloneReady(deployment *Deployment, deploymentName string, standalone *
 
 // SearchHeadClusterReady verify SHC is in READY status and does not flip-flop
 func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
-	shc := &enterprisev1.SearchHeadCluster{}
+	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(instanceName, shc)
@@ -121,7 +121,7 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 
 // SingleSiteIndexersReady verify single site indexers go to ready state
 func SingleSiteIndexersReady(deployment *Deployment, testenvInstance *TestEnv) {
-	idc := &enterprisev1.IndexerCluster{}
+	idc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(instanceName, idc)
@@ -143,7 +143,7 @@ func SingleSiteIndexersReady(deployment *Deployment, testenvInstance *TestEnv) {
 // ClusterMasterReady verify Cluster Master Instance is in ready status
 func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 	// Ensure that the cluster-master goes to Ready phase
-	cm := &enterprisev1.ClusterMaster{}
+	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), cm)
 		if err != nil {
@@ -170,7 +170,7 @@ func IndexersReady(deployment *Deployment, testenvInstance *TestEnv, siteCount i
 		instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 		// Ensure indexers go to Ready phase
-		idc := &enterprisev1.IndexerCluster{}
+		idc := &enterpriseApi.IndexerCluster{}
 		gomega.Eventually(func() splcommon.Phase {
 			err := deployment.GetInstance(instanceName, idc)
 			if err != nil {
@@ -249,7 +249,7 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
 
 // LicenseMasterReady verify LM is in ready status and does not flip flop
 func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
-	licenseMaster := &enterprisev1.LicenseMaster{}
+	licenseMaster := &enterpriseApi.LicenseMaster{}
 
 	testenvInstance.Log.Info("Verifying License Master becomes READY")
 	gomega.Eventually(func() splcommon.Phase {
@@ -366,7 +366,7 @@ func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, c
 // VerifySearchHeadClusterPhase verify the phase of SHC matches given phase
 func VerifySearchHeadClusterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
-		shc := &enterprisev1.SearchHeadCluster{}
+		shc := &enterpriseApi.SearchHeadCluster{}
 		shcName := deployment.GetName() + "-shc"
 		err := deployment.GetInstance(shcName, shc)
 		if err != nil {
@@ -381,7 +381,7 @@ func VerifySearchHeadClusterPhase(deployment *Deployment, testenvInstance *TestE
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
 func VerifyIndexerClusterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase, idxcName string) {
 	gomega.Eventually(func() splcommon.Phase {
-		idxc := &enterprisev1.IndexerCluster{}
+		idxc := &enterpriseApi.IndexerCluster{}
 		err := deployment.GetInstance(idxcName, idxc)
 		if err != nil {
 			return splcommon.PhaseError
@@ -395,7 +395,7 @@ func VerifyIndexerClusterPhase(deployment *Deployment, testenvInstance *TestEnv,
 // VerifyStandalonePhase verify the phase of Standalone CR
 func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
-		standalone := &enterprisev1.Standalone{}
+		standalone := &enterpriseApi.Standalone{}
 		err := deployment.GetInstance(deployment.GetName(), standalone)
 		if err != nil {
 			return splcommon.PhaseError
@@ -435,7 +435,7 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 
 // VerifyClusterMasterPhase verify phase of cluster master
 func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
-	cm := &enterprisev1.ClusterMaster{}
+	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), cm)
 		if err != nil {

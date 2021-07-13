@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -33,7 +33,7 @@ import (
 )
 
 // ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
-func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (reconcile.Result, error) {
+func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
@@ -63,7 +63,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())
 	if cr.Status.Members == nil {
-		cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
+		cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{}
 	}
 	if cr.Status.ShcSecretChanged == nil {
 		cr.Status.ShcSecretChanged = []bool{}
@@ -178,7 +178,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 type searchHeadClusterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
-	cr              *enterprisev1.SearchHeadCluster
+	cr              *enterpriseApi.SearchHeadCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
@@ -472,7 +472,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
 		c := mgr.getClient(n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-		memberStatus := enterprisev1.SearchHeadClusterMemberStatus{Name: memberName}
+		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
@@ -515,7 +515,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 }
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
-func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
 	// get search head env variables with deployer
 	env := getSearchHeadEnv(cr)
@@ -530,7 +530,7 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		return ss, err
@@ -543,7 +543,7 @@ func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
-func validateSearchHeadClusterSpec(cr *enterprisev1.SearchHeadCluster) error {
+func validateSearchHeadClusterSpec(cr *enterpriseApi.SearchHeadCluster) error {
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
 	}

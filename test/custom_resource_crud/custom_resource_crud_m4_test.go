@@ -18,7 +18,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -82,7 +82,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			}
 
 			// Change CPU limits to trigger CR update
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			for i := 1; i <= siteCount; i++ {
 				siteName := fmt.Sprintf("site%d", i)
 				instanceName := fmt.Sprintf("%s-%s", deployment.GetName(), siteName)

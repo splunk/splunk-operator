@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -79,8 +79,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// CSPL-901 standaloneTwoName := deployment.GetName() + "-two"
 			standaloneTwoName := "standalone-" + testenv.RandomDNSName(3)
 			// Configure Resources on second standalone CSPL-555
-			standaloneTwoSpec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			standaloneTwoSpec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "IfNotPresent",
 						Resources: corev1.ResourceRequirements{
@@ -170,7 +170,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Standalone CR")
 			scaledReplicaCount := 2
-			standalone = &enterprisev1.Standalone{}
+			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
 
@@ -245,7 +245,7 @@ var _ = Describe("Monitoring Console test", func() {
 			shcName := deployment.GetName() + "-shc"
 
 			// Get instance of current SHC CR with latest config
-			shc := &enterprisev1.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
@@ -263,7 +263,7 @@ var _ = Describe("Monitoring Console test", func() {
 			idxcName := deployment.GetName() + "-idxc"
 
 			// Get instance of current Indexer CR with latest config
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 

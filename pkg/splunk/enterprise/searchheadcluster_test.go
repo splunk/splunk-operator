@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/latest"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -62,7 +62,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[8], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}}
-	statefulSet := enterprisev1.SearchHeadCluster{
+	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -80,7 +80,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	revised := statefulSet.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(c, cr.(*enterpriseApi.SearchHeadCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
@@ -90,7 +90,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplySearchHeadCluster(c, cr.(*enterprisev1.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(c, cr.(*enterpriseApi.SearchHeadCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -102,7 +102,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 
 	// test for updating
 	scopedLog := log.WithName(method)
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -389,7 +389,7 @@ func TestApplyShcSecret(t *testing.T) {
 		},
 	}
 
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -518,7 +518,7 @@ func TestApplyShcSecret(t *testing.T) {
 }
 
 func TestGetSearchHeadStatefulSet(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -584,7 +584,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 }
 
 func TestGetDeployerStatefulSet(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -627,33 +627,33 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 }
 
 func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.SearchHeadClusterSpec{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
 			Replicas: 3,
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -682,19 +682,19 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 }
 
 func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.SearchHeadClusterSpec{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
 			Replicas: 3,
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				Defaults: enterprisev1.AppSourceDefaultSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
 					Scope:   "local",
 				},
-				VolList: []enterprisev1.VolumeSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -712,11 +712,11 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Provider:  "aws",
 					},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{
 						Name:     "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local",
 						},
@@ -724,7 +724,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 					{
 						Name:     "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local",
 						},
@@ -801,7 +801,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
@@ -824,7 +824,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
@@ -857,14 +857,14 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.SearchHeadClusterSpec{
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
 						Path:      "testbucket-rs-london",
@@ -872,10 +872,10 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 						Type:      "s3",
 						Provider:  "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -920,7 +920,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
 	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
@@ -943,7 +943,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			return nil
 		},
 		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
