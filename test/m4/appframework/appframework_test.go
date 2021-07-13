@@ -23,6 +23,7 @@ import (
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 var _ = Describe("m4appfw test", func() {
@@ -154,6 +155,39 @@ var _ = Describe("m4appfw test", func() {
 
 			//Verify Apps are installed cluster-wide
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
+			// Get instance of current Indexer CR with latest config
+			idxcName := deployment.GetName() + "-" + "site1"
+			idxc := &enterprisev1.IndexerCluster{}
+			err = deployment.GetInstance(idxcName, idxc)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			defaultIndexerReplicas := idxc.Spec.Replicas
+			scaledIndexerReplicas := defaultIndexerReplicas + 1
+			testenvInstance.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+
+			// Update Replicas of Indexer Cluster
+			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
+			err = deployment.UpdateCR(idxc)
+			Expect(err).To(Succeed(), "Failed to Scale Up Indexer Cluster")
+
+			// Ensure Indxer cluster scales up and go to ScalingUp phase
+			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
+
+			// Ensure Indexer cluster go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			//Verify Apps are copied to location
+			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
+
+			//Verify Apps are copied to location
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+
+			//Verify Apps are installed cluster-wide
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
 		})
 	})
 

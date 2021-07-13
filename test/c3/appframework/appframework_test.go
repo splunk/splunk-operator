@@ -23,6 +23,7 @@ import (
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 
 	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 var _ = Describe("c3appfw test", func() {
@@ -153,6 +154,69 @@ var _ = Describe("c3appfw test", func() {
 
 			//Verify Apps are updated
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterprisev1.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Scale Search Head Cluster
+			defaultSHReplicas := shc.Spec.Replicas
+			scaledSHReplicas := defaultSHReplicas + 1
+			testenvInstance.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
+
+			// Update Replicas of SHC
+			shc.Spec.Replicas = int32(scaledSHReplicas)
+			err = deployment.UpdateCR(shc)
+			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
+
+			// Ensure Search Head cluster scales up and go to ScalingUp phase
+			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp)
+
+			// Get instance of current Indexer CR with latest config
+			idxcName := deployment.GetName() + "-idxc"
+			idxc := &enterprisev1.IndexerCluster{}
+			err = deployment.GetInstance(idxcName, idxc)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+
+			// Scale indexers
+			defaultIndexerReplicas := idxc.Spec.Replicas
+			scaledIndexerReplicas := defaultIndexerReplicas + 1
+			testenvInstance.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+
+			// Update Replicas of Indexer Cluster
+			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
+			err = deployment.UpdateCR(idxc)
+			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
+
+			// Ensure Indexer cluster scales up and go to ScalingUp phase
+			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
+
+			// Ensure Indexer cluster go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Verify New Indexer On Cluster Master
+			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
+			testenvInstance.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
+			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify Apps are copied to location
+			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+
+			// Verify Apps are updated
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
 		})
 	})
 
