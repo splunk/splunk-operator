@@ -84,7 +84,8 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 	// Check if SSL is needed
 	useSSL := true
 	if strings.HasPrefix(appS3Endpoint, "http://") {
-		useSSL = false
+		// We should always use a secure SSL endpoint, so we won't set useSSL = false
+		scopedLog.Info("Using insecure endpoint, forcing useSSL=true for Minio Client Session", "appS3Endpoint", appS3Endpoint)
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "http://")
 	} else if strings.HasPrefix(appS3Endpoint, "https://") {
 		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "https://")

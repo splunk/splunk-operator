@@ -15,10 +15,13 @@
 package client
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
+
+	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -52,7 +55,10 @@ var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
 // GetRegion extracts the region from the endpoint field
 func GetRegion(endpoint string) string {
 	pattern := regexp.MustCompile(regionRegex)
-	return pattern.FindStringSubmatch(endpoint)[1]
+	if len(pattern.FindStringSubmatch(endpoint)) > 0 {
+		return pattern.FindStringSubmatch(endpoint)[1]
+	}
+	return ""
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientSession
@@ -64,6 +70,15 @@ func InitAWSClientWrapper(region, accessKeyID, secretAccessKey string) interface
 func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
 	scopedLog := log.WithName("InitAWSClientSession")
 
+	// Enforcing minimum version TLS1.2
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	tr.ForceAttemptHTTP2 = true
+	httpClient := http.Client{Transport: tr}
+
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(region),
 		Credentials: credentials.NewStaticCredentials(
@@ -71,13 +86,25 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 			secretAccessKey, // secret
 			""),
 		MaxRetries: aws.Int(3),
+		HTTPClient: &httpClient,
 	})
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
 		return nil
 	}
 
-	return s3.New(sess)
+	// Create the s3Client
+	s3Client := s3.New(sess)
+
+	// Validate transport
+	tlsVersion := "Unknown"
+	if tr, ok := s3Client.Config.HTTPClient.Transport.(*http.Transport); ok {
+		tlsVersion = getTLSVersion(tr)
+	}
+
+	scopedLog.Info("AWS Client Session initialization successful.", "region", region, "TLS Version", tlsVersion)
+
+	return s3Client
 }
 
 // NewAWSS3Client returns an AWS S3 client
@@ -109,6 +136,21 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 func RegisterAWSS3Client() {
 	wrapperObject := GetS3ClientWrapper{GetS3Client: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
 	S3Clients["aws"] = wrapperObject
+}
+
+func getTLSVersion(tr *http.Transport) string {
+	switch tr.TLSClientConfig.MinVersion {
+	case tls.VersionTLS10:
+		return "TLS 1.0"
+	case tls.VersionTLS11:
+		return "TLS 1.1"
+	case tls.VersionTLS12:
+		return "TLS 1.2"
+	case tls.VersionTLS13:
+		return "TLS 1.3"
+	}
+
+	return "Unknown"
 }
 
 // GetAppsList get the list of apps from remote storage
