@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/s3"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 )
 
 // MockAWSS3Object struct contains contents returned as part of S3 response
@@ -45,7 +45,7 @@ type MockAWSS3Handler struct {
 }
 
 // AddObjects adds mock AWS S3 Objects to handler
-func (c *MockAWSS3Handler) AddObjects(appFrameworkRef enterprisev1.AppFrameworkSpec, objects ...MockAWSS3Client) {
+func (c *MockAWSS3Handler) AddObjects(appFrameworkRef enterpriseApi.AppFrameworkSpec, objects ...MockAWSS3Client) {
 	for n := range objects {
 		mockAWSS3Client := objects[n]
 		appSource := appFrameworkRef.AppSources[n]

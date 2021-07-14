@@ -18,26 +18,26 @@ import (
 	"reflect"
 	"testing"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
 func TestCheckIfVolumeExists(t *testing.T) {
-	SmartStoreConfig := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreConfig := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -84,14 +84,14 @@ func TestNewMockAWSS3Client(t *testing.T) {
 }
 
 func TestGetVolume(t *testing.T) {
-	appFrameworkRef := enterprisev1.AppFrameworkSpec{
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		AppsRepoPollInterval: 60,
-		Defaults: enterprisev1.AppSourceDefaultSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "vol2",
 			Scope:   "cluster",
 		},
 
-		VolList: []enterprisev1.VolumeSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{
 				Name:      "vol1",
 				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -109,11 +109,11 @@ func TestGetVolume(t *testing.T) {
 				Provider:  "aws",
 			},
 		},
-		AppSources: []enterprisev1.AppSourceSpec{
+		AppSources: []enterpriseApi.AppSourceSpec{
 			{
 				Name:     "adminApps",
 				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "vol1",
 					Scope:   "local",
 				},
@@ -138,11 +138,11 @@ func TestGetVolume(t *testing.T) {
 	}
 
 	// test for an invalid volume
-	appFrameworkRef.AppSources = []enterprisev1.AppSourceSpec{
+	appFrameworkRef.AppSources = []enterpriseApi.AppSourceSpec{
 		{
 			Name:     "adminApps",
 			Location: "adminAppsRepo",
-			AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+			AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 				VolName: "invalid_volume",
 				Scope:   "local",
 			},

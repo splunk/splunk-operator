@@ -22,7 +22,7 @@ import (
 
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -66,28 +66,28 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "local",
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
 			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
 
 			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
 				AppSources:           appSourceSpec,
 			}
 
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "Always",
 					},
@@ -146,7 +146,7 @@ var _ = Describe("s1appfw test", func() {
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Up Standalone CR")
 			scaledReplicaCount := 2
-			standalone = &enterprisev1.Standalone{}
+			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
 
@@ -198,15 +198,15 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "local",
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
@@ -214,8 +214,8 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Create Standalone spec with App Framework enabled and some extra config to have ES installed correctly
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "Always",
 					},

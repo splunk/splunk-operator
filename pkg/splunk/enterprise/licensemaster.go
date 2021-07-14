@@ -23,13 +23,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
 // ApplyLicenseMaster reconciles the state for the Splunk Enterprise license master.
-func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.LicenseMaster) (reconcile.Result, error) {
+func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -124,7 +124,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterprisev1.Lice
 }
 
 // getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.LicenseMaster) (*appsv1.StatefulSet, error) {
+func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
@@ -137,7 +137,7 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 }
 
 // validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseMasterSpec(cr *enterprisev1.LicenseMaster) error {
+func validateLicenseMasterSpec(cr *enterpriseApi.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)

@@ -309,7 +309,7 @@ When using TLS for Ingress, we recommend you add an additional port for secure c
 This example shows how to add port 9998 for a standalone instance:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: standalone

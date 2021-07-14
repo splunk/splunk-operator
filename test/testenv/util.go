@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -63,9 +63,9 @@ func RandomDNSName(n int) string {
 }
 
 // newStandalone creates and initializes CR for Standalone Kind
-func newStandalone(name, ns string) *enterprisev1.Standalone {
+func newStandalone(name, ns string) *enterpriseApi.Standalone {
 
-	new := enterprisev1.Standalone{
+	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -75,8 +75,8 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.StandaloneSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
@@ -89,9 +89,9 @@ func newStandalone(name, ns string) *enterprisev1.Standalone {
 }
 
 // newStandalone creates and initializes CR for Standalone Kind
-func newStandaloneWithGivenSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+func newStandaloneWithGivenSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *enterpriseApi.Standalone {
 
-	new := enterprisev1.Standalone{
+	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -106,8 +106,8 @@ func newStandaloneWithGivenSpec(name, ns string, spec enterprisev1.StandaloneSpe
 	return &new
 }
 
-func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.LicenseMaster {
-	new := enterprisev1.LicenseMaster{
+func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
+	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
@@ -117,8 +117,8 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.Licen
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.LicenseMasterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{
 					{
 						Name: "licenses",
@@ -144,8 +144,8 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterprisev1.Licen
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) *enterprisev1.ClusterMaster {
-	new := enterprisev1.ClusterMaster{
+func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -155,8 +155,8 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.ClusterMasterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
@@ -173,8 +173,8 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibleConfig string, smartstorespec enterprisev1.SmartStoreSpec) *enterprisev1.ClusterMaster {
-	new := enterprisev1.ClusterMaster{
+func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
+	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -184,9 +184,9 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
 			SmartStore: smartstorespec,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
@@ -203,8 +203,8 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterprisev1.IndexerCluster {
-	new := enterprisev1.IndexerCluster{
+func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+	new := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -214,8 +214,8 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.IndexerClusterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
@@ -232,8 +232,8 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string) *enterprisev1.SearchHeadCluster {
-	new := enterprisev1.SearchHeadCluster{
+func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -243,8 +243,8 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, 
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.SearchHeadClusterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
@@ -403,9 +403,9 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 }
 
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Master
-func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterprisev1.Standalone {
+func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseApi.Standalone {
 
-	new := enterprisev1.Standalone{
+	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -415,8 +415,8 @@ func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterprisev
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.StandaloneSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
@@ -449,9 +449,9 @@ func newSecretSpec(ns string, secretName string, data map[string][]byte) *corev1
 }
 
 // newStandaloneWithSpec creates and initializes CR for Standalone Kind with given spec
-func newStandaloneWithSpec(name, ns string, spec enterprisev1.StandaloneSpec) *enterprisev1.Standalone {
+func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *enterpriseApi.Standalone {
 
-	new := enterprisev1.Standalone{
+	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -555,8 +555,8 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 }
 
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenSpec(name string, ns string, spec enterprisev1.ClusterMasterSpec) *enterprisev1.ClusterMaster {
-	new := enterprisev1.ClusterMaster{
+func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterMasterSpec) *enterpriseApi.ClusterMaster {
+	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -571,8 +571,8 @@ func newClusterMasterWithGivenSpec(name string, ns string, spec enterprisev1.Clu
 }
 
 // newSearchHeadClusterWithGivenSpec create and initializes CR for Search Cluster Kind with Given Spec
-func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterprisev1.SearchHeadClusterSpec) *enterprisev1.SearchHeadCluster {
-	new := enterprisev1.SearchHeadCluster{
+func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseApi.SearchHeadClusterSpec) *enterpriseApi.SearchHeadCluster {
+	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -587,8 +587,8 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterprisev1
 }
 
 // newLicenseMasterWithGivenSpec create and initializes CR for License Master Kind with Given Spec
-func newLicenseMasterWithGivenSpec(name, ns string, spec enterprisev1.LicenseMasterSpec) *enterprisev1.LicenseMaster {
-	new := enterprisev1.LicenseMaster{
+func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
+	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},

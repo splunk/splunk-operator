@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -36,8 +36,8 @@ var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange
 var NewAppsAddedBetweenPolls = []string{"TA-LDAP"}
 
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
-func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterprisev1.AppSourceDefaultSpec) enterprisev1.AppSourceSpec {
-	return enterprisev1.AppSourceSpec{
+func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterpriseApi.AppSourceDefaultSpec) enterpriseApi.AppSourceSpec {
+	return enterpriseApi.AppSourceSpec{
 		Name:                 appSourceName,
 		Location:             appSourceLocation,
 		AppSourceDefaultSpec: appSourceDefaultSpec,

@@ -37,7 +37,7 @@ indexers. A `Standalone` resource can be used to create a single instance
 that can perform either, or both, of these roles.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: single
@@ -56,7 +56,7 @@ The Splunk Operator makes creation of an indexer cluster as easy as creating a `
 #### Cluster Master
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm
@@ -67,7 +67,7 @@ EOF
 #### Indexer part
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example
@@ -103,7 +103,7 @@ If you want more indexers, just update it to include a `replicas` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example
@@ -161,7 +161,7 @@ metadata:
   name: idc-example
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v1
+    apiVersion: enterprise.splunk.com/v2
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -181,7 +181,7 @@ have to do is add an `clusterMasterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: single
@@ -199,7 +199,7 @@ different from the indexers:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm
@@ -213,7 +213,7 @@ spec:
     storageClassName: customStorageClass
     storageCapacity: 25Gi
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: idxc-part1
@@ -252,7 +252,7 @@ with an `clusterMasterRef` parameter pointing to the cluster master we created i
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -369,7 +369,7 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -440,7 +440,7 @@ like the following:
 In the standalone example, app1 and app2 are installed on Splunk Standalone instances.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -463,7 +463,7 @@ spec:
 In the ClusterMaster example, app3 and app4 are installed on any indexer instances that are managed by the cluster master. App5 and app6 are installed locally on the ClusterMaster instance.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cmexample
@@ -597,7 +597,7 @@ You can create a `LicenseMaster` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: LicenseMaster
 metadata:
   name: example
@@ -630,7 +630,7 @@ Once a LicenseMaster is created, you can configure your `Standalone` to use
 the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -647,7 +647,7 @@ While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -657,7 +657,7 @@ spec:
   licenseMasterRef:
     name: example
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example-idc
@@ -672,7 +672,7 @@ EOF
 In order to forward `LicenseMaster` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: LicenseMaster
 metadata:
   name: example
@@ -745,7 +745,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret objec
 Enterprise custom resource to use your External LM:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -814,7 +814,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret creat
 Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -864,7 +864,7 @@ metadata:
   name: splunk-default-secret
   namespace: default
   ownerReferences:
-  - apiVersion: enterprise.splunk.com/v1beta1
+  - apiVersion: enterprise.splunk.com/v2
     controller: false
     kind: SearchHeadCluster
     name: example-shc

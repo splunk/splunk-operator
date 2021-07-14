@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: LicenseMaster
 metadata:
   name: lm-example
@@ -11,7 +11,7 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm-example
@@ -21,20 +21,20 @@ spec:
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: idxc-example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: <n>
+  replicas: 4
   clusterMasterRef:
     name: cm-example
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: sh-example

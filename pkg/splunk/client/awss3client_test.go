@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -69,12 +69,12 @@ func TestGetAWSInitContainerCmd(t *testing.T) {
 
 func TestGetAppsListShouldNotFail(t *testing.T) {
 
-	appFrameworkRef := enterprisev1.AppFrameworkSpec{
-		Defaults: enterprisev1.AppSourceDefaultSpec{
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
 			Scope:   "local",
 		},
-		VolList: []enterprisev1.VolumeSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{
 				Name:      "msos_s2s3_vol",
 				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -92,16 +92,16 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 				Provider:  "aws",
 			},
 		},
-		AppSources: []enterprisev1.AppSourceSpec{
+		AppSources: []enterpriseApi.AppSourceSpec{
 			{Name: "adminApps",
 				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   "local"},
 			},
 			{Name: "securityApps",
 				Location: "securityAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   "local"},
 			},
@@ -159,7 +159,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var err error
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
@@ -214,8 +214,8 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 
 func TestGetAppsListShouldFail(t *testing.T) {
 
-	appFrameworkRef := enterprisev1.AppFrameworkSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol",
 				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
 				Path:      "testbucket-rs-london",
@@ -223,10 +223,10 @@ func TestGetAppsListShouldFail(t *testing.T) {
 				Type:      "s3",
 				Provider:  "aws"},
 		},
-		AppSources: []enterprisev1.AppSourceSpec{
+		AppSources: []enterpriseApi.AppSourceSpec{
 			{Name: "adminApps",
 				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   "local"},
 			},
@@ -259,7 +259,7 @@ func TestGetAppsListShouldFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var err error
 
 	appSource := appFrameworkRef.AppSources[0]

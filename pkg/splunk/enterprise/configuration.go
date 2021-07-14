@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -51,7 +51,7 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
+func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
 	var storageCapacity resource.Quantity
 	var err error
 
@@ -101,7 +101,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterprisev1.CommonSpl
 }
 
 // getSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
+func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	// use template if not headless
 	var service *corev1.Service
@@ -169,7 +169,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 }
 
 // setVolumeDefaults set properties in Volumes to default values
-func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
+func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 
 	// work-around openapi validation error by ensuring it is not nil
 	if spec.Volumes == nil {
@@ -196,7 +196,7 @@ func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
 }
 
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
 
@@ -303,7 +303,7 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 }
 
 // addPVCVolumes adds pvc volumes to statefulSet
-func addPVCVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
+func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
 	// prepare and append persistent volume claims if storage is not ephemeral
 	var err error
 	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType)
@@ -344,7 +344,7 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 }
 
 // addStorageVolumes adds storage volumes to the StatefulSet
-func addStorageVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
 		// add Ephermal volumes
@@ -373,7 +373,7 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkS
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -491,7 +491,7 @@ func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Meta
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
 	scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
@@ -691,7 +691,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Namespace: cr.GetNamespace(),
 			Name:      spec.ClusterMasterRef.Name,
 		}
-		masterIdxCluster := &enterprisev1.ClusterMaster{}
+		masterIdxCluster := &enterpriseApi.ClusterMaster{}
 		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
 		if err != nil {
 			scopedLog.Error(err, "Unable to get ClusterMaster")
@@ -738,7 +738,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+func getLivenessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
 	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	livenessDelay := livenessProbeDefaultDelaySec + additionalDelay
@@ -758,7 +758,7 @@ func getLivenessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
 // this indicates that all the the ansible plays executed at startup have completed.
-func getReadinessProbe(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+func getReadinessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
 	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	readinessDelay := readinessProbeDefaultDelaySec + additionalDelay
@@ -812,7 +812,7 @@ func getVolumeSourceMountFromConfigMapData(configMap *corev1.ConfigMap, mode *in
 }
 
 // isSmartstoreEnabled checks and returns true if smartstore is configured
-func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
+func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 	if smartstore == nil {
 		return false
 	}
@@ -821,7 +821,7 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 }
 
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
-func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterprisev1.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
+func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
 	if isSmartstoreConfigured(smartstore) == false {
 		return false
@@ -856,9 +856,9 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 }
 
 // initAppFrameWorkContext used to initialize the app frame work context
-func initAppFrameWorkContext(appFrameworkConf *enterprisev1.AppFrameworkSpec, appStatusContext *enterprisev1.AppDeploymentContext) {
+func initAppFrameWorkContext(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
 	if appStatusContext.AppsSrcDeployStatus == nil {
-		appStatusContext.AppsSrcDeployStatus = make(map[string]enterprisev1.AppSrcDeployInfo)
+		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
@@ -869,7 +869,7 @@ func initAppFrameWorkContext(appFrameworkConf *enterprisev1.AppFrameworkSpec, ap
 }
 
 // getAppSrcScope returns the scope of a given appSource
-func getAppSrcScope(appFrameworkConf *enterprisev1.AppFrameworkSpec, appSrcName string) string {
+func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) string {
 	for _, appSrc := range appFrameworkConf.AppSources {
 		if appSrc.Name == appSrcName {
 			if appSrc.Scope != "" {
@@ -884,7 +884,7 @@ func getAppSrcScope(appFrameworkConf *enterprisev1.AppFrameworkSpec, appSrcName 
 }
 
 // CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
-func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterprisev1.AppFrameworkSpec, appSrcName string) bool {
+func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) bool {
 	for _, appSrc := range appFrameworkConf.AppSources {
 		if appSrc.Name == appSrcName {
 			return true
@@ -894,7 +894,7 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterprisev1.AppFrameworkSpec
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
-func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, localScope bool) error {
+func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
 
 	duplicateAppSourceStorageChecker := make(map[string]bool)
 	duplicateAppSourceNameChecker := make(map[string]bool)
@@ -969,12 +969,12 @@ func validateSplunkAppSources(appFramework *enterprisev1.AppFrameworkSpec, local
 
 //  isAppFrameworkConfigured checks and returns true if App Framework is configured
 //  App Repo config without any App sources will not cause any App Framework activity
-func isAppFrameworkConfigured(appFramework *enterprisev1.AppFrameworkSpec) bool {
+func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
 	return !(appFramework == nil || appFramework.AppSources == nil)
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appContext *enterprisev1.AppDeploymentContext, localScope bool) error {
+func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -1017,7 +1017,7 @@ func ValidateAppFrameworkSpec(appFramework *enterprisev1.AppFrameworkSpec, appCo
 }
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec
-func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec, isAppFramework bool) error {
+func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
 
 	duplicateChecker := make(map[string]bool)
 
@@ -1056,7 +1056,7 @@ func validateRemoteVolumeSpec(volList []enterprisev1.VolumeSpec, isAppFramework 
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec
-func validateSplunkIndexesSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 
 	duplicateChecker := make(map[string]bool)
 
@@ -1086,7 +1086,7 @@ func validateSplunkIndexesSpec(smartstore *enterprisev1.SmartStoreSpec) error {
 }
 
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
-func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 	var err error
 
 	// Smartstore is an optional config (at least) for now
@@ -1119,7 +1119,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec, mapData map[string]string) (string, error) {
+func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
 	volumes := smartstore.VolList
@@ -1143,7 +1143,7 @@ remote.s3.endpoint = %s
 }
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
-func GetSmartstoreIndexesConfig(indexes []enterprisev1.IndexSpec) string {
+func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec) string {
 
 	var indexesConf string
 
@@ -1192,7 +1192,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 }
 
 //GetServerConfigEntries prepares the server.conf entries, and returns as a string
-func GetServerConfigEntries(cacheManagerConf *enterprisev1.CacheManagerSpec) string {
+func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""
 	}
@@ -1248,7 +1248,7 @@ max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploa
 }
 
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
-func GetSmartstoreIndexesDefaults(defaults enterprisev1.IndexConfDefaultsSpec) string {
+func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec) string {
 
 	remotePath := "$_index_name"
 

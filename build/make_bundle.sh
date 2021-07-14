@@ -5,7 +5,7 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
-OLD_VERSIONS="v1beta1 v1alpha3 v1alpha2"
+OLD_VERSIONS="v1 v1beta1 v1alpha3 v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
@@ -90,7 +90,7 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: metadata.annotations.alm-examples
   value: |-
     [{
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "IndexerCluster",
       "metadata": {
         "name": "example",
@@ -101,7 +101,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "LicenseMaster",
       "metadata": {
         "name": "example",
@@ -110,7 +110,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       "spec": {}
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "SearchHeadCluster",
       "metadata": {
         "name": "example",
@@ -121,7 +121,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "Standalone",
       "metadata": {
         "name": "example",
