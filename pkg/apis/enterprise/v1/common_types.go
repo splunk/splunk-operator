@@ -184,12 +184,10 @@ type VolumeSpec struct {
 	// Secret object name
 	SecretRef string `json:"secretRef"`
 
-	// Remote Storage type.
+	// Remote Storage type. Supported values: s3
 	Type string `json:"storageType"`
 
-	// App Package Remote Store provider.
-	// For e.g. aws, azure, minio, etc.
-	// Currently we are only supporting aws.
+	// App Package Remote Store provider. Supported values: aws, minio
 	Provider string `json:"provider"`
 }
 

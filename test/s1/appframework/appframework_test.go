@@ -143,6 +143,38 @@ var _ = Describe("s1appfw test", func() {
 			//Verify Apps are installed
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, "enabled", true, false)
 
+			// Scale Standalone instance
+			testenvInstance.Log.Info("Scaling Up Standalone CR")
+			scaledReplicaCount := 2
+			standalone = &enterprisev1.Standalone{}
+			err = deployment.GetInstance(deployment.GetName(), standalone)
+			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+
+			standalone.Spec.Replicas = int32(scaledReplicaCount)
+
+			err = deployment.UpdateCR(standalone)
+			Expect(err).To(Succeed(), "Failed to scale up Standalone")
+
+			// Ensure standalone is scaling up
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseScalingUp)
+
+			// Wait for Standalone to be in READY status
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
+
+			// Wait for Monitoring Console Pod to be in READY status
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			podNames := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0), fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
+
+			// Verify Apps are downloaded by init-container
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, true)
+
+			//Verify Apps are installed
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
+
 		})
 	})
 
@@ -151,15 +183,16 @@ var _ = Describe("s1appfw test", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
-			appList := []string{"SplunkEnterpriseSecuritySuite"}
-			appFileList := testenv.GetAppFileList(appList, 1)
+			esApp := []string{"SplunkEnterpriseSecuritySuite"}
+			appListV1 = append(appListV1, esApp...)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
 
 			// Download ES App from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(esApp, 1))
 			Expect(err).To(Succeed(), "Unable to download ES app file")
 
 			// Upload ES app to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(esApp, 1), downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -200,16 +233,13 @@ var _ = Describe("s1appfw test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
-			esApp := "splunk-enterprise-security_640.spl"
-			downloadedapps := append(testenv.GetAppFileList(appListV1, 1), esApp)
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, downloadedapps, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
-			// Verify ES app is installed locally
+			// Verify apps are installed locally
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, appList, false, "enabled", false, false)
-
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, appListV1, false, "enabled", false, false)
 		})
 	})
 })

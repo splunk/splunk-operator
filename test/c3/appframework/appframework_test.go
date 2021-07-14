@@ -154,6 +154,69 @@ var _ = Describe("c3appfw test", func() {
 
 			//Verify Apps are updated
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterprisev1.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Scale Search Head Cluster
+			defaultSHReplicas := shc.Spec.Replicas
+			scaledSHReplicas := defaultSHReplicas + 1
+			testenvInstance.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
+
+			// Update Replicas of SHC
+			shc.Spec.Replicas = int32(scaledSHReplicas)
+			err = deployment.UpdateCR(shc)
+			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
+
+			// Ensure Search Head cluster scales up and go to ScalingUp phase
+			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp)
+
+			// Get instance of current Indexer CR with latest config
+			idxcName := deployment.GetName() + "-idxc"
+			idxc := &enterprisev1.IndexerCluster{}
+			err = deployment.GetInstance(idxcName, idxc)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+
+			// Scale indexers
+			defaultIndexerReplicas := idxc.Spec.Replicas
+			scaledIndexerReplicas := defaultIndexerReplicas + 1
+			testenvInstance.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+
+			// Update Replicas of Indexer Cluster
+			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
+			err = deployment.UpdateCR(idxc)
+			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
+
+			// Ensure Indexer cluster scales up and go to ScalingUp phase
+			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
+
+			// Ensure Indexer cluster go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Verify New Indexer On Cluster Master
+			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
+			testenvInstance.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
+			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify Apps are copied to location
+			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+
+			// Verify Apps are updated
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
 		})
 	})
 
@@ -202,14 +265,47 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList := testenv.GetAppFileList(appListV1, 1)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, true, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed locally on CM and on SHC Deployer
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
 
 			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
+
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			//Upload new Versioned Apps to S3
+			appFileList := testenv.GetAppFileList(appListV2, 2)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Ensure that the CM goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure SHC go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
+
+			// Verify apps are installed locally on CM and on SHC Deployer
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
+
+			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})
 
@@ -218,15 +314,16 @@ var _ = Describe("c3appfw test", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
-			appList := []string{"SplunkEnterpriseSecuritySuite"}
-			appFileList := testenv.GetAppFileList(appList, 1)
+			esApp := []string{"SplunkEnterpriseSecuritySuite"}
+			appListV1 = append(appListV1, esApp...)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
 
 			// Download ES App from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(esApp, 1))
 			Expect(err).To(Succeed(), "Unable to download ES app file")
 
 			// Upload ES app to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(esApp, 1), downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -292,22 +389,20 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
-			esApp := "splunk-enterprise-security_640.spl"
-			downloadedapps := append(testenv.GetAppFileList(appListV1, 1), esApp)
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, downloadedapps, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
 
 			// Verify ES app is installed locally on SHC Deployer
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, false, "disabled", false, false)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, false, "disabled", false, false)
 
-			// Verify ES app is installed on SHs
+			// Verify apps are installed on SHs
 			podNames := []string{}
 			for i := 0; i < int(shSpec.Replicas); i++ {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				podNames = append(podNames, string(sh))
 			}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, false, "enabled", false, true)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, true)
 		})
 	})
 })

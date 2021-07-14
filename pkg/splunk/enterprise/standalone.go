@@ -123,6 +123,35 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		return result, err
 	}
 
+	// If we are using appFramework and are scaling up, we should re-populate the
+	// configMap with all the appSource entries. This is done so that the new pods
+	// that come up now will have the complete list of all the apps and then can
+	// download and install all the apps.
+	// TODO: Improve this logic so that we only recycle the new pod/replica
+	// and not all the existing pods.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Spec.Replicas > 1 {
+
+		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
+
+		isScalingUp, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
+		if err != nil {
+			return result, err
+		} else if isScalingUp {
+			// if we are indeed scaling up, then mark the deploy status to Pending
+			// for all the app sources so that we add all the app sources in configMap.
+			appStatusContext := cr.Status.AppContext
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusComplete, enterprisev1.DeployStatusPending)
+			}
+
+			// Now apply the configMap will full app listing.
+			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus)
+			if err != nil {
+				return result, err
+			}
+		}
+	}
+
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(client, cr)
 	if err != nil {
