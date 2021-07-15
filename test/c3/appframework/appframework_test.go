@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -65,20 +65,20 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "cluster",
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
 			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
 
 			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
@@ -157,7 +157,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Get instance of current SHC CR with latest config
 			shcName := deployment.GetName() + "-shc"
-			shc := &enterprisev1.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
@@ -176,7 +176,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
@@ -226,20 +226,20 @@ var _ = Describe("c3appfw test", func() {
 			// Create App framework Spec
 			// volumeSpec: Volume name, Endpoint, Path and SecretRef
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "local",
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
 
 			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
@@ -329,15 +329,15 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 
-			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
 				Scope:   "cluster",
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
 				Defaults:             appSourceDefaultSpec,
 				AppsRepoPollInterval: 60,
 				VolList:              volumeSpec,
@@ -353,8 +353,8 @@ var _ = Describe("c3appfw test", func() {
 			deployment.DeployIndexerCluster(deployment.GetName()+"-idxc", deployment.GetName(), indexerReplicas, deployment.GetName(), "")
 
 			// Deploy the SHC
-			shSpec := enterprisev1.SearchHeadClusterSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			shSpec := enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "Always",
 					},

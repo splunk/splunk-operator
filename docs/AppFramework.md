@@ -30,7 +30,8 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
 
 Example: Standalone.yaml
 
-```apiVersion: enterprise.splunk.com/v1
+```yaml
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: stdln
@@ -86,7 +87,8 @@ This example describes the installation of apps on Indexer Cluster as well as Cl
 
 Example: ClusterMaster.yaml
 
-```apiVersion: enterprise.splunk.com/v1
+```yaml
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm
@@ -144,7 +146,8 @@ This example describes the installation of apps on Search Head Cluster as well a
 
 Example: SearchHeadCluster.yaml
 
-```apiVersion: enterprise.splunk.com/v1
+```yaml
+apiVersion: enterprise.splunk.com/v2
 kind: SearchHeadCluster
 metadata:
   name: shc 
@@ -192,7 +195,7 @@ App Framework configuration is supported on the following Custom Resources: Stan
 
 Here is a typical App framework configuration in a Custom resource definition:
 
-```
+```yaml
               appRepo:
                 description: Splunk Enterprise App repository. Specifies remote App
                   location and scope for Splunk App management

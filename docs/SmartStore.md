@@ -30,7 +30,7 @@ Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=i
 Example. Standalone.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: s1
@@ -77,7 +77,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 Example. Clustermaster.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: <name>
@@ -113,7 +113,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterMaster` Custom Resources, and adds the following `Spec` configuration parameters:
 
 
-```
+```yaml
 smartstore:
   description:
     Splunk Smartstore configuration. Refer to indexes.conf.spec and

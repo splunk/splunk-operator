@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package version
+package apis
 
-var (
-	// Version of splunk-operator
-	Version = "1.0.2"
+import (
+	v2 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 )
+
+func init() {
+	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
+	AddToSchemes = append(AddToSchemes, v2.SchemeBuilder.AddToScheme)
+}

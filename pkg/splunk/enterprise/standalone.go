@@ -24,13 +24,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standalone) (reconcile.Result, error) {
+func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -141,7 +141,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 			// for all the app sources so that we add all the app sources in configMap.
 			appStatusContext := cr.Status.AppContext
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterprisev1.RepoStateActive, enterprisev1.DeployStatusComplete, enterprisev1.DeployStatusPending)
+				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
 			}
 
 			// Now apply the configMap will full app listing.
@@ -188,7 +188,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.Standalone) (*appsv1.StatefulSet, error) {
+func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
@@ -208,7 +208,7 @@ func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(cr *enterprisev1.Standalone) error {
+func validateStandaloneSpec(cr *enterpriseApi.Standalone) error {
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
 	}

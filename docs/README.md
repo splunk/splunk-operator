@@ -135,7 +135,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: s1

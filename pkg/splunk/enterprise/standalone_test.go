@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -56,7 +56,7 @@ func TestApplyStandalone(t *testing.T) {
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[9]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
-	current := enterprisev1.Standalone{
+	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -68,7 +68,7 @@ func TestApplyStandalone(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
+		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -78,7 +78,7 @@ func TestApplyStandalone(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
+		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -115,7 +115,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[13]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[12], funcCalls[13]}, "List": {listmockCall[0]}}
 
-	current := enterprisev1.Standalone{
+	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -123,23 +123,23 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
-				IndexList: []enterprisev1.IndexSpec{
+				IndexList: []enterpriseApi.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",
-						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 							VolName: "msos_s2s3_vol"},
 					},
 					{Name: "salesdata2", RemotePath: "remotepath2",
-						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 							VolName: "msos_s2s3_vol"},
 					},
 					{Name: "salesdata3", RemotePath: "remotepath3",
-						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 							VolName: "msos_s2s3_vol"},
 					},
 				},
@@ -171,14 +171,14 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(c, cr.(*enterprisev1.Standalone))
+		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandaloneWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
 }
 
 func TestGetStandaloneStatefulSet(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -247,7 +247,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 }
 
 func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
-	current := enterprisev1.Standalone{
+	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -255,15 +255,15 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
-				IndexList: []enterprisev1.IndexSpec{
+				IndexList: []enterpriseApi.IndexSpec{
 					{Name: "salesdata1", RemotePath: "remotepath1",
-						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 							VolName: "msos_s2s3_vol"},
 					},
 				},
@@ -307,33 +307,33 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 }
 
 func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -362,33 +362,33 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 }
 
 func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -424,19 +424,19 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 }
 
 func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				Defaults: enterprisev1.AppSourceDefaultSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
 					Scope:   "local",
 				},
-				VolList: []enterprisev1.VolumeSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -454,16 +454,16 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Provider:  "aws",
 					},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -538,7 +538,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
@@ -561,7 +561,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
@@ -595,14 +595,14 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
-			AppFrameworkConfig: enterprisev1.AppFrameworkSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.StandaloneSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
 						Path:      "testbucket-rs-london",
@@ -610,10 +610,10 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 						Type:      "s3",
 						Provider:  "aws"},
 				},
-				AppSources: []enterprisev1.AppSourceSpec{
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "adminApps",
 						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterprisev1.AppSourceDefaultSpec{
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
 							Scope:   "local"},
 					},
@@ -658,7 +658,7 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 
-	var vol enterprisev1.VolumeSpec
+	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
 	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
@@ -681,7 +681,7 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			return nil
 		},
 		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterprisev1.AppFrameworkSpec, vol *enterprisev1.VolumeSpec,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)

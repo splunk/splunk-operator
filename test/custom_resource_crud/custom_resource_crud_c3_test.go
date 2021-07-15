@@ -19,7 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -82,7 +82,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			}
 
 			// Change CPU limits to trigger CR update
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
 			err = deployment.GetInstance(instanceName, idxc)
 			Expect(err).To(Succeed(), "Unable to get instance of indexer cluster")
@@ -113,7 +113,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			}
 
 			// Change CPU limits to trigger CR update
-			shc := &enterprisev1.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
 			instanceName = fmt.Sprintf("%s-shc", deployment.GetName())
 			err = deployment.GetInstance(instanceName, shc)
 			Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
@@ -173,19 +173,19 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "cluster-master", 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
-			shc := &enterprisev1.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
 			deployment.GetInstance(deployment.GetName()+"-shc", shc)
 			err = deployment.DeleteCR(shc)
 			Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
 
 			// Delete the Indexer Cluster
-			idxc := &enterprisev1.IndexerCluster{}
+			idxc := &enterpriseApi.IndexerCluster{}
 			deployment.GetInstance(deployment.GetName()+"-idxc", idxc)
 			err = deployment.DeleteCR(idxc)
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 			// Delete the Cluster Master
-			cm := &enterprisev1.ClusterMaster{}
+			cm := &enterpriseApi.ClusterMaster{}
 			deployment.GetInstance(deployment.GetName(), cm)
 			err = deployment.DeleteCR(cm)
 			Expect(err).To(Succeed(), "Unable to delete CM instance", "CM Name", cm)
