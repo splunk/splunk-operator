@@ -50,11 +50,12 @@ type AppDeploymentStatus uint8
 
 // Values to represent the Pod App deployment status
 const (
-	// Indicates there is a change on remote store, but yet to start propogating that to the Pod
+	// Indicates there is a change on remote store, but yet to start propagating that to the Pod
 	DeployStatusPending AppDeploymentStatus = iota + 1
 
 	// App update on the Pod is in progress
-	DeployStatusInProgress //sgontla: Mostly transient  state for Phase-2, more of Phase-3 status
+	//ToDo: Mostly transient state for Phase-2, more of Phase-3 status
+	DeployStatusInProgress
 
 	// App is update is complete on the Pod
 	DeployStatusComplete

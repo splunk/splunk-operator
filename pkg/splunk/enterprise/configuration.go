@@ -467,7 +467,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	// ToDo: sgontla: Exclude MC, once it's own CR is available
+	// ToDo: Exclude MC, once it's own CR is available
 	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead && instanceType != SplunkMonitoringConsole {
 		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
@@ -587,8 +587,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
 
-		// ToDo: sgontla: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
-		// Once the apps are installed, and on a reconcile entry triggered by polling interval expirty, if there is no new
+		// ToDo: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
+		// Once the apps are installed, and on a reconcile entry triggered by polling interval expiry, if there is no new
 		// App changes on remote store, then the config map data is erased. In such case, no need to reset the Pod
 		if len(appListingConfigMap.Data) > 0 {
 			podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
@@ -981,11 +981,6 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 	}
 
 	scopedLog := log.WithName("ValidateAppFrameworkSpec")
-
-	// Todo: sgontla: Enable later. For now, allowing multiple volumes and app sources for UT purpose
-	if len(appFramework.VolList) > 1 || len(appFramework.AppSources) > 2 {
-		//return fmt.Errorf("Invalid App Framework config. Only one Volume, and a max. of two App sources supported")
-	}
 
 	scopedLog.Info("configCheck", "scope", localScope)
 
