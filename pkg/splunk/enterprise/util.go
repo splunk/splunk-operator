@@ -224,7 +224,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client sp
 // (1) app-list-local.yaml
 // (2) app-list-cluster.yaml
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
-// ToDo: sgontla: Deletes to be handled for phase-3
+// ToDo: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
 
@@ -301,8 +301,6 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
-	// ToDo: sgontla: For phase-2, there delete is not supported. We will leave the configMap to the last deploy state,
-	// to avoid unnecessary resets
 	if len(appListingConfigMap.Data) > 0 {
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
 
@@ -609,7 +607,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 	}
 
-	// ToDo: sgontla: Ideally, this check should go to the reconcile entry point once the glue logic in place.
+	// ToDo: Ideally, this check should go to the reconcile entry point once the glue logic in place.
 	if appDeployContext.AppsSrcDeployStatus == nil {
 		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
@@ -754,7 +752,7 @@ func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterpriseApi.App
 	var err error
 	scopedLog := log.WithName("markAppsStatusToComplete")
 
-	// ToDo: sgontla: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
+	// ToDo: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
 	for appSrc := range appSrcDeplymentStatus {
 		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
 		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)

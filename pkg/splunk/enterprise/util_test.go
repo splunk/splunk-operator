@@ -621,12 +621,12 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-10: Setting  all apps in AppSrc to complete should mark all the apps status as complete irrespective of their state
 	// 10.1 Check for state=Active and status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		// ToDo: sgontla: Enable for Phase3
+		// ToDo: Enable for Phase-3
 		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		// ToDo: sgontla: Enable for Phase3
+		// ToDo: Enable for Phase-3
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
@@ -643,12 +643,12 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// 10.2 Check for state=Deleted status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		// ToDo: sgontla: Enable for Phase3
+		// ToDo: Enable for Phase-3
 		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		// ToDo: sgontla: Enable for Phase3
+		// ToDo: Enable for Phase-3
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 

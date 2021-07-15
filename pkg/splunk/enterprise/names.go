@@ -62,7 +62,7 @@ const (
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
-	// ToDo: sgontla: Used only for Phase-2, to be removed later
+	// ToDo: Used only for Phase-2, to be removed later
 	appListingRev = "appListingRev"
 
 	// Pod location for app related config
