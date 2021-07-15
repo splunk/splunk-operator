@@ -23,6 +23,7 @@ var AppInfo = map[string]map[string]string{
 	"splunk_app_stream":                 {"V1": "6.0.1", "V2": "6.0.2", "V2filename": "Splunk-app-for-stream_720.tgz", "V1filename": "Splunk-app-for-stream_720.tgz"},
 	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "V2filename": "Splunk-db-connect_351.tgz", "V1filename": "Splunk-db-connect_350.tgz"},
 	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "V2filename": "Splunk-security-essentials_333.tgz", "V1filename": "Splunk-security-essentials_332.tgz"},
+	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "V2filename": "splunk-enterprise-security_641.spl", "V1filename": "splunk-enterprise-security_640.spl"},
 }
 
 //BasicApps Apps that require no restart to be installed

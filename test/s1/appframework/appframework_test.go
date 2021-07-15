@@ -177,4 +177,69 @@ var _ = Describe("s1appfw test", func() {
 
 		})
 	})
+
+	Context("appframework Standalone deployment (S1) with App Framework", func() {
+		It("s1, appframework: can deploy a Standalone and have ES app installed", func() {
+
+			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
+			// Upload ES app to S3
+			esApp := []string{"SplunkEnterpriseSecuritySuite"}
+			appListV1 = append(appListV1, esApp...)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+
+			// Download ES App from S3
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(esApp, 1))
+			Expect(err).To(Succeed(), "Unable to download ES app file")
+
+			// Upload ES app to S3
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(esApp, 1), downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterprisev1.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+			appSourceDefaultSpec := enterprisev1.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   "local",
+			}
+			appSourceName := "appframework-" + testenv.RandomDNSName(3)
+			appSourceSpec := []enterprisev1.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+			appFrameworkSpec := enterprisev1.AppFrameworkSpec{
+				Defaults:             appSourceDefaultSpec,
+				AppsRepoPollInterval: 60,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			// Create Standalone spec with App Framework enabled and some extra config to have ES installed correctly
+			spec := enterprisev1.StandaloneSpec{
+				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes:                      []corev1.Volume{},
+					LivenessInitialDelaySeconds:  600,
+					ReadinessInitialDelaySeconds: 660,
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
+
+			// Ensure Standalone goes to Ready phase
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify Apps are downloaded by init-container
+			initContDownloadLocation := "/init-apps/" + appSourceName
+			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
+
+			// Verify apps are installed locally
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, appListV1, false, "enabled", false, false)
+		})
+	})
 })
