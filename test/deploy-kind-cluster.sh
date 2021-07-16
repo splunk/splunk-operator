@@ -4,9 +4,9 @@ reg_name='kind-registry'
 reg_port=$(echo $PRIVATE_REGISTRY | cut -d':' -f2)
 
 function deleteCluster() {
-  kind delete cluster --name=${CLUSTER_NAME}
+  kind delete cluster --name=${TEST_CLUSTER_NAME}
   if [ $? -ne 0 ]; then
-    echo "Unable to delete cluster - ${CLUSTER_NAME}"
+    echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
   fi
 
@@ -27,7 +27,7 @@ function createCluster() {
     return 1
   fi
 
-  found=$(kind get clusters | grep "^${CLUSTER_NAME}$")
+  found=$(kind get clusters | grep "^${TEST_CLUSTER_NAME}$")
   if [ -z "$found" ]; then
     # create registry container unless it already exists
     running="$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)"
@@ -44,7 +44,7 @@ function createCluster() {
     done    
 
 # create a cluster with the local registry enabled in containerd
-cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
+cat <<EOF | kind create cluster --name "${TEST_CLUSTER_NAME}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -59,5 +59,5 @@ fi
 
     # Output
     echo "KIND cluster nodes:"
-    kind get nodes --name=${CLUSTER_NAME}
+    kind get nodes --name=${TEST_CLUSTER_NAME}
 }

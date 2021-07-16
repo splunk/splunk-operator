@@ -458,7 +458,7 @@ jobs:
           no_output_timeout: 30m
   # Runs app framework tests against a k8s cluster
   app-framework-tests:
-    executor: ubuntu-machine
+    executor: test-runner
     steps:
       - run: 
           name: Setup Splunk operator and enterprise image env vars
@@ -466,6 +466,11 @@ jobs:
             echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
             echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
             echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+            echo 'export CLUSTER_NODES=${NUM_NODES}' >> $BASH_ENV
+            echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
+            echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_NAME=appfw-int-test-cluster' >> $BASH_ENV
       - kubernetes/install
       - aws-cli/install
       - aws-eks/install-eksctl
