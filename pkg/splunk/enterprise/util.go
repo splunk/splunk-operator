@@ -240,18 +240,29 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	// Locally scoped apps for CM/Deployer require the latest splunk-ansible with apps_location_local.  Prior to this,
 	// there was no method to install local apps for these roles.  If the apps_location_local variable is not available,
 	// it will be ignored and revert back to no locally scoped apps for CM/Deployer.
-	yamlConfHeader := fmt.Sprintf(`splunk:
-  apps_location:`)
+	yamlConfIdcHeader := fmt.Sprintf(`splunk:
+  app_paths_install:
+    idxc:`)
+
+	yamlConfShcHeader := fmt.Sprintf(`splunk:
+  app_paths_install:
+    shc:`)
+
 	yamlConfLocalHeader := fmt.Sprintf(`splunk:
-  apps_location_local:`)
+  app_paths_install:
+    default:`)
 
 	var localAppsConf, clusterAppsConf string
-	if crKind == "ClusterMaster" || crKind == "SearchHeadCluster" {
-		localAppsConf = yamlConfLocalHeader
+	if crKind == "ClusterMaster" {
+		clusterAppsConf = yamlConfIdcHeader
+	} else if crKind == "SearchHeadCluster" {
+		clusterAppsConf = yamlConfShcHeader
 	} else {
-		localAppsConf = yamlConfHeader
+		clusterAppsConf = ""
 	}
-	clusterAppsConf = yamlConfHeader
+
+	localAppsConf = yamlConfLocalHeader
+
 	var mapKeys []string
 
 	// Map order is not guaranteed, so use the sorted keys to go through the map entries
@@ -269,7 +280,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
 					localAppsConf = fmt.Sprintf(`%s
-    - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
+      - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
 				}
 			}
 
@@ -278,7 +289,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
-    - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
+      - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
 				}
 			}
 
@@ -287,11 +298,12 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		}
 	}
 
-	if localAppsConf != yamlConfHeader && localAppsConf != yamlConfLocalHeader {
+	// Don't update the configMap if there is nothing to write.
+	if localAppsConf != yamlConfLocalHeader {
 		mapAppListing["app-list-local.yaml"] = localAppsConf
 	}
 
-	if clusterAppsConf != yamlConfHeader {
+	if clusterAppsConf != yamlConfIdcHeader && clusterAppsConf != yamlConfShcHeader && clusterAppsConf != "" {
 		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
 	}
 
