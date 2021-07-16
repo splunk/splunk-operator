@@ -303,7 +303,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapAppListing["app-list-local.yaml"] = localAppsConf
 	}
 
-	if clusterAppsConf != yamlConfIdcHeader || clusterAppsConf != yamlConfShcHeader || clusterAppsConf != "" {
+	if clusterAppsConf != yamlConfIdcHeader && clusterAppsConf != yamlConfShcHeader && clusterAppsConf != "" {
 		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
 	}
 
