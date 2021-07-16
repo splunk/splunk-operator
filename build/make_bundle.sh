@@ -147,9 +147,10 @@ yq w $OLM_CATALOG/splunk/splunk.package.yaml packageName "splunk-certified" > $O
 # Mac OS expects sed -i '', Linux expects sed -i''. To workaround this, using .bak
 zip $OLM_CERTIFIED/splunk.zip -j $OLM_CERTIFIED/splunk $OLM_CERTIFIED/splunk/*
 
-# This adds the 'protocol' field back to the CRDs.
+# This adds the 'protocol' field back to the CRDs, when we try to run make package or make generate.
+# NOTE: This is a temporary fix and should not be needed in future operator-sdk upgrades.
 function updateCRDS {
-for crd in `ls $1`
+    for crd in `ls $1`
     do
         echo Updating crd: $crd
         line_num=`grep -n "x-kubernetes-list-map-keys" $1/$crd | awk -F ":" '{print$1}'`
