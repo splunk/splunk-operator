@@ -16,6 +16,7 @@ workflows:
             branches:
               only:
                 - develop
+                - feature-appframework
     jobs:
       - build-image
       - unit-tests
