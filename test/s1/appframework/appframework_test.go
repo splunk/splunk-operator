@@ -62,7 +62,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("appframework Standalone deployment (S1) with App Framework", func() {
-		It("s1, appframework: can deploy a standalone instance with App Framework enabled", func() {
+		It("smoke, s1, appframework: can deploy a standalone instance with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -179,7 +179,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("appframework Standalone deployment (S1) with App Framework", func() {
-		It("s1, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("smoke, s1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
