@@ -75,7 +75,7 @@ spec:
     name: cm
 EOF
 ```
-This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the RF (replication_factor) set.
+This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set.
 
 NOTE: Whenever we try to specify `replicas` on IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either `replication_factor` for single site indexer clusters, or to `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
