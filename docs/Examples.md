@@ -1,13 +1,13 @@
 # Configuring Splunk Enterprise Deployments
 
-This document includes various examples for configuring Splunk Enterprise
-deployments.
+This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
 
 
   - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
     - [Indexer Clusters](#indexer-clusters)
       - [Cluster Master](#cluster-master)
       - [Indexer part](#indexer-part)
+    - [Monitoring Clonsole](#monitoring-console)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
     - [Cleaning Up](#cleaning-up)
@@ -26,15 +26,13 @@ deployments.
     - [Updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
     - [Deleting global kubernetes secret object](#deleting-global-kubernetes-secret-object)
 
-Please refer to the [Custom Resource Guide](CustomResources.md) for more
-information about the custom resources that you can use with the Splunk
+Refer to the [Custom Resource Guide](CustomResources.md) for more information about the custom resources that you can use with the Splunk
 Operator.
 
 ## Creating a Clustered Deployment
 
-The two basic building blocks of Splunk Enterprise are search heads and
-indexers. A `Standalone` resource can be used to create a single instance
-that can perform either, or both, of these roles.
+The two basic building blocks of Splunk Enterprise infrastructure are search heads and indexers. A `Standalone` resource can be used to create a single instance
+that can perform either, or both of these roles.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -49,9 +47,8 @@ The passwords for the instance are generated automatically. To review the passwo
 
 ### Indexer Clusters
 
-When growing, customers will typically want to first expand by upgrading
-to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of an indexer cluster as easy as creating a `ClusterMaster` resource for Cluster Master and an `IndexerCluster` resource for indexers part respectively:
+When customers outgrow the capabilites of single instance for indexing and search, they will scale the infrastructure up to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
+The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMaster` resource for Cluster Master, and using the `IndexerCluster` resource for the cluster peers:
 
 #### Cluster Master
 ```yaml
@@ -78,28 +75,21 @@ spec:
     name: cm
 EOF
 ```
+This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the RF (replication_factor) set.
 
-This will automatically configure a cluster with RF(replication_factor) number of indexer peers.
-
-NOTE: Whenever we try to specify `replicas` on IndexerCluster CR less than RF(as set on ClusterMaster),
-the operator will always scale the number of peers to either `replication_factor`(in case of single site indexer cluster)
-or to `origin` count in `site_replication_factor`(in case of multi-site indexer cluster).
+NOTE: Whenever we try to specify `replicas` on IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either `replication_factor` for single site indexer clusters, or to `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
 ```
 $ kubectl get pods
 NAME                                       READY   STATUS    RESTARTS    AGE
 splunk-cm-cluster-master-0                  1/1     Running   0          29s
-splunk-default-monitoring-console-0         1/1     Running   0          15s
 splunk-example-indexer-0                    1/1     Running   0          29s
 splunk-example-indexer-1                    1/1     Running   0          29s
 splunk-example-indexer-2                    1/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
-Notes: 
-- The monitoring console pod is automatically created and pre-configured per namespace
-- The name of the monitoring console pod is of the format splunk-`namespace`-monitoring-console-0
 
-If you want more indexers, just update it to include a `replicas` parameter:
+If you want to add more indexers as cluster peers, update your CR to include a `replicas` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -121,14 +111,13 @@ EOF
 $ kubectl get pods
 NAME                                         READY    STATUS    RESTARTS   AGE
 splunk-cm-cluster-master-0                    1/1     Running   0          14m
-splunk-default-monitoring-console-0           1/1     Running   0          13m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
 splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
-You can now easily scale your indexer cluster by just patching `replicas`.
+You can now easily scale your indexer cluster by patching the `replicas` count.
 
 ```
 $ kubectl patch indexercluster example --type=json -p '[{"op": "replace", "path": "/spec/replicas", "value": 5}]'
@@ -142,16 +131,14 @@ For efficiency, note that you can use the following short names with `kubectl`:
 * `searchheadcluster`: `shc`
 * `licensemaster`: `lm`
 
-Even better, all the custom resources with a `replicas` field also support
-using the `kubectl scale` command:
+All the custom resources that support a `replicas` field can be scaled using the `kubectl scale` command:
 
 ```
 $ kubectl scale idc example --replicas=5
 indexercluster.enterprise.splunk.com/example scaled
 ```
 
-You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
-to manage scaling for you. For example:
+You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -176,8 +163,7 @@ NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   
 idc-example   IndexerCluster/example   16%/50%   5         10        5          15m
 ```
 
-To create a standalone search head that uses your indexer cluster, all you
-have to do is add an `clusterMasterRef` parameter:
+To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -193,8 +179,8 @@ spec:
 EOF
 ```
 
-The important parameter to note here is the `clusterMasterRef` field which points to the cluster master of the indexer cluster.
-Having a separate CR for cluster master gives us the control to define a size or StorageClass for the PersistentVolumes of the cluster master
+Note that the `clusterMasterRef` field points to the cluster master of the indexer cluster.
+Having a separate CR for cluster master allows you to define a size or StorageClass for the PersistentVolumes of the cluster master
 different from the indexers:
 
 ```yaml
@@ -229,18 +215,23 @@ spec:
 EOF
 ```
 
-In the above environment, cluster master controls the [applications loaded](#installing-splunk-apps) to all
-the parts of the indexer cluster, and the indexer services that it creates select the indexers
-deployed by all the IndexerCluster parts, while the indexer services created by indexer cluster only select the indexers that it manages.
+The cluster master controls the [Splunk Apps](#installing-splunk-apps) distributed to all peers in the indexer cluster.  The indexer services that it creates select the indexers deployed by all the IndexerCluster parts, while the indexer services created by indexer cluster only select the indexers that it manages.
 
-This can also allow to better control
-the upgrade cycle to respect the recommended order: cluster master, then search heads,
-then indexers, by defining and updating the docker image used by each IndexerCluster part.
+This allows the Splunk Operator to control the upgrade cycle and use the recommended order: cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
-This solution can also be used to build a [multisite cluster](MultisiteExamples.md)
-by defining a different zone affinity and site in each child IndexerCluster resource.
+This example can be extended to build a [multisite cluster](MultisiteExamples.md) by defining a different zone affinity and site in each child IndexerCluster resource.
 
 The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
+
+
+### Monitoring Console
+The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. 
+
+Use the `monitoringConsoleRef` paramter to define the name of the MC prior to the pod creation. Or, use `monitoringConsoleRef` to reference a MC pod running in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure the connection used by the MC.
+
+** Add code block example for ADDING MC after a cluster is running
+** Update CM and Cluster examples above to define the `monitoringConsoleRef`
+** Update SHC example below to define the `monitoringConsoleRef`
 
 ### Search Head Clusters
 
@@ -264,14 +255,12 @@ spec:
 EOF
 ```
 
-This will automatically create a deployer with 3 search heads clustered
-together (search head clusters require a minimum of 3 members):
+This will automatically create a deployer with 3 search heads clustered together (search head clusters require a minimum of 3 members):
 
 ```
 $ kubectl get pods
 NAME                                        READY   STATUS    RESTARTS   AGE
 splunk-cm-cluster-master-0                   1/1     Running   0          53m
-splunk-default-monitoring-console-0          0/1     Running   0          52m
 splunk-example-deployer-0                    0/1     Running   0          29s
 splunk-example-indexer-0                     1/1     Running   0          53m
 splunk-example-indexer-1                     1/1     Running   0          40m
@@ -285,15 +274,13 @@ splunk-operator-7c5599546c-pmbc2             1/1     Running   0          12m
 splunk-single-standalone-0                   1/1     Running   0          11m
 ```
 
-Similar to indexer clusters, you can easily scale search head clusters
-by just patching the `replicas` parameter.
+Similar to indexer clusters, you can easily scale search head clusters by just patching the `replicas` parameter.
 
 The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions
 
 ### Cluster Services
 
-Note that the creation of `SearchHeadCluster`, `ClusterMaster` and `IndexerCluster`
-resources also creates corresponding Kubernetes services:
+Note that the creation of `SearchHeadCluster`, `ClusterMaster` and `IndexerCluster` resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
@@ -310,16 +297,13 @@ splunk-example-search-head-service                          ClusterIP   10.100.3
 splunk-operator-metrics                                     ClusterIP   10.100.181.146   <none>        8383/TCP,8686/TCP                                11d
 ```
 
-To login to your new Splunk Enterprise cluster, you can forward port 8000
-to one of the search head pods, or use a load balancing service that is
-automatically created for your deployment:
+To login to your new Splunk Enterprise cluster, you can forward port 8000 to one of the search head pods, or use a load balancing service that is automatically created for your deployment:
 
 ```
 kubectl port-forward service/splunk-example-search-head-service 8000
 ```
 
-Similar to other examples, the default administrator password can be obtained
-from the global kubernetes secrets object as described here:
+Similar to other examples, the default administrator password can be obtained from the global kubernetes secrets object as described here:
 
 ```
 kubectl get secret splunk-`<namespace`>-secret -o jsonpath='{.data.password}' | base64 --decode
@@ -330,14 +314,9 @@ Splunk clusters accessible outside of Kubernetes.
 
 ### Cleaning Up
 
-As these examples demonstrate, the Splunk Operator for Kubernetes makes it
-easy to create and manage clustered deployments of Splunk Enterprise. Given
-the reduced complexity, the comparable resource requirements from
-leveraging containers, and the ability to easily start small and scale as
-necessary, we recommend that you use the `IndexerCluster` and `SearchHeadCluster`
-resources in favor of `Standalone`, unless you have a specific reason not to.
+As these examples demonstrate, the Splunk Operator for Kubernetes makes it easy to create and manage clustered deployments of Splunk Enterprise. Given the reduced complexity, the comparable resource requirements from leveraging containers, and the ability to easily start small and scale as necessary, we recommend that you use the `IndexerCluster` and `SearchHeadCluster` resources when creating deployments using the Operator. 
 
-To remove the resources created from this example, run
+To remove the resources created from this example, run:
 
 ```
 kubectl delete standalone single
@@ -354,8 +333,7 @@ Indexes can be managed through the Splunk Operator. Every index configured throu
 
 The Splunk Enterprise container supports many
 [default configuration settings](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md)
-which are used to set up and configure new deployments. The Splunk Operator
-provides several ways to configure these.
+which are used to set up and configure new deployments. The Splunk Operator provides several ways to configure these.
 
 Suppose we create a ConfigMap named `splunk-defaults` that includes a
 `default.yml` in our kubernetes cluster:
