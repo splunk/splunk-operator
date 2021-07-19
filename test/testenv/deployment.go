@@ -564,7 +564,7 @@ func (d *Deployment) DeployLicenseMasterWithGivenSpec(name string, spec enterpri
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec) error {
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec, delaySeconds int) error {
 
 	licenseMaster := ""
 
@@ -589,6 +589,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
+			LivenessInitialDelaySeconds:  int32(delaySeconds),
+			ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
@@ -615,6 +617,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
+			LivenessInitialDelaySeconds:  int32(delaySeconds),
+			ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpec,
@@ -630,7 +634,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-master, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int) error {
 
 	licenseMaster := ""
 
@@ -669,7 +673,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults: defaults,
+			Defaults:                     defaults,
+			LivenessInitialDelaySeconds:  int32(delaySeconds),
+			ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
@@ -709,7 +715,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults: siteDefaults,
+			Defaults:                     siteDefaults,
+			LivenessInitialDelaySeconds:  int32(delaySeconds),
+			ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpec,

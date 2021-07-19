@@ -60,8 +60,8 @@ var _ = Describe("m4appfw test", func() {
 		}
 	})
 
-	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
-		It("smoke, m4, appframework: can deploy a M4 SVA with App Framework enabled", func() {
+	XContext("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
+		It("smoke, integration, m4, appframework: can deploy a M4 SVA with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -88,7 +88,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			indexersPerSite := 1
 
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true)
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10)
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -117,7 +117,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			//Verify Apps are installed cluster-wide
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//Delete apps on S3 for new Apps
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
@@ -154,7 +154,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			//Verify Apps are installed cluster-wide
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			// testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-" + "site1"
@@ -186,7 +186,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			//Verify Apps are installed cluster-wide
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			// testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 		})
 	})
@@ -220,7 +220,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create Multi site Cluster and SHC, with App Framework enabled on CM and SHC Deployer
 			siteCount := 3
 			indexersPerSite := 1
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true)
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10)
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -232,8 +232,13 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure SHC go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
+			// Verify Apps are downloaded by init-container
+			initContDownloadLocation := "/init-apps/" + appSourceName
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed locally on CM and on SHC Deployer
@@ -247,7 +252,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = nil
 
 			//Upload new Versioned Apps to S3
-			appFileList := testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -263,6 +268,9 @@ var _ = Describe("m4appfw test", func() {
 
 			// Ensure SHC go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify Apps are downloaded by init-container
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
