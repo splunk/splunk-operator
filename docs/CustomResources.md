@@ -259,7 +259,7 @@ The Operator now includes a CR for the Monitoring Console (MC). This offers a nu
 * To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
 * A namespace can contain only one MC pod.
 
-Use the `monitoringConsoleRef` paramter to define an MC pod prior to its existence. Or you can use it to reference a running MC pod in the namespace. The MC pod will check for the existence of new or existing pods in the namespace, and automatically configure the connection used by the MC. 
+Use the `monitoringConsoleRef` paramter to define the name of the MC prior to the pod creation. Or, use `monitoringConsoleRef` to reference a MC pod running in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure the connection used by the MC.
 
 
 ## Examples of Guaranteed and Burstable QoS
