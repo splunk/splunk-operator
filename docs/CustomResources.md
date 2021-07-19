@@ -13,6 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+  - 
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
 
 For examples on how to use these custom resources, please see
@@ -76,6 +77,7 @@ configuration parameters:
 | imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
+| monitoringConsoleRef  | string     | Logical name assigned to the Monitoring Console pod. It can be set before or after the MC pod creation.|
 | resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#hardware-resources-requirements) for production values.|
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 
@@ -232,6 +234,27 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
+
+
+## MonitoringConsole Resource Spec Parameters
+
+```
+apiVersion: enterprise.splunk.com/v1
+kind: Standalone
+metadata:
+  name: s1
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  monitoringConsoleRef:
+    name: test
+```
+
+Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?|https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo] in the Splunk Enterprise documentation. 
+
+The Operator now includes a CR for the Monitoring Console (MC). This offers a number of advantages, including: customizable resource allocation, app management, and license management. An MC pod will not be created automatically in the default namespace when using other Operator CR's. You can use the MC CR before or after the creation of pods using other CR's.
+
+The Operator object `monitoringConsoleRef` allows you to define an MC pod prior to its existence, or reference a running MC pod in the namespace. The MC pod will check for the existence of new or existing pods in the namespace, and configure the connection used by the MC. A namespace can contain only one MC pod.
 
 
 ## Examples of Guaranteed and Burstable QoS
