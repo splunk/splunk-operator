@@ -252,14 +252,14 @@ spec:
 
 Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
 
-The Operator now includes a CR for the Monitoring Console (MC). This offers a number of advantages, including: customizable resource allocation, app management, and license management. 
+The Splunk Operator now includes a CR for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management. 
 
-* An MC pod will not be created automatically in the default namespace when using other Operator CR's. 
-* When upgrading to the latest Operator, any previously automated MC pods will be deleted. 
+* An MC pod is not created automatically in the default namespace when using other Splunk Operator CR's. 
+* When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted. 
 * To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
 * A namespace can contain only one MC pod.
 
-Use the `monitoringConsoleRef` paramter to define the name of the MC prior to the pod creation. Or, use `monitoringConsoleRef` to reference a MC pod running in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure the connection used by the MC.
+The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
 
 
 ## Examples of Guaranteed and Burstable QoS
@@ -267,11 +267,11 @@ Use the `monitoringConsoleRef` paramter to define the name of the MC prior to th
 You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
   
 ### A Guaranteed QoS Class example:
-The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
+Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
 
-*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` value.*
+*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` values.*
 
-Example:
+Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -290,9 +290,9 @@ spec:
 ```
 
 ### A Burstable QoS Class example:
-Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but should be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory upto ```limits``` values.
+Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. 
 
-Example:
+Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v1
@@ -311,7 +311,7 @@ spec:
 ```
 
 ### A BestEffort QoS Class example:
-With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. As the Splunk Operator sets the default values for resources when you don’t provide any values for the CPU/Mem resources, so the BestEffort QoS is not a viable option with Splunk Operator.
+With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. The BestEffort QoS is not recommended for use with Splunk Operator.
 
 ### Pod Resources Management
 
