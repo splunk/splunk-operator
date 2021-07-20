@@ -587,27 +587,28 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
 				logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
 				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
-				comparsion := strings.EqualFold(status, statusCheck)
+				comparison := strings.EqualFold(status, statusCheck)
 				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
 				if clusterWideInstall {
 					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						gomega.Expect(comparsion).Should(gomega.Equal(true))
-					} else {
-						gomega.Expect(comparsion).Should(gomega.Equal(false))
+						gomega.Expect(comparison).Should(gomega.Equal(true))
 					}
 				} else {
 					// For local install check pods individually
 					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						gomega.Expect(comparsion).Should(gomega.Equal(false))
+						gomega.Expect(comparison).Should(gomega.Equal(false))
 					} else {
-						gomega.Expect(comparsion).Should(gomega.Equal(true))
+						gomega.Expect(comparison).Should(gomega.Equal(true))
 					}
 				}
 				if versionCheck {
-					if checkupdated {
-						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V2"]))
-					} else {
-						gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V1"]))
+					// For clusterwide install do not check for versions on deployer and cluster-master as the apps arent installed there
+					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-master-"))) {
+						if checkupdated {
+							gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V2"]))
+						} else {
+							gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V1"]))
+						}
 					}
 				}
 			}
