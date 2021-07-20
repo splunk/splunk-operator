@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 )
 
 const (
@@ -61,6 +61,9 @@ const (
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
+
+	// DeployerPod Template String for deployer pod
+	DeployerPod = "splunk-%s-shc-deployer-0"
 
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
@@ -189,7 +192,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
 
 	// Scheme
-	enterprisev1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
@@ -609,4 +612,9 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 	}
 
 	return &d, nil
+}
+
+// GetLMConfigMap Return name of license config map
+func (testenv *TestEnv) GetLMConfigMap() string {
+	return testenv.licenseCMName
 }

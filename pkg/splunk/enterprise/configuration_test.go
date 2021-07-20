@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -51,7 +51,7 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 }
 
 func TestGetSplunkService(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -82,13 +82,13 @@ func TestGetSplunkService(t *testing.T) {
 }
 
 func TestGetSplunkDefaults(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{Defaults: "defaults_string"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Defaults: "defaults_string"},
 		},
 	}
 
@@ -103,14 +103,14 @@ func TestGetSplunkDefaults(t *testing.T) {
 }
 
 func TestGetService(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
+		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ServiceTemplate: corev1.Service{
 						Spec: corev1.ServiceSpec{
@@ -133,7 +133,7 @@ func TestGetService(t *testing.T) {
 }
 
 func TestSetVolumeDefault(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -200,18 +200,18 @@ func TestSetVolumeDefault(t *testing.T) {
 }
 
 func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T) {
-	cr := enterprisev1.ClusterMaster{
+	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.ClusterMasterSpec{
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 				},
 
-				IndexList: []enterprisev1.IndexSpec{
+				IndexList: []enterpriseApi.IndexSpec{
 					{Name: "salesdata1"},
 					{Name: "salesdata2", RemotePath: "salesdata2"},
 					{Name: "salesdata3", RemotePath: ""},
@@ -229,20 +229,20 @@ func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T
 }
 
 func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.StandaloneSpec{
+		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 				},
-				IndexList: []enterprisev1.IndexSpec{
+				IndexList: []enterpriseApi.IndexSpec{
 					{Name: "salesdata1",
-						IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 							VolName: "msos_s2s3_vol"},
 					},
 					{Name: "salesdata2", RemotePath: "salesdata2"},
@@ -261,25 +261,25 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 }
 
 func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
-	cr := enterprisev1.ClusterMaster{
+	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.ClusterMasterSpec{
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 				},
 
-				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexList: []enterpriseApi.IndexSpec{
+					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
 				},
@@ -298,21 +298,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	var err error
 
 	// Valid smartstore config
-	SmartStore := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStore := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -324,22 +324,22 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Missing Secret object reference with Volume config should fail
-	SmartStoreMultipleVolumes := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreMultipleVolumes := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol_1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 			{Name: "msos_s2s3_vol_2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret2"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -351,8 +351,8 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Smartstore config with missing endpoint for the volume errors out
-	SmartStoreVolumeWithNoRemoteEndPoint := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreVolumeWithNoRemoteEndPoint := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
 		},
 	}
@@ -363,8 +363,8 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Smartstore config with missing remote name for the volume
-	SmartStoreWithVolumeNameMissing := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithVolumeNameMissing := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london"},
 		},
 	}
@@ -375,8 +375,8 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Smartstore config with missing path for the volume
-	SmartStoreWithVolumePathMissing := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithVolumePathMissing := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: ""},
 		},
 	}
@@ -387,21 +387,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Smartstore config with missing index name
-	SmartStoreWithMissingIndexName := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithMissingIndexName := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -413,21 +413,21 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	//Smartstore config Index with VolName, but missing RemotePath errors out
-	SmartStoreWithMissingIndexLocation := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithMissingIndexLocation := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -439,18 +439,18 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Having defaults volume and remote path should not complain an index missing the volume and remotepath info.
-	SmartStoreConfWithDefaults := enterprisev1.SmartStoreSpec{
-		Defaults: enterprisev1.IndexConfDefaultsSpec{
-			IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+	SmartStoreConfWithDefaults := enterpriseApi.SmartStoreSpec{
+		Defaults: enterpriseApi.IndexConfDefaultsSpec{
+			IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 				VolName: "msos_s2s3_vol"},
 		},
-		VolList: []enterprisev1.VolumeSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1"},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3"},
@@ -469,18 +469,18 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Configuring indexes without volume config should return error
-	SmartStoreWithoutVolumes := enterprisev1.SmartStoreSpec{
-		IndexList: []enterprisev1.IndexSpec{
+	SmartStoreWithoutVolumes := enterpriseApi.SmartStoreSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -492,23 +492,23 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Duplicate volume names should be rejected
-	SmartStoreWithDuplicateVolumes := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithDuplicateVolumes := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 			{Name: "msos_s2s3_vol-2", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -520,12 +520,12 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Defaults with invalid volume reference should return error
-	SmartStoreDefaultsWithNonExistingVolume := enterprisev1.SmartStoreSpec{
-		Defaults: enterprisev1.IndexConfDefaultsSpec{
-			IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+	SmartStoreDefaultsWithNonExistingVolume := enterpriseApi.SmartStoreSpec{
+		Defaults: enterpriseApi.IndexConfDefaultsSpec{
+			IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 				VolName: "msos_s2s3_vol-2"},
 		},
-		VolList: []enterprisev1.VolumeSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
 	}
@@ -536,17 +536,17 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	//Duplicate index names should return an error
-	SmartStoreWithDuplicateIndexes := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreWithDuplicateIndexes := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata1", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -559,14 +559,14 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 
 	// If the default volume is not configured, then each index should be configured
 	// with an explicit volume info. If not, should return an error
-	SmartStoreVolumeMissingBothFromDefaultsAndIndex := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreVolumeMissingBothFromDefaultsAndIndex := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1"},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 		},
@@ -578,13 +578,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 
 	// Volume referenced from an index must be a valid volume
-	SmartStoreIndexesWithInvalidVolumeName := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
+	SmartStoreIndexesWithInvalidVolumeName := enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol-1", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
 		},
-		IndexList: []enterprisev1.IndexSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol-2"},
 			},
 		},
@@ -596,34 +596,286 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 }
 
+func TestValidateAppFrameworkSpec(t *testing.T) {
+	var err error
+	// Valid app framework config
+	AppFramework := enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "cluster"},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+		},
+	}
+
+	appFrameworkContext := enterpriseApi.AppDeploymentContext{
+		AppsRepoStatusPollInterval: 60,
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
+	}
+
+	AppFramework.VolList[0].SecretRef = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Missing Secret Object reference should error out")
+	}
+	AppFramework.VolList[0].SecretRef = "s3-secret"
+
+	// App Framework config with missing App Source name
+	AppFramework.AppSources[0].Name = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Should not accept an app source with missing name ")
+	}
+
+	//App Framework config app source config with missing location(withot default location) should errro out
+	AppFramework.AppSources[0].Name = "adminApps"
+	AppFramework.AppSources[0].Location = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
+	}
+	AppFramework.AppSources[0].Location = "adminAppsRepo"
+
+	// Having defaults volume and location should not complain an app source missing the volume and remote location info.
+	AppFramework.Defaults.Scope = "cluster"
+	AppFramework.Defaults.VolName = "msos_s2s3_vol"
+	AppFramework.AppSources[0].Scope = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
+	}
+	AppFramework.AppSources[0].Location = "adminAppsRepo"
+
+	// Empty App Repo config should not cause an error
+	err = ValidateAppFrameworkSpec(nil, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("App Repo config is optional, should not cause an error. But, got the error: %v", err)
+	}
+
+	// Configuring indexes without volume config should return error
+	AppFrameworkWithoutVolumeSpec := enterpriseApi.AppFrameworkSpec{
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "cluster"},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   "local"},
+			},
+		},
+	}
+
+	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("App Repo config without volume details should return error")
+	}
+
+	// Defaults with invalid volume reference should return error
+	AppFramework.Defaults.VolName = "UnknownVolume"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Volume referred in the defaults should be a valid volume")
+	}
+
+	//Duplicate App Sources should return an error
+	tmpVolume := AppFramework.AppSources[1].VolName
+	tmpLocation := AppFramework.AppSources[1].Location
+
+	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
+	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Duplicate app sources should return an error")
+	}
+
+	AppFramework.AppSources[1].VolName = tmpVolume
+	AppFramework.AppSources[1].Location = tmpLocation
+
+	// Duplicate app sources names should cause an error
+	tmpAppSourceName := AppFramework.AppSources[1].Name
+	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Failed to detect duplicate app source names")
+	}
+	AppFramework.AppSources[1].Name = tmpAppSourceName
+
+	// If the default volume is not configured, then each index should be configured
+	// with an explicit volume info. If not, should return an error
+	AppFramework.AppSources[0].VolName = ""
+	AppFramework.Defaults.VolName = ""
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("If no default volume, App Source with missing volume info should return an error")
+	}
+
+	// If the AppSource doesn't have VolName, and if the defaults have it, shouldn't cause an error
+	AppFramework.Defaults.VolName = "msos_s2s3_vol"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
+	}
+
+	// Volume referenced from an index must be a valid volume
+	AppFramework.AppSources[0].VolName = "UnknownVolume"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Index with an invalid volume name should return error")
+	}
+	AppFramework.AppSources[0].VolName = "msos_s2s3_vol"
+
+	// if the CR supports only local apps, and if the app source scope is not local, should return error
+	AppFramework.AppSources[0].Scope = "cluster"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	if err == nil {
+		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
+	}
+
+	// If the app scope value other than "local" or "cluster" should return an error
+	AppFramework.AppSources[0].Scope = "unknown"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
+	}
+
+	// If the CR supports only local apps, and default is configured with "cluster" scope, that should be detected
+	AppFramework.AppSources[0].Scope = "local"
+	AppFramework.AppSources[1].Scope = "local"
+	AppFramework.AppSources[2].Scope = "local"
+
+	AppFramework.Defaults.Scope = "cluster"
+
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	if err == nil {
+		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
+	}
+	AppFramework.AppSources[0].Scope = "local"
+
+	// Default scope should be either "local" OR "cluster"
+	AppFramework.Defaults.Scope = "unknown"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
+	}
+	AppFramework.Defaults.Scope = "cluster"
+
+	// Missing scope, if the default scope is not specified should return error
+	AppFramework.Defaults.Scope = ""
+	AppFramework.AppSources[0].Scope = ""
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Missing scope should be detected, but failed")
+	}
+	AppFramework.Defaults.Scope = "local"
+	AppFramework.AppSources[0].Scope = "local"
+
+	// AppsRepoPollInterval should be in between the minAppsRepoPollInterval and maxAppsRepoPollInterval
+	// Default Poll interval
+	if splcommon.DefaultAppsRepoPollInterval < splcommon.MinAppsRepoPollInterval || splcommon.DefaultAppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", splcommon.MinAppsRepoPollInterval, splcommon.MaxAppsRepoPollInterval)
+	}
+
+	appFrameworkContext.AppsRepoStatusPollInterval = 0
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
+		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", splcommon.DefaultAppsRepoPollInterval)
+	}
+
+	// Check for minAppsRepoPollInterval
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
+	}
+
+	// Check for maxAppsRepoPollInterval
+	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
+	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
+	}
+
+	// Invalid volume name in defaults should return an error
+	AppFramework.Defaults.VolName = "unknownVolume"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
+	}
+}
+
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
-	SmartStoreIndexes := enterprisev1.SmartStoreSpec{
-		IndexList: []enterprisev1.IndexSpec{
+	SmartStoreIndexes := enterpriseApi.SmartStoreSpec{
+		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					MaxGlobalDataSizeMB:    6000,
 					MaxGlobalRawDataSizeMB: 7000,
 					VolName:                "msos_s2s3_vol"},
 			},
 			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					VolName: "msos_s2s3_vol"},
 			},
 			{Name: "salesdata3", // Missing RemotePath should be filled with the default "$_index_name"
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					MaxGlobalDataSizeMB:    2000,
 					MaxGlobalRawDataSizeMB: 3000,
 					VolName:                "msos_s2s3_vol"},
-				IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+				IndexAndCacheManagerCommonSpec: enterpriseApi.IndexAndCacheManagerCommonSpec{
 					HotlistBloomFilterRecencyHours: 48,
 					HotlistRecencySecs:             48 * 60 * 60},
 			},
 			{Name: "salesdata4", // Missing RemotePath should be filled with the default "$_index_name"
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 					MaxGlobalDataSizeMB:    4000,
 					MaxGlobalRawDataSizeMB: 5000,
 					VolName:                "msos_s2s3_vol"},
-				IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+				IndexAndCacheManagerCommonSpec: enterpriseApi.IndexAndCacheManagerCommonSpec{
 					HotlistBloomFilterRecencyHours: 24,
 					HotlistRecencySecs:             24 * 60 * 60},
 			},
@@ -661,8 +913,8 @@ maxGlobalRawDataSizeMB = 5000
 }
 func TestGetServerConfigEntries(t *testing.T) {
 
-	SmartStoreCacheManager := enterprisev1.CacheManagerSpec{
-		IndexAndCacheManagerCommonSpec: enterprisev1.IndexAndCacheManagerCommonSpec{
+	SmartStoreCacheManager := enterpriseApi.CacheManagerSpec{
+		IndexAndCacheManagerCommonSpec: enterpriseApi.IndexAndCacheManagerCommonSpec{
 			HotlistRecencySecs:             24 * 60 * 60,
 			HotlistBloomFilterRecencyHours: 24,
 		},
@@ -700,8 +952,8 @@ max_concurrent_uploads = 6
 
 func TestGetSmartstoreIndexesDefaults(t *testing.T) {
 
-	SmartStoreDefaultsConf := enterprisev1.IndexConfDefaultsSpec{
-		IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+	SmartStoreDefaultsConf := enterpriseApi.IndexConfDefaultsSpec{
+		IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 			VolName:                "s2s3_vol",
 			MaxGlobalDataSizeMB:    50 * 1024,
 			MaxGlobalRawDataSizeMB: 60 * 1024,
@@ -728,65 +980,26 @@ maxGlobalRawDataSizeMB = 61440
 
 }
 
-func TestCheckIfVolumeExists(t *testing.T) {
-	SmartStoreConfig := enterprisev1.SmartStoreSpec{
-		VolList: []enterprisev1.VolumeSpec{
-			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
-		},
-		IndexList: []enterprisev1.IndexSpec{
-			{Name: "salesdata1", RemotePath: "remotepath1",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata2", RemotePath: "remotepath2",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-			{Name: "salesdata3", RemotePath: "remotepath3",
-				IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
-					VolName: "msos_s2s3_vol"},
-			},
-		},
-	}
-
-	// Volume that doesn't should error out
-	_, err := checkIfVolumeExists(SmartStoreConfig.VolList, "random_volume_name")
-
-	if err == nil {
-		t.Errorf("if the volume doesn't exists, error should be reported")
-	}
-
-	// Volume that exists should not error out
-	index := len(SmartStoreConfig.VolList) - 1
-	returnedIndex, err := checkIfVolumeExists(SmartStoreConfig.VolList, SmartStoreConfig.VolList[index].Name)
-
-	if err != nil {
-		t.Errorf("existing volume should not error out. index id: %d, error: %s", index, err.Error())
-	} else if index != returnedIndex {
-		t.Errorf("Expected index: %d, but returned index id: %d", index, returnedIndex)
-	}
-}
-
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
-	cr := enterprisev1.ClusterMaster{
+	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.ClusterMasterSpec{
-			SmartStore: enterprisev1.SmartStoreSpec{
-				VolList: []enterprisev1.VolumeSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
 				},
 
-				IndexList: []enterprisev1.IndexSpec{
-					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+				IndexList: []enterpriseApi.IndexSpec{
+					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
-					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterprisev1.IndexAndGlobalCommonSpec{
+					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
 						VolName: "msos_s2s3_vol"},
 					},
 				},
@@ -858,7 +1071,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	var replicas int32 = 1
 
 	// Create CR
-	cr := enterprisev1.ClusterMaster{
+	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
@@ -891,7 +1104,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Default spec
-	spec := &enterprisev1.CommonSplunkSpec{}
+	spec := &enterpriseApi.CommonSplunkSpec{}
 
 	test := func(want string) {
 		ss := statefulSet.DeepCopy()
@@ -906,12 +1119,12 @@ func TestAddStorageVolumes(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	// Define PVCs for etc & var with storage capacity and storage class name defined
-	spec = &enterprisev1.CommonSplunkSpec{
-		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity:  "25Gi",
 			StorageClassName: "gp2",
 		},
-		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity:  "35Gi",
 			StorageClassName: "gp3",
 		},
@@ -919,23 +1132,23 @@ func TestAddStorageVolumes(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	// Define PVCs for etc & ephemeral for var
-	spec = &enterprisev1.CommonSplunkSpec{
-		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity:  "25Gi",
 			StorageClassName: "gp2",
 		},
-		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			EphemeralStorage: true,
 		},
 	}
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	// Define ephemeral for etc & PVCs for var
-	spec = &enterprisev1.CommonSplunkSpec{
-		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			EphemeralStorage: true,
 		},
-		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity:  "25Gi",
 			StorageClassName: "gp2",
 		},
@@ -943,11 +1156,11 @@ func TestAddStorageVolumes(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
-	spec = &enterprisev1.CommonSplunkSpec{
-		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			EphemeralStorage: true,
 		},
-		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			EphemeralStorage: true,
 			StorageCapacity:  "25Gi",
 			StorageClassName: "gp2",
@@ -956,8 +1169,8 @@ func TestAddStorageVolumes(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
 
 	// Define invalid EtcVolumeStorageConfig
-	spec = &enterprisev1.CommonSplunkSpec{
-		EtcVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity: "----",
 		},
 	}
@@ -967,8 +1180,8 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Define invalid VarVolumeStorageConfig
-	spec = &enterprisev1.CommonSplunkSpec{
-		VarVolumeStorageConfig: enterprisev1.StorageClassSpec{
+	spec = &enterpriseApi.CommonSplunkSpec{
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity: "----",
 		},
 	}
@@ -977,4 +1190,103 @@ func TestAddStorageVolumes(t *testing.T) {
 		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
 	}
 
+}
+
+func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
+	var configMapName = "testConfgMap"
+	var namespace = "testNameSpace"
+
+	dataMap := make(map[string]string)
+	dataMap["a"] = "x"
+	dataMap["b"] = "y"
+	dataMap["z"] = "z"
+	cm := splctrl.PrepareConfigMap(configMapName, namespace, dataMap)
+	var mode int32 = 755
+
+	test := func(cm *corev1.ConfigMap, mode *int32, want string) {
+		f := func() (interface{}, error) {
+			return getVolumeSourceMountFromConfigMapData(cm, mode), nil
+		}
+		configTester(t, "getVolumeSourceMountFromConfigMapData()", f, want)
+
+	}
+
+	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
+}
+
+func TestGetLivenessProbe(t *testing.T) {
+	cr := &enterpriseApi.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	livenessProbe := getLivenessProbe(cr, spec, 0)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
+		t.Errorf("Failed to set Liveness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
+	livenessProbe = getLivenessProbe(cr, spec, 0)
+	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
+		t.Errorf("Failed to set Liveness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	livenessProbe = getLivenessProbe(cr, spec, 20)
+	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+func TestGetReadinessProbe(t *testing.T) {
+	cr := &enterpriseApi.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	readinessProbe := getReadinessProbe(cr, spec, 0)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
+		t.Errorf("Failed to set Readiness probe default delay")
+	}
+
+	// Test if the default delay can be overwritten with configured delay
+	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
+	readinessProbe = getReadinessProbe(cr, spec, 0)
+	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
+		t.Errorf("Failed to set Readiness probe initial delay with configured value")
+	}
+
+	// Test if the additional Delay can override the default and the cofigured delay values
+	readinessProbe = getReadinessProbe(cr, spec, 20)
+	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set additional delay overriding the default and configured")
+	}
+}
+
+func TestGetProbe(t *testing.T) {
+
+	command := []string{
+		"grep",
+		"ready",
+		"file.txt",
+	}
+
+	test := func(command []string, delay, timeout, period int32, want string) {
+		f := func() (interface{}, error) {
+			return getProbe(command, delay, timeout, period), nil
+		}
+		configTester(t, "getProbe()", f, want)
+
+	}
+
+	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
 }

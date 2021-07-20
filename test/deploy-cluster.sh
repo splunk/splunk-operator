@@ -11,6 +11,11 @@ if [[ -z "${TEST_CLUSTER_PLATFORM}" ]]; then
   export TEST_CLUSTER_PLATFORM="${CLUSTER_PROVIDER}"
 fi
 
+if [[ -z "${TEST_CLUSTER_NAME}" ]]; then
+  echo "Test Cluster Name Not Set in Environment Variables. Changing to env.sh value"
+  export TEST_CLUSTER_NAME="${CLUSTER_NAME}"
+fi
+
 if [[ -z "${CLUSTER_NODES}" ]]; then
   echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
   export CLUSTER_NODES="${NUM_NODES}"

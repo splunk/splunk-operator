@@ -5,13 +5,14 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
-OLD_VERSIONS="v1beta1 v1alpha3 v1alpha2"
+OLD_VERSIONS="v1 v1beta1 v1alpha3 v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
 OLM_CATALOG=deploy/olm-catalog
 OLM_CERTIFIED=deploy/olm-certified
 YAML_SCRIPT_FILE=.yq_script.yaml
+CRDS_PATH="deploy/crds"
 
 # create yq template to append older CRD versions
 rm -f $YAML_SCRIPT_FILE
@@ -90,7 +91,7 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: metadata.annotations.alm-examples
   value: |-
     [{
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "IndexerCluster",
       "metadata": {
         "name": "example",
@@ -101,7 +102,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "LicenseMaster",
       "metadata": {
         "name": "example",
@@ -110,7 +111,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       "spec": {}
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "SearchHeadCluster",
       "metadata": {
         "name": "example",
@@ -121,7 +122,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v1",
+      "apiVersion": "enterprise.splunk.com/v2",
       "kind": "Standalone",
       "metadata": {
         "name": "example",
@@ -145,3 +146,22 @@ yq w $OLM_CATALOG/splunk/splunk.package.yaml packageName "splunk-certified" > $O
 
 # Mac OS expects sed -i '', Linux expects sed -i''. To workaround this, using .bak
 zip $OLM_CERTIFIED/splunk.zip -j $OLM_CERTIFIED/splunk $OLM_CERTIFIED/splunk/*
+
+# This adds the 'protocol' field back to the CRDs, when we try to run make package or make generate.
+# NOTE: This is a temporary fix and should not be needed in future operator-sdk upgrades.
+function updateCRDS {
+    for crd in `ls $1`
+    do
+        echo Updating crd: $crd
+        line_num=`grep -n "x-kubernetes-list-map-keys" $1/$crd | awk -F ":" '{print$1}'`
+        line_num=$(($line_num-2))
+        awk 'NR==v1{print "                          - protocol"}1' v1="${line_num}" $1/$crd > tmp.out
+        mv tmp.out $1/$crd
+    done
+}
+
+echo Updating $CRDS_PATH
+updateCRDS $CRDS_PATH
+
+echo Updating $OLM_CATALOG/splunk/$VERSION
+updateCRDS $OLM_CATALOG/splunk/$VERSION
