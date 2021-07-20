@@ -88,9 +88,9 @@ metadata:
 spec:
   hosts:
   - "splunk.example.com"
-    gateways:
+  gateways:
   - "splunk-web"
-    tcp:
+  tcp:
   - match:
     - port: 80
     route:

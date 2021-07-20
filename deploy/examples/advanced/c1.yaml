@@ -20,6 +20,27 @@ metadata:
 spec:
   licenseMasterRef:
     name: lm-example
+  smartstore:
+    defaults:
+        remotePath: $_index_name
+        volumeName: <my_volume_name>
+    indexes:
+      - name: main
+        remotePath: $_index_name
+        volumeName: <my_volume_name>
+    volumes:
+      - name: <my_volume_name>
+        path: <my_path>
+        endpoint: https://<my_s3_URL>
+        secretRef: <my_secret_name>
+  volumes:
+    - name: apps
+      configMap:
+        name: splunk-apps
+  defaults: |-
+    splunk:
+      apps_location:
+        - "/mnt/apps/<my_index_config>.tgz"
 ---
 apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster

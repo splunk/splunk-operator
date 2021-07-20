@@ -7,7 +7,7 @@
 
 * Upgraded operator-sdk version from v0.15.1 to v0.18.2
 
-* CSPL-633 - Added new 'ExtraEnv' parameter in CR spec. This enables customers to pass 'ExtraEnv' variables to the Splunk instance containers
+* CSPL-633 - Added new 'extraEnv' parameter in CR spec. This enables customers to pass 'ExtraEnv' variables to the Splunk instance containers
 
 * Documentation updates to include
   * Updated documentation for Multisite example

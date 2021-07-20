@@ -32,16 +32,13 @@ kubectl apply -f splunk-operator.yaml
 
 ## Admin Installation for All Namespaces
 
-_**Note:** The Admin Installation for all Namespaces is not functioning as intended with this release. We're tracking the issue [here](https://github.com/splunk/splunk-operator/issues/206). Check the status of the issue before attempting to use these instructions._
-
---------------------
-
-
-If you want to configure a single instance of the operator to manage all the namespaces of your cluster, use the alternative cluster scope installation yaml file:
+If you want to configure a single instance of the operator to watch all the namespaces of your cluster while managing deployments only in the namespace `splunk-operator`, use the alternative cluster scope installation yaml file:
 
 ```
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-cluster.yaml
 ```
+
+**Note**: The operator has the ability to watch, list secret objects in all namespaces.
 
 When running at cluster scope, you will need to bind the `splunk:operator:namespace-manager` ClusterRole to the `splunk-operator` ServiceAccount in all namespaces you want it to manage. 
 
