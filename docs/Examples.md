@@ -178,7 +178,7 @@ spec:
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the Cluster Master (CM) for the indexer cluster.
+Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster.
 
 Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
@@ -213,8 +213,7 @@ spec:
   varStorage: "128Gi"
 EOF
 ```
-The Splunk Operator is responsible for configuring and maintaing the connection between the CM and the index cluster peers, but it does not manage Splunk Apps. 
-The cluster master (CM) manages the [Splunk Apps and Add-ons](#installing-splunk-apps) distributed to all peers in the indexer cluster.  
+The Splunk Operator is responsible for configuring and maintaing the connection between the cluster master and the index cluster peers, but it does not manage Splunk Apps. The cluster master manages the [Splunk Apps and Add-ons](#installing-splunk-apps) distributed to all peers in the indexer cluster.  
 
 This also allows the Splunk Operator to control the upgrade cycle and use the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
@@ -226,7 +225,7 @@ The passwords for the instance are generated automatically. To review the passwo
 ### Monitoring Console
 The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. 
 
-The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
+The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running a Monitoring Console pod; you can start the pod before or after the other CR's in the namespace. The Monitoring Console pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
 
 ** Add code block example for ADDING MC after a cluster is running
 ** Update CM and Cluster examples above to define the `monitoringConsoleRef`
