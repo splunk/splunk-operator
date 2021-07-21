@@ -210,6 +210,13 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - watch
+          - list
+        - apiGroups:
           - enterprise.splunk.com
           resources:
           - '*'
