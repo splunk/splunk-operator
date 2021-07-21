@@ -1041,13 +1041,23 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 		if isAppFramework {
 			if volume.Type == "" {
 				return fmt.Errorf("Remote volume Type is missing")
+			} else if volume.Type != "s3" {
+				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported.")
 			}
+
 			if volume.Provider == "" {
 				return fmt.Errorf("S3 Provider is missing")
+			} else if !isValidProvider(volume.Provider) {
+				return fmt.Errorf("S3 Provider is invalid")
 			}
 		}
 	}
 	return nil
+}
+
+// isValidProvider checks if the provider specified is supported
+func isValidProvider(provider string) bool {
+	return provider == "aws" || provider == "minio"
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec
