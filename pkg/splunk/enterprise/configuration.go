@@ -1042,7 +1042,7 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 			if volume.Type == "" {
 				return fmt.Errorf("Remote volume Type is missing")
 			} else if volume.Type != "s3" {
-				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported.")
+				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported")
 			}
 
 			if volume.Provider == "" {
