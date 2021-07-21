@@ -63,10 +63,10 @@ image: docker.io/splunk/splunk-operator:<desired_operator_version>
 imagePullPolicy: IfNotPresent 
 ```
 ​
-To verify that a new Splunk Enterprise Docker image was applied to a pod, you can check the version of the image. Example:
+To verify that a new Splunk Enterprise Docker image was applied to a pod, you can check any running pod and verify the version of the image. Example:
 ​
 ```
-kubectl get pods splunk-default-monitoring-console-0 -o yaml | grep -i image
+kubectl get pods splunk-monitoring-console-0 -o yaml | grep -i image
 image: splunk/splunk:8.1.2
 imagePullPolicy: IfNotPresent
 image: splunk/splunk:8.1.2
@@ -78,5 +78,4 @@ This is an example of the process followed by the Splunk Operator if the operato
 1. A new Splunk Operator pod will be created, and the existing operator pod will be terminated.
 2. Any existing License Master, Search Head, Deployer, ClusterMaster, Standalone pods will be terminated to be redeployed with the upgraded spec.
 3. After a ClusterMaster pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
-4. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
 * Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first
