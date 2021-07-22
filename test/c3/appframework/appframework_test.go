@@ -411,9 +411,6 @@ var _ = Describe("c3appfw test", func() {
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
 
-			// Verify ES app is installed locally on SHC Deployer
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, false, "disabled", false, false)
-
 			// Verify apps are installed on SHs
 			podNames := []string{}
 			for i := 0; i < int(shSpec.Replicas); i++ {
