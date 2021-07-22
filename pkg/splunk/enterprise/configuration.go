@@ -1039,15 +1039,26 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
-			if volume.Type == "" {
-				return fmt.Errorf("Remote volume Type is missing")
+			if !isValidStorageType(volume.Type) {
+				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported")
 			}
-			if volume.Provider == "" {
-				return fmt.Errorf("S3 Provider is missing")
+
+			if !isValidProvider(volume.Provider) {
+				return fmt.Errorf("S3 Provider is invalid")
 			}
 		}
 	}
 	return nil
+}
+
+// isValidStorageType checks if the storage type specified is valid and supported
+func isValidStorageType(storage string) bool {
+	return storage != "" && storage == "s3"
+}
+
+// isValidProvider checks if the provider specified is valid and supported
+func isValidProvider(provider string) bool {
+	return provider != "" && (provider == "aws" || provider == "minio")
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec
