@@ -1,9 +1,21 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 1.0.2 (2021-08-04)
+* This is the 1.0.2 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.1 image with it
+
+* CSPL-725 - Operator App Management Framework Phase 2 (Beta Release)
+  
+* CSPL-1139: Make the Liveness and Readiness Probe initial delay time configurable
+
+* Documentation updates to include
+  * Updated documentation for App Framework
+  * Updated documentation for Smartstore examples
 ## 1.0.1 (2021-06-09)
 * This is the 1.0.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
 
-* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.1 image with it
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.0 image with it
 
 * Upgraded operator-sdk version from v0.15.1 to v0.18.2
 
