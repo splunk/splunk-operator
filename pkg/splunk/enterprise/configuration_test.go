@@ -846,6 +846,19 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err == nil {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
+
+	// Invalid remote volume type should return error.
+	AppFramework.VolList[0].Type = "s4"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
+	}
+
+	AppFramework.VolList[0].Provider = "invalid-provider"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
+	}
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
