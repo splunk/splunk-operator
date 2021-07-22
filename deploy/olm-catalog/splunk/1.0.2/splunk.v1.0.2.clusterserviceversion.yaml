@@ -251,7 +251,7 @@ spec:
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:8.2.1
+                  value: docker.io/splunk/splunk:8.2.1-a1
                 image: docker.io/splunk/splunk-operator:1.0.2
                 imagePullPolicy: IfNotPresent
                 name: splunk-operator
