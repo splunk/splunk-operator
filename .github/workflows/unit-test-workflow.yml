@@ -1,0 +1,39 @@
+name: Unit Test and Coveralls
+on: 
+  push:
+    branches:
+      - "develop"
+      - "CSPL-1092-circleci-github-actions-migration"
+  pull_request:
+    branches:
+      - "develop"
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.13.6'
+      - name: Install golint
+        run: |
+          go version
+          go get -u golang.org/x/lint/golint
+      - name: Install goveralls
+        run: |
+          go version
+          go get github.com/mattn/goveralls@latest
+      - name: Check Source formatting
+        run: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - name: Lint source code
+        run: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - name: Run Unit Tests
+        run: make test  
+      - name: Run Code Coverage
+        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+      - name: Upload Coverage artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage.out
+          path: coverage.out

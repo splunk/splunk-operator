@@ -1,0 +1,79 @@
+name: Smoke Test WorkFlow
+on:
+  push:
+    branches:
+        - "develop"
+        - "CSPL-1092-circleci-github-actions-migration"
+jobs:
+  smoke-tests:
+    strategy:
+      matrix:
+        test: [basic]
+    runs-on: ubuntu-latest
+    env:
+      NUM_NODES: 1
+      NUM_WORKERS: 3
+      ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      SPLUNK_OPERATO_IMAGE_FILENAME: splunk-operator
+      TEST_FOCUS: "^.*?\b${{ matrix.test }}\b.*?\bsmoke\b.*?$"
+      TEST_CLUSTER_PLATFORM: eks
+      TEST_CLUSTER_NAME: "eks-integration-test-cluster-smoke-${{ matrix.test }}"
+    steps:
+      - name: Chekcout code
+        uses: actions/checkout@v2   
+      - name: Install Kubectl
+        uses: Azure/setup-kubectl@v1
+        with:
+          version: 'v1.16.13'
+      - name: Install Python
+        uses: actions/setup-python@v2
+      - name: Install AWS CLI
+        run: |
+          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+          unzip awscli-bundle.zip
+          sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+          aws --version
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.13.6'
+      - name: Install Go Lint
+        run: |
+          go version
+          go get -u golang.org/x/lint/golint
+      - name: Install EKS CTL
+        run: |
+          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin
+          eksctl version
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@v1
+      - name: Install Operator SDK
+        run: |
+          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.19.0/operator-sdk-v0.19.0-x86_64-linux-gnu
+          sudo chmod +x /usr/local/bin/operator-sdk
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Make Splunk Operator Image
+        run: |
+          docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
+          operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Push Splunk Operator Image to ECR
+        run: |
+          echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
+          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Create EKS cluster
+        run: |
+           make cluster-up
+      - name: Cleanup up EKS cluster
+        if: ${{ always() }}
+        run: | 
+           make cluster-down
