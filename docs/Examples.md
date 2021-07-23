@@ -52,15 +52,26 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMast
 #### Cluster Master
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm
   finalizers:
   - enterprise.splunk.com/delete-pvc
+spec:
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
-#### Indexer part
+The Splunk Operator is responsible for configuring and maintaing the connection between the cluster master and the index cluster peers, but it does not manage Splunk Apps. The cluster master manages the Splunk Apps and Add-ons distributed to all peers in the indexer cluster. See [Installing Splunk Apps](#installing-splunk-apps) for more information.
+
+The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
+
+The process is similar to build a multisite cluster, through defining a different zone affinity and site in each child IndexerCluster resource. See [Multisite cluster examples](MultisiteExamples.md)
+
+The passwords for the instance are generated automatically. To review the passwords, refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
+
+#### Indexer cluster peers
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v1
@@ -72,6 +83,8 @@ metadata:
 spec:
   clusterMasterRef:
     name: cm
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
 This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set.
@@ -88,6 +101,7 @@ splunk-example-indexer-2                    1/1     Running   0          29s
 splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
 
+#### Scaling cluster peers using replicas
 If you want to add more indexers as cluster peers, update your `IndexerCluster` CR and define the `replicas` parameter:
 
 ```yaml
@@ -103,6 +117,8 @@ spec:
   clusterMasterRef:
     name: cm
   replicas: 3
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
 
@@ -136,7 +152,7 @@ All CR's that support a `replicas` field can be scaled using the `kubectl scale`
 $ kubectl scale idc example --replicas=5
 indexercluster.enterprise.splunk.com/example scaled
 ```
-
+#### Scaling cluster peers using pod autoscaling
 You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 
 ```yaml
@@ -162,6 +178,7 @@ NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   
 idc-example   IndexerCluster/example   16%/50%   5         10        5          15m
 ```
 
+#### Create a search head to search your index cluster
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
 
 ```yaml
@@ -175,11 +192,14 @@ metadata:
 spec:
   clusterMasterRef:
     name: cm
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
 
 Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster.
 
+#### Another Cluster Master example
 Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
 ```yaml
@@ -211,16 +231,10 @@ spec:
   replicas: 3
   storageClassName: local
   varStorage: "128Gi"
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
-The Splunk Operator is responsible for configuring and maintaing the connection between the cluster master and the index cluster peers, but it does not manage Splunk Apps. The cluster master manages the [Splunk Apps and Add-ons](#installing-splunk-apps) distributed to all peers in the indexer cluster.  
-
-This also allows the Splunk Operator to control the upgrade cycle and use the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
-
-This example can be extended to build a [multisite cluster](MultisiteExamples.md) by defining a different zone affinity and site in each child IndexerCluster resource.
-
-The passwords for the instance are generated automatically. To review the passwords, refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
-
 
 ### Monitoring Console
 The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. 
