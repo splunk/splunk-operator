@@ -247,7 +247,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   monitoringConsoleRef:
-    name: mc_test
+    name: example_mc
 ```
 
 Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
