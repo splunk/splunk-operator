@@ -6,7 +6,10 @@ This document includes various examples for configuring Splunk Enterprise deploy
   - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
     - [Indexer Clusters](#indexer-clusters)
       - [Cluster Master](#cluster-master)
-      - [Indexer part](#indexer-part)
+      - [Indexer cluster peers](#indexer-cluster-peers)
+      - [Scaling cluster peers using replicas](#scaling-cluster-peers-using-replicas)
+      - [Scaling cluster peers using pod autoscaling](#scaling-cluster-peers-using-pod-autoscaling)
+      - [Create a search head for your index cluster](#create-a-search-head-for-your-index-cluster)
     - [Monitoring Clonsole](#monitoring-console)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
@@ -178,7 +181,7 @@ NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   
 idc-example   IndexerCluster/example   16%/50%   5         10        5          15m
 ```
 
-#### Create a search head to search your index cluster
+#### Create a search head for your index cluster
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
 
 ```yaml
@@ -237,21 +240,31 @@ EOF
 ```
 
 ### Monitoring Console
-The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. 
+The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. The Monitoring Console pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
 
-The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running a Monitoring Console pod; you can start the pod before or after the other CR's in the namespace. The Monitoring Console pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v2
+kind: Standalone
+metadata:
+  name: s1
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  monitoringConsoleRef:
+    name: example_mc
+EOF
+```
 
-** Add code block example for ADDING MC after a cluster is running
-** Update CM and Cluster examples above to define the `monitoringConsoleRef`
-** Update SHC example below to define the `monitoringConsoleRef`
+There is no preferred order when running a Monitoring Console pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster master and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
+
 
 ### Search Head Clusters
 
-To scale search performance and provide high availability, customers will
-often want to deploy a [search head cluster](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC).
-Similar to a `Standalone` search head, you can create a search head cluster
-that uses your indexer cluster by just adding a new `SearchHeadCluster` resource
-with an `clusterMasterRef` parameter pointing to the cluster master we created in the above steps:
+A search head cluster is used to distribute users and search load across multiple instances, and provides high availabilty for search jobs. See [About search head clustering](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC) in the Splunk Enterprise documentation.
+
+You can create a search head cluster that is configured to communicate with your indexer cluster by using a `SearchHeadCluster` resource
+and adding the `clusterMasterRef` parameter. 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -264,10 +277,12 @@ metadata:
 spec:
   clusterMasterRef:
     name: cm
+  monitoringConsoleRef:
+    name: example_mc
 EOF
 ```
 
-This will automatically create a deployer with 3 search heads clustered together (search head clusters require a minimum of 3 members):
+This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members.
 
 ```
 $ kubectl get pods
@@ -286,13 +301,13 @@ splunk-operator-7c5599546c-pmbc2             1/1     Running   0          12m
 splunk-single-standalone-0                   1/1     Running   0          11m
 ```
 
-Similar to indexer clusters, you can easily scale search head clusters by just patching the `replicas` parameter.
+Similar to indexer clusters, you can scale a search head cluster by patching the `replicas` parameter.
 
 The passwords for the instance are generated automatically. To review the passwords, refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions
 
 ### Cluster Services
 
-Note that the creation of `SearchHeadCluster`, `ClusterMaster` and `IndexerCluster` resources also creates corresponding Kubernetes services:
+The creation of `SearchHeadCluster`, `ClusterMaster`, `MonitoringConsole`, and `IndexerCluster` resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
@@ -338,7 +353,7 @@ kubectl delete clustermaster cm
 
 ## SmartStore Index Management
 
-Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. For further details, see [SmartStore Resource Guide](SmartStore.md).
+Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. See [SmartStore Resource Guide](SmartStore.md).
 
 ## Using Default Settings
 
