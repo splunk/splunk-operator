@@ -37,7 +37,7 @@ The two basic building blocks of Splunk Enterprise infrastructure are search hea
 that can perform either, or both of these roles.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: single
@@ -77,7 +77,7 @@ The passwords for the instance are generated automatically. To review the passwo
 #### Indexer cluster peers
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example
@@ -109,7 +109,7 @@ If you want to add more indexers as cluster peers, update your `IndexerCluster` 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example
@@ -166,7 +166,7 @@ metadata:
   name: idc-example
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v1
+    apiVersion: enterprise.splunk.com/v2
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -186,7 +186,7 @@ To create a standalone search head that is preconfigured to search your indexer 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: single
@@ -207,7 +207,7 @@ Having a separate CR for cluster master allows you to define parameters differen
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: cm
@@ -221,7 +221,7 @@ spec:
     storageClassName: customStorageClass
     storageCapacity: 25Gi
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: idxc-part1
@@ -268,7 +268,7 @@ and adding the `clusterMasterRef` parameter.
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -373,7 +373,7 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -412,10 +412,18 @@ for more details.
 
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
 
+With the latest release of the Splunk Operator, a Beta version of the new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
+
+The below method of installing apps continues to be supported, but will be deprecated in future releases.
+
 The Splunk Operator can be used to automatically install apps for you by
 including the `apps_location` parameter in your default settings. The value
 may either be a comma-separated list of apps or a YAML list, with each app
 referenced using a filesystem path or URL.
+
+Note: In the case of `SearchHeadCluster` or `ClusterMaster` when the apps are configured through 
+the `apps_location`, all those apps will be deployed to the Search Heads or Indexers respectively.
+To install the apps locally to the Deployer or ClusterMaster, the apps should be specified through `apps_location_local`.
 
 When using filesystem paths, the apps should be mounted using the
 `volumes` parameter. This may be used to reference either Kubernetes
@@ -431,8 +439,12 @@ kubectl create configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
 You can have the Splunk Operator install these automatically using something
 like the following:
 
+
+### Example: Standalone
+In the standalone example, app1 and app2 are installed on Splunk Standalone instances.
+
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -448,6 +460,32 @@ spec:
       apps_location:
         - "/mnt/apps/app1.tgz"
         - "/mnt/apps/app2.tgz"
+```
+
+
+### Example: Cluster Master
+In the ClusterMaster example, app3 and app4 are installed on any indexer instances that are managed by the cluster master. App5 and app6 are installed locally on the ClusterMaster instance.
+
+```yaml
+apiVersion: enterprise.splunk.com/v2
+kind: ClusterMaster
+metadata:
+  name: cmexample
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  volumes:
+    - name: apps
+      configMap:
+        name: splunk-apps
+  defaults: |-
+    splunk:
+      apps_location:
+        - "/mnt/apps/app3.tgz"
+        - "/mnt/apps/app4.tgz"
+      apps_location_local:
+        - "/mnt/apps/app5.tgz"
+        - "/mnt/apps/app6.tgz"
 ```
 
 If you are using a search head cluster, the deployer will be used to push
@@ -563,7 +601,7 @@ You can create a `LicenseMaster` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: LicenseMaster
 metadata:
   name: example
@@ -596,7 +634,7 @@ Once a LicenseMaster is created, you can configure your `Standalone` to use
 the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -613,7 +651,7 @@ While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -623,7 +661,7 @@ spec:
   licenseMasterRef:
     name: example
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: IndexerCluster
 metadata:
   name: example-idc
@@ -638,7 +676,7 @@ EOF
 In order to forward `LicenseMaster` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: LicenseMaster
 metadata:
   name: example
@@ -711,7 +749,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret objec
 Enterprise custom resource to use your External LM:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: example
@@ -780,7 +818,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret creat
 Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v2
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -830,7 +868,7 @@ metadata:
   name: splunk-default-secret
   namespace: default
   ownerReferences:
-  - apiVersion: enterprise.splunk.com/v1beta1
+  - apiVersion: enterprise.splunk.com/v2
     controller: false
     kind: SearchHeadCluster
     name: example-shc

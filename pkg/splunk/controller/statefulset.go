@@ -282,3 +282,17 @@ func GetStatefulSetByName(c splcommon.ControllerClient, namespacedName types.Nam
 
 	return &statefulset, nil
 }
+
+// IsStatefulSetScalingUp checks if we are currently scaling up
+func IsStatefulSetScalingUp(client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (bool, error) {
+	scopedLog := log.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
+	current, err := GetStatefulSetByName(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
+		return false, err
+	}
+
+	return *current.Spec.Replicas < desiredReplicas, nil
+}

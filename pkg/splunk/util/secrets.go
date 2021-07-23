@@ -478,6 +478,7 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 // GetSecretByName retrieves namespace scoped secret object for a given name
 func GetSecretByName(c splcommon.ControllerClient, cr splcommon.MetaObject, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
+	scopedLog := log.WithName("GetSecretByName").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Check if a namespace scoped secret exists
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
@@ -485,6 +486,7 @@ func GetSecretByName(c splcommon.ControllerClient, cr splcommon.MetaObject, name
 
 	if err != nil {
 		// Didn't find it
+		scopedLog.Error(err, "Unable to get secret", "secret name", name)
 		return nil, err
 	}
 

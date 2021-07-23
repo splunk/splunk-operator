@@ -6,6 +6,7 @@ require (
 	github.com/Azure/go-autorest/autorest/adal v0.9.13 // indirect
 	github.com/aws/aws-sdk-go v1.37.24
 	github.com/go-logr/logr v0.1.0
+	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
 	github.com/operator-framework/operator-sdk v0.18.2
@@ -43,8 +44,12 @@ replace (
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.18.17
 )
 
-replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
+replace (
+	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
 
-replace github.com/openshift/api => github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad // Required until https://github.com/operator-framework/operator-lifecycle-manager/pull/1241 is resolved
+	github.com/openshift/api => github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad // Required until https://github.com/operator-framework/operator-lifecycle-manager/pull/1241 is resolved
 
-replace golang.org/x/text => golang.org/x/text v0.3.5 // Fix CVE-2020-14040 and CVE-2020-28852
+	golang.org/x/net => golang.org/x/net v0.0.0-20210614182718-04defd469f4e // CVE-2021-33194 and CVE-2021-31525
+
+	golang.org/x/text => golang.org/x/text v0.3.5 // Fix CVE-2020-14040 and CVE-2020-28852
+)
