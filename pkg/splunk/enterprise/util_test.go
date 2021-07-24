@@ -196,9 +196,11 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 func TestApplyAppListingConfigMap(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "clusterMaster",
-			//Name:      "idxCluster",
+			Name:      "example",
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
@@ -216,19 +218,19 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeCluster},
 					},
-					{Name: "authenticationApps",
-						Location: "authenticationAppsRepo",
+					{Name: "appsWithPreConfigRequired",
+						Location: "repoForAppsWithPreConfigRequired",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   "clusterWithPreConfig"},
 					},
 				},
 			},
@@ -250,7 +252,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	S3Response.Objects = createRemoteObjectList("c41d8cd98f00", startAppPathAndName, 3322, nil, 10)
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[1].Name] = S3Response
 
-	startAppPathAndName = "authenticationCategoryOne.tgz"
+	startAppPathAndName = "appWithPreConfigReqOne.tgz"
 	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 4322, nil, 10)
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
@@ -273,9 +275,14 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		configTester(t, "(ApplyAppListingConfigMap)", f, want)
 	}
 
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-clusterMaster--app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"data":{"app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/1_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/2_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/3_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/4_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/5_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/6_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/7_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/8_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/9_authenticationCategoryOne.tgz\"\n      - \"/init-apps/authenticationApps/10_authenticationCategoryOne.tgz\"\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"app-list-cluster-with-pre-config.yaml":"splunk:\n  apps_location:\n      - \"/init-apps/appsWithPreConfigRequired/1_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/2_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/3_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/4_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/5_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/6_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/7_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/8_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/9_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/10_appWithPreConfigReqOne.tgz\"","app-list-cluster.yaml":"splunk:\n  app_paths_install:\n    idxc:\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
+
+	// Make sure that the App Listing configMap works fine for SearchHeadCluster
+	cr.Kind = "SearchHeadCluster"
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-searchheadcluster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"SearchHeadCluster","name":"example","uid":"","controller":true}]},"data":{"app-list-cluster-with-pre-config.yaml":"splunk:\n  apps_location:\n      - \"/init-apps/appsWithPreConfigRequired/1_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/2_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/3_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/4_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/5_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/6_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/7_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/8_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/9_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/10_appWithPreConfigReqOne.tgz\"","app-list-cluster.yaml":"splunk:\n  app_paths_install:\n    shc:\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
 
 	// Now test the Cluster master stateful set, to validate the Pod updates with the app listing config map
+	cr.Kind = "ClusterMaster"
 	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -291,7 +298,12 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		configTester(t, fmt.Sprintf("getClusterMasterStatefulSet"), f, want)
 	}
 
-	testStsWithAppListVolMounts(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-clusterMaster-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"clusterMaster","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"},"annotations":{"appListingRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-clusterMaster-cluster-master-secret-v1","defaultMode":420}},{"name":"mnt-app-listing","configMap":{"name":"splunk-clusterMaster--app-list","items":[{"key":"app-list-local.yaml","path":"app-list-local.yaml","mode":420},{"key":"appsUpdateToken","path":"appsUpdateToken","mode":420}],"defaultMode":420}},{"name":"init-apps","emptyDir":{}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/app-listing/app-list-local.yaml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-app-listing","mountPath":"/mnt/app-listing/"},{"name":"init-apps","mountPath":"/init-apps/"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":455,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":165,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-clusterMaster-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-clusterMaster-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-clusterMaster-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-clusterMaster-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+	testStsWithAppListVolMounts(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-example-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"},"annotations":{"appListingRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-example-cluster-master-secret-v1","defaultMode":420}},{"name":"mnt-app-listing","configMap":{"name":"splunk-example-clustermaster-app-list","items":[{"key":"app-list-cluster-with-pre-config.yaml","path":"app-list-cluster-with-pre-config.yaml","mode":420},{"key":"app-list-cluster.yaml","path":"app-list-cluster.yaml","mode":420},{"key":"app-list-local.yaml","path":"app-list-local.yaml","mode":420},{"key":"appsUpdateToken","path":"appsUpdateToken","mode":420}],"defaultMode":420}},{"name":"init-apps","emptyDir":{}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/app-listing/app-list-local.yaml,/mnt/app-listing/app-list-cluster.yaml,/mnt/app-listing/app-list-cluster-with-pre-config.yaml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-app-listing","mountPath":"/mnt/app-listing/"},{"name":"init-apps","mountPath":"/init-apps/"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":1800,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-example-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-example-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+
+	// Test to ensure that the Applisting config map is empty after the apps are installed successfully
+	markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"appsUpdateToken":"1601945361"}}`)
+
 }
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
@@ -472,19 +484,19 @@ func TestHandleAppRepoChanges(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 				},
 			},
@@ -630,7 +642,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete)
 		if err != nil {
@@ -652,7 +664,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 		if err != nil {

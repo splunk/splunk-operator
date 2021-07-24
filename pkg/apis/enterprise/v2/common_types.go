@@ -45,6 +45,13 @@ const (
 	RepoStatePassive
 )
 
+// Values to represent the App Source scope
+const (
+	ScopeLocal                = "local"
+	ScopeCluster              = "cluster"
+	ScopeClusterWithPreConfig = "clusterWithPreConfig"
+)
+
 // AppDeploymentStatus represents the status of an App on the Pod
 type AppDeploymentStatus uint8
 
@@ -237,7 +244,7 @@ type AppSourceDefaultSpec struct {
 	// Remote Storage Volume name
 	VolName string `json:"volumeName,omitempty"`
 
-	// Scope of the App deployment: cluster, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	// Scope of the App deployment: cluster, clusterWithPreConfig, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
 	Scope string `json:"scope,omitempty"`
 }
 

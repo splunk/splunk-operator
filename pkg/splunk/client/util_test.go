@@ -88,7 +88,7 @@ func TestGetVolume(t *testing.T) {
 		AppsRepoPollInterval: 60,
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "vol2",
-			Scope:   "cluster",
+			Scope:   enterpriseApi.ScopeCluster,
 		},
 
 		VolList: []enterpriseApi.VolumeSpec{
@@ -115,7 +115,7 @@ func TestGetVolume(t *testing.T) {
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "vol1",
-					Scope:   "local",
+					Scope:   enterpriseApi.ScopeLocal,
 				},
 			},
 			{
@@ -144,7 +144,7 @@ func TestGetVolume(t *testing.T) {
 			Location: "adminAppsRepo",
 			AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 				VolName: "invalid_volume",
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			},
 		},
 	}

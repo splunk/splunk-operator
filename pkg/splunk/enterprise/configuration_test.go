@@ -608,19 +608,19 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "cluster"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 			{Name: "securityApps",
 				Location: "securityAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 			{Name: "authenticationApps",
 				Location: "authenticationAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 		},
 	}
@@ -659,7 +659,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
 
 	// Having defaults volume and location should not complain an app source missing the volume and remote location info.
-	AppFramework.Defaults.Scope = "cluster"
+	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	AppFramework.AppSources[0].Scope = ""
 
@@ -682,19 +682,19 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "cluster"},
+					Scope:   enterpriseApi.ScopeCluster},
 			},
 			{Name: "securityApps",
 				Location: "securityAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 			{Name: "authenticationApps",
 				Location: "authenticationAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 		},
 	}
@@ -764,7 +764,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].VolName = "msos_s2s3_vol"
 
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
-	AppFramework.AppSources[0].Scope = "cluster"
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeCluster
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
@@ -778,17 +778,15 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	// If the CR supports only local apps, and default is configured with "cluster" scope, that should be detected
-	AppFramework.AppSources[0].Scope = "local"
-	AppFramework.AppSources[1].Scope = "local"
-	AppFramework.AppSources[2].Scope = "local"
+	AppFramework.AppSources[0].Scope, AppFramework.AppSources[1].Scope, AppFramework.AppSources[2].Scope = enterpriseApi.ScopeLocal, enterpriseApi.ScopeLocal, enterpriseApi.ScopeLocal
 
-	AppFramework.Defaults.Scope = "cluster"
+	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
-	AppFramework.AppSources[0].Scope = "local"
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
@@ -796,7 +794,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err == nil {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
-	AppFramework.Defaults.Scope = "cluster"
+	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
 	// Missing scope, if the default scope is not specified should return error
 	AppFramework.Defaults.Scope = ""
@@ -805,8 +803,19 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err == nil {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
-	AppFramework.Defaults.Scope = "local"
-	AppFramework.AppSources[0].Scope = "local"
+	AppFramework.Defaults.Scope = enterpriseApi.ScopeLocal
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
+
+	// Scope clusteWithPreConfig should not return an error
+
+	AppFramework.Defaults.Scope = ""
+	AppFramework.AppSources[0].Scope = "clusterWithPreConfig"
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("Valid scope clusterWithPreConfig should not cause an error")
+	}
+	AppFramework.Defaults.Scope = enterpriseApi.ScopeLocal
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
 	// AppsRepoPollInterval should be in between the minAppsRepoPollInterval and maxAppsRepoPollInterval
 	// Default Poll interval
@@ -1237,22 +1246,22 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(cr, spec, 0)
+	livenessProbe := getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(cr, spec, 0)
+	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(cr, spec, 20)
-	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set additional delay overriding the default and configured")
+	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 20)
+	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
 }
 
@@ -1266,22 +1275,22 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(cr, spec, 0)
+	readinessProbe := getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(cr, spec, 0)
+	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(cr, spec, 20)
-	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set additional delay overriding the default and configured")
+	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 20)
+	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
+		t.Errorf("Failed to set the configured Readiness probe initial delay value")
 	}
 }
 

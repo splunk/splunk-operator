@@ -70,7 +70,7 @@ var _ = Describe("m4appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "cluster",
+				Scope:   enterpriseApi.ScopeCluster,
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
@@ -212,7 +212,7 @@ var _ = Describe("m4appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
