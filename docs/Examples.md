@@ -314,8 +314,7 @@ $ kubectl get svc
 NAME                                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
 splunk-cm-cluster-master-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
 splunk-cm-indexer-service                                   ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
-service/splunk-default-monitoring-console-headless          ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
-service/splunk-default-monitoring-console-service           ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
+service/splunk-monitoring-console                           ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
 splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless                             ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service                              ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
@@ -348,6 +347,7 @@ To remove the resources created from this example, run:
 kubectl delete standalone single
 kubectl delete shc example
 kubectl delete idc example
+kubectl delete mc example_mc
 kubectl delete clustermaster cm
 ```
 
