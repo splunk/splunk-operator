@@ -268,7 +268,7 @@ The Splunk Operator now includes a CRD for the Monitoring Console (MC). This off
 * When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted. 
 * To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
 
-The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. The MC pod will automatically update itself on the creation or deletion of the pods that have a reference set to the MC pod, and will automatically configure a connection to those pods.
+The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
 
 
 ## Examples of Guaranteed and Burstable QoS
