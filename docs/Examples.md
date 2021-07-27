@@ -90,7 +90,7 @@ spec:
     name: example_mc
 EOF
 ```
-This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set.
+This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. 
 
 NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
@@ -200,7 +200,7 @@ spec:
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster.
+Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. 
 
 #### Another Cluster Master example
 Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
@@ -240,7 +240,7 @@ EOF
 ```
 
 ### Monitoring Console
-The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. The Monitoring Console pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
+The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The Monitoring Console pod is referenced by using the `monitoringConsoleRef` parameter. The MC pod will automatically update itself upon the creation or deletion of any pods that have a reference set to the MC pod, and will automatically configure a connection to those pods.
 
 ```yaml
 cat <<EOF | kubectl apply -f -
