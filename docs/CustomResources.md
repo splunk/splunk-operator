@@ -262,14 +262,13 @@ spec:
 
 Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
 
-The Splunk Operator now includes a CR for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management. 
+The Splunk Operator now includes a CRD for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management. 
 
 * An MC pod is not created automatically in the default namespace when using other Splunk Operator CR's. 
 * When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted. 
 * To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
-* A namespace can contain only one MC pod.
 
-The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. The MC pod will periodically check for the existence of new or existing pods in the namespace, and automatically configure a connection to those pods.
+The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. The MC pod will automatically update itself on the creation or deletion of the pods that have a reference set to the MC pod, and will automatically configure a connection to those pods.
 
 
 ## Examples of Guaranteed and Burstable QoS
