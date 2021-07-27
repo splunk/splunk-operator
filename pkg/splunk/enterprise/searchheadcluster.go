@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -24,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -32,7 +33,7 @@ import (
 )
 
 // ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
-func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (reconcile.Result, error) {
+func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
@@ -41,9 +42,19 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(&cr.Spec)
+	err := validateSearchHeadClusterSpec(cr)
 	if err != nil {
 		return result, err
+	}
+
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	// updates status after function completes
@@ -52,7 +63,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())
 	if cr.Status.Members == nil {
-		cr.Status.Members = []enterprisev1.SearchHeadClusterMemberStatus{}
+		cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{}
 	}
 	if cr.Status.ShcSecretChanged == nil {
 		cr.Status.ShcSecretChanged = []bool{}
@@ -138,11 +149,21 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(cr.Status.AppContext.AppsSrcDeployStatus)
+		}
+
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getSearchHeadEnv(cr))
 		if err != nil {
 			return result, err
 		}
-		result.Requeue = false
+
+		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+		} else {
+			result.Requeue = false
+		}
 
 		// Reset secrets related status structs
 		cr.Status.ShcSecretChanged = []bool{}
@@ -157,7 +178,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterprisev1.
 type searchHeadClusterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
-	cr              *enterprisev1.SearchHeadCluster
+	cr              *enterpriseApi.SearchHeadCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
@@ -451,7 +472,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
 		c := mgr.getClient(n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-		memberStatus := enterprisev1.SearchHeadClusterMemberStatus{Name: memberName}
+		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
@@ -494,7 +515,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(statefulSet *appsv1.Statefu
 }
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
-func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
 	// get search head env variables with deployer
 	env := getSearchHeadEnv(cr)
@@ -509,14 +530,30 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterprisev
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return ss, err
+	}
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	return ss, err
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
-func validateSearchHeadClusterSpec(spec *enterprisev1.SearchHeadClusterSpec) error {
-	if spec.Replicas < 3 {
-		spec.Replicas = 3
+func validateSearchHeadClusterSpec(cr *enterpriseApi.SearchHeadCluster) error {
+	if cr.Spec.Replicas < 3 {
+		cr.Spec.Replicas = 3
 	}
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
+		if err != nil {
+			return err
+		}
+	}
+
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

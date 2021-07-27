@@ -17,6 +17,8 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -48,7 +51,7 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
+func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
 	var storageCapacity resource.Quantity
 	var err error
 
@@ -98,7 +101,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterprisev1.CommonSpl
 }
 
 // getSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
+func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	// use template if not headless
 	var service *corev1.Service
@@ -166,7 +169,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSp
 }
 
 // setVolumeDefaults set properties in Volumes to default values
-func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
+func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 
 	// work-around openapi validation error by ensuring it is not nil
 	if spec.Volumes == nil {
@@ -193,7 +196,7 @@ func setVolumeDefaults(spec *enterprisev1.CommonSplunkSpec) {
 }
 
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
 
@@ -206,6 +209,14 @@ func validateCommonSplunkSpec(spec *enterprisev1.CommonSplunkSpec) error {
 			corev1.ResourceCPU:    resource.MustParse("4"),
 			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
+	}
+
+	if spec.LivenessInitialDelaySeconds < 0 {
+		return fmt.Errorf("Negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+	}
+
+	if spec.ReadinessInitialDelaySeconds < 0 {
+		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
 	setVolumeDefaults(spec)
@@ -224,19 +235,6 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 			"default.yml": defaults,
 		},
 	}
-}
-
-// prepareSplunkSmartstoreConfigMap returns a K8 ConfigMap containing Splunk smartstore config in INI format
-func prepareSplunkSmartstoreConfigMap(identifier, namespace string, crKind string, dataIniMap map[string]string) *corev1.ConfigMap {
-	configMapIni := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkSmartstoreConfigMapName(identifier, crKind),
-			Namespace: namespace,
-		},
-	}
-	configMapIni.Data = dataIniMap
-
-	return configMapIni
 }
 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
@@ -305,7 +303,7 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 }
 
 // addPVCVolumes adds pvc volumes to statefulSet
-func addPVCVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
+func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
 	// prepare and append persistent volume claims if storage is not ephemeral
 	var err error
 	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType)
@@ -346,7 +344,7 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 }
 
 // addStorageVolumes adds storage volumes to the StatefulSet
-func addStorageVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
 		// add Ephermal volumes
@@ -375,7 +373,7 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkS
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -465,30 +463,35 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	return statefulSet, nil
 }
 
+// getAppListingConfigMap returns the App listing configMap, if it exists and applicable for that instanceType
+func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+	var configMap *corev1.ConfigMap
+
+	// ToDo: Exclude MC, once it's own CR is available
+	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead && instanceType != SplunkMonitoringConsole {
+		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
+		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
+	}
+
+	return configMap
+}
+
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
-func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (*corev1.ConfigMap, bool) {
-	var smartStoreConfigMapName string
+func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+	var configMap *corev1.ConfigMap
+
 	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
-		smartStoreConfigMapName = GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
-	}
-
-	if smartStoreConfigMapName != "" {
+		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
-		configMap, err := splctrl.GetConfigMap(client, namespacedName)
-		if err != nil {
-			// Do not return configMap name, unless the configMap really exists
-			return nil, false
-		}
-
-		return configMap, true
+		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
 	}
 
-	// Do not return configMap name, unless the configMap really exists
-	return nil, false
+	return configMap
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterprisev1.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
 	scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
@@ -554,8 +557,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	smartstoreConfigMap, exists := getSmartstoreConfigMap(client, cr, instanceType)
-	if exists {
+	smartstoreConfigMap := getSmartstoreConfigMap(client, cr, instanceType)
+	if smartstoreConfigMap != nil {
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -577,7 +580,19 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		if instanceType == SplunkStandalone {
 			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = smartstoreConfigMap.ResourceVersion
 		}
+	}
 
+	appListingConfigMap := getAppListingConfigMap(client, cr, instanceType)
+	if appListingConfigMap != nil {
+		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
+
+		// ToDo: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
+		// Once the apps are installed, and on a reconcile entry triggered by polling interval expiry, if there is no new
+		// App changes on remote store, then the config map data is erased. In such case, no need to reset the Pod
+		if len(appListingConfigMap.Data) > 0 {
+			podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
+		}
 	}
 
 	// update security context
@@ -588,36 +603,23 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		FSGroup:   &fsGroup,
 	}
 
-	// use script provided by enterprise container to check if pod is alive
-	livenessProbe := &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/sbin/checkstate.sh",
-				},
-			},
-		},
-		InitialDelaySeconds: 300,
-		TimeoutSeconds:      30,
-		PeriodSeconds:       30,
+	var numberOfApps int
+	var appListingFiles []string
+	if appListingConfigMap != nil {
+		for key, appListingentry := range appListingConfigMap.Data {
+			if key != appsUpdateToken {
+				// One(to accomodate header) less than number of entries
+				numberOfApps += strings.Count(appListingentry, "\n") - 1
+				appListingFiles = append(appListingFiles, key)
+			}
+		}
+		// Always sort the slice, so that map entries are ordered, to avoid pod resets
+		sort.Strings(appListingFiles)
 	}
 
-	// pod is ready if container artifact file is created with contents of "started".
-	// this indicates that all the the ansible plays executed at startup have completed.
-	readinessProbe := &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: []string{
-					"/bin/grep",
-					"started",
-					"/opt/container_artifact/splunk-container.state",
-				},
-			},
-		},
-		InitialDelaySeconds: 10,
-		TimeoutSeconds:      5,
-		PeriodSeconds:       5,
-	}
+	livenessProbe := getLivenessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
+
+	readinessProbe := getReadinessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -634,6 +636,12 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+
+	if appListingConfigMap != nil {
+		for _, fileName := range appListingFiles {
+			splunkDefaults = fmt.Sprintf("%s%s,%s", appConfLocationOnPod, fileName, splunkDefaults)
+		}
 	}
 
 	// prepare container env variables
@@ -683,7 +691,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Namespace: cr.GetNamespace(),
 			Name:      spec.ClusterMasterRef.Name,
 		}
-		masterIdxCluster := &enterprisev1.ClusterMaster{}
+		masterIdxCluster := &enterpriseApi.ClusterMaster{}
 		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
 		if err != nil {
 			scopedLog.Error(err, "Unable to get ClusterMaster")
@@ -728,8 +736,83 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 }
 
+// getLivenessProbe the probe for checking the liveness of the Pod
+// uses script provided by enterprise container to check if pod is alive
+func getLivenessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	livenessDelay := livenessProbeDefaultDelaySec + additionalDelay
+	if spec.LivenessInitialDelaySeconds > livenessDelay {
+		livenessDelay = spec.LivenessInitialDelaySeconds
+	}
+
+	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
+
+	livenessCommand := []string{
+		"/sbin/checkstate.sh",
+	}
+
+	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeoutSec, livenessProbePeriodSec)
+}
+
+// getReadinessProbe provides the probe for checking the readiness of the Pod
+// pod is ready if container artifact file is created with contents of "started".
+// this indicates that all the the ansible plays executed at startup have completed.
+func getReadinessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	readinessDelay := readinessProbeDefaultDelaySec + additionalDelay
+	if spec.ReadinessInitialDelaySeconds > readinessDelay {
+		readinessDelay = spec.ReadinessInitialDelaySeconds
+	}
+
+	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
+
+	readinessCommand := []string{
+		"/bin/grep",
+		"started",
+		"/opt/container_artifact/splunk-container.state",
+	}
+
+	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
+}
+
+// getProbe returns the Probe for given values.
+func getProbe(command []string, delay, timeout, period int32) *corev1.Probe {
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			Exec: &corev1.ExecAction{
+				Command: command,
+			},
+		},
+		InitialDelaySeconds: delay,
+		TimeoutSeconds:      timeout,
+		PeriodSeconds:       period,
+	}
+}
+
+// getVolumeSourceMountFromConfigMapData returns a volume source with the configMap Data entries
+func getVolumeSourceMountFromConfigMapData(configMap *corev1.ConfigMap, mode *int32) corev1.VolumeSource {
+	volumeSource := corev1.VolumeSource{
+		ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: configMap.GetName(),
+			},
+			DefaultMode: mode,
+		},
+	}
+
+	for key := range configMap.Data {
+		volumeSource.ConfigMap.Items = append(volumeSource.ConfigMap.Items, corev1.KeyToPath{Key: key, Path: key, Mode: mode})
+	}
+	//  Map traversal order is not guaranteed. Always sort the slice to avoid (random) pod resets due to the ordering
+	splcommon.SortSlice(volumeSource.ConfigMap.Items, splcommon.SortFieldKey)
+
+	return volumeSource
+}
+
 // isSmartstoreEnabled checks and returns true if smartstore is configured
-func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
+func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 	if smartstore == nil {
 		return false
 	}
@@ -737,18 +820,8 @@ func isSmartstoreConfigured(smartstore *enterprisev1.SmartStoreSpec) bool {
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
 }
 
-func checkIfVolumeExists(volumeList []enterprisev1.VolumeSpec, volName string) (int, error) {
-	for i, volume := range volumeList {
-		if volume.Name == volName {
-			return i, nil
-		}
-	}
-
-	return -1, fmt.Errorf("Volume: %s, doesn't exist", volName)
-}
-
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
-func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterprisev1.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
+func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
 	if isSmartstoreConfigured(smartstore) == false {
 		return false
@@ -782,8 +855,244 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
+// initAppFrameWorkContext used to initialize the app frame work context
+func initAppFrameWorkContext(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
+	if appStatusContext.AppsSrcDeployStatus == nil {
+		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	}
+
+	for _, vol := range appFrameworkConf.VolList {
+		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
+			splclient.RegisterS3Client(vol.Provider)
+		}
+	}
+}
+
+// getAppSrcScope returns the scope of a given appSource
+func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) string {
+	for _, appSrc := range appFrameworkConf.AppSources {
+		if appSrc.Name == appSrcName {
+			if appSrc.Scope != "" {
+				return appSrc.Scope
+			}
+
+			break
+		}
+	}
+
+	return appFrameworkConf.Defaults.Scope
+}
+
+// CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
+func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) bool {
+	for _, appSrc := range appFrameworkConf.AppSources {
+		if appSrc.Name == appSrcName {
+			return true
+		}
+	}
+	return false
+}
+
+// validateSplunkAppSources validates the App source config in App Framework spec
+func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
+
+	duplicateAppSourceStorageChecker := make(map[string]bool)
+	duplicateAppSourceNameChecker := make(map[string]bool)
+	var vol string
+
+	// Make sure that all the App Sources are provided with the mandatory config values.
+	for i, appSrc := range appFramework.AppSources {
+		if appSrc.Name == "" {
+			return fmt.Errorf("App Source name is missing for AppSource at: %d", i)
+		}
+
+		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
+			return fmt.Errorf("Multiple app sources with the name %s is not allowed", appSrc.Name)
+		}
+		duplicateAppSourceNameChecker[appSrc.Name] = true
+
+		if appSrc.Location == "" {
+			return fmt.Errorf("App Source location is missing for AppSource: %s", appSrc.Name)
+		}
+
+		if appSrc.VolName != "" {
+			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
+			if err != nil {
+				return fmt.Errorf("Invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
+			}
+			vol = appSrc.VolName
+		} else {
+			if appFramework.Defaults.VolName == "" {
+				return fmt.Errorf("volumeName is missing for App Source: %s", appSrc.Name)
+			}
+			vol = appFramework.Defaults.VolName
+		}
+
+		if appSrc.Scope != "" {
+			if localScope && appSrc.Scope != "local" {
+				return fmt.Errorf("Invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+			}
+
+			if appSrc.Scope != "local" && appSrc.Scope != "cluster" {
+				return fmt.Errorf("Scope for App Source: %s should be either local or cluster", appSrc.Name)
+			}
+		} else {
+			if appFramework.Defaults.Scope == "" {
+				return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
+			}
+		}
+
+		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
+			return fmt.Errorf("Duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
+		}
+		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
+
+	}
+
+	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" {
+		return fmt.Errorf("Invalid scope for defaults config. Only local scope is supported for this kind of CR")
+	}
+
+	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" && appFramework.Defaults.Scope != "cluster" {
+		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
+	}
+
+	if appFramework.Defaults.VolName != "" {
+		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
+		if err != nil {
+			return fmt.Errorf("Invalid Volume Name for Defaults. Error: %s", err)
+		}
+	}
+
+	return nil
+}
+
+//  isAppFrameworkConfigured checks and returns true if App Framework is configured
+//  App Repo config without any App sources will not cause any App Framework activity
+func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
+	return !(appFramework == nil || appFramework.AppSources == nil)
+}
+
+// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
+func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
+	var err error
+	if !isAppFrameworkConfigured(appFramework) {
+		return nil
+	}
+
+	scopedLog := log.WithName("ValidateAppFrameworkSpec")
+
+	scopedLog.Info("configCheck", "scope", localScope)
+
+	// Set the value in status field to be same as that in spec.
+	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
+
+	if appContext.AppsRepoStatusPollInterval == 0 {
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
+	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
+	}
+
+	err = validateRemoteVolumeSpec(appFramework.VolList, true)
+	if err != nil {
+		return err
+	}
+
+	err = validateSplunkAppSources(appFramework, localScope)
+
+	if err == nil {
+		scopedLog.Info("App framework configuration is valid")
+	}
+	return err
+}
+
+// validateRemoteVolumeSpec validates the Remote storage volume spec
+func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
+
+	duplicateChecker := make(map[string]bool)
+
+	// Make sure that all the Volumes are provided with the mandatory config values.
+	for i, volume := range volList {
+		if _, ok := duplicateChecker[volume.Name]; ok {
+			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
+		}
+		duplicateChecker[volume.Name] = true
+		// Make sure that the smartstore volume info is correct
+		if volume.Name == "" {
+			return fmt.Errorf("Volume name is missing for volume at : %d", i)
+		}
+		if volume.Endpoint == "" {
+			return fmt.Errorf("Volume Endpoint URI is missing")
+		}
+		if volume.Path == "" {
+			return fmt.Errorf("Volume Path is missing")
+		}
+		if volume.SecretRef == "" {
+			return fmt.Errorf("Volume SecretRef is missing")
+		}
+
+		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
+		// For now, Smartstore supports only S3, which is by default.
+		if isAppFramework {
+			if !isValidStorageType(volume.Type) {
+				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported")
+			}
+
+			if !isValidProvider(volume.Provider) {
+				return fmt.Errorf("S3 Provider is invalid")
+			}
+		}
+	}
+	return nil
+}
+
+// isValidStorageType checks if the storage type specified is valid and supported
+func isValidStorageType(storage string) bool {
+	return storage != "" && storage == "s3"
+}
+
+// isValidProvider checks if the provider specified is valid and supported
+func isValidProvider(provider string) bool {
+	return provider != "" && (provider == "aws" || provider == "minio")
+}
+
+// validateSplunkIndexesSpec validates the smartstore index spec
+func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
+
+	duplicateChecker := make(map[string]bool)
+
+	// Make sure that all the indexes are provided with the mandatory config values.
+	for i, index := range smartstore.IndexList {
+		if index.Name == "" {
+			return fmt.Errorf("Index name is missing for index at: %d", i)
+		}
+
+		if _, ok := duplicateChecker[index.Name]; ok {
+			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
+		}
+		duplicateChecker[index.Name] = true
+		if index.VolName == "" && smartstore.Defaults.VolName == "" {
+			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
+		}
+
+		if index.VolName != "" {
+			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
+			if err != nil {
+				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
-func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error {
+func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 	var err error
 
 	// Smartstore is an optional config (at least) for now
@@ -797,74 +1106,26 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterprisev1.SmartStoreSpec) error
 		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
-	duplicateChecker := make(map[string]bool)
-
-	volList := smartstore.VolList
-	// Make sure that all the Volumes are provided with the mandatory config values.
-	for i, volume := range volList {
-		if _, ok := duplicateChecker[volume.Name]; ok {
-			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
-		}
-		duplicateChecker[volume.Name] = true
-
-		// Make sure that the smartstore volume info is correct
-		if volume.Name == "" {
-			return fmt.Errorf("Volume name is missing for volume at : %d", i)
-		}
-
-		if volume.Endpoint == "" {
-			return fmt.Errorf("Volume Endpoint URI is missing")
-		}
-
-		if volume.Path == "" {
-			return fmt.Errorf("Volume Path is missing")
-		}
-
-		if volume.SecretRef == "" {
-			return fmt.Errorf("Volume SecretRef is missing")
-		}
+	err = validateRemoteVolumeSpec(smartstore.VolList, false)
+	if err != nil {
+		return err
 	}
 
 	defaults := smartstore.Defaults
 	// When volName is configured, bucket remote path should also be configured
 	if defaults.VolName != "" {
-		_, err = checkIfVolumeExists(volList, defaults.VolName)
+		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
 		}
 	}
 
-	duplicateChecker = make(map[string]bool)
-	indexList := smartstore.IndexList
-	// Make sure that all the indexes are provided with the mandatory config values.
-	for i, index := range indexList {
-		if _, ok := duplicateChecker[index.Name]; ok {
-			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
-		}
-		duplicateChecker[index.Name] = true
-
-		if index.Name == "" {
-			return fmt.Errorf("Index name is missing for index at: %d", i)
-		}
-
-		if index.VolName == "" && defaults.VolName == "" {
-			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
-		}
-
-		if index.VolName != "" {
-			_, err = checkIfVolumeExists(volList, index.VolName)
-			if err != nil {
-				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
-			}
-		}
-
-	}
-
-	return nil
+	err = validateSplunkIndexesSpec(smartstore)
+	return err
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterprisev1.SmartStoreSpec, mapData map[string]string) (string, error) {
+func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
 	volumes := smartstore.VolList
@@ -888,7 +1149,7 @@ remote.s3.endpoint = %s
 }
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
-func GetSmartstoreIndexesConfig(indexes []enterprisev1.IndexSpec) string {
+func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec) string {
 
 	var indexesConf string
 
@@ -937,7 +1198,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 }
 
 //GetServerConfigEntries prepares the server.conf entries, and returns as a string
-func GetServerConfigEntries(cacheManagerConf *enterprisev1.CacheManagerSpec) string {
+func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""
 	}
@@ -993,7 +1254,7 @@ max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploa
 }
 
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
-func GetSmartstoreIndexesDefaults(defaults enterprisev1.IndexConfDefaultsSpec) string {
+func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec) string {
 
 	remotePath := "$_index_name"
 

@@ -26,7 +26,7 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -147,7 +147,7 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {
-	cr := enterprisev1.Standalone{
+	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -206,5 +206,41 @@ func TestGetStatefulSetByName(t *testing.T) {
 	_, err = GetStatefulSetByName(c, namespacedName)
 	if err != nil {
 		t.Errorf(err.Error())
+	}
+}
+
+func TestIsStatefulSetScalingUp(t *testing.T) {
+	var replicas int32 = 1
+	statefulSetName := "splunk-stand1-standalone"
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stand1",
+			Namespace: "test",
+		},
+	}
+
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	*current.Spec.Replicas = 2
+	_, err := IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	if err == nil {
+		t.Errorf("IsStatefulSetScalingUp should have returned error as we have not yet added statefulset to client.")
+	}
+
+	c.AddObject(current)
+	_, err = IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	if err != nil {
+		t.Errorf("IsStatefulSetScalingUp should not have returned error")
 	}
 }

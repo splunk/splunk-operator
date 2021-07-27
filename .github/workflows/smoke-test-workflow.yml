@@ -1,25 +1,39 @@
 name: Smoke Test WorkFlow
-on:
-  push:
-    branches:
-        - "develop"
-        - "CSPL-1092-circleci-github-actions-migration"
+on: [pull_request]
 jobs:
   smoke-tests:
     strategy:
       matrix:
-        test: [basic]
+        test: [basic, appframework, secret]
     runs-on: ubuntu-latest
     env:
-      NUM_NODES: 1
-      NUM_WORKERS: 3
-      ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
+      CLUSTER_NODES: 1
+      CLUSTER_WORKERS: 3
+      SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      SPLUNK_OPERATO_IMAGE_FILENAME: splunk-operator
-      TEST_FOCUS: "^.*?\b${{ matrix.test }}\b.*?\bsmoke\b.*?$"
+      SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      TEST_FOCUS: "${{ matrix.test }}"
+      # This regex matches any string not containing smoke keyword
+      TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_CLUSTER_PLATFORM: eks
-      TEST_CLUSTER_NAME: "eks-integration-test-cluster-smoke-${{ matrix.test }}"
+      EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
+      EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
+      TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
+      TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
+      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
     steps:
+      - name: Set Test Cluster Name
+        run: | 
+          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+      - name: Set Test Cluster Nodes and Parallel Runs
+        run: >-
+          if [ ${{ matrix.test }} == "appframework" ]; then 
+            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
+            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
+          fi
       - name: Chekcout code
         uses: actions/checkout@v2   
       - name: Install Kubectl
@@ -30,7 +44,7 @@ jobs:
         uses: actions/setup-python@v2
       - name: Install AWS CLI
         run: |
-          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle-1.20.8.zip" -o "awscli-bundle.zip"
           unzip awscli-bundle.zip
           sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
           aws --version
@@ -42,6 +56,10 @@ jobs:
         run: |
           go version
           go get -u golang.org/x/lint/golint
+      - name: Install Ginkgo 
+        run: |
+            go get github.com/onsi/ginkgo/ginkgo
+            go get github.com/onsi/gomega/...
       - name: Install EKS CTL
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -53,6 +71,13 @@ jobs:
         run: |
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.19.0/operator-sdk-v0.19.0-x86_64-linux-gnu
           sudo chmod +x /usr/local/bin/operator-sdk
+      - name: Configure Docker Hub credentials
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN}}
+      - name: Pull Splunk Enterprise Edge Image
+        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -70,9 +95,19 @@ jobs:
         run: |
           echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
           docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Tag and Push Splunk Enterprise Image to ECR
+        run: |
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Create EKS cluster
         run: |
            make cluster-up
+      - name: Change Operator Image Tag to latest
+        run: |
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
+      - name: Run smoke test
+        run: |
+          make int-test
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: | 
