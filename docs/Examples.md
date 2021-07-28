@@ -107,6 +107,7 @@ This will automatically configure a cluster, with a predetermined number of inde
 
 NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
+After starting the cluster master, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
 ```
 $ kubectl get pods
 NAME                                       READY   STATUS    RESTARTS    AGE
