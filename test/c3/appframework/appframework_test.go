@@ -61,7 +61,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with SHC (C3) with App Framework", func() {
-		It("integration, c3, appframework: can deploy a C3 SVA with App Framework enabled", func() {
+		It("appfwint, c3, appframework: can deploy a C3 SVA with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -231,7 +231,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, c3, integration, appframework: can deploy a C3 SVA and have apps installed locally on CM and SHC Deployer", func() {
+		It("smoke, c3, appframework: can deploy a C3 SVA and have apps installed locally on CM and SHC Deployer", func() {
 
 			// Create App framework Spec
 			// volumeSpec: Volume name, Endpoint, Path and SecretRef
@@ -329,7 +329,7 @@ var _ = Describe("c3appfw test", func() {
 
 	// Commenting this test for now as ES app is not installed locally on Deployer anymore before bundle push due to change from CSPL-1167
 	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
+		It("appfwint, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
