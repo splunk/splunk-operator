@@ -248,13 +248,15 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 ## MonitoringConsole Resource Spec Parameters
 
-```
+```yaml
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v2
 kind: MonitoringConsole
 metadata:
   name: example_mc
   finalizers:
   - enterprise.splunk.com/delete-pvc
+EOF
 ```
 
 Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
