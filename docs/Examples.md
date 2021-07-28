@@ -70,7 +70,7 @@ The Splunk Operator is responsible for configuring and maintaing the connection 
 
 The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
-This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later.
+This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
 
 The process is similar to build a multisite cluster, through defining a different zone affinity and site in each child IndexerCluster resource. See [Multisite cluster examples](MultisiteExamples.md)
 
@@ -92,7 +92,7 @@ spec:
     name: example_mc
 EOF
 ```
-This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later.
+This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
 
 NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
@@ -202,7 +202,7 @@ spec:
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later.
+Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
 
 #### Another Cluster Master example
 Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
@@ -242,7 +242,7 @@ EOF
 ```
 
 ### Monitoring Console
-The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
+The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
 
 
 ```yaml
@@ -285,7 +285,7 @@ spec:
 EOF
 ```
 
-This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod. The MC pod does not need to be running; the name can be predefined and the pod started later.
+This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod. The MC pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
 
 ```
 $ kubectl get pods
