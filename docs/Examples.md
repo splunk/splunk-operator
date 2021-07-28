@@ -70,7 +70,18 @@ The Splunk Operator is responsible for configuring and maintaing the connection 
 
 The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
-This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
+This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console), or use the example below:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v2
+kind: MonitoringConsole
+metadata:
+  name: example_mc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+EOF
+```
 
 The process is similar to build a multisite cluster, through defining a different zone affinity and site in each child IndexerCluster resource. See [Multisite cluster examples](MultisiteExamples.md)
 
@@ -92,7 +103,7 @@ spec:
     name: example_mc
 EOF
 ```
-This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
+This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
 NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
@@ -103,6 +114,7 @@ splunk-cm-cluster-master-0                  1/1     Running   0          29s
 splunk-example-indexer-0                    1/1     Running   0          29s
 splunk-example-indexer-1                    1/1     Running   0          29s
 splunk-example-indexer-2                    1/1     Running   0          29s
+splunk-example_mc-monitoring-console-0      1/1     Running   0          40s
 splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
 
@@ -134,6 +146,7 @@ splunk-cm-cluster-master-0                    1/1     Running   0          14m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
+splunk-example_mc-monitoring-console-0        1/1     Running   0          80s
 splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
@@ -150,6 +163,7 @@ For efficiency, note that you can use the following short names with `kubectl`:
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
 * `licensemaster`: `lm`
+* `monitoringconsole`: `mc`
 
 All CR's that support a `replicas` field can be scaled using the `kubectl scale` command. For example:
 
@@ -202,7 +216,19 @@ spec:
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
+Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
+
+```
+$ kubectl get pods
+NAME                                         READY    STATUS    RESTARTS   AGE
+splunk-cm-cluster-master-0                    1/1     Running   0          14m
+splunk-example-indexer-0                      1/1     Running   0          14m
+splunk-example-indexer-1                      1/1     Running   0          70s
+splunk-example-indexer-2                      1/1     Running   0          70s
+splunk-example_mc-monitoring-console-0        1/1     Running   0          80s
+splunk-single-standalone-0                    1/1     Running   0          90s
+splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
+```
 
 #### Another Cluster Master example
 Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
@@ -242,20 +268,17 @@ EOF
 ```
 
 ### Monitoring Console
-The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
+The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods. 
 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v2
-kind: Standalone
+kind: MonitoringConsole
 metadata:
-  name: s1
+  name: example_mc
   finalizers:
   - enterprise.splunk.com/delete-pvc
-spec:
-  monitoringConsoleRef:
-    name: example_mc
 EOF
 ```
 
@@ -285,7 +308,18 @@ spec:
 EOF
 ```
 
-This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod. The MC pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console).
+This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod.  To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console), or use the example below:
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v2
+kind: MonitoringConsole
+metadata:
+  name: example_mc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+EOF
+```
 
 ```
 $ kubectl get pods
@@ -302,6 +336,7 @@ splunk-example-search-head-1                 0/1     Running   0          29s
 splunk-example-search-head-2                 0/1     Running   0          29s
 splunk-operator-7c5599546c-pmbc2             1/1     Running   0          12m
 splunk-single-standalone-0                   1/1     Running   0          11m
+splunk-example_mc-monitoring-console-0       1/1     Running   0          80s
 ```
 
 Similar to indexer clusters, you can scale a search head cluster by patching the `replicas` parameter.
@@ -317,7 +352,7 @@ $ kubectl get svc
 NAME                                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
 splunk-cm-cluster-master-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
 splunk-cm-indexer-service                                   ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
-service/splunk-monitoring-console                           ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
+splunk-example_mc-monitoring-console-service                ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
 splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless                             ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service                              ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
