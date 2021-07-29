@@ -511,7 +511,7 @@ jobs:
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
             TEST_FOCUS: "monitoring_console"
-            TEST_FOCUS: "appframework"
+            # TEST_FOCUS: "appframework"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results
