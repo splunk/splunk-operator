@@ -70,6 +70,19 @@ const (
 
 	// SortFieldKey represents field name Key for sorting
 	SortFieldKey = "Key"
+
+	// Appframework specific polling intervals
+	// Need to make sure to change the comment in
+	// the spec section for AppFramework about the polling intervals.
+
+	// DefaultAppsRepoPollInterval sets the polling interval to one hour
+	DefaultAppsRepoPollInterval int64 = 60 * 60
+
+	// MinAppsRepoPollInterval sets the polling interval to one minute
+	MinAppsRepoPollInterval int64 = 60
+
+	// MaxAppsRepoPollInterval sets the polling interval to one day
+	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
 )
 
 // GetVersionedSecretName returns a versioned secret name

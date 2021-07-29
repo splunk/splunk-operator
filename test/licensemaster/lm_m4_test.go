@@ -46,7 +46,7 @@ var _ = Describe("Licensemaster test", func() {
 		It("licensemaster: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadFromS3Bucket()
+			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map

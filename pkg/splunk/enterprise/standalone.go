@@ -25,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standalone) (reconcile.Result, error) {
+func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -39,14 +39,14 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
 	// validate and updates defaults for CR
-	err := validateStandaloneSpec(&cr.Spec)
+	err := validateStandaloneSpec(cr)
 	if err != nil {
+		scopedLog.Error(err, "Failed to validate standalone spec")
 		return result, err
 	}
 
@@ -69,9 +69,22 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
 	}()
 
 	// create or update general config resources
@@ -110,6 +123,35 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 		return result, err
 	}
 
+	// If we are using appFramework and are scaling up, we should re-populate the
+	// configMap with all the appSource entries. This is done so that the new pods
+	// that come up now will have the complete list of all the apps and then can
+	// download and install all the apps.
+	// TODO: Improve this logic so that we only recycle the new pod/replica
+	// and not all the existing pods.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Spec.Replicas > 1 {
+
+		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
+
+		isScalingUp, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
+		if err != nil {
+			return result, err
+		} else if isScalingUp {
+			// if we are indeed scaling up, then mark the deploy status to Pending
+			// for all the app sources so that we add all the app sources in configMap.
+			appStatusContext := cr.Status.AppContext
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+			}
+
+			// Now apply the configMap will full app listing.
+			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus)
+			if err != nil {
+				return result, err
+			}
+		}
+	}
+
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(client, cr)
 	if err != nil {
@@ -138,38 +180,58 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterprisev1.Standal
 				return result, err
 			}
 		}
-		result.Requeue = false
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(cr.Status.AppContext.AppsSrcDeployStatus)
+		}
+		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+		} else {
+			result.Requeue = false
+		}
 	}
 	return result, nil
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.Standalone) (*appsv1.StatefulSet, error) {
+func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}
 
-	_, needToSetupSplunkOperatorApp := getSmartstoreConfigMap(client, cr, SplunkStandalone)
+	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkStandalone)
 
-	if needToSetupSplunkOperatorApp {
+	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(spec *enterprisev1.StandaloneSpec) error {
-	if spec.Replicas == 0 {
-		spec.Replicas = 1
+func validateStandaloneSpec(cr *enterpriseApi.Standalone) error {
+	if cr.Spec.Replicas == 0 {
+		cr.Spec.Replicas = 1
 	}
 
-	err := ValidateSplunkSmartstoreSpec(&spec.SmartStore)
-	if err != nil {
-		return err
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		if err != nil {
+			return err
+		}
 	}
 
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		if err != nil {
+			return err
+		}
+	}
+
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

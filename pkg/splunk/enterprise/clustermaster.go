@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"time"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -33,7 +33,7 @@ import (
 )
 
 // ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster master.
-func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (reconcile.Result, error) {
+func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -83,6 +83,16 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 			scopedLog.Error(err, "Status update failed")
 		}
 	}()
+
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
+		}
+	}
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -134,6 +144,9 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(cr.Status.AppContext.AppsSrcDeployStatus)
+		}
 		// Master apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(client, cr)
@@ -142,41 +155,59 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterprisev1.Clus
 		}
 
 		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
-			result.Requeue = false
+			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+				result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			} else {
+				result.Requeue = false
+			}
 		}
 	}
 	return result, nil
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterMasterSpec(cr *enterprisev1.ClusterMaster) error {
-	err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
-	if err != nil {
-		return err
+func validateClusterMasterSpec(cr *enterpriseApi.ClusterMaster) error {
+
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
+		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		if err != nil {
+			return err
+		}
+	}
+
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
+		if err != nil {
+			return err
+		}
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) (*appsv1.StatefulSet, error) {
+func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
 	if err != nil {
 		return ss, err
 	}
-	_, exists := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
+	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkClusterMaster)
 
-	if exists {
+	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
 	}
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }
 
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	masterIdxcName := cr.GetName()
@@ -188,9 +219,9 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
-	configMap, exists := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
-	if exists {
-		tokenFromConfigMap := configMap.Data[configToken]
+	smartStoreConfigMap := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
+	if smartStoreConfigMap != nil {
+		tokenFromConfigMap := smartStoreConfigMap.Data[configToken]
 		if tokenFromConfigMap == stdOut {
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
@@ -203,7 +234,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 }
 
 // PerformCmBundlePush initiates the bundle push from cluster master
-func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
 	}
@@ -241,7 +272,7 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterprisev1.ClusterM
 }
 
 // PushMasterAppsBundle issues the REST command to for cluster master bundle push
-func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterprisev1.ClusterMaster) error {
+func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())

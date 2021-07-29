@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +37,9 @@ type StandaloneSpec struct {
 
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
@@ -58,6 +61,9 @@ type StandaloneStatus struct {
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
