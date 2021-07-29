@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -34,7 +34,7 @@ import (
 )
 
 // ApplyMonitoringConsole reconciles the StatefulSet for N monitoring console instances of Splunk Enterprise.
-func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterprisev1.MonitoringConsole) (reconcile.Result, error) {
+func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -110,7 +110,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterprisev1.
 }
 
 // getMonitoringConsoleStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise monitoring console instances.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.MonitoringConsole) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	var monitoringConsoleConfigMap *corev1.ConfigMap
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
@@ -140,7 +140,7 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *ente
 }
 
 // validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsoleSpec, and returns error if something is wrong.
-func validateMonitoringConsoleSpec(spec *enterprisev1.MonitoringConsoleSpec) error {
+func validateMonitoringConsoleSpec(spec *enterpriseApi.MonitoringConsoleSpec) error {
 	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
 }
 

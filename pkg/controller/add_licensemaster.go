@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -40,9 +40,9 @@ type LicenseMasterController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
 func (ctrl LicenseMasterController) GetInstance() splcommon.MetaObject {
-	return &enterprisev1.LicenseMaster{
+	return &enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev1.APIVersion,
+			APIVersion: enterpriseApi.APIVersion,
 			Kind:       "LicenseMaster",
 		},
 	}
@@ -55,6 +55,6 @@ func (ctrl LicenseMasterController) GetWatchTypes() []runtime.Object {
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl LicenseMasterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
-	instance := cr.(*enterprisev1.LicenseMaster)
+	instance := cr.(*enterpriseApi.LicenseMaster)
 	return enterprise.ApplyLicenseMaster(client, instance)
 }

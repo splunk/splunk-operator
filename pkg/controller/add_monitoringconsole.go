@@ -15,7 +15,7 @@
 package controller
 
 import (
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -39,9 +39,9 @@ type MonitoringConsoleController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
 func (ctrl MonitoringConsoleController) GetInstance() splcommon.MetaObject {
-	return &enterprisev1.MonitoringConsole{
+	return &enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev1.APIVersion,
+			APIVersion: enterpriseApi.APIVersion,
 			Kind:       "MonitoringConsole",
 		},
 	}
@@ -54,6 +54,6 @@ func (ctrl MonitoringConsoleController) GetWatchTypes() []runtime.Object {
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl MonitoringConsoleController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
-	instance := cr.(*enterprisev1.MonitoringConsole)
+	instance := cr.(*enterpriseApi.MonitoringConsole)
 	return enterprise.ApplyMonitoringConsole(client, instance)
 }

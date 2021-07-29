@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v2
 
 import (
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // default all fields to being optional
@@ -27,50 +28,51 @@ import (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// MonitoringConsoleSpec defines the desired state of MonitoringConsole
-type MonitoringConsoleSpec struct {
+// LicenseMasterSpec defines the desired state of a Splunk Enterprise license master.
+type LicenseMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
+
+	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// MonitoringConsoleStatus defines the observed state of MonitoringConsole
-type MonitoringConsoleStatus struct {
-	// current phase of the monitoring console
+// LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
+type LicenseMasterStatus struct {
+	// current phase of the license master
 	Phase splcommon.Phase `json:"phase"`
 
-	// selector for pods, used by HorizontalPodAutoscaler
-	Selector string `json:"selector"`
-
-	// Bundle push status tracker
-	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
-
-	// Resource Revision tracker
-	ResourceRevMap map[string]string `json:"resourceRevMap"`
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MonitoringConsole is the Schema for the monitoringconsole API
+// LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of monitoring console"
-// +kubebuilder:resource:path=monitoringconsoles,scope=Namespaced,shortName=mc
+// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
 // +kubebuilder:storageversion
-type MonitoringConsole struct {
+type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MonitoringConsoleSpec   `json:"spec,omitempty"`
-	Status MonitoringConsoleStatus `json:"status,omitempty"`
+	Spec   LicenseMasterSpec   `json:"spec,omitempty"`
+	Status LicenseMasterStatus `json:"status,omitempty"`
 }
+
+// blank assignment to verify that LicenseMaster implements splcommon.MetaObject
+var _ splcommon.MetaObject = &LicenseMaster{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MonitoringConsoleList contains a list of MonitoringConsole
-type MonitoringConsoleList struct {
+// LicenseMasterList contains a list of LicenseMaster
+type LicenseMasterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MonitoringConsole `json:"items"`
+	Items           []LicenseMaster `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MonitoringConsole{}, &MonitoringConsoleList{})
+	SchemeBuilder.Register(&LicenseMaster{}, &LicenseMasterList{})
 }

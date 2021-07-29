@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -113,7 +114,7 @@ func TestGetMCConfigMap(t *testing.T) {
 		},
 	}
 
-	cr := enterprisev1.MonitoringConsole{
+	cr := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
 		},
@@ -185,5 +186,28 @@ func TestSetConfigMapOwnerRef(t *testing.T) {
 	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource configmap %s", current.GetName())
+	}
+}
+
+func TestPrepareConfigMap(t *testing.T) {
+	var configMapName = "testConfgMap"
+	var namespace = "testNameSpace"
+	expectedCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+	}
+
+	dataMap := make(map[string]string)
+	dataMap["a"] = "x"
+	dataMap["b"] = "y"
+	dataMap["z"] = "z"
+	expectedCm.Data = dataMap
+
+	returnedCM := PrepareConfigMap(configMapName, namespace, dataMap)
+
+	if !reflect.DeepEqual(expectedCm, returnedCM) {
+		t.Errorf("configMap preparation failed")
 	}
 }

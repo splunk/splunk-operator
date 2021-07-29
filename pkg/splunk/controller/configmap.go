@@ -123,3 +123,16 @@ func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaOb
 
 	return splutil.UpdateResource(client, configMap)
 }
+
+// PrepareConfigMap prepares and returns a K8 ConfigMap object for the given data
+func PrepareConfigMap(configMapName, namespace string, dataMap map[string]string) *corev1.ConfigMap {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+	}
+	configMap.Data = dataMap
+
+	return configMap
+}

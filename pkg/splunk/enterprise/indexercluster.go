@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -36,7 +36,7 @@ import (
 )
 
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
-func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (reconcile.Result, error) {
+func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -57,7 +57,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
-		cr.Status.Peers = []enterprisev1.IndexerClusterMemberStatus{}
+		cr.Status.Peers = []enterpriseApi.IndexerClusterMemberStatus{}
 	}
 	if cr.Status.IndexerSecretChanged == nil {
 		cr.Status.IndexerSecretChanged = []bool{}
@@ -82,7 +82,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterMasterRef.Name,
 	}
-	masterIdxCluster := &enterprisev1.ClusterMaster{}
+	masterIdxCluster := &enterpriseApi.ClusterMaster{}
 	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
 	if err == nil {
 		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
@@ -166,13 +166,13 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterprisev1.Ind
 type indexerClusterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
-	cr              *enterprisev1.IndexerCluster
+	cr              *enterpriseApi.IndexerCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
-func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterprisev1.IndexerCluster, enable bool, mock bool) error {
+func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, mock bool) error {
 	// Retrieve admin password from Pod
 	var masterIdxcName string
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 {
@@ -551,7 +551,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 	}
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
 		peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
-		peerStatus := enterprisev1.IndexerClusterMemberStatus{Name: peerName}
+		peerStatus := enterpriseApi.IndexerClusterMemberStatus{Name: peerName}
 		peerInfo, ok := peers[peerName]
 		if ok {
 			peerStatus.ID = peerInfo.ID
@@ -578,7 +578,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 }
 
 // getIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
-func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.IndexerCluster) (*appsv1.StatefulSet, error) {
+func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (*appsv1.StatefulSet, error) {
 	// Note: SPLUNK_INDEXER_URL is not used by the indexer pod containers,
 	// hence avoided the call to getIndexerExtraEnv.
 	// If other indexer CR specific env variables are required:
@@ -589,7 +589,7 @@ func getIndexerStatefulSet(client splcommon.ControllerClient, cr *enterprisev1.I
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
-func validateIndexerClusterSpec(cr *enterprisev1.IndexerCluster) error {
+func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 	// We cannot have 0 replicas in IndexerCluster spec, since this refers to number of indexers in an indexer cluster
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1

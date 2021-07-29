@@ -16,10 +16,15 @@ workflows:
             branches:
               only:
                 - develop
+                - feature-appframework
     jobs:
       - build-image
       - unit-tests
       - eks-integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - appfw-eks-integration-tests:
           requires:
             - build-image
             - unit-tests
@@ -120,7 +125,7 @@ executors:
       # Set cluster workers to 5 (5 cluster nodes)
       # NUM_NODES represent number of parallel test executions
       # NUM_WORKERS represent number of nodes in a k8 cluster
-      NUM_NODES: 5 
+      NUM_NODES: 3 
       NUM_WORKERS: 8
       CLUSTER_NAME: eks-integration-test-cluster
       ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
@@ -330,7 +335,6 @@ jobs:
             mkdir -p /tmp/test-results
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
-            # TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster|scaling_test|crcrud|secret"
             TEST_FOCUS: "integration"
       - store_test_results:
           name: Save test results
@@ -401,6 +405,7 @@ jobs:
             echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
             echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
             echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_NAME=eks-integration-test-cluster' >> $BASH_ENV
       - kubernetes/install
       - aws-cli/install
       - aws-eks/install-eksctl
@@ -420,6 +425,7 @@ jobs:
             echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
             echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
             echo "CLUSTER_PROVIDER=$TEST_CLUSTER_PLATFORM"
+            echo "TEST_CLUSTER=$TEST_CLUSTER_NAME"
       - run:
           # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
           # it will skip. Uses NUM_WORKERS for size of cluster
@@ -437,7 +443,6 @@ jobs:
             mkdir -p /tmp/test-results
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
-            # TEST_FOCUS: "smoke|ingest_search|monitoring_console|smartstore|licensemaster|scaling_test|crcrud|secret"
             TEST_FOCUS: "integration"
       - store_test_results:
           name: Save test results
@@ -453,6 +458,9 @@ jobs:
   # Runs integration tests against a k8s cluster
   monitoring-console-tests:
     executor: ubuntu-machine
+  # Runs integration tests against a kubernetes cluster
+  appfw-eks-integration-tests:
+    executor: test-runner
     steps:
       - run: 
           name: Setup Splunk operator and enterprise image env vars
@@ -460,15 +468,14 @@ jobs:
             echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
             echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
             echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+            echo 'export CLUSTER_NODES=${NUM_NODES}' >> $BASH_ENV
+            echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
+            echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_NAME=appfw-eks-integration-test-cluster' >> $BASH_ENV
       - kubernetes/install
       - aws-cli/install
       - aws-eks/install-eksctl
-      - run:
-          name: Install kind tool
-          command: |
-            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.7.0/kind-$(uname)-amd64
-            chmod +x ./kind
-            sudo mv ./kind /usr/local/bin
       - checkout
       - attach_workspace:
           name: Restore workspace
@@ -484,7 +491,8 @@ jobs:
             echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
             echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
             echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
-            echo "CLUSTER_PROVIDER=$CLUSTER_PROVIDER"
+            echo "CLUSTER_PROVIDER=$TEST_CLUSTER_PLATFORM"
+            echo "TEST_CLUSTER=$TEST_CLUSTER_NAME"
       - run:
           # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
           # it will skip. Uses NUM_WORKERS for size of cluster
@@ -503,8 +511,15 @@ jobs:
             find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
           environment: 
             TEST_FOCUS: "monitoring_console"
+            TEST_FOCUS: "appframework"
       - store_test_results:
           name: Save test results
           path: /tmp/test-results
       - store_artifacts:
           path: /tmp/test-results
+      - run:
+          # Delete k8 cluster
+          name: Delete cluster
+          command: |
+            make cluster-down
+          no_output_timeout: 30m

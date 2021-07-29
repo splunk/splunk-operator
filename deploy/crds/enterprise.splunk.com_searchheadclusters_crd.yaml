@@ -34,7 +34,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1
+    name: v2
     schema:
       openAPIV3Schema:
         description: SearchHeadCluster is the Schema for a Splunk Enterprise search
@@ -651,6 +651,84 @@ spec:
                         type: array
                     type: object
                 type: object
+              appRepo:
+                description: Splunk Enterprise App repository. Specifies remote App
+                  location and scope for Splunk App management
+                properties:
+                  appSources:
+                    description: List of App sources on remote storage
+                    items:
+                      description: AppSourceSpec defines list of App package (*.spl,
+                        *.tgz) locations on remote volumes
+                      properties:
+                        location:
+                          description: Location relative to the volume path
+                          type: string
+                        name:
+                          description: Logical name for the set of apps placed in
+                            this location. Logical name must be unique to the appRepo
+                          type: string
+                        scope:
+                          description: 'Scope of the App deployment: cluster, local.
+                            Scope determines whether the App(s) is/are installed locally
+                            or cluster-wide'
+                          type: string
+                        volumeName:
+                          description: Remote Storage Volume name
+                          type: string
+                      type: object
+                    type: array
+                  appsRepoPollIntervalSeconds:
+                    description: Interval in seconds to check the Remote Storage for
+                      App changes. The default value for this config is 1 hour(3600
+                      sec), minimum value is 1 minute(60sec) and maximum value is
+                      1 day(86400 sec). We assign the value based on following conditions
+                      -    1. If no value or 0 is specified then it will be defaulted
+                      to 1 hour.    2. If anything less than min is specified then
+                      we set it to 1 min.    3. If anything more than the max value
+                      is specified then we set it to 1 day.
+                    format: int64
+                    type: integer
+                  defaults:
+                    description: Defines the default configuration settings for App
+                      sources
+                    properties:
+                      scope:
+                        description: 'Scope of the App deployment: cluster, local.
+                          Scope determines whether the App(s) is/are installed locally
+                          or cluster-wide'
+                        type: string
+                      volumeName:
+                        description: Remote Storage Volume name
+                        type: string
+                    type: object
+                  volumes:
+                    description: List of remote storage volumes
+                    items:
+                      description: VolumeSpec defines remote volume config
+                      properties:
+                        endpoint:
+                          description: Remote volume URI
+                          type: string
+                        name:
+                          description: Remote volume name
+                          type: string
+                        path:
+                          description: Remote volume path
+                          type: string
+                        provider:
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
+                          type: string
+                        secretRef:
+                          description: Secret object name
+                          type: string
+                        storageType:
+                          description: 'Remote Storage type. Supported values: s3'
+                          type: string
+                      type: object
+                    type: array
+                type: object
               clusterMasterRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -874,6 +952,13 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              livenessInitialDelaySeconds:
+                description: 'LivenessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command)
+                  for the Liveness probe Note: If needed, Operator overrides with
+                  a higher value'
+                format: int32
+                type: integer
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
                   console managed by the operator within Kubernetes
@@ -911,6 +996,13 @@ spec:
                     description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                     type: string
                 type: object
+              readinessInitialDelaySeconds:
+                description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
+                  for Readiness probe Note: If needed, Operator overrides with a higher
+                  value'
+                format: int32
+                type: integer
               replicas:
                 description: Number of search head pods; a search head cluster will
                   be created if > 1
@@ -2502,6 +2594,142 @@ spec:
                 items:
                   type: boolean
                 type: array
+              appContext:
+                description: App Framework Context
+                properties:
+                  appRepo:
+                    description: List of App package (*.spl, *.tgz) locations on remote
+                      volume
+                    properties:
+                      appSources:
+                        description: List of App sources on remote storage
+                        items:
+                          description: AppSourceSpec defines list of App package (*.spl,
+                            *.tgz) locations on remote volumes
+                          properties:
+                            location:
+                              description: Location relative to the volume path
+                              type: string
+                            name:
+                              description: Logical name for the set of apps placed
+                                in this location. Logical name must be unique to the
+                                appRepo
+                              type: string
+                            scope:
+                              description: 'Scope of the App deployment: cluster,
+                                local. Scope determines whether the App(s) is/are
+                                installed locally or cluster-wide'
+                              type: string
+                            volumeName:
+                              description: Remote Storage Volume name
+                              type: string
+                          type: object
+                        type: array
+                      appsRepoPollIntervalSeconds:
+                        description: Interval in seconds to check the Remote Storage
+                          for App changes. The default value for this config is 1
+                          hour(3600 sec), minimum value is 1 minute(60sec) and maximum
+                          value is 1 day(86400 sec). We assign the value based on
+                          following conditions -    1. If no value or 0 is specified
+                          then it will be defaulted to 1 hour.    2. If anything less
+                          than min is specified then we set it to 1 min.    3. If
+                          anything more than the max value is specified then we set
+                          it to 1 day.
+                        format: int64
+                        type: integer
+                      defaults:
+                        description: Defines the default configuration settings for
+                          App sources
+                        properties:
+                          scope:
+                            description: 'Scope of the App deployment: cluster, local.
+                              Scope determines whether the App(s) is/are installed
+                              locally or cluster-wide'
+                            type: string
+                          volumeName:
+                            description: Remote Storage Volume name
+                            type: string
+                        type: object
+                      volumes:
+                        description: List of remote storage volumes
+                        items:
+                          description: VolumeSpec defines remote volume config
+                          properties:
+                            endpoint:
+                              description: Remote volume URI
+                              type: string
+                            name:
+                              description: Remote volume name
+                              type: string
+                            path:
+                              description: Remote volume path
+                              type: string
+                            provider:
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio'
+                              type: string
+                            secretRef:
+                              description: Secret object name
+                              type: string
+                            storageType:
+                              description: 'Remote Storage type. Supported values:
+                                s3'
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  appSrcDeployStatus:
+                    additionalProperties:
+                      description: AppSrcDeployInfo represents deployment info for
+                        list of Apps
+                      properties:
+                        appDeploymentInfo:
+                          items:
+                            description: AppDeploymentInfo represents a single App
+                              deployment information
+                            properties:
+                              Size:
+                                format: int64
+                                type: integer
+                              appName:
+                                type: string
+                              deployStatus:
+                                description: AppDeploymentStatus represents the status
+                                  of an App on the Pod
+                                type: integer
+                              lastModifiedTime:
+                                type: string
+                              objectHash:
+                                type: string
+                              repoState:
+                                description: AppRepoState represent the App state
+                                  on remote store
+                                type: integer
+                            type: object
+                          type: array
+                      type: object
+                    description: Represents the Apps deployment status
+                    type: object
+                  appsRepoStatusPollIntervalSeconds:
+                    description: Interval in seconds to check the Remote Storage for
+                      App changes This is introduced here so that we dont do spec
+                      validation in every reconcile just because the spec and status
+                      are different.
+                    format: int64
+                    type: integer
+                  isDeploymentInProgress:
+                    description: IsDeploymentInProgress indicates if the Apps deployment
+                      is in progress
+                    type: boolean
+                  lastAppInfoCheckTime:
+                    description: This is set to the time when we get the list of apps
+                      from remote storage.
+                    format: int64
+                    type: integer
+                  version:
+                    description: App Framework version info for future use
+                    type: integer
+                type: object
               captain:
                 description: name or label of the search head captain
                 type: string
@@ -2599,6 +2827,15 @@ spec:
         specReplicasPath: .spec.replicas
         statusReplicasPath: .status.replicas
       status: {}
+  - name: v1
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
   - name: v1beta1
     served: true
     storage: false

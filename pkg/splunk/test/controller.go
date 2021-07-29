@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,16 +47,16 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 	dstP := *dst
 	srcP := *src
 	switch srcP.(type) {
-	case *enterprisev1.ClusterMaster:
-		*dstP.(*enterprisev1.ClusterMaster) = *srcP.(*enterprisev1.ClusterMaster)
-	case *enterprisev1.IndexerCluster:
-		*dstP.(*enterprisev1.IndexerCluster) = *srcP.(*enterprisev1.IndexerCluster)
-	case *enterprisev1.LicenseMaster:
-		*dstP.(*enterprisev1.LicenseMaster) = *srcP.(*enterprisev1.LicenseMaster)
-	case *enterprisev1.SearchHeadCluster:
-		*dstP.(*enterprisev1.SearchHeadCluster) = *srcP.(*enterprisev1.SearchHeadCluster)
-	case *enterprisev1.Standalone:
-		*dstP.(*enterprisev1.Standalone) = *srcP.(*enterprisev1.Standalone)
+	case *enterpriseApi.ClusterMaster:
+		*dstP.(*enterpriseApi.ClusterMaster) = *srcP.(*enterpriseApi.ClusterMaster)
+	case *enterpriseApi.IndexerCluster:
+		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
+	case *enterpriseApi.LicenseMaster:
+		*dstP.(*enterpriseApi.LicenseMaster) = *srcP.(*enterpriseApi.LicenseMaster)
+	case *enterpriseApi.SearchHeadCluster:
+		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
+	case *enterpriseApi.Standalone:
+		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
 	default:
 		return false
 	}

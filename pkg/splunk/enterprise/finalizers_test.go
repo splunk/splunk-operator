@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -70,7 +70,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	wantDeleted := false
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
 		wantDeleted = true
-		apiVersion, _ := schema.ParseGroupVersion(enterprisev1.APIVersion)
+		apiVersion, _ := schema.ParseGroupVersion(enterpriseApi.APIVersion)
 		mockCalls["Update"] = []spltest.MockFuncCall{
 			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 		}
@@ -134,7 +134,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			mockCalls["Get"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v1.ClusterMaster-test-master1"},
+				{MetaName: "*v2.ClusterMaster-test-master1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 		}
@@ -193,7 +193,7 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 	wantDeleted := false
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
 		wantDeleted = true
-		apiVersion, _ := schema.ParseGroupVersion(enterprisev1.APIVersion)
+		apiVersion, _ := schema.ParseGroupVersion(enterpriseApi.APIVersion)
 		mockCalls["Update"] = []spltest.MockFuncCall{
 			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 		}
@@ -214,7 +214,7 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
 }
 func TestDeleteSplunkPvc(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -241,7 +241,7 @@ func TestDeleteSplunkPvc(t *testing.T) {
 }
 
 func TestDeleteSplunkClusterMasterPvc(t *testing.T) {
-	cr := enterprisev1.ClusterMaster{
+	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
