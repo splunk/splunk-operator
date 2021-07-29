@@ -327,7 +327,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	// Commenting this test for now as ES app is not installed locally on Deployer anymore before bundle push due to change from CSPL-1167
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("appfwint, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
