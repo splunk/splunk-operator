@@ -13,10 +13,6 @@ jobs:
       run: |
         go version
         go get -u golang.org/x/lint/golint
-    - name: Install goveralls
-      run: |
-        go version
-        go get github.com/mattn/goveralls@latest
     - name: Check Source formatting
       run: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
     - name: Lint source code
