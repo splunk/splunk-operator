@@ -102,13 +102,13 @@ func (d *Deployment) DeployStandalone(name string) (*enterpriseApi.Standalone, e
 
 // DeployMonitoringConsole deploys MC instance on specified testenv,
 // licenseMasterRef is optional, pass empty string if MC should not be attached to a LM
-func (d *Deployment) DeployMonitoringConsole(name string, licenseMasterRef string) (*enterprisev1.MonitoringConsole, error) {
+func (d *Deployment) DeployMonitoringConsole(name string, licenseMasterRef string) (*enterpriseApi.MonitoringConsole, error) {
 	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, licenseMasterRef)
 	deployed, err := d.deployCR(name, mc)
 	if err != nil {
 		return nil, err
 	}
-	return deployed.(*enterprisev1.MonitoringConsole), err
+	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
 // GetInstance retrieves the standalone, indexer, searchhead, licensemaster instance
@@ -458,8 +458,8 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterpriseApi.Standal
 	return deployed.(*enterpriseApi.Standalone), err
 }
 
-// DeployStandalonewithGivenSpec deploys a standalone with given spec
-func (d *Deployment) DeployStandalonewithGivenSpec(name string, spec enterpriseApi.StandaloneSpec) (*enterpriseApi.Standalone, error) {
+// DeployStandaloneWithGivenSpec deploys a standalone with given spec
+func (d *Deployment) DeployStandaloneWithGivenSpec(name string, spec enterpriseApi.StandaloneSpec) (*enterpriseApi.Standalone, error) {
 	standalone := newStandaloneWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, standalone)
 	if err != nil {

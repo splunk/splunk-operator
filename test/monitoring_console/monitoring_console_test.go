@@ -69,8 +69,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
 			mcName := deployment.GetName()
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
@@ -136,8 +136,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			standaloneOneName := deployment.GetName()
 			mcName := deployment.GetName()
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
@@ -289,8 +289,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			standaloneName := deployment.GetName()
 			mcName := deployment.GetName()
-			spec := enterprisev1.StandaloneSpec{
-				CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},

@@ -467,8 +467,8 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 }
 
 // newMonitoringConsoleSpec returns MC Spec with given name, namespace and license master Ref
-func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterprisev1.MonitoringConsole {
-	mcSpec := enterprisev1.MonitoringConsole{
+func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
 		},
@@ -478,8 +478,8 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterprisev1.MonitoringConsoleSpec{
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
@@ -579,6 +579,16 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
+}
+
+// GetConfigMap Gets the config map for a given k8 config map name
+func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := deployment.GetInstance(configMapName, configMap)
+	if err != nil {
+		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+	}
+	return configMap, err
 }
 
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind

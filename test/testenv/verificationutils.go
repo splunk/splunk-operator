@@ -60,7 +60,7 @@ type PodDetailsStruct struct {
 }
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
-func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string, monitoringConsole *enterprisev1.MonitoringConsole, testenvInstance *TestEnv) {
+func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deploymentName, monitoringConsole)
 		if err != nil {
@@ -428,7 +428,7 @@ func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crN
 // VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
 func VerifyMonitoringConsolePhase(deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
-		mc := &enterprisev1.MonitoringConsole{}
+		mc := &enterpriseApi.MonitoringConsole{}
 		err := deployment.GetInstance(crName, mc)
 		if err != nil {
 			return splcommon.PhaseError
