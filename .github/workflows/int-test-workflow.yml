@@ -71,7 +71,7 @@ jobs:
         uses: docker-practice/actions-setup-docker@v1
       - name: Install Operator SDK
         run: |
-          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v0.19.0/operator-sdk-v0.19.0-x86_64-linux-gnu
+          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ secrets.OPERATOR_SDK_VERSION }}/operator-sdk-${{ secrets.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
           sudo chmod +x /usr/local/bin/operator-sdk
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1

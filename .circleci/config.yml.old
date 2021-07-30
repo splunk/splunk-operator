@@ -1,0 +1,508 @@
+# See https://circleci.com/blog/using-circleci-workflows-to-replicate-docker-hub-automated-builds/
+version: 2.1
+
+orbs:
+  kubernetes: circleci/kubernetes@0.11.2
+  aws-cli: circleci/aws-cli@1.3.0
+  aws-eks: circleci/aws-eks@1.0.3
+
+workflows:
+  version: 2
+  eks-nightly-test:
+    triggers:
+      - schedule:
+          cron: "0 12 * * *"
+          filters:
+            branches:
+              only:
+                - develop
+                - feature-appframework
+    jobs:
+      - build-image
+      - unit-tests
+      - eks-integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - appfw-eks-integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - vulnerability-scan:
+          requires:
+            - build-image     
+  nightly-integration-test:
+    triggers:
+      - schedule:
+          cron: "0 12 * * *"
+          filters:
+            branches:
+              only:
+                - develop
+    jobs:
+      - build-image
+      - unit-tests
+      - integration-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - vulnerability-scan:
+          requires:
+            - build-image     
+  build-and-push:
+    jobs:
+      - build-image
+      - unit-tests
+      - smoke-tests:
+          requires:
+            - build-image
+            - unit-tests
+      - vulnerability-scan:
+          requires:
+            - build-image
+      - push-latest:
+          requires:
+            - build-image
+            - unit-tests
+            - smoke-tests
+            - vulnerability-scan
+          filters:
+            branches:
+              only:
+                - master
+      - push-edge:
+          requires:
+            - build-image
+            - unit-tests
+            - smoke-tests
+            - vulnerability-scan
+          filters:
+            branches:
+              only:
+                - develop
+      - push-release:
+          requires:
+            - build-image
+            - unit-tests
+            - smoke-tests
+            - vulnerability-scan
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+/
+            branches:
+              ignore: /.*/
+executors:
+  ubuntu-machine:
+    environment:
+      # Test nodes for parallel runs
+      NUM_NODES: 2
+      # Size of k8s cluster.
+      NUM_WORKERS: 3
+      ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    machine:
+      image: ubuntu-1604:202004-01
+    resource_class: xlarge
+  test-runner:
+    # Config for cluster on EKS/GKE
+    environment:
+      # Set cluster workers to 5 (5 cluster nodes)
+      # NUM_NODES represent number of parallel test executions
+      # NUM_WORKERS represent number of nodes in a k8 cluster
+      NUM_NODES: 3 
+      NUM_WORKERS: 8
+      CLUSTER_NAME: eks-integration-test-cluster
+      ENTERPRISE_IMAGE_NAME: splunk/splunk:edge
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    machine:
+      image: ubuntu-1604:202004-01
+    resource_class: medium
+  golang-builder:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    working_directory: /opt/app-root/src/splunk-operator
+    docker:
+      - image: splunk/splunk-operator-builder:develop
+  docker-publisher:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    docker:
+      - image: circleci/buildpack-deps:buster
+  classic-machine:
+    environment:
+      IMAGE_NAME: splunk/splunk-operator
+      IMAGE_FILENAME: splunk-operator
+    machine:
+      image: circleci/classic:latest
+commands:
+  save_image:
+    description: "Save image"
+    steps:
+      - run:
+          name: "Save image"
+          command: |
+            mkdir -p /tmp/images
+            docker image save -o /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar ${IMAGE_NAME}:${CIRCLE_SHA1}
+  load_image:
+    description: "Load image"
+    steps:
+      - run:
+          name: "Load image"
+          command: docker load -i /tmp/images/${IMAGE_FILENAME}-${CIRCLE_SHA1}.tar
+  push_image:
+    description: "Load, tag and push an image"
+    parameters:
+      tag:
+        type: string
+    steps:
+      - load_image
+      - run: 
+          name: Tag image
+          command: |
+            docker tag ${IMAGE_NAME}:${CIRCLE_SHA1} ${IMAGE_NAME}:<< parameters.tag >>
+      - run:
+          name: Push latest image to DockerHub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push ${IMAGE_NAME}:<< parameters.tag >>
+jobs:
+  build-image:
+    executor: golang-builder
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: 
+          name: Pull base image updates
+          command: docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
+      - run: 
+          name: Build splunk/splunk-operator image
+          command: operator-sdk build --verbose ${IMAGE_NAME}:${CIRCLE_SHA1}
+      - save_image
+      - persist_to_workspace:
+          name: Persist images to workspace
+          root: /tmp
+          paths:
+            - images
+      - store_artifacts:
+          name: Save images as artifacts
+          path: /tmp/images
+  unit-tests:
+    executor: golang-builder
+    steps:
+      - checkout
+      - run: 
+          name: Check source formatting
+          command: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - run: 
+          name: Lint source code
+          command: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - run:
+          name: Run package tests
+          command: make test
+      - run:
+          name: Upload coverage.out
+          command: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken $COVERALLS_TOKEN
+      - store_artifacts:
+          name: Save coverage.out as artifact
+          path: coverage.out
+  # Runs smoke tests against a k8s cluster
+  smoke-tests:
+    executor: ubuntu-machine
+    steps:
+      - run: 
+          name: Setup Splunk operator and enterprise image env vars
+          command: |
+            echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
+            echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
+            echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+      - kubernetes/install
+      - aws-cli/install
+      - aws-eks/install-eksctl
+      - run:
+          name: Install kind tool
+          command: |
+            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.7.0/kind-$(uname)-amd64
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      # load the operator image to local registry in the VM
+      - load_image
+      - run:
+          name: Print out version and environment
+          command: |
+            ls -al
+            echo "GO VERSION=`go version`"
+            echo "CIRCLE_SHA1=$CIRCLE_SHA1"
+            echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
+            echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
+            echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
+            echo "CLUSTER_PROVIDER=$CLUSTER_PROVIDER"
+      - run:
+          # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
+          # it will skip. Uses NUM_WORKERS for size of cluster
+          name: Deploy k8s cluster
+          command: |
+            make cluster-up 
+            kubectl version # log the k8s version
+          no_output_timeout: 30m
+      - run:
+          # Run the smoke tests againsts the cluster deployed above.
+          # Test againsts the SPLUNK_OPERATOR_IMAGE and SPLUNK_ENTERPRISE_IMAGE 
+          name: Run smoke tests 
+          command: |
+            make int-test
+            mkdir -p /tmp/test-results
+            find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: smoke
+      - store_test_results:
+          name: Save test results
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+  # Runs integration tests against a k8s cluster
+  integration-tests:
+    executor: ubuntu-machine
+    steps:
+      - run: 
+          name: Setup Splunk operator and enterprise image env vars
+          command: |
+            echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
+            echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
+            echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+      - kubernetes/install
+      - aws-cli/install
+      - aws-eks/install-eksctl
+      - run:
+          name: Install kind tool
+          command: |
+            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.7.0/kind-$(uname)-amd64
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      # load the operator image to local registry in the VM
+      - load_image
+      - run:
+          name: Print out version and environment
+          command: |
+            ls -al
+            echo "GO VERSION=`go version`"
+            echo "CIRCLE_SHA1=$CIRCLE_SHA1"
+            echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
+            echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
+            echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
+            echo "CLUSTER_PROVIDER=$CLUSTER_PROVIDER"
+      - run:
+          # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
+          # it will skip. Uses NUM_WORKERS for size of cluster
+          name: Deploy k8s cluster
+          command: |
+            make cluster-up 
+            kubectl version # log the k8s version
+          no_output_timeout: 30m
+      - run:
+          # Run the integration tests againsts the cluster deployed above.
+          # Test againsts the SPLUNK_OPERATOR_IMAGE and SPLUNK_ENTERPRISE_IMAGE 
+          name: Run integration tests 
+          command: |
+            make int-test
+            mkdir -p /tmp/test-results
+            find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: "integration"
+      - store_test_results:
+          name: Save test results
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+  vulnerability-scan:
+    executor: classic-machine
+    steps:
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - load_image
+      - run:
+          name: Setup clair scanner
+          command: make setup_clair_scanner
+      - run:
+          name: Scan container image
+          command: make run_clair_scan
+      - run:
+          name: Stop clair scanner
+          command: make stop_clair_scanner
+      - store_artifacts:
+          name: Save scan results as artifacts
+          path: clair-scanner-logs
+  push-latest:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "latest"
+  push-edge:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "edge"
+  push-release:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      - push_image:
+          tag: "${CIRCLE_TAG}"
+  # Runs integration tests against a kubernetes cluster
+  eks-integration-tests:
+    executor: test-runner
+    steps:
+      - run: 
+          name: Setup Splunk operator and enterprise image env vars
+          command: |
+            echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
+            echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
+            echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+            echo 'export CLUSTER_NODES=${NUM_NODES}' >> $BASH_ENV
+            echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
+            echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_NAME=eks-integration-test-cluster' >> $BASH_ENV
+      - kubernetes/install
+      - aws-cli/install
+      - aws-eks/install-eksctl
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      # load the operator image to local registry in the VM
+      - load_image
+      - run:
+          name: Print out version and environment
+          command: |
+            ls -al
+            echo "GO VERSION=`go version`"
+            echo "CIRCLE_SHA1=$CIRCLE_SHA1"
+            echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
+            echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
+            echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
+            echo "CLUSTER_PROVIDER=$TEST_CLUSTER_PLATFORM"
+            echo "TEST_CLUSTER=$TEST_CLUSTER_NAME"
+      - run:
+          # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
+          # it will skip. Uses NUM_WORKERS for size of cluster
+          name: Deploy k8s cluster
+          command: |
+            make cluster-up 
+            kubectl version # log the k8s version
+          no_output_timeout: 30m
+      - run:
+          # Run the integration tests againsts the cluster deployed above.
+          # Test againsts the SPLUNK_OPERATOR_IMAGE and SPLUNK_ENTERPRISE_IMAGE 
+          name: Run integration tests 
+          command: |
+            make int-test
+            mkdir -p /tmp/test-results
+            find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: "integration"
+      - store_test_results:
+          name: Save test results
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+      - run:
+          when: always
+          # Delete k8 cluster
+          name: Delete cluster
+          command: |
+            make cluster-down
+          no_output_timeout: 30m
+  # Runs integration tests against a kubernetes cluster
+  appfw-eks-integration-tests:
+    executor: test-runner
+    steps:
+      - run: 
+          name: Setup Splunk operator and enterprise image env vars
+          command: |
+            echo 'export SPLUNK_OPERATOR_IMAGE=${IMAGE_NAME}:${CIRCLE_SHA1}' >> $BASH_ENV
+            echo 'export SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_NAME}' >> $BASH_ENV
+            echo 'export COMMIT_HASH=$(echo ${CIRCLE_SHA1:0:7})' >> $BASH_ENV
+            echo 'export CLUSTER_NODES=${NUM_NODES}' >> $BASH_ENV
+            echo 'export CLUSTER_WORKERS=${NUM_WORKERS}' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
+            echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
+            echo 'export TEST_CLUSTER_NAME=appfw-eks-integration-test-cluster' >> $BASH_ENV
+      - kubernetes/install
+      - aws-cli/install
+      - aws-eks/install-eksctl
+      - checkout
+      - attach_workspace:
+          name: Restore workspace
+          at: /tmp
+      # load the operator image to local registry in the VM
+      - load_image
+      - run:
+          name: Print out version and environment
+          command: |
+            ls -al
+            echo "GO VERSION=`go version`"
+            echo "CIRCLE_SHA1=$CIRCLE_SHA1"
+            echo "SPLUNK_OPERATOR_IMAGE=$SPLUNK_OPERATOR_IMAGE"
+            echo "SPLUNK_ENTEPRISE_IMAGE=$SPLUNK_ENTERPRISE_IMAGE"
+            echo "PRIVATE_REGISTRY=$PRIVATE_REGISTRY"
+            echo "CLUSTER_PROVIDER=$TEST_CLUSTER_PLATFORM"
+            echo "TEST_CLUSTER=$TEST_CLUSTER_NAME"
+      - run:
+          # Deploys a eks or kind cluster depending of CLUSTER_PROVIDER flag. If cluster already exists,
+          # it will skip. Uses NUM_WORKERS for size of cluster
+          name: Deploy k8s cluster
+          command: |
+            make cluster-up 
+            kubectl version # log the k8s version
+          no_output_timeout: 30m
+      - run:
+          # Run the integration tests againsts the cluster deployed above.
+          # Test againsts the SPLUNK_OPERATOR_IMAGE and SPLUNK_ENTERPRISE_IMAGE 
+          name: Run integration tests 
+          command: |
+            make int-test
+            mkdir -p /tmp/test-results
+            find ./test -name "*junit.xml" -exec cp {} /tmp/test-results \;
+          environment: 
+            TEST_FOCUS: "appframework"
+      - store_test_results:
+          name: Save test results
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+      - run:
+          # Delete k8 cluster
+          when: always
+          name: Delete cluster
+          command: |
+            make cluster-down
+          no_output_timeout: 30m
