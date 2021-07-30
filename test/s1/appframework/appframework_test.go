@@ -97,7 +97,7 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Create Standalone Deployment with App Framework
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
@@ -226,7 +226,7 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
 			// Ensure Standalone goes to Ready phase
