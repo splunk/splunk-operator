@@ -435,6 +435,7 @@ jobs:
       - store_artifacts:
           path: /tmp/test-results
       - run:
+          when: always
           # Delete k8 cluster
           name: Delete cluster
           command: |
@@ -500,6 +501,7 @@ jobs:
           path: /tmp/test-results
       - run:
           # Delete k8 cluster
+          when: always
           name: Delete cluster
           command: |
             make cluster-down
