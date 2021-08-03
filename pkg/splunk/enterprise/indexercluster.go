@@ -136,6 +136,17 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		//update MC
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.Spec.MonitoringConsoleRef.Name)}
+			_, err := splctrl.GetStatefulSetByName(client, namespacedName)
+			//if MC pod already exists
+			if err == nil {
+				c := mgr.getMonitoringConsoleClient(cr)
+				err := c.AutomateMCApplyChanges(false)
+				return result, err
+			}
+		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(client, cr, false, false)
@@ -169,6 +180,12 @@ type indexerClusterPodManager struct {
 	cr              *enterpriseApi.IndexerCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+//getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
+func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.Spec.MonitoringConsoleRef.Name, false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
