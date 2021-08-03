@@ -97,14 +97,14 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Create Standalone Deployment with App Framework
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
@@ -162,7 +162,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			//testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			podNames := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0), fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
 
@@ -226,7 +226,7 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
 			// Ensure Standalone goes to Ready phase
