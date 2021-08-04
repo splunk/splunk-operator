@@ -132,6 +132,7 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Delete Apps on S3 for Version", appVersion)
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
+			testenvInstance.Log.Info("Testing upgrade scenario")
 
 			//Upload new Versioned Apps to S3
 			appFileList = testenv.GetAppFileList(appListV2, 2)
@@ -243,6 +244,52 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+			testenvInstance.Log.Info("Testing downgrade scenario")
+
+			//Upload new Versioned Apps to S3
+			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appVersion = "V1"
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify MC Pod is Ready
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify Apps are downloaded by init-container
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+
+			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app verison", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+
+			//Verify Apps are updated
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+
 		})
 	})
 
@@ -314,6 +361,7 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Delete Apps on S3 for Version", appVersion)
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
+			testenvInstance.Log.Info("Testing upgrade scenario")
 
 			//Upload new Versioned Apps to S3
 			appVersion = "V2"
@@ -464,10 +512,25 @@ var _ = Describe("c3appfw test", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframework: can deploy a C3 SVA with apps installed locally on CM and SHC Deployer, and cluster-wide on Peers and SHs", func() {
-			// Upload V2 apps to a 2nd S3 bucket as we need 2 buckets for this test.(V1 apps to be used for local install, V2 apps for cluster install)
+
+			//Delete apps on S3 for new Apps to split them accorss both cluster and local
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			//Split Applist into 2 list for local and cluster install
+			appListLocal := appListV1[len(appListV1)/2:]
+			appListCluster := appListV1[:len(appListV1)/2]
+
+			// Upload appListLocal to bucket 1 on S3
+			appFileList := testenv.GetAppFileList(appListLocal, 1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload apps to a 2nd directory on S3 bucket as we need 2 buckets locations for this test.(appListLocal apps to be used for local install, appListCluster apps for cluster install)
 			s3TestDirCluster := "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			ClusterappFileList := testenv.GetAppFileList(appListV2, 2)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, ClusterappFileList, downloadDirV2)
+			clusterappFileList := testenv.GetAppFileList(appListCluster, 1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -476,11 +539,11 @@ var _ = Describe("c3appfw test", func() {
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceLocalSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 			appSourceClusterSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "cluster",
+				Scope:   enterpriseApi.ScopeCluster,
 			}
 			appSourceNameLocal := "appframework-localapps-" + testenv.RandomDNSName(3)
 			appSourceSpecLocal := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameLocal, s3TestDir, appSourceLocalSpec)}
@@ -515,27 +578,29 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify apps with local scope are downloaded by init-container
+			appVersion := "V1"
 			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList := testenv.GetAppFileList(appListV1, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for local install for  apps version V1")
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
-			appFileList = testenv.GetAppFileList(appListV2, 2)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for cluster install for  apps version V2")
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			appFileList = testenv.GetAppFileList(appListCluster, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify Apps are installed locally on Cluster Master and Deployer for  apps version V1")
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
+			localPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
 			// Verify apps with cluster scope are installed on indexers
-			podNames = []string{}
+			clusterPodNames := []string{}
 			for i := 0; i < int(indexerReplicas); i++ {
 				sh := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				podNames = append(podNames, string(sh))
+				clusterPodNames = append(clusterPodNames, string(sh))
 			}
 
 			// Get SH Replicas and add sh pods to pod names
@@ -544,13 +609,119 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of SHC")
 			shReplicas := shc.Spec.Replicas
+
 			for i := 0; i < int(shReplicas); i++ {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				podNames = append(podNames, string(sh))
+				clusterPodNames = append(clusterPodNames, string(sh))
 			}
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 
-			testenvInstance.Log.Info("Verify Apps are installed cluster wide for  apps version V2")
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, "enabled", false, true)
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+			testenvInstance.Log.Info("Testing upgrade scenario")
+
+			//Upload new Versioned Apps to S3
+			appVersion = "V2"
+			appFileList = testenv.GetAppFileList(appListLocal, 2)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload apps to a 2nd directory on S3 bucket as we need 2 buckets locations for this test.(appListLocal apps to be used for local install, appListCluster apps for cluster install)
+			clusterappFileList = testenv.GetAppFileList(appListCluster, 2)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Ensure that the CM goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure SHC go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify apps with local scope are downloaded by init-container
+			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
+			appFileList = testenv.GetAppFileList(appListLocal, 2)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with cluster scope are downloaded by init-container
+			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
+			appFileList = testenv.GetAppFileList(appListCluster, 2)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with local scope are installed locally on CM and on SHC Deployer
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
+
+			// Verify apps with cluster scope are installed on indexers
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
+
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+			testenvInstance.Log.Info("Testing downgrade scenario")
+
+			//Upload new Versioned Apps to S3 to test downgrade scenario
+			appVersion = "V1"
+			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload apps to a 2nd directory on S3 bucket as we need 2 buckets locations for this test.(appListLocal apps to be used for local install, appListCluster apps for cluster install)
+			clusterappFileList = testenv.GetAppFileList(appListCluster, 1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Ensure that the CM goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure SHC go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify apps with local scope are downloaded by init-container
+			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
+			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with cluster scope are downloaded by init-container
+			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
+			appFileList = testenv.GetAppFileList(appListCluster, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with local scope are installed locally on CM and on SHC Deployer
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
+
+			// Verify apps with cluster scope are installed on indexers
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 		})
 	})
 })
