@@ -643,19 +643,19 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 				},
 			},
@@ -692,7 +692,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
-					Scope:   "local",
+					Scope:   enterpriseApi.ScopeLocal,
 				},
 				VolList: []enterpriseApi.VolumeSpec{
 					{
@@ -718,7 +718,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local",
+							Scope:   enterpriseApi.ScopeLocal,
 						},
 					},
 					{
@@ -726,7 +726,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local",
+							Scope:   enterpriseApi.ScopeLocal,
 						},
 					},
 					{
@@ -877,7 +877,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 				},
 			},

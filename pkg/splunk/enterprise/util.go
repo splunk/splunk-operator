@@ -252,6 +252,11 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
   app_paths_install:
     default:`)
 
+	// Used for apps requiring pre-configuration before installing on the cluster
+	// Example: Splunk Enterprise Security App
+	yamlClusterAppsWithPreConfHeader := fmt.Sprintf(`splunk:
+  apps_location:`)
+
 	var localAppsConf, clusterAppsConf string
 	if crKind == "ClusterMaster" {
 		clusterAppsConf = yamlConfIdcHeader
@@ -262,6 +267,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	}
 
 	localAppsConf = yamlConfLocalHeader
+	clusterAppsWithPreConf := yamlClusterAppsWithPreConfHeader
 
 	var mapKeys []string
 
@@ -275,7 +281,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		appDeployList := appsSrcDeployStatus[appSrc].AppDeploymentInfoList
 
 		switch scope := getAppSrcScope(appConf, appSrc); scope {
-		case "local":
+		case enterpriseApi.ScopeLocal:
 			for idx := range appDeployList {
 				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
@@ -284,12 +290,21 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 				}
 			}
 
-		case "cluster":
+		case enterpriseApi.ScopeCluster:
 			for idx := range appDeployList {
 				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
 					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
 					clusterAppsConf = fmt.Sprintf(`%s
       - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
+				}
+			}
+
+		case enterpriseApi.ScopeClusterWithPreConfig:
+			for idx := range appDeployList {
+				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
+					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
+					clusterAppsWithPreConf = fmt.Sprintf(`%s
+      - "/init-apps/%s/%s"`, clusterAppsWithPreConf, appSrc, appDeployList[idx].AppName)
 				}
 			}
 
@@ -307,6 +322,9 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
 	}
 
+	if clusterAppsWithPreConf != yamlClusterAppsWithPreConfHeader {
+		mapAppListing["app-list-cluster-with-pre-config.yaml"] = clusterAppsWithPreConf
+	}
 	// Create App list config map
 	configMapName := GetSplunkAppsConfigMapName(cr.GetName(), crKind)
 	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
@@ -760,18 +778,25 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 // 1. Completing the changes for Deletes. Called with state=AppStateDeleted, and status=DeployStatusPending
 // 2. Completing the changes for Active(Apps newly added, apps modified, Apps previously deleted, and now active).
 // Note:- Used in only for Phase-2
-func markAppsStatusToComplete(appSrcDeplymentStatus map[string]enterpriseApi.AppSrcDeployInfo) error {
+func markAppsStatusToComplete(client splcommon.ControllerClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appSrcDeploymentStatus map[string]enterpriseApi.AppSrcDeployInfo) error {
 	var err error
 	scopedLog := log.WithName("markAppsStatusToComplete")
 
-	// ToDo: Passing appSrcDeplymentStatus is redundant, but this function will go away in phase-3, so ok for now.
-	for appSrc := range appSrcDeplymentStatus {
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
-		changeAppSrcDeployInfoStatus(appSrc, appSrcDeplymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
+	// ToDo: Passing appSrcDeploymentStatus is redundant, but this function will go away in phase-3, so ok for now.
+	for appSrc := range appSrcDeploymentStatus {
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
+		changeAppSrcDeployInfoStatus(appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
 	}
 
+	// ToDo: For now disabling the configMap reset, as it causes unnecessary pod resets due to annotations change
+	// Now that all the apps are deployed. Update the same in the App listing configMap
+	// _, _, err = ApplyAppListingConfigMap(client, cr, appConf, appSrcDeploymentStatus)
+	// if err != nil {
+	// 	return err
+	// }
+
 	scopedLog.Info("Marked the App deployment status to complete")
-	// ToDo: sgontla: Caller of this API also needs to set "IsDeploymentInProgress = false" once after completing this function call for all the app sources
+	// ToDo: Caller of this API also needs to set "IsDeploymentInProgress = false" once after completing this function call for all the app sources
 
 	return err
 }
