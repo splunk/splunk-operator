@@ -614,7 +614,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		// Always sort the slice, so that map entries are ordered, to avoid pod resets
 		sort.Strings(appListingFiles)
 
-		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone {
+		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster {
 			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
 		}
 	}
