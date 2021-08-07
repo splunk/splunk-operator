@@ -328,7 +328,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	// Commenting this test for now as ES app is not installed locally on Deployer anymore before bundle push due to change from CSPL-1167
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("appfwint, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
@@ -352,7 +352,7 @@ var _ = Describe("c3appfw test", func() {
 
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeCluster,
+				Scope:   enterpriseApi.ScopeClusterWithPreConfig,
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
 			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
@@ -386,8 +386,8 @@ var _ = Describe("c3appfw test", func() {
 					ClusterMasterRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
-					LivenessInitialDelaySeconds:  1450,
-					ReadinessInitialDelaySeconds: 1450,
+					// LivenessInitialDelaySeconds:  1450,
+					// ReadinessInitialDelaySeconds: 1450,
 				},
 				Replicas:           3,
 				AppFrameworkConfig: appFrameworkSpec,

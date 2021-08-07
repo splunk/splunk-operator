@@ -202,7 +202,7 @@ var _ = Describe("s1appfw test", func() {
 
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
+				Scope:   enterpriseApi.ScopeClusterWithPreConfig,
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
 			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
@@ -219,9 +219,9 @@ var _ = Describe("s1appfw test", func() {
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "Always",
 					},
-					Volumes:                      []corev1.Volume{},
-					LivenessInitialDelaySeconds:  600,
-					ReadinessInitialDelaySeconds: 660,
+					Volumes: []corev1.Volume{},
+					// LivenessInitialDelaySeconds:  600,
+					// ReadinessInitialDelaySeconds: 660,
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
