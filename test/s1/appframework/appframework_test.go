@@ -202,7 +202,7 @@ var _ = Describe("s1appfw test", func() {
 
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeClusterWithPreConfig,
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
 			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
