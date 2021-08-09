@@ -123,10 +123,6 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
-	if instanceType == SplunkMonitoringConsole {
-		service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetNamespace(), isHeadless)
-		instanceIdentifier = cr.GetNamespace()
-	}
 	if instanceType == SplunkIndexer {
 		if len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part

@@ -31,8 +31,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-headless"},
-		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
+		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
