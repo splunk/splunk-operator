@@ -411,7 +411,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Deploy Monitoring Console CRD
+			// Deploy Monitoring Console Pod
 			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
@@ -477,6 +477,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure Indxer cluster scales up and go to ScalingUp phase
 			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
 
+			// Deploy Standalone Pod
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -567,7 +568,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Deploy Monitoring Console CRD
+			// Deploy Monitoring Console Pod
 			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 

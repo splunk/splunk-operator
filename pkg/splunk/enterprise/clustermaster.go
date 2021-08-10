@@ -183,7 +183,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 	return result, nil
 }
 
-// clusterMasterPodManager is used to manage the cluster master pof
+// clusterMasterPodManager is used to manage the cluster master pod
 type clusterMasterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
