@@ -741,3 +741,171 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 	}
 	return nil
 }
+
+// DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
+func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster master
+	cmSpec := enterpriseApi.ClusterMasterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+	}
+	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy the indexer cluster
+	_, err = d.DeployIndexerCluster(name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	if err != nil {
+		return err
+	}
+
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterMasterRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+		Replicas: 3,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// DeployMultisiteClusterWithMonitoringConsole deploys cluster-master, indexers in multiple sites (SHC LM Optional) with monitoring console
+func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Master
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license master
+		_, err := d.DeployLicenseMaster(name)
+		if err != nil {
+			return err
+		}
+
+		licenseMaster = name
+	}
+
+	// Deploy the cluster-master
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+
+	// Cluster Master Spec
+	cmSpec := enterpriseApi.ClusterMasterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			Defaults: defaults,
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+	}
+
+	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: %s
+`, name, siteName)
+		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-cluster-master-service
+  site: site0
+`, name)
+	// Deploy the SH cluster
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: splcommon.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterMasterRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
+			},
+			Defaults: siteDefaults,
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+		Replicas: 3,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
