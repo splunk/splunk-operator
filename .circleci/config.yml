@@ -456,6 +456,7 @@ jobs:
             echo 'export TEST_CLUSTER_PLATFORM=eks' >> $BASH_ENV
             echo 'export PRIVATE_REGISTRY=$ECR_REPOSITORY' >> $BASH_ENV
             echo 'export TEST_CLUSTER_NAME=appfw-eks-integration-test-cluster-${CIRCLE_BUILD_NUM}' >> $BASH_ENV
+            echo 'export NUM_NODES=2' >> $BASH_ENV
       - kubernetes/install
       - aws-cli/install
       - aws-eks/install-eksctl
