@@ -669,9 +669,9 @@ spec:
                             this location. Logical name must be unique to the appRepo
                           type: string
                         scope:
-                          description: 'Scope of the App deployment: cluster, local.
-                            Scope determines whether the App(s) is/are installed locally
-                            or cluster-wide'
+                          description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                            local. Scope determines whether the App(s) is/are installed
+                            locally or cluster-wide'
                           type: string
                         volumeName:
                           description: Remote Storage Volume name
@@ -694,9 +694,9 @@ spec:
                       sources
                     properties:
                       scope:
-                        description: 'Scope of the App deployment: cluster, local.
-                          Scope determines whether the App(s) is/are installed locally
-                          or cluster-wide'
+                        description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                          local. Scope determines whether the App(s) is/are installed
+                          locally or cluster-wide'
                         type: string
                       volumeName:
                         description: Remote Storage Volume name
@@ -2617,8 +2617,8 @@ spec:
                               type: string
                             scope:
                               description: 'Scope of the App deployment: cluster,
-                                local. Scope determines whether the App(s) is/are
-                                installed locally or cluster-wide'
+                                clusterWithPreConfig, local. Scope determines whether
+                                the App(s) is/are installed locally or cluster-wide'
                               type: string
                             volumeName:
                               description: Remote Storage Volume name
@@ -2642,8 +2642,8 @@ spec:
                           App sources
                         properties:
                           scope:
-                            description: 'Scope of the App deployment: cluster, local.
-                              Scope determines whether the App(s) is/are installed
+                            description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                              local. Scope determines whether the App(s) is/are installed
                               locally or cluster-wide'
                             type: string
                           volumeName:

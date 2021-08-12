@@ -180,7 +180,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[12]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13]}, "Update": {funcCalls[10], funcCalls[13]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterMaster{
@@ -448,19 +448,19 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "authenticationApps",
 						Location: "authenticationAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 				},
 			},
@@ -496,7 +496,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
-					Scope:   "local",
+					Scope:   enterpriseApi.ScopeLocal,
 				},
 				VolList: []enterpriseApi.VolumeSpec{
 					{
@@ -521,13 +521,13 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{Name: "securityApps",
 						Location: "securityAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 					{
 						Name:     "authenticationApps",
@@ -683,7 +683,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 						Location: "adminAppsRepo",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							VolName: "msos_s2s3_vol",
-							Scope:   "local"},
+							Scope:   enterpriseApi.ScopeLocal},
 					},
 				},
 			},

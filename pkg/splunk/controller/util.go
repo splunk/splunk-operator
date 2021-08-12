@@ -175,6 +175,18 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 				current.Containers[idx].Env = revised.Containers[idx].Env
 				result = true
 			}
+
+			if current.Containers[idx].LivenessProbe != nil && revised.Containers[idx].LivenessProbe != nil &&
+				current.Containers[idx].LivenessProbe.InitialDelaySeconds != revised.Containers[idx].LivenessProbe.InitialDelaySeconds {
+				current.Containers[idx].LivenessProbe.InitialDelaySeconds = revised.Containers[idx].LivenessProbe.InitialDelaySeconds
+				result = true
+			}
+
+			if current.Containers[idx].ReadinessProbe != nil && revised.Containers[idx].ReadinessProbe != nil &&
+				current.Containers[idx].ReadinessProbe.InitialDelaySeconds != revised.Containers[idx].ReadinessProbe.InitialDelaySeconds {
+				current.Containers[idx].ReadinessProbe.InitialDelaySeconds = revised.Containers[idx].ReadinessProbe.InitialDelaySeconds
+				result = true
+			}
 		}
 	}
 

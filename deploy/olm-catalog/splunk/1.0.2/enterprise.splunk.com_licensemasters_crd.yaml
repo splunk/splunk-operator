@@ -1,44 +1,31 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: searchheadclusters.enterprise.splunk.com
+  name: licensemasters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: SearchHeadCluster
-    listKind: SearchHeadClusterList
-    plural: searchheadclusters
+    kind: LicenseMaster
+    listKind: LicenseMasterList
+    plural: licensemasters
     shortNames:
-    - shc
-    singular: searchheadcluster
+    - lm
+    singular: licensemaster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of search head cluster
+    - description: Status of license master
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of the deployer
-      jsonPath: .status.deployerPhase
-      name: Deployer
-      type: string
-    - description: Desired number of search head cluster members
-      jsonPath: .status.replicas
-      name: Desired
-      type: integer
-    - description: Current number of ready search head cluster members
-      jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
-    - description: Age of search head cluster
+    - description: Age of license master
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1
+    name: v2
     schema:
       openAPIV3Schema:
-        description: SearchHeadCluster is the Schema for a Splunk Enterprise search
-          head cluster
+        description: LicenseMaster is the Schema for a Splunk Enterprise license master.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -53,8 +40,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: SearchHeadClusterSpec defines the desired state of a Splunk
-              Enterprise search head cluster
+            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
+              license master.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -652,7 +639,7 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
+                description: Splunk enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
                   appSources:
@@ -669,9 +656,9 @@ spec:
                             this location. Logical name must be unique to the appRepo
                           type: string
                         scope:
-                          description: 'Scope of the App deployment: cluster, local.
-                            Scope determines whether the App(s) is/are installed locally
-                            or cluster-wide'
+                          description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                            local. Scope determines whether the App(s) is/are installed
+                            locally or cluster-wide'
                           type: string
                         volumeName:
                           description: Remote Storage Volume name
@@ -694,9 +681,9 @@ spec:
                       sources
                     properties:
                       scope:
-                        description: 'Scope of the App deployment: cluster, local.
-                          Scope determines whether the App(s) is/are installed locally
-                          or cluster-wide'
+                        description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                          local. Scope determines whether the App(s) is/are installed
+                          locally or cluster-wide'
                         type: string
                       volumeName:
                         description: Remote Storage Volume name
@@ -717,15 +704,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
@@ -953,9 +939,18 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
-              replicas:
-                description: Number of search head pods; a search head cluster will
-                  be created if > 1
+              livenessInitialDelaySeconds:
+                description: 'LivenessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command)
+                  for the Liveness probe Note: If needed, Operator overrides with
+                  a higher value'
+                format: int32
+                type: integer
+              readinessInitialDelaySeconds:
+                description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
+                  for Readiness probe Note: If needed, Operator overrides with a higher
+                  value'
                 format: int32
                 type: integer
               resources:
@@ -1151,6 +1146,7 @@ spec:
                               x-kubernetes-int-or-string: true
                           required:
                           - port
+                          - protocol
                           type: object
                         type: array
                         x-kubernetes-list-map-keys:
@@ -2529,20 +2525,9 @@ spec:
                 type: array
             type: object
           status:
-            description: SearchHeadClusterStatus defines the observed state of a Splunk
-              Enterprise search head cluster
+            description: LicenseMasterStatus defines the observed state of a Splunk
+              Enterprise license master.
             properties:
-              adminPasswordChangedSecrets:
-                additionalProperties:
-                  type: boolean
-                description: Holds secrets whose admin password has changed
-                type: object
-              adminSecretChangedFlag:
-                description: Indicates when the admin password has been changed for
-                  a peer
-                items:
-                  type: boolean
-                type: array
               appContext:
                 description: App Framework Context
                 properties:
@@ -2566,8 +2551,8 @@ spec:
                               type: string
                             scope:
                               description: 'Scope of the App deployment: cluster,
-                                local. Scope determines whether the App(s) is/are
-                                installed locally or cluster-wide'
+                                clusterWithPreConfig, local. Scope determines whether
+                                the App(s) is/are installed locally or cluster-wide'
                               type: string
                             volumeName:
                               description: Remote Storage Volume name
@@ -2591,8 +2576,8 @@ spec:
                           App sources
                         properties:
                           scope:
-                            description: 'Scope of the App deployment: cluster, local.
-                              Scope determines whether the App(s) is/are installed
+                            description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                              local. Scope determines whether the App(s) is/are installed
                               locally or cluster-wide'
                             type: string
                           volumeName:
@@ -2614,15 +2599,15 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: App Package Remote Store provider. For
-                                e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws.
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio'
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
-                              description: Remote Storage type.
+                              description: 'Remote Storage type. Supported values:
+                                s3'
                               type: string
                           type: object
                         type: array
@@ -2679,67 +2664,8 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              captain:
-                description: name or label of the search head captain
-                type: string
-              captainReady:
-                description: true if the search head cluster's captain is ready to
-                  service requests
-                type: boolean
-              deployerPhase:
-                description: current phase of the deployer
-                enum:
-                - Pending
-                - Ready
-                - Updating
-                - ScalingUp
-                - ScalingDown
-                - Terminating
-                - Error
-                type: string
-              initialized:
-                description: true if the search head cluster has finished initialization
-                type: boolean
-              maintenanceMode:
-                description: true if the search head cluster is in maintenance mode
-                type: boolean
-              members:
-                description: status of each search head cluster member
-                items:
-                  description: SearchHeadClusterMemberStatus is used to track the
-                    status of each search head cluster member
-                  properties:
-                    active_historical_search_count:
-                      description: Number of currently running historical searches.
-                      type: integer
-                    active_realtime_search_count:
-                      description: Number of currently running realtime searches.
-                      type: integer
-                    adhoc_searchhead:
-                      description: Flag that indicates if this member can run scheduled
-                        searches.
-                      type: boolean
-                    is_registered:
-                      description: Indicates if this member is registered with the
-                        searchhead cluster captain.
-                      type: boolean
-                    name:
-                      description: Name of the search head cluster member
-                      type: string
-                    status:
-                      description: Indicates the status of the member.
-                      type: string
-                  type: object
-                type: array
-              minPeersJoined:
-                description: true if the minimum number of search head cluster members
-                  have joined
-                type: boolean
-              namespace_scoped_secret_resource_version:
-                description: Indicates resource version of namespace scoped secret
-                type: string
               phase:
-                description: current phase of the search head cluster
+                description: current phase of the license master
                 enum:
                 - Pending
                 - Ready
@@ -2749,33 +2675,21 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              readyReplicas:
-                description: current number of ready search head cluster members
-                format: int32
-                type: integer
-              replicas:
-                description: desired number of search head cluster members
-                format: int32
-                type: integer
-              selector:
-                description: selector for pods, used by HorizontalPodAutoscaler
-                type: string
-              shcSecretChangedFlag:
-                description: Indicates when the shc_secret has been changed for a
-                  peer
-                items:
-                  type: boolean
-                type: array
             type: object
         type: object
     served: true
     storage: true
     subresources:
-      scale:
-        labelSelectorPath: .status.selector
-        specReplicasPath: .spec.replicas
-        statusReplicasPath: .status.replicas
       status: {}
+  - name: v1
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
   - name: v1beta1
     served: true
     storage: false

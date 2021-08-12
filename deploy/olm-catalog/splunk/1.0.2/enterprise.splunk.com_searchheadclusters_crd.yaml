@@ -34,7 +34,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1
+    name: v2
     schema:
       openAPIV3Schema:
         description: SearchHeadCluster is the Schema for a Splunk Enterprise search
@@ -669,9 +669,9 @@ spec:
                             this location. Logical name must be unique to the appRepo
                           type: string
                         scope:
-                          description: 'Scope of the App deployment: cluster, local.
-                            Scope determines whether the App(s) is/are installed locally
-                            or cluster-wide'
+                          description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                            local. Scope determines whether the App(s) is/are installed
+                            locally or cluster-wide'
                           type: string
                         volumeName:
                           description: Remote Storage Volume name
@@ -694,9 +694,9 @@ spec:
                       sources
                     properties:
                       scope:
-                        description: 'Scope of the App deployment: cluster, local.
-                          Scope determines whether the App(s) is/are installed locally
-                          or cluster-wide'
+                        description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                          local. Scope determines whether the App(s) is/are installed
+                          locally or cluster-wide'
                         type: string
                       volumeName:
                         description: Remote Storage Volume name
@@ -717,15 +717,14 @@ spec:
                           description: Remote volume path
                           type: string
                         provider:
-                          description: App Package Remote Store provider. For e.g.
-                            aws, azure, minio, etc. Currently we are only supporting
-                            aws.
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio'
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: Remote Storage type.
+                          description: 'Remote Storage type. Supported values: s3'
                           type: string
                       type: object
                     type: array
@@ -953,6 +952,20 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              livenessInitialDelaySeconds:
+                description: 'LivenessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command)
+                  for the Liveness probe Note: If needed, Operator overrides with
+                  a higher value'
+                format: int32
+                type: integer
+              readinessInitialDelaySeconds:
+                description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
+                  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
+                  for Readiness probe Note: If needed, Operator overrides with a higher
+                  value'
+                format: int32
+                type: integer
               replicas:
                 description: Number of search head pods; a search head cluster will
                   be created if > 1
@@ -1151,6 +1164,7 @@ spec:
                               x-kubernetes-int-or-string: true
                           required:
                           - port
+                          - protocol
                           type: object
                         type: array
                         x-kubernetes-list-map-keys:
@@ -2566,8 +2580,8 @@ spec:
                               type: string
                             scope:
                               description: 'Scope of the App deployment: cluster,
-                                local. Scope determines whether the App(s) is/are
-                                installed locally or cluster-wide'
+                                clusterWithPreConfig, local. Scope determines whether
+                                the App(s) is/are installed locally or cluster-wide'
                               type: string
                             volumeName:
                               description: Remote Storage Volume name
@@ -2591,8 +2605,8 @@ spec:
                           App sources
                         properties:
                           scope:
-                            description: 'Scope of the App deployment: cluster, local.
-                              Scope determines whether the App(s) is/are installed
+                            description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
+                              local. Scope determines whether the App(s) is/are installed
                               locally or cluster-wide'
                             type: string
                           volumeName:
@@ -2614,15 +2628,15 @@ spec:
                               description: Remote volume path
                               type: string
                             provider:
-                              description: App Package Remote Store provider. For
-                                e.g. aws, azure, minio, etc. Currently we are only
-                                supporting aws.
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio'
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
-                              description: Remote Storage type.
+                              description: 'Remote Storage type. Supported values:
+                                s3'
                               type: string
                           type: object
                         type: array
@@ -2776,6 +2790,15 @@ spec:
         specReplicasPath: .spec.replicas
         statusReplicasPath: .status.replicas
       status: {}
+  - name: v1
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
   - name: v1beta1
     served: true
     storage: false

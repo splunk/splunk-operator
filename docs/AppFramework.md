@@ -135,14 +135,16 @@ This example describes the installation of apps on Search Head Cluster as well a
    * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 3. Create folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the Deployer, and apps that will be distributed to all cluster search heads by the Deployer. 
-   * The apps are split across 3 folders named `searchApps`, `machineLearningApps`, and `adminApps`. The apps placed into  `searchApps` and `machineLearningApps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
+   * The apps are split across 3 folders named `searchApps`, `machineLearningApps`, `adminApps` and `ESapps`. The apps placed into  `searchApps`, `machineLearningApps` and `ESapps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
 
 4. Copy your Splunk App or Add-on archive files to the App Source.
-   * In this example, the Splunk Apps for the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework-us-west-2/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at`bucket-app-framework-us-west-2/shcLoc-us/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
+   * In this example, the Splunk Apps for the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework-us-west-2/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework-us-west-2/shcLoc-us/adminAppsLoc/`. Apps that need pre-configuration by the deployer(Ex. Enterprise Security App) before installing to the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/ESappsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the SearchHeadCluster CR specification and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CR's where the Splunk Enterprise instance will deploy the apps to search heads, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes.
-   * In this example, the Deployer will run some apps locally, and deploy other apps to the search heads. The App Source folder `adminApps` are Splunk Apps that are installed on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope.
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
+      * For CR's where the Splunk Enterprise instance will pre-configure before deploying to the search heads,  set the `scope: clusterWithPreConfig`.
+      * For CR's where the Splunk Enterprise instance will deploy the apps(without pre-configuring) to search heads set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes. 
+   * In this example, the Deployer will run some apps locally, and deploy other apps to the search heads. The App Source folder `adminApps` are Splunk Apps that are installed on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder ESapps, deployer pre-configures them, and then deploys them to the search heads.
 
 Example: SearchHeadCluster.yaml
 
@@ -168,6 +170,9 @@ spec:
       - name: adminApps
         location: adminAppsLoc/
         scope: local
+      - name: ESapps
+        location: ESappsLoc/
+        scope: clusterWithPreConfig
     volumes:
       - name: volume_app_repo_us
         storageType: s3
@@ -191,7 +196,7 @@ App Framework configuration is supported on the following Custom Resources: Stan
 
 * Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
 * Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)
-* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone) or cluster-wide (such as Indexer cluster
+* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone) or cluster-wide (such as Indexer cluster, Search Head Cluster)
 
 Here is a typical App framework configuration in a Custom resource definition:
 
@@ -214,7 +219,7 @@ Here is a typical App framework configuration in a Custom resource definition:
                             this location. Logical name must be unique to the appRepo
                           type: string
                         scope:
-                          description: 'Scope of the App deployment: cluster, local.
+                          description: 'Scope of the App deployment: cluster,  local.
                             Scope determines whether the App(s) is/are installed locally
                             or cluster-wide'
                           type: string
@@ -293,15 +298,16 @@ Here is a typical App framework configuration in a Custom resource definition:
 * `scope` defines the scope of the App to be installed. 
   * If the scope is `local` the apps will be installed locally on the pod referred to by the CR
   * If the scope is `cluster` the apps will be installed across the cluster referred to by the CR
+  * If the scope is `clusterWithPreConfig` the apps will be pre-configured before installing across the cluster referred to by the CR
   * The cluster scope is only supported on CR's that manage cluster-wide app deployment
   
-    | CRD Type          | Scope support  | App Framework support |
-    | :---------------- | :------------- | :-------------------- |
-    | ClusterManager    | cluster, local | Yes                   |
-    | SearchHeadCluster | cluster, local | Yes                   |
-    | Standalone        | local          | Yes                   |
-    | LicenceMaster     | local          | Yes                   |
-    | IndexerCluster    | N/A            | No                    |
+    | CRD Type          | Scope support                          | App Framework support |
+    | :---------------- | :------------------------------------- | :-------------------- |
+    | ClusterManager    | cluster, clusterWithPreConfig,  local  | Yes                   |
+    | SearchHeadCluster | cluster, clusterWithPreConfig, local   | Yes                   |
+    | Standalone        | local                                  | Yes                   |
+    | LicenceMaster     | local                                  | Yes                   |
+    | IndexerCluster    | N/A                                    | No                    |
 
 * `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section)
 * `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed  
@@ -312,9 +318,9 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 ## Impact of livenessInitialDelaySeconds and readinessInitialDelaySeconds
 
-* Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes 
-* Default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds
-* When Appframework is configured as part of a CR, depending on the number of Apps being configured, Operator can also override the default or configured values for both probes with internally calculated higher values. This is to ensure that optimal values are being used to allow for successful installation or update of Apps especially in large scale deployments. 
+* Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes
+* When App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs)
+* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Master, Standalone and License Master CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
 
 ## App Framework Limitations
 

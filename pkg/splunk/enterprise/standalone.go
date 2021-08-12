@@ -181,8 +181,15 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 			}
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(cr.Status.AppContext.AppsSrcDeployStatus)
+			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 		}
+		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+		} else {
+			result.Requeue = false
+		}
+
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)

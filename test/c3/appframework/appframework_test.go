@@ -70,7 +70,7 @@ var _ = Describe("c3appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "cluster",
+				Scope:   enterpriseApi.ScopeCluster,
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
@@ -241,7 +241,7 @@ var _ = Describe("c3appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
@@ -327,21 +327,25 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
+	// Commenting this test for now as ES app is not installed locally on Deployer anymore before bundle push due to change from CSPL-1167
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("appfwint, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
+
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
 
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
-			appListV1 = append(appListV1, esApp...)
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(esApp, 1)
 
 			// Download ES App from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(esApp, 1))
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file")
 
 			// Upload ES app to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(esApp, 1), downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -351,7 +355,7 @@ var _ = Describe("c3appfw test", func() {
 
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "cluster",
+				Scope:   enterpriseApi.ScopeClusterWithPreConfig,
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
 			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
@@ -385,8 +389,8 @@ var _ = Describe("c3appfw test", func() {
 					ClusterMasterRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
-					LivenessInitialDelaySeconds:  1450,
-					ReadinessInitialDelaySeconds: 1450,
+					// LivenessInitialDelaySeconds:  1450,
+					// ReadinessInitialDelaySeconds: 1450,
 				},
 				Replicas:           3,
 				AppFrameworkConfig: appFrameworkSpec,
@@ -412,7 +416,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
 
 			// Verify ES app is installed locally on SHC Deployer
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, false, "disabled", false, false)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, true, "disabled", false, false)
 
 			// Verify apps are installed on SHs
 			podNames := []string{}
@@ -420,7 +424,100 @@ var _ = Describe("c3appfw test", func() {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				podNames = append(podNames, string(sh))
 			}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, true)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, esApp, true, "enabled", false, true)
+		})
+	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration, appframework: can deploy a C3 SVA with apps installed locally on CM and SHC Deployer, and cluster-wide on Peers and SHs", func() {
+			// Upload V2 apps to a 2nd S3 bucket as we need 2 buckets for this test.(V1 apps to be used for local install, V2 apps for cluster install)
+			s3TestDirCluster := "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			ClusterappFileList := testenv.GetAppFileList(appListV2, 2)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, ClusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Create App framework Spec
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			appSourceLocalSpec := enterpriseApi.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   "local",
+			}
+			appSourceClusterSpec := enterpriseApi.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   "cluster",
+			}
+			appSourceNameLocal := "appframework-localapps-" + testenv.RandomDNSName(3)
+			appSourceSpecLocal := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameLocal, s3TestDir, appSourceLocalSpec)}
+			appSourceNameCluster := "appframework-clusterapps-" + testenv.RandomDNSName(3)
+			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameCluster, s3TestDirCluster, appSourceClusterSpec)}
+
+			appSourceSpec := append(appSourceSpecLocal, appSourceSpecCluster...)
+
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+				Defaults:             appSourceLocalSpec,
+				AppsRepoPollInterval: 60,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			// Create Single site Cluster and SHC, with App Framework enabled on CM and SHC Deployer
+			indexerReplicas := 3
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, 10)
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
+
+			// Ensure that the CM goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure SHC go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify apps with local scope are downloaded by init-container
+			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
+			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with cluster scope are downloaded by init-container
+			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
+			podNames = []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps with local scope are installed locally on CM and on SHC Deployer
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
+
+			// Verify apps with cluster scope are installed on indexers
+			podNames = []string{}
+			for i := 0; i < int(indexerReplicas); i++ {
+				sh := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
+				podNames = append(podNames, string(sh))
+			}
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, "enabled", false, true)
+
+			// Verify apps with cluster scope are installed on SHs
+			shc := &enterpriseApi.SearchHeadCluster{}
+			shcName := deployment.GetName() + "-shc"
+			err = deployment.GetInstance(shcName, shc)
+			Expect(err).To(Succeed(), "Failed to get instance of SHC")
+			shReplicas := shc.Spec.Replicas
+
+			podNames = []string{}
+			for i := 0; i < int(shReplicas); i++ {
+				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
+				podNames = append(podNames, string(sh))
+			}
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, "enabled", false, true)
 		})
 	})
 })
