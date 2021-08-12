@@ -27,6 +27,7 @@ for v in $OLD_VERSIONS; do
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
