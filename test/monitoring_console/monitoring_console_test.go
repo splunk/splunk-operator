@@ -502,6 +502,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
+			// Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
