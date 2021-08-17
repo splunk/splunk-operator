@@ -441,8 +441,12 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 60,
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
 						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
@@ -819,5 +823,29 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	_, err = s3ClientMgr.GetAppsList()
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestGetClusterMasterList(t *testing.T) {
+	cm := enterpriseApi.ClusterMaster{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	cmList := &enterpriseApi.ClusterMasterList{}
+	cmList.Items = append(cmList.Items, cm)
+
+	client.ListObj = cmList
+
+	numOfObjects, err := getClusterMasterList(client, &cm, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of ClusterMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

@@ -33,7 +33,9 @@ type DefaultStatefulSetPodManager struct{}
 
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
 func (mgr *DefaultStatefulSetPodManager) Update(client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
+
 	phase, err := ApplyStatefulSet(client, statefulSet)
+
 	if err == nil && phase == splcommon.PhaseReady {
 		phase, err = UpdateStatefulSetPods(client, statefulSet, mgr, desiredReplicas)
 	}

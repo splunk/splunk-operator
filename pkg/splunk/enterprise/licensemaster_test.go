@@ -140,6 +140,9 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
 		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
@@ -512,5 +515,29 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	_, err = s3ClientMgr.GetAppsList()
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestGetLicenseMasterList(t *testing.T) {
+	lm := enterpriseApi.LicenseMaster{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	lmList := &enterpriseApi.LicenseMasterList{}
+	lmList.Items = append(lmList.Items, lm)
+
+	client.ListObj = lmList
+
+	numOfObjects, err := getLicenseMasterList(client, &lm, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of LicenseMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

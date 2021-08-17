@@ -632,6 +632,9 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			Replicas: 3,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
@@ -1005,5 +1008,29 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	_, err = s3ClientMgr.GetAppsList()
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestGetSearchHeadClusterList(t *testing.T) {
+	shc := enterpriseApi.SearchHeadCluster{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	shcList := &enterpriseApi.SearchHeadClusterList{}
+	shcList.Items = append(shcList.Items, shc)
+
+	client.ListObj = shcList
+
+	numOfObjects, err := getSearchHeadClusterList(client, &shc, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of SearchHeadCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

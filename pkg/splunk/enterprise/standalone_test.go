@@ -312,6 +312,9 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 			Name:      "standalone",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
@@ -366,6 +369,9 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
@@ -743,5 +749,29 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	_, err = s3ClientMgr.GetAppsList()
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestGetStandaloneList(t *testing.T) {
+	standalone := enterpriseApi.Standalone{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	standaloneList := &enterpriseApi.StandaloneList{}
+	standaloneList.Items = append(standaloneList.Items, standalone)
+
+	client.ListObj = standaloneList
+
+	numOfObjects, err := getStandaloneList(client, &standalone, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of standalone objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

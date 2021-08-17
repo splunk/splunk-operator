@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -257,7 +258,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
 	// set the status context
-	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+	initAppFrameWorkContext(client, &cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 
 	err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
 
@@ -465,6 +466,188 @@ func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
 		t.Errorf("Non existing app is reported as existing")
 	}
 
+}
+
+func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Provider: "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// add another standalone cr to the list
+	revised := cr
+	revised.ObjectMeta.Name = "standalone2"
+
+	var appDeployContext enterpriseApi.AppDeploymentContext
+	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+	err := initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	if err != nil {
+		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
+	}
+	var configMap *corev1.ConfigMap
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
+	configMap, err = splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		t.Errorf("Unable to get configMap")
+	}
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	// check the status and refCount first time
+	if getManualUpdateRefCount(configMap.Data[kind]) != "1" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+		t.Errorf("Got wrong status or/and refCount")
+	}
+
+	var appDeployContext2 enterpriseApi.AppDeploymentContext
+	appDeployContext2.AppFrameworkConfig = revised.Spec.AppFrameworkConfig
+	err = initAndCheckAppInfoStatus(client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	if err != nil {
+		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
+	}
+
+	configMap, err = splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		t.Errorf("Unable to get configMap")
+	}
+
+	// check the status and refCount second time. We should have turned off manual update now.
+	if getManualUpdateRefCount(configMap.Data[kind]) != "2" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+		t.Errorf("Got wrong status or/and refCount")
+	}
+
+	// prepare the configMap
+	crKindMap := make(map[string]string)
+	configMapData := fmt.Sprintf(`status: on
+	refCount: 2`)
+
+	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
+	configMapName := GetSplunkManualAppUpdateConfigMapName()
+
+	configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+
+	_, err = splctrl.ApplyConfigMap(client, configMap)
+	if err != nil {
+		t.Errorf("ApplyConfigMap should not have returned error")
+	}
+	// set this CR as the owner ref for the config map
+	err = SetConfigMapOwnerRef(client, &cr, configMap)
+	if err != nil {
+		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
+	}
+
+	// set the second CR too as the owner ref for the config map
+	err = SetConfigMapOwnerRef(client, &revised, configMap)
+	if err != nil {
+		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
+	}
+
+	err = initAndCheckAppInfoStatus(client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	if err != nil {
+		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
+	}
+
+	// check the status and refCount second time. We should have turned off manual update now.
+	if getManualUpdateRefCount(configMap.Data[kind]) != "1" || getManualUpdateStatus(configMap.Data[kind]) != "on" {
+		t.Errorf("Got wrong status or/and refCount")
+	}
+
+	err = initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
+	if err != nil {
+		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
+	}
+
+	// check the status and refCount second time. We should have turned off manual update now.
+	if getManualUpdateRefCount(configMap.Data[kind]) != "2" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+		t.Errorf("Got wrong status or/and refCount")
+	}
+
+}
+
+func TestInitAndCheckAppInfoStatusShouldFail(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   "local"},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	var appDeployContext enterpriseApi.AppDeploymentContext
+	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
+
+	initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	if appDeployContext.LastAppInfoCheckTime != 0 {
+		t.Errorf("We should not have updated the LastAppInfoCheckTime as polling of apps repo is disabled.")
+	}
 }
 
 func TestHandleAppRepoChanges(t *testing.T) {
@@ -787,5 +970,118 @@ func TestGetNextRequeueTime(t *testing.T) {
 	nextRequeueTime := GetNextRequeueTime(appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
+	}
+}
+
+func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
+	stand1 := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// To test the failure scenario, do not add the configMap to the client yet
+	err := UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	if err == nil {
+		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there is no configMap yet")
+	}
+
+	kind := stand1.GetObjectKind().GroupVersionKind().Kind
+
+	crKindMap := make(map[string]string)
+
+	// now prepare the configMap and add it
+	configMapData := fmt.Sprintf(`status: off
+refCount: 1`)
+
+	crKindMap[kind] = configMapData
+	configMapName := GetSplunkManualAppUpdateConfigMapName()
+
+	configMap := splctrl.PrepareConfigMap(configMapName, stand1.GetNamespace(), crKindMap)
+
+	client.AddObject(configMap)
+
+	// To test the failure scenario, do not add the standalone cr to the list yet
+	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	if err == nil {
+		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there are no owner references in the configMap")
+	}
+
+	// set the second CR too as the owner ref for the config map
+	err = SetConfigMapOwnerRef(client, &stand1, configMap)
+	if err != nil {
+		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
+	}
+
+	// create another standalone cr
+	stand2 := stand1
+	stand2.ObjectMeta.Name = "standalone2"
+
+	// set the second CR too as the owner ref for the config map
+	err = SetConfigMapOwnerRef(client, &stand2, configMap)
+	if err != nil {
+		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
+	}
+
+	// We should have decremented the refCount to 1
+	err = UpdateOrRemoveEntryFromConfigMap(client, &stand2, SplunkStandalone)
+	if err != nil {
+		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+	}
+
+	refCount := getManualUpdateRefCount(configMap.Data[kind])
+	if refCount != "1" {
+		t.Errorf("Got wrong refCount. Expected=%d, Got=%s", 1, refCount)
+	}
+
+	// remove stand2 as the configMap owner reference
+	var ownerRefCount uint
+	ownerRefCount, err = RemoveConfigMapOwnerRef(client, &stand2, configMap.Name)
+	if ownerRefCount != 1 || err != nil {
+		t.Errorf("RemoveConfigMapOwnerRef should not have returned error or number of owner references should be 1.")
+	}
+
+	// Now since there is only 1 standalone left, we should be removing the entry from the configMap
+	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	if err != nil {
+		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+	}
+
+	if _, ok := configMap.Data[kind]; ok {
+		t.Errorf("There should not be any entry for this CR type in the configMap")
 	}
 }

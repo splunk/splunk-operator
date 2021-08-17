@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -95,6 +96,16 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 		if err != nil {
 			return result, err
 		}
+
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkSearchHead)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -128,6 +139,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	if err != nil {
 		return result, err
 	}
+
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(client, statefulSet, 1)
 	if err != nil {
@@ -556,4 +568,25 @@ func validateSearchHeadClusterSpec(cr *enterpriseApi.SearchHeadCluster) error {
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+// helper function to get the list of SearchHeadCluster types in the current namespace
+func getSearchHeadClusterList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	scopedLog := log.WithName("getSearchHeadClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.SearchHeadClusterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil || numOfObjects == 0 {
+		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+	if numOfObjects == 0 {
+		scopedLog.Error(err, "No SearchHeadCluster types found in namespace %s", cr.GetNamespace())
+		return numOfObjects, nil
+	}
+
+	return numOfObjects, nil
 }

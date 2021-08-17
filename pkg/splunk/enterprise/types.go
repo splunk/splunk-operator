@@ -88,3 +88,21 @@ func (instanceType InstanceType) ToKind() string {
 	}
 	return kind
 }
+
+// ToInstanceType returns instanceType based on kind
+func ToInstanceType(kind string) InstanceType {
+	var instanceType InstanceType
+	switch kind {
+	case "Standalone":
+		instanceType = SplunkStandalone
+	case "ClusterMaster":
+		instanceType = SplunkClusterMaster
+	case "LicenseMaster":
+		instanceType = SplunkLicenseMaster
+	case "IndexerCluster":
+		instanceType = SplunkIndexer
+	case "SearchHeadCluster":
+		instanceType = SplunkSearchHead
+	}
+	return instanceType
+}
