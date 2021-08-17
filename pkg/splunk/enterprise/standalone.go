@@ -227,5 +227,5 @@ func validateStandaloneSpec(cr *enterpriseApi.Standalone) error {
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(cr, &cr.Spec.CommonSplunkSpec)
 }

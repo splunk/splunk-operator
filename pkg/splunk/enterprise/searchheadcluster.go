@@ -555,5 +555,5 @@ func validateSearchHeadClusterSpec(cr *enterpriseApi.SearchHeadCluster) error {
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(cr, &cr.Spec.CommonSplunkSpec)
 }

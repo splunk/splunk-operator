@@ -146,5 +146,5 @@ func validateLicenseMasterSpec(cr *enterpriseApi.LicenseMaster) error {
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(cr, &cr.Spec.CommonSplunkSpec)
 }

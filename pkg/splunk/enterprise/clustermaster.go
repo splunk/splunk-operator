@@ -187,7 +187,7 @@ func validateClusterMasterSpec(cr *enterpriseApi.ClusterMaster) error {
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(cr, &cr.Spec.CommonSplunkSpec)
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.

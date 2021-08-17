@@ -608,5 +608,5 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
 	}
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(cr, &cr.Spec.CommonSplunkSpec)
 }

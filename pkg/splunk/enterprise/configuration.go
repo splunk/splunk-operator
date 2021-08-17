@@ -36,6 +36,46 @@ import (
 
 var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
+const (
+	// Readiness probe time values
+	readinessProbeDefaultDelaySec int32 = 10
+	readinessProbeTimeoutSec      int32 = 5
+	readinessProbePeriodSec       int32 = 5
+
+	// Liveness probe time values
+	livenessProbeDefaultDelaySec int32 = 300
+	livenessProbeTimeoutSec      int32 = 30
+	livenessProbePeriodSec       int32 = 30
+)
+
+var defaultLivenessProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: livenessProbeDefaultDelaySec,
+	TimeoutSeconds:      livenessProbeTimeoutSec,
+	PeriodSeconds:       livenessProbePeriodSec,
+	Handler: corev1.Handler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				"/sbin/checkstate.sh",
+			},
+		},
+	},
+}
+
+var defaultReadinessProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: readinessProbeDefaultDelaySec,
+	TimeoutSeconds:      readinessProbeTimeoutSec,
+	PeriodSeconds:       readinessProbePeriodSec,
+	Handler: corev1.Handler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				"/bin/grep",
+				"started",
+				"/opt/container_artifact/splunk-container.state",
+			},
+		},
+	},
+}
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-master is used
@@ -195,7 +235,7 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 }
 
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
 
@@ -210,17 +250,85 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 		},
 	}
 
-	if spec.LivenessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+	err := validatesLivenessProbe(cr, spec.LivenessProbe)
+	if err != nil {
+		return err
 	}
 
-	if spec.ReadinessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
+	err = validatesReadinessProbe(cr, spec.ReadinessProbe)
+	if err != nil {
+		return err
 	}
 
 	setVolumeDefaults(spec)
-
 	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
+}
+
+// validateProbe validates a generic probe values
+func validateProbe(probe *corev1.Probe) error {
+	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.SuccessThreshold < 0 || probe.FailureThreshold < 0 {
+		return fmt.Errorf("Negative values are not not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, SuccessThreshold = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
+	}
+
+	return nil
+}
+
+// validatesLivenessProbe validates the liveness probe config
+func validatesLivenessProbe(cr splcommon.MetaObject, livenessProbe *corev1.Probe) error {
+	var err error
+	if livenessProbe == nil {
+		return err
+	}
+
+	scopedLog := log.WithName("validatesLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	err = validateProbe(livenessProbe)
+	if err != nil {
+		return fmt.Errorf("Invalid Liveness Probe config. Reason: %s", err)
+	}
+
+	if livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", livenessProbe.InitialDelaySeconds, "recommended minimum", livenessProbeDefaultDelaySec)
+	}
+
+	if livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", livenessProbe.TimeoutSeconds, "recommended minimum", livenessProbeTimeoutSec)
+	}
+
+	if livenessProbe.PeriodSeconds < livenessProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
+	}
+
+	return err
+}
+
+// validatesReadinessProbe validates the Readiness probe config
+func validatesReadinessProbe(cr splcommon.MetaObject, readinessProbe *corev1.Probe) error {
+	var err error
+	if readinessProbe == nil {
+		return err
+	}
+
+	scopedLog := log.WithName("validatesReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	err = validateProbe(readinessProbe)
+	if err != nil {
+		return fmt.Errorf("Invalid Readiness Probe config. Reason: %s", err)
+	}
+
+	if readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", readinessProbe.InitialDelaySeconds, "recommended minimum", readinessProbeDefaultDelaySec)
+	}
+
+	if readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", readinessProbe.TimeoutSeconds, "recommended minimum", readinessProbeTimeoutSec)
+	}
+
+	if readinessProbe.PeriodSeconds < readinessProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
+	}
+
+	return err
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
@@ -744,58 +852,83 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
 func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	//	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	livenessDelay := int32(livenessProbeDefaultDelaySec)
+	if instanceType == SplunkMonitoringConsole || spec.LivenessProbe == nil {
+		return &defaultLivenessProbe
+	} else {
+		return getProbeWithConfigUpdates(&defaultLivenessProbe, spec.LivenessProbe)
+	}
+}
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the Liveness initial delay from the CR
-		if spec.LivenessInitialDelaySeconds != 0 {
-			livenessDelay = spec.LivenessInitialDelaySeconds
-		} else {
-			livenessDelay += additionalDelay
+// getReadinessProbe the probe for checking the readiness of the Pod
+// uses script provided by enterprise container to check if pod is ready
+func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	//	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if instanceType == SplunkMonitoringConsole || spec.ReadinessProbe == nil {
+		return &defaultReadinessProbe
+	} else {
+		return getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe)
+	}
+}
+
+func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *corev1.Probe) *corev1.Probe {
+	if configuredProbe == nil {
+		return defaultProbe
+	} else {
+		// Always take a separate probe, instead of referring the memory address from spec.
+		// (Referring the configured Probe memory is kind of OK as we are not writing to the DB, however
+		// updating any values(if the Application needs to do) can cause confusion when referring the CR
+		// while handling a reconcile event)
+		var derivedProbe = *configuredProbe
+		if derivedProbe.InitialDelaySeconds == 0 {
+			derivedProbe.InitialDelaySeconds = defaultProbe.InitialDelaySeconds
 		}
+		if derivedProbe.TimeoutSeconds == 0 {
+			derivedProbe.TimeoutSeconds = defaultProbe.TimeoutSeconds
+		}
+		if derivedProbe.PeriodSeconds == 0 {
+			derivedProbe.PeriodSeconds = defaultProbe.PeriodSeconds
+		}
+		if derivedProbe.Exec == nil {
+			derivedProbe.Exec = defaultProbe.Exec
+		}
+
+		return &derivedProbe
 	}
-
-	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
-
-	livenessCommand := []string{
-		"/sbin/checkstate.sh",
-	}
-
-	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeoutSec, livenessProbePeriodSec)
 }
 
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
-func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+// 	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	readinessDelay := int32(readinessProbeDefaultDelaySec)
+// 	if instanceType == SplunkMonitoringConsole {
+// 		return &defaultReadinessProbe
+// 	}
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the readiness initial delay from the CR
-		if spec.ReadinessInitialDelaySeconds != 0 {
-			readinessDelay = spec.ReadinessInitialDelaySeconds
-		} else {
-			readinessDelay += additionalDelay
-		}
-	}
+// 	// Exclude MC, as it derives the spec from Multiple CRs.
+// 	// ToDo: Remove the Check once the MC CRD is in place
+// 	if instanceType != SplunkMonitoringConsole {
+// 		// If configured, always use the readiness initial delay from the CR
+// 		if spec.ReadinessProbe.InitialDelaySeconds != 0 {
+// 			readinessDelay = spec.ReadinessProbe.InitialDelaySeconds
+// 		} else {
+// 			readinessDelay += additionalDelay
+// 		}
+// 	}
 
-	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
+// 	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessProbe.InitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
 
-	readinessCommand := []string{
-		"/bin/grep",
-		"started",
-		"/opt/container_artifact/splunk-container.state",
-	}
+// 	readinessCommand := []string{
+// 		"/bin/grep",
+// 		"started",
+// 		"/opt/container_artifact/splunk-container.state",
+// 	}
 
-	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
-}
+// 	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
+// }
 
 // getProbe returns the Probe for given values.
 func getProbe(command []string, delay, timeout, period int32) *corev1.Probe {

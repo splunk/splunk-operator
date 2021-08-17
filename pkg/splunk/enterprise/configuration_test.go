@@ -1252,13 +1252,13 @@ func TestGetLivenessProbe(t *testing.T) {
 	}
 
 	// Test if the default delay can be overwritten with configured delay
-	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
+	spec.LivenessProbe.InitialDelaySeconds = livenessProbeDefaultDelaySec + 10
 	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
-	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
+	if livenessProbe.InitialDelaySeconds != spec.LivenessProbe.InitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
-	// Test if the additional Delay can override the default and the cofigured delay values
+	// Test if the additional Delay can override the default and the configured delay values
 	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 20)
 	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Liveness probe initial delay value")
@@ -1281,13 +1281,13 @@ func TestGetReadinessProbe(t *testing.T) {
 	}
 
 	// Test if the default delay can be overwritten with configured delay
-	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
+	spec.ReadinessProbe.InitialDelaySeconds = readinessProbeDefaultDelaySec + 10
 	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
-	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
+	if readinessProbe.InitialDelaySeconds != spec.ReadinessProbe.InitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
-	// Test if the additional Delay can override the default and the cofigured delay values
+	// Test if the additional Delay can override the default and the configured delay values
 	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 20)
 	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Readiness probe initial delay value")

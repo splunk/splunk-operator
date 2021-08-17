@@ -107,16 +107,6 @@ const (
 	// Time delay involved in installating the Splunk Apps.
 	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
 	maxSplunkAppsInstallationDelaySecs = 1500
-
-	// Readiness probe time values
-	readinessProbeDefaultDelaySec = 10
-	readinessProbeTimeoutSec      = 5
-	readinessProbePeriodSec       = 5
-
-	// Liveness probe time values
-	livenessProbeDefaultDelaySec = 300
-	livenessProbeTimeoutSec      = 30
-	livenessProbePeriodSec       = 30
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
