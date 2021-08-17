@@ -104,6 +104,10 @@ const (
 	// Average amount of time an app installation takes
 	avgAppInstallationTime = 5
 
+	// Time delay involved in installating the Splunk Apps.
+	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
+	maxSplunkAppsInstallationDelaySecs = 1500
+
 	// Readiness probe time values
 	readinessProbeDefaultDelaySec = 10
 	readinessProbeTimeoutSec      = 5

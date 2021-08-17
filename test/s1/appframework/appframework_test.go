@@ -71,7 +71,7 @@ var _ = Describe("s1appfw test", func() {
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 
 			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
@@ -181,18 +181,22 @@ var _ = Describe("s1appfw test", func() {
 	Context("appframework Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframework: can deploy a Standalone and have ES app installed", func() {
 
+			//Delete apps on S3 for new Apps
+			testenvInstance.Log.Info("Delete Apps on S3 before upload ES")
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
-			appListV1 = append(appListV1, esApp...)
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(esApp, 1)
 
 			// Download ES App from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(esApp, 1))
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file")
 
 			// Upload ES app to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(esApp, 1), downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -202,7 +206,7 @@ var _ = Describe("s1appfw test", func() {
 
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: volumeName,
-				Scope:   "local",
+				Scope:   enterpriseApi.ScopeLocal,
 			}
 			appSourceName := "appframework-" + testenv.RandomDNSName(3)
 			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
@@ -219,9 +223,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: splcommon.Spec{
 						ImagePullPolicy: "Always",
 					},
-					Volumes:                      []corev1.Volume{},
-					LivenessInitialDelaySeconds:  600,
-					ReadinessInitialDelaySeconds: 660,
+					Volumes: []corev1.Volume{},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -239,7 +241,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Verify apps are installed locally
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, appListV1, false, "enabled", false, false)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, esApp, false, "enabled", false, false)
 		})
 	})
 })

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -603,23 +602,25 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		FSGroup:   &fsGroup,
 	}
 
-	var numberOfApps int
+	var additionalDelayForAppInstallation int32
 	var appListingFiles []string
+
 	if appListingConfigMap != nil {
-		for key, appListingentry := range appListingConfigMap.Data {
+		for key := range appListingConfigMap.Data {
 			if key != appsUpdateToken {
-				// One(to accomodate header) less than number of entries
-				numberOfApps += strings.Count(appListingentry, "\n") - 1
 				appListingFiles = append(appListingFiles, key)
 			}
 		}
 		// Always sort the slice, so that map entries are ordered, to avoid pod resets
 		sort.Strings(appListingFiles)
+
+		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster {
+			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
+		}
 	}
 
-	livenessProbe := getLivenessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
-
-	readinessProbe := getReadinessProbe(cr, spec, int32(numberOfApps*avgAppInstallationTime))
+	livenessProbe := getLivenessProbe(cr, instanceType, spec, additionalDelayForAppInstallation)
+	readinessProbe := getReadinessProbe(cr, instanceType, spec, 0)
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -717,8 +718,12 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	for _, envVar := range spec.ExtraEnv {
-		extraEnv = append(extraEnv, envVar)
+	// Exclude MC as it derives the Spec from multiple CRs
+	// ToDo: Remove the Check once the MC CRD is in place
+	if instanceType != SplunkMonitoringConsole {
+		for _, envVar := range spec.ExtraEnv {
+			extraEnv = append(extraEnv, envVar)
+		}
 	}
 
 	// append any extra variables
@@ -738,12 +743,20 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
 	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	livenessDelay := livenessProbeDefaultDelaySec + additionalDelay
-	if spec.LivenessInitialDelaySeconds > livenessDelay {
-		livenessDelay = spec.LivenessInitialDelaySeconds
+	livenessDelay := int32(livenessProbeDefaultDelaySec)
+
+	// Exclude MC, as it derives the spec from Multiple CRs.
+	// ToDo: Remove the Check once the MC CRD is in place
+	if instanceType != SplunkMonitoringConsole {
+		// If configured, always use the Liveness initial delay from the CR
+		if spec.LivenessInitialDelaySeconds != 0 {
+			livenessDelay = spec.LivenessInitialDelaySeconds
+		} else {
+			livenessDelay += additionalDelay
+		}
 	}
 
 	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
@@ -757,13 +770,20 @@ func getLivenessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
-// this indicates that all the the ansible plays executed at startup have completed.
-func getReadinessProbe(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
 	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	readinessDelay := readinessProbeDefaultDelaySec + additionalDelay
-	if spec.ReadinessInitialDelaySeconds > readinessDelay {
-		readinessDelay = spec.ReadinessInitialDelaySeconds
+	readinessDelay := int32(readinessProbeDefaultDelaySec)
+
+	// Exclude MC, as it derives the spec from Multiple CRs.
+	// ToDo: Remove the Check once the MC CRD is in place
+	if instanceType != SplunkMonitoringConsole {
+		// If configured, always use the readiness initial delay from the CR
+		if spec.ReadinessInitialDelaySeconds != 0 {
+			readinessDelay = spec.ReadinessInitialDelaySeconds
+		} else {
+			readinessDelay += additionalDelay
+		}
 	}
 
 	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
@@ -929,17 +949,15 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 		}
 
 		if appSrc.Scope != "" {
-			if localScope && appSrc.Scope != "local" {
+			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
 				return fmt.Errorf("Invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
 			}
 
-			if appSrc.Scope != "local" && appSrc.Scope != "cluster" {
-				return fmt.Errorf("Scope for App Source: %s should be either local or cluster", appSrc.Name)
+			if !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopeCluster || appSrc.Scope == enterpriseApi.ScopeClusterWithPreConfig) {
+				return fmt.Errorf("Scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
 			}
-		} else {
-			if appFramework.Defaults.Scope == "" {
-				return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
-			}
+		} else if appFramework.Defaults.Scope == "" {
+			return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
 		}
 
 		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
@@ -949,11 +967,11 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 	}
 
-	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" {
+	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
 		return fmt.Errorf("Invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
-	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != "local" && appFramework.Defaults.Scope != "cluster" {
+	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopeCluster && appFramework.Defaults.Scope != enterpriseApi.ScopeClusterWithPreConfig {
 		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
 
