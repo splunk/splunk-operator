@@ -124,7 +124,7 @@ func UploadFileToS3(dataBucket string, filename string, path string, file *os.Fi
 		}
 		logf.Log.Info("Uploaded", "filename", file.Name(), "bytes", numBytes)
 	}
-	return file.Name(), err
+	return filepath.Join(path, filename), err
 }
 
 // GetFileListOnS3 lists object in a bucket
