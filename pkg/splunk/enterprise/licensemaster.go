@@ -173,10 +173,6 @@ func getLicenseMasterList(c splcommon.ControllerClient, cr splcommon.MetaObject,
 		scopedLog.Error(err, "LicenseMaster types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
 	}
-	if numOfObjects == 0 {
-		scopedLog.Error(err, "No LicenseMaster types found in namespace %s", cr.GetNamespace())
-		return numOfObjects, nil
-	}
 
 	return numOfObjects, nil
 }

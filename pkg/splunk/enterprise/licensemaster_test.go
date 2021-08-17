@@ -518,6 +518,89 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 }
 
+func TestApplyLicenseMasterDeletion(t *testing.T) {
+	lm := enterpriseApi.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+		Spec: enterpriseApi.LicenseMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	c.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	lm.ObjectMeta.DeletionTimestamp = &currentTime
+	lm.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+
+	_, err = ApplyLicenseMaster(c, &lm)
+	if err != nil {
+		t.Errorf("ApplyLicenseMaster should not have returned error here.")
+	}
+}
+
 func TestGetLicenseMasterList(t *testing.T) {
 	lm := enterpriseApi.LicenseMaster{}
 
@@ -527,12 +610,18 @@ func TestGetLicenseMasterList(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
+	// Invalid scenario since we haven't added license master to the list yet
+	numOfObjects, err := getStandaloneList(client, &lm, listOpts)
+	if err == nil {
+		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
+	}
+
 	lmList := &enterpriseApi.LicenseMasterList{}
 	lmList.Items = append(lmList.Items, lm)
 
 	client.ListObj = lmList
 
-	numOfObjects, err := getLicenseMasterList(client, &lm, listOpts)
+	numOfObjects, err = getLicenseMasterList(client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}

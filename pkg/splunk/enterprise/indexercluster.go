@@ -621,13 +621,9 @@ func getIndexerClusterList(c splcommon.ControllerClient, cr splcommon.MetaObject
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
-	if err != nil {
+	if err != nil || numOfObjects == 0 {
 		scopedLog.Error(err, "IndexerCluster types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
-	}
-	if numOfObjects == 0 {
-		scopedLog.Error(err, "No IndexerCluster types found in namespace %s", cr.GetNamespace())
-		return numOfObjects, nil
 	}
 
 	return numOfObjects, nil

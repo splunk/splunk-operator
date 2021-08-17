@@ -1000,6 +1000,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 	var turnOffManualChecking bool
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
+
 	//check if the apps need to be downloaded from remote storage
 	if shouldCheckAppRepoStatus(client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 		var sourceToAppsList map[string]splclient.S3Response

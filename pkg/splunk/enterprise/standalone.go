@@ -249,13 +249,9 @@ func getStandaloneList(c splcommon.ControllerClient, cr splcommon.MetaObject, li
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
-	if err != nil {
+	if err != nil || numOfObjects == 0 {
 		scopedLog.Error(err, "Standalone types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
-	}
-	if numOfObjects == 0 {
-		scopedLog.Error(err, "No Standalone types found in namespace %s", cr.GetNamespace())
-		return numOfObjects, nil
 	}
 
 	return numOfObjects, nil

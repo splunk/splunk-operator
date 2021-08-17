@@ -973,6 +973,68 @@ func TestGetNextRequeueTime(t *testing.T) {
 	}
 }
 
+func TestShouldCheckAppRepoStatus(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	var appStatusContext enterpriseApi.AppDeploymentContext
+	appStatusContext.AppsRepoStatusPollInterval = 0
+	var turnOffManualChecking bool
+	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	if shouldCheck == true {
+		t.Errorf("shouldCheckAppRepoStatus should have returned false as there is no configMap yet.")
+	}
+
+	crKindMap := make(map[string]string)
+	configMapData := fmt.Sprintf(`status: on
+refCount: 1`)
+	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
+
+	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(), cr.GetNamespace(), crKindMap)
+	c.AddObject(configMap)
+	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	if shouldCheck != true {
+		t.Errorf("shouldCheckAppRepoStatus should have returned true.")
+	}
+}
+
 func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
 	stand1 := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
