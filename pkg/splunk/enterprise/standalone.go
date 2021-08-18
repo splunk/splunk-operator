@@ -160,6 +160,9 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConosoleRef(client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return result, err
+	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)

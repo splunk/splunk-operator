@@ -141,6 +141,9 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
 	err = validateMonitoringConosoleRef(client, statefulSet, extraEnv)
+	if err != nil {
+		return result, err
+	}
 
 	clusterMasterManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := clusterMasterManager.Update(client, statefulSet, 1)

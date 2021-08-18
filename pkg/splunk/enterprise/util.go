@@ -1050,5 +1050,6 @@ func validateMonitoringConosoleRef(c splcommon.ControllerClient, revised *appsv1
 			}
 		}
 	}
-	return err
+	//if the sts doesn't exists no need for any change
+	return nil
 }
