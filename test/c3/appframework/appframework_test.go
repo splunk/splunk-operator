@@ -111,25 +111,25 @@ var _ = Describe("c3appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app verison", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "verison", appVersion, "App List", appFileList)
 			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
 
 			//Verify Apps are installed
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//Delete apps on S3 for new Apps
-			testenvInstance.Log.Info("Delete Apps on S3 for Version", appVersion)
+			testenvInstance.Log.Info("Delete Apps on S3 for", "Version", appVersion)
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 			testenvInstance.Log.Info("Testing upgrade scenario")
@@ -137,7 +137,7 @@ var _ = Describe("c3appfw test", func() {
 			//Upload new Versioned Apps to S3
 			appFileList = testenv.GetAppFileList(appListV2, 2)
 			appVersion = "V2"
-			testenvInstance.Log.Info("Uploading apps S3 for verison", appVersion)
+			testenvInstance.Log.Info("Uploading apps S3 for", "verison", appVersion)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -161,19 +161,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
-			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app verison", appVersion)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "verison", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
 
 			//Verify Apps are updated
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			// Get instance of current SHC CR with latest config
@@ -233,15 +233,15 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are copied to location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app verison", appVersion)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "verison", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
 
 			// Verify Apps install status and version
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			//Delete apps on S3 for new Apps
@@ -275,19 +275,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", " version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
-			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", " version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app verison", appVersion)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", " verison", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
 
 			//Verify Apps are updated
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", " version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 		})
@@ -342,30 +342,30 @@ var _ = Describe("c3appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
-			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
 
 			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app verison", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app", "verison", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//Delete apps on S3 for new Apps
-			testenvInstance.Log.Info("Delete Apps on S3 for Version", appVersion)
+			testenvInstance.Log.Info("Delete Apps on S3 for", "Version", appVersion)
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 			testenvInstance.Log.Info("Testing upgrade scenario")
 
 			//Upload new Versioned Apps to S3
 			appVersion = "V2"
-			testenvInstance.Log.Info("Uploading apps S3 for verison", appVersion)
+			testenvInstance.Log.Info("Uploading apps S3 for", "verison", appVersion)
 			appFileList = testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
@@ -387,19 +387,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
-			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
 			// Verify apps are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 
 			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app verison", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app", "verison", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})
@@ -582,18 +582,18 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
 			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList = testenv.GetAppFileList(appListLocal, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			localPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
 			// Verify apps with cluster scope are installed on indexers
@@ -614,7 +614,7 @@ var _ = Describe("c3appfw test", func() {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				clusterPodNames = append(clusterPodNames, string(sh))
 			}
-			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 
 			//Delete apps on S3 for new Apps
@@ -653,21 +653,21 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps with local scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
 			appFileList = testenv.GetAppFileList(appListLocal, 2)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 2)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
 
 			// Verify apps with cluster scope are installed on indexers
-			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
 
 			//Delete apps on S3 for new Apps
@@ -706,21 +706,21 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps with local scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
 			appFileList = testenv.GetAppFileList(appListLocal, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
 			// Verify apps with cluster scope are installed on indexers
-			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app version", appVersion)
+			testenvInstance.Log.Info("Verify Apps are installed clusterwide on indexers and search-heads by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 		})
 	})
