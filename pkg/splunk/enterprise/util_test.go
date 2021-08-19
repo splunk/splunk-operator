@@ -791,7 +791,7 @@ func TestGetNextRequeueTime(t *testing.T) {
 	}
 }
 
-func TestValidateMonitoringConosoleRef(t *testing.T) {
+func TestValidateMonitoringConsoleRef(t *testing.T) {
 	currentCM := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -868,7 +868,7 @@ func TestValidateMonitoringConosoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConosoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
@@ -893,7 +893,7 @@ func TestValidateMonitoringConosoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConosoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}

@@ -1003,8 +1003,8 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	return nil
 }
 
-//validateMonitoringConosoleRef validates the changes in monitoringConsoleRef
-func validateMonitoringConosoleRef(c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
+//validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
+func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
 	var err error
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current appsv1.StatefulSet
@@ -1015,24 +1015,20 @@ func validateMonitoringConosoleRef(c splcommon.ControllerClient, revised *appsv1
 		revEnv := revised.Spec.Template.Spec.Containers[0].Env
 
 		var cEnv, rEnv corev1.EnvVar
-		monitoringConsoleRevEmpty := true
 
 		for _, cEnvTemp := range currEnv {
 			if cEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
-				cEnv.Name = "SPLUNK_MONITORING_CONSOLE_REF"
 				cEnv.Value = cEnvTemp.Value
 			}
 		}
 
 		for _, rEnvTemp := range revEnv {
 			if rEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
-				rEnv.Name = "SPLUNK_MONITORING_CONSOLE_REF"
 				rEnv.Value = rEnvTemp.Value
-				monitoringConsoleRevEmpty = false
 			}
 		}
 
-		if cEnv.Name == "SPLUNK_MONITORING_CONSOLE_REF" && rEnv.Name == "SPLUNK_MONITORING_CONSOLE_REF" && cEnv.Value != rEnv.Value {
+		if cEnv.Value != "" && rEnv.Value != "" && cEnv.Value != rEnv.Value {
 			//1. if revised Spec has different mcRef defined
 			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
 			if err != nil {
@@ -1042,7 +1038,7 @@ func validateMonitoringConosoleRef(c splcommon.ControllerClient, revised *appsv1
 			if err != nil {
 				return err
 			}
-		} else if cEnv.Value != "" && monitoringConsoleRevEmpty {
+		} else if cEnv.Value != "" && rEnv.Value == "" {
 			//2. if revised Spec doesn't have mcRef defined
 			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
 			if err != nil {

@@ -145,7 +145,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConosoleRef(client, statefulSet, getSearchHeadEnv(cr))
+	err = validateMonitoringConsoleRef(client, statefulSet, getSearchHeadEnv(cr))
 	if err != nil {
 		return result, err
 	}

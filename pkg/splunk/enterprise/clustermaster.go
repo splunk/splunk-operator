@@ -140,7 +140,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
-	err = validateMonitoringConosoleRef(client, statefulSet, extraEnv)
+	err = validateMonitoringConsoleRef(client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
 	}
