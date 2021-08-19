@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -888,7 +889,7 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	configMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 
 	// Owner ref doesn't exist, update configMap with owner references
-	if getManualUpdateRefCount(crKindMap[cr.GetObjectKind().GroupVersionKind().Kind]) == "1" {
+	if getManualUpdateRefCount(crKindMap[cr.GetObjectKind().GroupVersionKind().Kind]) == 1 {
 		configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 	}
 
@@ -912,13 +913,14 @@ func getManualUpdateStatus(data string) string {
 }
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
-func getManualUpdateRefCount(data string) string {
+func getManualUpdateRefCount(data string) int {
+	var refCount int
 	refCountRegex := ".*refCount: (?P<refCount>.*).*"
 	pattern := regexp.MustCompile(refCountRegex)
 	if len(pattern.FindStringSubmatch(data)) > 0 {
-		return pattern.FindStringSubmatch(data)[1]
+		refCount, _ = strconv.Atoi(pattern.FindStringSubmatch(data)[1])
 	}
-	return ""
+	return refCount
 }
 
 // createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap

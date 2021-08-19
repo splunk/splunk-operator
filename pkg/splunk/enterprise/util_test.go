@@ -530,7 +530,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	// check the status and refCount first time
-	if getManualUpdateRefCount(configMap.Data[kind]) != "1" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 
@@ -547,7 +547,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != "2" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 
@@ -583,7 +583,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != "1" || getManualUpdateStatus(configMap.Data[kind]) != "on" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "on" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 
@@ -593,7 +593,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != "2" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 
@@ -1126,8 +1126,8 @@ refCount: 1`)
 	}
 
 	refCount := getManualUpdateRefCount(configMap.Data[kind])
-	if refCount != "1" {
-		t.Errorf("Got wrong refCount. Expected=%d, Got=%s", 1, refCount)
+	if refCount != 1 {
+		t.Errorf("Got wrong refCount. Expected=%d, Got=%d", 1, refCount)
 	}
 
 	// remove stand2 as the configMap owner reference

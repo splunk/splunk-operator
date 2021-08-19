@@ -972,7 +972,7 @@ func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.Me
 		if getManualUpdateStatus(configMap.Data[kind]) == "on" {
 			// There can be more than 1 CRs of this kind. We should only
 			// turn off the status once all the CRs have finished the reconciles
-			if getManualUpdateRefCount(configMap.Data[kind]) == "1" {
+			if getManualUpdateRefCount(configMap.Data[kind]) == 1 {
 				*turnOffManualChecking = true
 			}
 			return true
@@ -1049,12 +1049,15 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
 			appStatusContext.LastAppInfoCheckTime = 0
 
-			numOfObjects := getNumOfOwnerRefsKind(configMap, kind)
+			numOfObjects := getManualUpdateRefCount(configMap.Data[kind])
 
 			// turn off the manual checking for this CR kind in the configMap
 			if turnOffManualChecking == true {
 				scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
+				// reset the status back to "off" and
+				// refCount to original count
 				status = "off"
+				numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
 			} else {
 				//just decrement the refCount if the status is "on"
 				status = getManualUpdateStatus(configMap.Data[kind])

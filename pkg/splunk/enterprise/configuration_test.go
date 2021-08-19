@@ -1365,7 +1365,7 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount
-	if getManualUpdateRefCount(configMap.Data[kind]) != "1" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 
@@ -1376,7 +1376,7 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount
-	if getManualUpdateRefCount(configMap.Data[kind]) != "2" || getManualUpdateStatus(configMap.Data[kind]) != "off" {
+	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
 		t.Errorf("Got wrong status or/and refCount")
 	}
 }
