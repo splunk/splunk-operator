@@ -13,6 +13,9 @@
   * Updated documentation for App Framework
   * Updated documentation for Smartstore examples
 
+* Known Issues
+  * CSPL-1250 - [AppFramework] On App install/update to the Search Head Cluster(SHC), the deployer unnecessarily includes the apps which were installed in the previous bundle push along with the new/updated app. This can potentially delay the app install/update process
+
 ## 1.0.1 (2021-06-09)
 * This is the 1.0.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
 
