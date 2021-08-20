@@ -94,6 +94,12 @@ const (
 
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
+
+	// ClusterMasterServiceName Cluster Master Service Template String
+	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
+
+	// DeployerServiceName Cluster Master Service Template String
+	DeployerServiceName = "splunk-%s-shc-deployer-service"
 )
 
 var (

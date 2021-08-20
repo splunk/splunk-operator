@@ -60,9 +60,9 @@ type PodDetailsStruct struct {
 }
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
-func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
+func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {
-		err := deployment.GetInstance(deploymentName, monitoringConsole)
+		err := deployment.GetInstance(mcName, monitoringConsole)
 		if err != nil {
 			return splcommon.PhaseError
 		}
@@ -73,7 +73,7 @@ func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string,
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
-		_ = deployment.GetInstance(deployment.GetName(), monitoringConsole)
+		_ = deployment.GetInstance(mcName, monitoringConsole)
 		return monitoringConsole.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
@@ -695,5 +695,31 @@ func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance
 			found := CheckStringInSlice(appList, app)
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
+	}
+}
+
+// VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigMap(deployment *Deployment, testenvInstance *TestEnv, pods []string, key string, mcName string, expected bool) {
+	// Get contents of MC config map
+	mcConfigMap, err := GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get MC config map")
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking for POD on  MC Config Map", "POD Name", podName, "DATA", mcConfigMap.Data)
+		gomega.Expect(expected).To(gomega.Equal(CheckPodNameInString(podName, mcConfigMap.Data[key])), "Verify Pod in MC Config Map. Pod Name %s.", podName)
+	}
+}
+
+// VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigString(deployment *Deployment, testenvInstance *TestEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking pod configured in MC POD Peers String", "Pod Name", podName)
+		var found bool
+		if checkPodIP {
+			podIP := GetPodIP(testenvInstance.GetName(), podName)
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+		} else {
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+		}
+		gomega.Expect(expected).To(gomega.Equal(found), "Verify Pod in MC Config String. Pod Name %s.", podName)
 	}
 }
