@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -37,14 +37,15 @@ func TestApplyIndexerCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.ClusterMaster-test-master1"},
+		{MetaName: "*v2.ClusterMaster-test-master1"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
-		{MetaName: "*v1.ClusterMaster-test-master1"},
+		{MetaName: "*v2.ClusterMaster-test-master1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
@@ -58,7 +59,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "List": {listmockCall[0]}}
 
-	current := enterprisev1.IndexerCluster{
+	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -66,9 +67,9 @@ func TestApplyIndexerCluster(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
+		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 1,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: "master1",
 				},
@@ -81,17 +82,17 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		_, err := ApplyIndexerCluster(c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerCluster", &current, revised, createCalls, updateCalls, reconcile, true)
 
-	// test deletion
+	// // test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerCluster(c, cr.(*enterprisev1.IndexerCluster))
+		_, err := ApplyIndexerCluster(c, cr.(*enterpriseApi.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -99,7 +100,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 
 func TestGetClusterMasterClient(t *testing.T) {
 	scopedLog := log.WithName("TestGetClusterMasterClient")
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -107,15 +108,15 @@ func TestGetClusterMasterClient(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
+		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 1,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: "", /* Empty ClusterMasterRef */
 				},
 			},
 		},
-		Status: enterprisev1.IndexerClusterStatus{
+		Status: enterpriseApi.IndexerClusterStatus{
 			ClusterMasterPhase: splcommon.PhaseReady,
 		},
 	}
@@ -149,7 +150,7 @@ func TestGetClusterMasterClient(t *testing.T) {
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
 	scopedLog := log.WithName(method)
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -157,15 +158,15 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.IndexerClusterSpec{
+		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: replicas,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: "master1",
 				},
 			},
 		},
-		Status: enterprisev1.IndexerClusterStatus{
+		Status: enterpriseApi.IndexerClusterStatus{
 			ClusterMasterPhase: splcommon.PhaseReady,
 		},
 	}
@@ -674,7 +675,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 
 	c.AddObjects(initObjectList)
 
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -830,7 +831,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 		},
 	}
 
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
 		},
@@ -957,14 +958,14 @@ func TestApplyIdxcSecret(t *testing.T) {
 
 func TestInvalidIndexerClusterSpec(t *testing.T) {
 
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
 
-	cm := enterprisev1.ClusterMaster{
+	cm := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -998,7 +999,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 }
 
 func TestGetIndexerStatefulSet(t *testing.T) {
-	cr := enterprisev1.IndexerCluster{
+	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",

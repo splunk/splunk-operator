@@ -41,6 +41,12 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
+	// identifier
+	appListingTemplateStr = "splunk-%s-%s-app-list"
+
+	// init container name
+	initContainerTemplate = "%s-init-%d-%s"
+
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
@@ -56,6 +62,12 @@ const (
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
+	// ToDo: Used only for Phase-2, to be removed later
+	appListingRev = "appListingRev"
+
+	// Pod location for app related config
+	appConfLocationOnPod = "/mnt/app-listing/"
+
 	// command merger
 	commandMerger = " && "
 
@@ -65,8 +77,11 @@ const (
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
 
-	//smartstoreconfigToken used to track if the config is reflecting on Pod or not
+	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
+
+	// appsUpdateToken used to track if the if the latest app list is reflecting on pod or not
+	appsUpdateToken = "appsUpdateToken"
 
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
@@ -79,6 +94,29 @@ const (
 	protoHTTP  = "http"
 	protoHTTPS = "https"
 	protoTCP   = "tcp"
+
+	// Volume name for shared volume between init and splunk containers
+	appVolumeMntName = "init-apps"
+
+	// Mount location for the shared app package volume
+	appBktMnt = "/init-apps/"
+
+	// Average amount of time an app installation takes
+	avgAppInstallationTime = 5
+
+	// Time delay involved in installating the Splunk Apps.
+	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
+	maxSplunkAppsInstallationDelaySecs = 1500
+
+	// Readiness probe time values
+	readinessProbeDefaultDelaySec = 10
+	readinessProbeTimeoutSec      = 5
+	readinessProbePeriodSec       = 5
+
+	// Liveness probe time values
+	livenessProbeDefaultDelaySec = 300
+	livenessProbeTimeoutSec      = 30
+	livenessProbePeriodSec       = 30
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -122,6 +160,11 @@ func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType Ins
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
 	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
+}
+
+// GetSplunkAppsConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
+func GetSplunkAppsConfigMapName(identifier string, crKind string) string {
+	return fmt.Sprintf(appListingTemplateStr, identifier, strings.ToLower(crKind))
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.

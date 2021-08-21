@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-install.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.2/splunk-operator-install.yaml
 ```
 
 
@@ -18,13 +18,13 @@ Kubernetes only allows administrators to install new `CustomResourceDefinition` 
 If you are not an administrator, you can have an administrator create the required objects for you by running:
 
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-crds.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.2/splunk-operator-crds.yaml
 ```
 
 Afterwards, you can download and use the yaml file to install the operator within your own namespace:
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-noadmin.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.2/splunk-operator-noadmin.yaml
 kubectl config set-context --current --namespace=<NAMESPACE>
 kubectl apply -f splunk-operator.yaml
 ```
@@ -32,16 +32,13 @@ kubectl apply -f splunk-operator.yaml
 
 ## Admin Installation for All Namespaces
 
-_**Note:** The Admin Installation for all Namespaces is not functioning as intended with this release. We're tracking the issue [here](https://github.com/splunk/splunk-operator/issues/206). Check the status of the issue before attempting to use these instructions._
-
---------------------
-
-
-If you want to configure a single instance of the operator to manage all the namespaces of your cluster, use the alternative cluster scope installation yaml file:
+If you want to configure a single instance of the operator to watch all the namespaces of your cluster while managing deployments only in the namespace `splunk-operator`, use the alternative cluster scope installation yaml file:
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.1/splunk-operator-cluster.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.2/splunk-operator-cluster.yaml
 ```
+
+**Note**: The operator has the ability to watch, list secret objects in all namespaces.
 
 When running at cluster scope, you will need to bind the `splunk:operator:namespace-manager` ClusterRole to the `splunk-operator` ServiceAccount in all namespaces you want it to manage. 
 
