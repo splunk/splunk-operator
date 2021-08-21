@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,12 +31,18 @@ import (
 // LicenseMasterSpec defines the desired state of a Splunk Enterprise license master.
 type LicenseMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
+
+	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
 type LicenseMasterStatus struct {
 	// current phase of the license master
 	Phase splcommon.Phase `json:"phase"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

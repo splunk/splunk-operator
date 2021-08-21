@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v2
 
 import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -33,6 +33,9 @@ type ClusterMasterSpec struct {
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
 	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
@@ -51,6 +54,9 @@ type ClusterMasterStatus struct {
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework status
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // BundlePushInfo Indicates if bundle push required

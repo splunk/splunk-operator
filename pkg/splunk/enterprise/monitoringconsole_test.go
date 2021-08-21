@@ -23,14 +23,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev1 "github.com/splunk/splunk-operator/pkg/apis/enterprise/v1"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func TestApplyMonitoringConsole(t *testing.T) {
-	standaloneCR := enterprisev1.Standalone{
+	standaloneCR := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -88,7 +88,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		obj := cr.(*enterprisev1.Standalone)
+		obj := cr.(*enterpriseApi.Standalone)
 		err := ApplyMonitoringConsole(c, obj, obj.Spec.CommonSplunkSpec, env)
 		return err
 	}
@@ -208,14 +208,14 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
-	cr := enterprisev1.SearchHeadCluster{
+	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterprisev1.SearchHeadClusterSpec{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
 			Replicas: 3,
-			CommonSplunkSpec: enterprisev1.CommonSplunkSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: "stack1",
 				},
@@ -240,7 +240,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr.Spec); err != nil {
+			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getMonitoringConsoleStatefulSet(c, &cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, "splunk-test-secret")
