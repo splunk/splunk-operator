@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -129,4 +130,17 @@ func GetAppFileList(appList []string, version int) []string {
 		appFileList = append(appFileList, AppInfo[app][fileKey])
 	}
 	return appFileList
+}
+
+// GetAppframeworkManualUpdateConfigMap gets config map for given manual update configmap
+func GetAppframeworkManualUpdateConfigMap(deployment *Deployment, ns string) (*corev1.ConfigMap, error) {
+	ConfigMapName := fmt.Sprintf(AppframeworkManualUpdateConfigMap, ns)
+	logf.Log.Info("Get config map for", "CONFIG MAP NAME", ConfigMapName)
+	ConfigMap, err := GetConfigMap(deployment, ns, ConfigMapName)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get splunk manual poll Config Map")
+		return ConfigMap, err
+	}
+	logf.Log.Info("Config Map contents", "CONFIG MAP NAME", ConfigMapName, "Data", ConfigMap.Data)
+	return ConfigMap, err
 }

@@ -554,6 +554,16 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	return stdout, nil
 }
 
+// GetConfigMap Gets the config map for a given k8 config map name
+func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := deployment.GetInstance(configMapName, configMap)
+	if err != nil {
+		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+	}
+	return configMap, err
+}
+
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
 func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterMasterSpec) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
@@ -642,4 +652,21 @@ func CheckStringInSlice(stringSlice []string, compString string) bool {
 		}
 	}
 	return false
+}
+
+// GeneratePodNameSlice returns slice of PodNames based on given key and count.
+func GeneratePodNameSlice(formatString string, key string, count int, multisite bool, siteCount int) []string {
+	var podNames []string
+	if multisite {
+		for site := 1; site <= siteCount; site++ {
+			for i := 0; i < count; i++ {
+				podNames = append(podNames, fmt.Sprintf(formatString, key, site, i))
+			}
+		}
+	} else {
+		for i := 0; i < count; i++ {
+			podNames = append(podNames, fmt.Sprintf(formatString, key, i))
+		}
+	}
+	return podNames
 }

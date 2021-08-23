@@ -15,6 +15,7 @@ package m4appfw
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -365,6 +366,160 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
 			testenvInstance.Log.Info("Verify Apps are not copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
+		})
+	})
+
+	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
+		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
+
+			// Create App framework Spec
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   enterpriseApi.ScopeCluster,
+			}
+
+			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+			appSourceName := "appframework" + testenv.RandomDNSName(3)
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+
+			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+				Defaults:             appSourceDefaultSpec,
+				AppsRepoPollInterval: 0,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			siteCount := 3
+			indexersPerSite := 1
+
+			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster")
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10)
+			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Ensure cluster configured as multisite
+			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify Apps are downloaded by init-container
+			appVersion := "V1"
+			initContDownloadLocation := "/init-apps/" + appSourceName
+			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+
+			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
+			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "verison", appVersion, "App List", appFileList)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+
+			//Verify Apps are installed cluster-wide
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by runnign Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+
+			//Delete apps on S3 for new Apps
+			testenvInstance.Log.Info("Delete Apps on S3 for Version", appVersion)
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			//Upload new Versioned Apps to S3
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appVersion = "V2"
+			testenvInstance.Log.Info("Uploading apps S3 for", "verison", appVersion)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Ensure cluster configured as multisite
+			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			//Verify Apps are not updated cluster-wide
+			testenvInstance.Log.Info("Verify Apps are not updated on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err := testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Ensure standalone is updating
+			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(deployment, testenvInstance)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Ensure cluster configured as multisite
+			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			//Verify config map set back to off after poll trigger
+			testenvInstance.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
+			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+
+			// Verify Apps are downloaded by init-container
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+
+			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "verison", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+
+			//Verify Apps are installed cluster-wide
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 		})
 	})
 })

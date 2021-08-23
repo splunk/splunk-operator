@@ -94,6 +94,9 @@ const (
 
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
+
+	// AppframeworkManualUpdateConfigMap Config map for App Framework manual update
+	AppframeworkManualUpdateConfigMap = "splunk-%s-manual-app-update"
 )
 
 var (
