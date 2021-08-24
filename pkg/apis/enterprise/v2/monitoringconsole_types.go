@@ -30,6 +30,9 @@ import (
 // MonitoringConsoleSpec defines the desired state of MonitoringConsole
 type MonitoringConsoleSpec struct {
 	CommonSplunkSpec `json:",inline"`
+
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // MonitoringConsoleStatus defines the observed state of MonitoringConsole
@@ -45,6 +48,9 @@ type MonitoringConsoleStatus struct {
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework status
+	AppContext AppDeploymentContext `json:"appContext"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -660,6 +660,7 @@ func (in *MonitoringConsoleList) DeepCopyObject() runtime.Object {
 func (in *MonitoringConsoleSpec) DeepCopyInto(out *MonitoringConsoleSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	in.AppFrameworkConfig.DeepCopyInto(&out.AppFrameworkConfig)
 	return
 }
 
@@ -684,6 +685,7 @@ func (in *MonitoringConsoleStatus) DeepCopyInto(out *MonitoringConsoleStatus) {
 			(*out)[key] = val
 		}
 	}
+	in.AppContext.DeepCopyInto(&out.AppContext)
 	return
 }
 
