@@ -1356,17 +1356,18 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	revised := cr
 	revised.ObjectMeta.Name = "standalone2"
 
-	kind := cr.GetObjectKind().GroupVersionKind().Kind
-
 	// Create the configMap
 	configMap, err := createOrUpdateAppUpdateConfigMap(client, &cr)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}
 
+	configMapName := configMap.Name
 	// check the status and refCount
-	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount := getManualUpdateRefCount(client, &cr, configMapName)
+	status := getManualUpdateStatus(client, &cr, configMapName)
+	if refCount != 1 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	// update the configMap
@@ -1376,7 +1377,9 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount
-	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount = getManualUpdateRefCount(client, &revised, configMapName)
+	status = getManualUpdateStatus(client, &revised, configMapName)
+	if refCount != 2 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
 }

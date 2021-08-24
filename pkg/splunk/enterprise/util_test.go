@@ -520,18 +520,20 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
+
 	var configMap *corev1.ConfigMap
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
+	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
 		t.Errorf("Unable to get configMap")
 	}
 
-	kind := cr.GetObjectKind().GroupVersionKind().Kind
-
 	// check the status and refCount first time
-	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount := getManualUpdateRefCount(client, &cr, configMapName)
+	status := getManualUpdateStatus(client, &cr, configMapName)
+	if refCount != 1 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	var appDeployContext2 enterpriseApi.AppDeploymentContext
@@ -547,8 +549,10 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount = getManualUpdateRefCount(client, &revised, configMapName)
+	status = getManualUpdateStatus(client, &revised, configMapName)
+	if refCount != 2 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
 
 	// prepare the configMap
@@ -557,7 +561,6 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	refCount: 2`)
 
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
 
 	configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 
@@ -583,8 +586,10 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != 1 || getManualUpdateStatus(configMap.Data[kind]) != "on" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount = getManualUpdateRefCount(client, &revised, configMapName)
+	status = getManualUpdateStatus(client, &revised, configMapName)
+	if refCount != 1 || status != "on" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=on, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	err = initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
@@ -593,8 +598,10 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	if getManualUpdateRefCount(configMap.Data[kind]) != 2 || getManualUpdateStatus(configMap.Data[kind]) != "off" {
-		t.Errorf("Got wrong status or/and refCount")
+	refCount = getManualUpdateRefCount(client, &cr, configMapName)
+	status = getManualUpdateStatus(client, &cr, configMapName)
+	if refCount != 2 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
 
 }
@@ -1017,7 +1024,7 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 	var appStatusContext enterpriseApi.AppDeploymentContext
 	appStatusContext.AppsRepoStatusPollInterval = 0
 	var turnOffManualChecking bool
-	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &cr.Spec.AppFrameworkConfig, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck == true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned false as there is no configMap yet.")
 	}
@@ -1029,7 +1036,7 @@ refCount: 1`)
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(), cr.GetNamespace(), crKindMap)
 	c.AddObject(configMap)
-	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &cr.Spec.AppFrameworkConfig, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck != true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned true.")
 	}
@@ -1125,7 +1132,7 @@ refCount: 1`)
 		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
 	}
 
-	refCount := getManualUpdateRefCount(configMap.Data[kind])
+	refCount := getManualUpdateRefCount(client, &stand1, configMapName)
 	if refCount != 1 {
 		t.Errorf("Got wrong refCount. Expected=%d, Got=%d", 1, refCount)
 	}

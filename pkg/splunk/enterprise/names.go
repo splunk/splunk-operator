@@ -70,8 +70,6 @@ const (
 
 	manualAppUpdateCM = "splunk-manual-app-update"
 
-	manualAppUpdateRev = "manualAppUpdateRev"
-
 	// command merger
 	commandMerger = " && "
 

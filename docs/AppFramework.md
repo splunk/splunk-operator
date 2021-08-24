@@ -314,7 +314,53 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 ### appsRepoPollIntervalSeconds
 
-`appsRepoPollIntervalSeconds` helps configure the polling interval(in seconds) to detect addition or modification of apps on the Remote Storage
+The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage.  If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-manual-app-update**, which is used to manually trigger the app updates. When `appsRepoPollIntervalSeconds` is set to '0' for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manaul_initiation_of_app_management).
+
+
+## Manual initiation of app management
+You can prevent the App Framework from automatically polling the remote storage for changes. By setting the CR setting `appsRepoPollIntervalSeconds` to '0', the App Framework polling is disabled, and the configMap is updated with a new `status` field.
+
+The 'status' field defaults to 'off'. When you're ready to initiate an app check using the App Framework, manually update the `status` field in the configMap for that CR type to `on`. 
+For example, you deployed one Standalone CR with app framework enabled. 
+
+```
+kubectl get standalone
+NAME   PHASE   DESIRED   READY   AGE
+s1     Ready   1         1       13h
+```
+As mentioned above, Splunk Operator will create the configMap `splunk-manual-app-update` with an entry for Standalone CR as below -
+
+```yaml
+apiVersion: v1
+data:
+  Standalone: |-
+    status: off
+    refCount: 1
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2021-08-24T01:04:01Z"
+  name: splunk-manual-app-update
+  namespace: default
+  ownerReferences:
+  - apiVersion: enterprise.splunk.com/v2
+    controller: false
+    kind: Standalone
+    name: s1
+    uid: ddb9528f-2e25-49be-acd4-4fadde489849
+  resourceVersion: "75406013"
+  selfLink: /api/v1/namespaces/default/configmaps/splunk-manual-app-update
+  uid: 413c6053-af4f-4cb3-97e0-6dbe7cd17721
+  ```
+
+To trigger manual checking of app/s, update the configMap and set the `status` field to 'on' for the Standalone CR as below:
+
+```kubectl patch cm/splunk-manual-app-update --type merge -p '{"data":{"Standalone":"status: on\nrefCount: 1"}}'```
+
+The App Framework will perform its checks and updates, and reset the 'status' to 'off' when it has completed its tasks.
+
+To re-enable the polling, update the CR `appsRepoPollIntervalSeconds` setting to a value greater than 0.
+
+NOTE: all CR's of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CR's of the same type before updating the polling interval.
 
 ## Impact of livenessInitialDelaySeconds and readinessInitialDelaySeconds
 

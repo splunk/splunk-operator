@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -889,7 +890,7 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	configMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 
 	// Owner ref doesn't exist, update configMap with owner references
-	if getManualUpdateRefCount(crKindMap[cr.GetObjectKind().GroupVersionKind().Kind]) == 1 {
+	if getManualUpdateRefCount(client, cr, configMapName) == 0 {
 		configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 	}
 
@@ -903,8 +904,17 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 }
 
 // getManualUpdateStatus extracts the status field from the configMap data
-func getManualUpdateStatus(data string) string {
+func getManualUpdateStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
+	scopedLog := log.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return ""
+	}
+
 	statusRegex := ".*status: (?P<status>.*).*"
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 	pattern := regexp.MustCompile(statusRegex)
 	if len(pattern.FindStringSubmatch(data)) > 0 {
 		return pattern.FindStringSubmatch(data)[1]
@@ -913,9 +923,18 @@ func getManualUpdateStatus(data string) string {
 }
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
-func getManualUpdateRefCount(data string) int {
+func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) int {
+	scopedLog := log.WithName("getManualUpdateRefCount").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	var refCount int
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return refCount
+	}
 	refCountRegex := ".*refCount: (?P<refCount>.*).*"
+
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 	pattern := regexp.MustCompile(refCountRegex)
 	if len(pattern.FindStringSubmatch(data)) > 0 {
 		refCount, _ = strconv.Atoi(pattern.FindStringSubmatch(data)[1])
@@ -935,9 +954,20 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
+	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err == nil {
+		// If this CR is already an owner reference, then do nothing.
+		// This can happen if we have already set this CR as ownerRef in the first time,
+		// and we reach here again during the next reconcile.
+		currentOwnerRef := configMap.GetOwnerReferences()
+		for i := 0; i < len(currentOwnerRef); i++ {
+			if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+				return configMap, nil
+			}
+		}
+
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -957,7 +987,7 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	if _, ok := crKindMap[kind]; !ok {
 		status = "off"
 	} else {
-		status = getManualUpdateStatus(crKindMap[kind])
+		status = getManualUpdateStatus(client, cr, configMapName)
 	}
 
 	configMapData = fmt.Sprintf(`status: %s
@@ -974,7 +1004,7 @@ refCount: %d`, status, numOfObjects+1)
 	return configMap, nil
 }
 
-// initAppFrameWorkContext used to initialize the app frame work context
+// initAppFrameWorkContext used to initialize the appframework context
 func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)

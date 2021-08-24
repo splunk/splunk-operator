@@ -957,22 +957,28 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 	return appStatusContext.AppsRepoStatusPollInterval != 0
 }
 
-func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
+func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
 	scopedLog := log.WithName("shouldCheckAppRepoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	if !isAppRepoPollingEnabled(appStatusContext) {
-		// check if manual app checking flag is turned on for this CR kind
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
-		configMap, err := splctrl.GetConfigMap(client, namespacedName)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get the configMap", "name", namespacedName.Name)
+	// Do not poll for the app updates if the manual app update is turned off.
+	if !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+		if !isAppRepoPollingEnabled(appStatusContext) && getManualUpdateStatus(client, cr, GetSplunkManualAppUpdateConfigMapName()) == "off" {
+			scopedLog.Info("Not polling for app updates as manual app update is turned off")
+
+			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
+			appStatusContext.LastAppInfoCheckTime = 0
+
 			return false
 		}
+	}
+
+	if !isAppRepoPollingEnabled(appStatusContext) {
+		configMapName := GetSplunkManualAppUpdateConfigMapName()
 
 		// Check if we need to manually check for app updates for this CR kind
-		if getManualUpdateStatus(configMap.Data[kind]) == "on" {
+		if getManualUpdateStatus(client, cr, configMapName) == "on" {
 			// There can be more than 1 CRs of this kind. We should only
 			// turn off the status once all the CRs have finished the reconciles
-			if getManualUpdateRefCount(configMap.Data[kind]) == 1 {
+			if getManualUpdateRefCount(client, cr, configMapName) == 1 {
 				*turnOffManualChecking = true
 			}
 			return true
@@ -1002,7 +1008,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	//check if the apps need to be downloaded from remote storage
-	if shouldCheckAppRepoStatus(client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+	if shouldCheckAppRepoStatus(client, cr, appFrameworkConf, appStatusContext, kind, &turnOffManualChecking) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
@@ -1039,7 +1045,8 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			SetLastAppInfoCheckTime(appStatusContext)
 		} else {
 			var status string
-			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
+			configMapName := GetSplunkManualAppUpdateConfigMapName()
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 			configMap, err := splctrl.GetConfigMap(client, namespacedName)
 			if err != nil {
 				scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
@@ -1049,7 +1056,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
 			appStatusContext.LastAppInfoCheckTime = 0
 
-			numOfObjects := getManualUpdateRefCount(configMap.Data[kind])
+			numOfObjects := getManualUpdateRefCount(client, cr, configMapName)
 
 			// turn off the manual checking for this CR kind in the configMap
 			if turnOffManualChecking == true {
@@ -1060,7 +1067,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 				numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
 			} else {
 				//just decrement the refCount if the status is "on"
-				status = getManualUpdateStatus(configMap.Data[kind])
+				status = getManualUpdateStatus(client, cr, configMapName)
 				if status == "on" {
 					numOfObjects--
 				}
@@ -1121,11 +1128,12 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 	return numOfObjects
 }
 
-// UpdateOrRemoveEntryFromConfigMap removes the entry for the CR type from the manual app update configMap
+// UpdateOrRemoveEntryFromConfigMap removes/updates the entry for the CR type from the manual app update configMap
 func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkManualAppUpdateConfigMapName()}
+	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(c, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get config map", "name", namespacedName.Name)
@@ -1148,7 +1156,7 @@ func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon
 		numOfObjects--
 
 		configMapData := fmt.Sprintf(`status: %s
-refCount: %d`, getManualUpdateStatus(configMap.Data[kind]), numOfObjects)
+refCount: %d`, getManualUpdateStatus(c, cr, configMapName), numOfObjects)
 
 		configMap.Data[kind] = configMapData
 	}
