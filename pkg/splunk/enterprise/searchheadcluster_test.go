@@ -1104,7 +1104,7 @@ func TestGetSearchHeadClusterList(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Invalid scenario since we haven't added shc to the list yet
-	numOfObjects, err := getStandaloneList(client, &shc, listOpts)
+	numOfObjects, err := getSearchHeadClusterList(client, &shc, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added shc to the list yet")
 	}

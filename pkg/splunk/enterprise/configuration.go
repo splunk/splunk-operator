@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 
@@ -883,29 +882,46 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 
 	scopedLog := log.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	var configMap *corev1.ConfigMap
+	var err error
+	var newConfigMap bool
 
 	scopedLog.Info("Creating/Updating manual app update configMap")
 
-	configMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
-
-	// Owner ref doesn't exist, update configMap with owner references
-	if getManualUpdateRefCount(client, cr, configMapName) == 0 {
-		configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
-	}
-
-	_, err := splctrl.ApplyConfigMap(client, configMap)
+	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to apply the configMap", "name", configMap)
-		return nil, err
+		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+		newConfigMap = true
 	}
 
+	configMap.Data = crKindMap
+
+	// set this CR as owner reference for the configMap
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	if newConfigMap {
+		err = splutil.CreateResource(client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			return configMap, err
+		}
+	} else {
+		err = splutil.UpdateResource(client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			return configMap, err
+		}
+	}
 	return configMap, nil
 }
 
 // getManualUpdateStatus extracts the status field from the configMap data
 func getManualUpdateStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
 	scopedLog := log.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
@@ -915,11 +931,8 @@ func getManualUpdateStatus(client splcommon.ControllerClient, cr splcommon.MetaO
 
 	statusRegex := ".*status: (?P<status>.*).*"
 	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
-	pattern := regexp.MustCompile(statusRegex)
-	if len(pattern.FindStringSubmatch(data)) > 0 {
-		return pattern.FindStringSubmatch(data)[1]
-	}
-	return ""
+
+	return extractFieldFromConfigMapData(statusRegex, data)
 }
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
@@ -932,13 +945,11 @@ func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.Met
 		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
 		return refCount
 	}
-	refCountRegex := ".*refCount: (?P<refCount>.*).*"
 
+	refCountRegex := ".*refCount: (?P<refCount>.*).*"
 	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
-	pattern := regexp.MustCompile(refCountRegex)
-	if len(pattern.FindStringSubmatch(data)) > 0 {
-		refCount, _ = strconv.Atoi(pattern.FindStringSubmatch(data)[1])
-	}
+
+	refCount, _ = strconv.Atoi(extractFieldFromConfigMapData(refCountRegex, data))
 	return refCount
 }
 
@@ -954,8 +965,9 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err == nil {
 		// If this CR is already an owner reference, then do nothing.
@@ -972,13 +984,6 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 
 		// get the number of instance types of this kind
 		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
-
-		// set this CR as the owner ref for the config map
-		err = SetConfigMapOwnerRef(client, cr, configMap)
-		if err != nil {
-			scopedLog.Error(err, "Unable to set owner reference for configMap", "name", namespacedName.Name)
-			return configMap, err
-		}
 	}
 
 	// prepare the configMap data OR

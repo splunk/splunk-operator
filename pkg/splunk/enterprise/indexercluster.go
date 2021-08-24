@@ -614,14 +614,14 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 
 // helper function to get the list of IndexerCluster types in the current namespace
 func getIndexerClusterList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
-	scopedLog := log.WithName("getStandaloneList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.IndexerClusterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
-	if err != nil || numOfObjects == 0 {
+	if err != nil {
 		scopedLog.Error(err, "IndexerCluster types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
 	}

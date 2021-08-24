@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -957,22 +958,10 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 	return appStatusContext.AppsRepoStatusPollInterval != 0
 }
 
-func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
-	scopedLog := log.WithName("shouldCheckAppRepoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	// Do not poll for the app updates if the manual app update is turned off.
-	if !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
-		if !isAppRepoPollingEnabled(appStatusContext) && getManualUpdateStatus(client, cr, GetSplunkManualAppUpdateConfigMapName()) == "off" {
-			scopedLog.Info("Not polling for app updates as manual app update is turned off")
-
-			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
-			appStatusContext.LastAppInfoCheckTime = 0
-
-			return false
-		}
-	}
-
+func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
+	// If polling is disabled, check if manual update is on.
 	if !isAppRepoPollingEnabled(appStatusContext) {
-		configMapName := GetSplunkManualAppUpdateConfigMapName()
+		configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 
 		// Check if we need to manually check for app updates for this CR kind
 		if getManualUpdateStatus(client, cr, configMapName) == "on" {
@@ -1008,7 +997,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	//check if the apps need to be downloaded from remote storage
-	if shouldCheckAppRepoStatus(client, cr, appFrameworkConf, appStatusContext, kind, &turnOffManualChecking) {
+	if shouldCheckAppRepoStatus(client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
@@ -1045,7 +1034,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			SetLastAppInfoCheckTime(appStatusContext)
 		} else {
 			var status string
-			configMapName := GetSplunkManualAppUpdateConfigMapName()
+			configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 			configMap, err := splctrl.GetConfigMap(client, namespacedName)
 			if err != nil {
@@ -1132,7 +1121,7 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(c, namespacedName)
 	if err != nil {
@@ -1200,4 +1189,14 @@ func RemoveConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.Met
 	}
 
 	return refCount, nil
+}
+
+func extractFieldFromConfigMapData(fieldRegex, data string) string {
+
+	var result string
+	pattern := regexp.MustCompile(fieldRegex)
+	if len(pattern.FindStringSubmatch(data)) > 0 {
+		result = pattern.FindStringSubmatch(data)[1]
+	}
+	return result
 }

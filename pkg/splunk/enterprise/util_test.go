@@ -522,7 +522,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	}
 
 	var configMap *corev1.ConfigMap
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
@@ -1024,7 +1024,7 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 	var appStatusContext enterpriseApi.AppDeploymentContext
 	appStatusContext.AppsRepoStatusPollInterval = 0
 	var turnOffManualChecking bool
-	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &cr.Spec.AppFrameworkConfig, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck == true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned false as there is no configMap yet.")
 	}
@@ -1034,9 +1034,9 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 refCount: 1`)
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
-	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(), cr.GetNamespace(), crKindMap)
+	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 	c.AddObject(configMap)
-	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &cr.Spec.AppFrameworkConfig, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck != true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned true.")
 	}
@@ -1098,7 +1098,7 @@ func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
 refCount: 1`)
 
 	crKindMap[kind] = configMapData
-	configMapName := GetSplunkManualAppUpdateConfigMapName()
+	configMapName := GetSplunkManualAppUpdateConfigMapName(stand1.GetNamespace())
 
 	configMap := splctrl.PrepareConfigMap(configMapName, stand1.GetNamespace(), crKindMap)
 

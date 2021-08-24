@@ -321,7 +321,7 @@ func getClusterMasterList(c splcommon.ControllerClient, cr splcommon.MetaObject,
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
-	if err != nil || numOfObjects == 0 {
+	if err != nil {
 		scopedLog.Error(err, "ClusterMaster types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
 	}

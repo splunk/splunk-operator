@@ -611,7 +611,7 @@ func TestGetLicenseMasterList(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Invalid scenario since we haven't added license master to the list yet
-	numOfObjects, err := getStandaloneList(client, &lm, listOpts)
+	numOfObjects, err := getLicenseMasterList(client, &lm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}

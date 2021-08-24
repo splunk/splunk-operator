@@ -579,7 +579,7 @@ func getSearchHeadClusterList(c splcommon.ControllerClient, cr splcommon.MetaObj
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
 
-	if err != nil || numOfObjects == 0 {
+	if err != nil {
 		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
 		return numOfObjects, err
 	}

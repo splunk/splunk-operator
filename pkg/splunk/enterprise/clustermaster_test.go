@@ -918,7 +918,7 @@ func TestGetClusterMasterList(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Invalid scenario since we haven't added clustermaster to the list yet
-	numOfObjects, err := getStandaloneList(client, &cm, listOpts)
+	numOfObjects, err := getClusterMasterList(client, &cm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
