@@ -45,6 +45,7 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 	}
 
 	labels := map[string]string{
@@ -58,7 +59,7 @@ func TestApplyClusterMaster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[9]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9]}, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10]}, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -167,6 +168,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-master-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 	}
@@ -181,7 +183,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[6], funcCalls[7], funcCalls[9]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13]}, "Update": {funcCalls[10], funcCalls[13]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[14]}, "Update": {funcCalls[10], funcCalls[13]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{

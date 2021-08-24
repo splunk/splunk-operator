@@ -143,6 +143,13 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	if err != nil {
 		return result, err
 	}
+
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(client, statefulSet, getSearchHeadEnv(cr))
+	if err != nil {
+		return result, err
+	}
+
 	mgr := searchHeadClusterPodManager{c: client, log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	phase, err = mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
