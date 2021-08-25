@@ -823,30 +823,28 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", splcommon.MinAppsRepoPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
-	appFrameworkContext.AppsRepoStatusPollInterval = 0
+	AppFramework.AppsRepoPollInterval = 0
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
-		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", splcommon.DefaultAppsRepoPollInterval)
 	}
 
 	// Check for minAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
+	AppFramework.AppsRepoPollInterval = splcommon.MinAppsRepoPollInterval - 1
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
-		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MinAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval. AppsRepoStatusPollInterval=%d, expected=%d", appFrameworkContext.AppsRepoStatusPollInterval, splcommon.MinAppsRepoPollInterval)
 	}
 
 	// Check for maxAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
+	AppFramework.AppsRepoPollInterval = splcommon.MaxAppsRepoPollInterval + 1
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
-		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval. AppsRepoStatusPollInterval=%d, expected=%d", appFrameworkContext.AppsRepoStatusPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
 	// Invalid volume name in defaults should return an error
@@ -1311,4 +1309,77 @@ func TestGetProbe(t *testing.T) {
 	}
 
 	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
+}
+
+func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// now create another standalone type
+	revised := cr
+	revised.ObjectMeta.Name = "standalone2"
+
+	// Create the configMap
+	configMap, err := createOrUpdateAppUpdateConfigMap(client, &cr)
+	if err != nil {
+		t.Errorf("manual app update configMap should have been created successfully")
+	}
+
+	configMapName := configMap.Name
+	// check the status and refCount
+	refCount := getManualUpdateRefCount(client, &cr, configMapName)
+	status := getManualUpdateStatus(client, &cr, configMapName)
+	if refCount != 1 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
+	}
+
+	// update the configMap
+	configMap, err = createOrUpdateAppUpdateConfigMap(client, &revised)
+	if err != nil {
+		t.Errorf("manual app update configMap should have been created successfully")
+	}
+
+	// check the status and refCount
+	refCount = getManualUpdateRefCount(client, &revised, configMapName)
+	status = getManualUpdateStatus(client, &revised, configMapName)
+	if refCount != 2 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
+	}
 }

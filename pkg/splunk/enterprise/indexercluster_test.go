@@ -1062,3 +1062,27 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster master located in a different namespace")
 	}
 }
+
+func TestGetIndexerClusterList(t *testing.T) {
+	idxc := enterpriseApi.IndexerCluster{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	idxcList := &enterpriseApi.IndexerClusterList{}
+	idxcList.Items = append(idxcList.Items, idxc)
+
+	client.ListObj = idxcList
+
+	numOfObjects, err := getIndexerClusterList(client, &idxc, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of IndexerCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
+	}
+}

@@ -25,6 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -609,4 +610,21 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
 	}
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+// helper function to get the list of IndexerCluster types in the current namespace
+func getIndexerClusterList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	scopedLog := log.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.IndexerClusterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "IndexerCluster types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }

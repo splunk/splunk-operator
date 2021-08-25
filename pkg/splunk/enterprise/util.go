@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -949,6 +951,33 @@ func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration 
 	return time.Second * (time.Duration(nextRequeueTimeInSec))
 }
 
+// isAppRepoPollingEnabled checks whether automatic polling for apps repo changes
+// is enabled or not. If the value is 0, then we fallback to on-demand polling of apps
+// repo changes.
+func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContext) bool {
+	return appStatusContext.AppsRepoStatusPollInterval != 0
+}
+
+func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
+	// If polling is disabled, check if manual update is on.
+	if !isAppRepoPollingEnabled(appStatusContext) {
+		configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+
+		// Check if we need to manually check for app updates for this CR kind
+		if getManualUpdateStatus(client, cr, configMapName) == "on" {
+			// There can be more than 1 CRs of this kind. We should only
+			// turn off the status once all the CRs have finished the reconciles
+			if getManualUpdateRefCount(client, cr, configMapName) == 1 {
+				*turnOffManualChecking = true
+			}
+			return true
+		}
+	} else {
+		return HasAppRepoCheckTimerExpired(appStatusContext)
+	}
+	return false
+}
+
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
 func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -958,10 +987,17 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	// This is done to prevent the null pointer dereference in case when
 	// operator crashes and comes back up and the status of app context was updated
 	// to match the spec in the previous run.
-	initAppFrameWorkContext(appFrameworkConf, appStatusContext)
+	err = initAppFrameWorkContext(client, cr, appFrameworkConf, appStatusContext)
+	if err != nil {
+		scopedLog.Error(err, "Unable initialize app framework")
+		return err
+	}
+
+	var turnOffManualChecking bool
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	//check if the apps need to be downloaded from remote storage
-	if HasAppRepoCheckTimerExpired(appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+	if shouldCheckAppRepoStatus(client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
@@ -993,9 +1029,174 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			appStatusContext.AppFrameworkConfig = *appFrameworkConf
 		}
 
-		// set the last check time to current time
-		SetLastAppInfoCheckTime(appStatusContext)
+		// set the last check time to current time only if the polling is enabled
+		if isAppRepoPollingEnabled(appStatusContext) {
+			SetLastAppInfoCheckTime(appStatusContext)
+		} else {
+			var status string
+			configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+			configMap, err := splctrl.GetConfigMap(client, namespacedName)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
+				return err
+			}
+
+			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
+			appStatusContext.LastAppInfoCheckTime = 0
+
+			numOfObjects := getManualUpdateRefCount(client, cr, configMapName)
+
+			// turn off the manual checking for this CR kind in the configMap
+			if turnOffManualChecking == true {
+				scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
+				// reset the status back to "off" and
+				// refCount to original count
+				status = "off"
+				numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+			} else {
+				//just decrement the refCount if the status is "on"
+				status = getManualUpdateStatus(client, cr, configMapName)
+				if status == "on" {
+					numOfObjects--
+				}
+			}
+
+			// prepare the configMapData
+			configMapData := fmt.Sprintf(`status: %s
+refCount: %d`, status, numOfObjects)
+
+			configMap.Data[kind] = configMapData
+
+			err = splutil.UpdateResource(client, configMap)
+			if err != nil {
+				scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+				return err
+			}
+		}
 	}
 
 	return nil
+}
+
+// SetConfigMapOwnerRef sets the owner references for the configMap
+func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, configMap *corev1.ConfigMap) error {
+	scopedLog := log.WithName("SetConfigMapOwnerRef").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	currentOwnerRef := configMap.GetOwnerReferences()
+	// Check if owner ref exists
+	for i := 0; i < len(currentOwnerRef); i++ {
+		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}
+	}
+
+	// Owner ref doesn't exist, update configMap with owner references
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	// Update the configMap now
+	err := splutil.UpdateResource(client, configMap)
+	if err != nil {
+		scopedLog.Error(err, "Unable to update configMap", "name", configMap.Name)
+		return err
+	}
+
+	return nil
+
+}
+
+func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
+	var numOfObjects int
+	currentOwnerRefs := configMap.GetOwnerReferences()
+	// Get the nubmer of owners of this kind
+	for i := 0; i < len(currentOwnerRefs); i++ {
+		if currentOwnerRefs[i].Kind == kind {
+			numOfObjects++
+		}
+	}
+	return numOfObjects
+}
+
+// UpdateOrRemoveEntryFromConfigMap removes/updates the entry for the CR type from the manual app update configMap
+func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
+	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(c, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get config map", "name", namespacedName.Name)
+		return err
+	}
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	numOfObjects := getNumOfOwnerRefsKind(configMap, kind)
+	if numOfObjects == 0 {
+		err = fmt.Errorf("Error getting objects for this type: %s", instanceType.ToString())
+		return err
+	}
+
+	// if this is the last of its kind, remove its entry from the config map
+	if numOfObjects == 1 {
+		delete(configMap.Data, kind)
+	} else {
+		// just decrement the refCount in the configMap
+		numOfObjects--
+
+		configMapData := fmt.Sprintf(`status: %s
+refCount: %d`, getManualUpdateStatus(c, cr, configMapName), numOfObjects)
+
+		configMap.Data[kind] = configMapData
+	}
+
+	// Update configMap now
+	err = splutil.UpdateResource(c, configMap)
+	if err != nil {
+		scopedLog.Error(err, "Unable to update configMap", "name", namespacedName.Name)
+		return err
+	}
+
+	return nil
+}
+
+// RemoveConfigMapOwnerRef removes the owner references for the configMap
+func RemoveConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) (uint, error) {
+	var err error
+	var refCount uint = 0
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		return 0, err
+	}
+
+	ownerRef := configMap.GetOwnerReferences()
+	for i := 0; i < len(ownerRef); i++ {
+		if reflect.DeepEqual(ownerRef[i], splcommon.AsOwner(cr, false)) {
+			ownerRef = append(ownerRef[:i], ownerRef[i+1:]...)
+			refCount++
+		}
+	}
+
+	// Update the modified owner reference list
+	if refCount > 0 {
+		configMap.SetOwnerReferences(ownerRef)
+		err = splutil.UpdateResource(client, configMap)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return refCount, nil
+}
+
+func extractFieldFromConfigMapData(fieldRegex, data string) string {
+
+	var result string
+	pattern := regexp.MustCompile(fieldRegex)
+	if len(pattern.FindStringSubmatch(data)) > 0 {
+		result = pattern.FindStringSubmatch(data)[1]
+	}
+	return result
 }

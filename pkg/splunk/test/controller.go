@@ -49,14 +49,24 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 	switch srcP.(type) {
 	case *enterpriseApi.ClusterMaster:
 		*dstP.(*enterpriseApi.ClusterMaster) = *srcP.(*enterpriseApi.ClusterMaster)
+	case *enterpriseApi.ClusterMasterList:
+		*dstP.(*enterpriseApi.ClusterMasterList) = *srcP.(*enterpriseApi.ClusterMasterList)
 	case *enterpriseApi.IndexerCluster:
 		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
+	case *enterpriseApi.IndexerClusterList:
+		*dstP.(*enterpriseApi.IndexerClusterList) = *srcP.(*enterpriseApi.IndexerClusterList)
 	case *enterpriseApi.LicenseMaster:
 		*dstP.(*enterpriseApi.LicenseMaster) = *srcP.(*enterpriseApi.LicenseMaster)
+	case *enterpriseApi.LicenseMasterList:
+		*dstP.(*enterpriseApi.LicenseMasterList) = *srcP.(*enterpriseApi.LicenseMasterList)
 	case *enterpriseApi.SearchHeadCluster:
 		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
+	case *enterpriseApi.SearchHeadClusterList:
+		*dstP.(*enterpriseApi.SearchHeadClusterList) = *srcP.(*enterpriseApi.SearchHeadClusterList)
 	case *enterpriseApi.Standalone:
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
+	case *enterpriseApi.StandaloneList:
+		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
 	default:
 		return false
 	}

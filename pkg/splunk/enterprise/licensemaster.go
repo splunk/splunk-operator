@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -74,6 +75,17 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 		if err != nil {
 			return result, err
 		}
+
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkLicenseMaster)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		DeleteOwnerReferencesForResources(client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -147,4 +159,21 @@ func validateLicenseMasterSpec(cr *enterpriseApi.LicenseMaster) error {
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+// helper function to get the list of LicenseMaster types in the current namespace
+func getLicenseMasterList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	scopedLog := log.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.LicenseMasterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "LicenseMaster types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }

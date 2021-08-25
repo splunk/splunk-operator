@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -104,6 +105,16 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
 		if err != nil {
 			return result, err
+		}
+
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterMaster)
+			if err != nil {
+				return result, err
+			}
 		}
 
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
@@ -300,4 +311,21 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.Cluste
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 	return splunkClient.BundlePush(true)
+}
+
+// helper function to get the list of ClusterMaster types in the current namespace
+func getClusterMasterList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	scopedLog := log.WithName("getClusterMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.ClusterMasterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "ClusterMaster types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }

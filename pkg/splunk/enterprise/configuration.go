@@ -17,7 +17,9 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -875,10 +877,147 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 	return false
 }
 
-// initAppFrameWorkContext used to initialize the app frame work context
-func initAppFrameWorkContext(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
+// ApplyManualAppUpdateConfigMap applies the manual app update config map
+func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
+
+	scopedLog := log.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	var configMap *corev1.ConfigMap
+	var err error
+	var newConfigMap bool
+
+	scopedLog.Info("Creating/Updating manual app update configMap")
+
+	configMap, err = splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+		newConfigMap = true
+	}
+
+	configMap.Data = crKindMap
+
+	// set this CR as owner reference for the configMap
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	if newConfigMap {
+		err = splutil.CreateResource(client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			return configMap, err
+		}
+	} else {
+		err = splutil.UpdateResource(client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			return configMap, err
+		}
+	}
+	return configMap, nil
+}
+
+// getManualUpdateStatus extracts the status field from the configMap data
+func getManualUpdateStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
+	scopedLog := log.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return ""
+	}
+
+	statusRegex := ".*status: (?P<status>.*).*"
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+
+	return extractFieldFromConfigMapData(statusRegex, data)
+}
+
+// getManualUpdateRefCount extracts the refCount field from the configMap data
+func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) int {
+	scopedLog := log.WithName("getManualUpdateRefCount").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	var refCount int
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return refCount
+	}
+
+	refCountRegex := ".*refCount: (?P<refCount>.*).*"
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+
+	refCount, _ = strconv.Atoi(extractFieldFromConfigMapData(refCountRegex, data))
+	return refCount
+}
+
+// createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
+func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
+	scopedLog := log.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	crKindMap := make(map[string]string)
+	var configMapData, status string
+	var configMap *corev1.ConfigMap
+	var err error
+	var numOfObjects int
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	configMap, err = splctrl.GetConfigMap(client, namespacedName)
+	if err == nil {
+		// If this CR is already an owner reference, then do nothing.
+		// This can happen if we have already set this CR as ownerRef in the first time,
+		// and we reach here again during the next reconcile.
+		currentOwnerRef := configMap.GetOwnerReferences()
+		for i := 0; i < len(currentOwnerRef); i++ {
+			if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+				return configMap, nil
+			}
+		}
+
+		crKindMap = configMap.Data
+
+		// get the number of instance types of this kind
+		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+	}
+
+	// prepare the configMap data OR
+	// initialize the configMap data for this CR type,
+	// if it did not exist before
+	if _, ok := crKindMap[kind]; !ok {
+		status = "off"
+	} else {
+		status = getManualUpdateStatus(client, cr, configMapName)
+	}
+
+	configMapData = fmt.Sprintf(`status: %s
+refCount: %d`, status, numOfObjects+1)
+	crKindMap[kind] = configMapData
+
+	// Create/update the configMap to store the values of manual trigger per CR kind.
+	configMap, err = ApplyManualAppUpdateConfigMap(client, cr, crKindMap)
+	if err != nil {
+		scopedLog.Error(err, "Create/update configMap for app update failed")
+		return configMap, err
+	}
+
+	return configMap, nil
+}
+
+// initAppFrameWorkContext used to initialize the appframework context
+func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+
+		_, err := createOrUpdateAppUpdateConfigMap(client, cr)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
@@ -886,6 +1025,7 @@ func initAppFrameWorkContext(appFrameworkConf *enterpriseApi.AppFrameworkSpec, a
 			splclient.RegisterS3Client(vol.Provider)
 		}
 	}
+	return nil
 }
 
 // getAppSrcScope returns the scope of a given appSource
@@ -1005,9 +1145,9 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 	// Set the value in status field to be same as that in spec.
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
 
-	if appContext.AppsRepoStatusPollInterval == 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
+	if appContext.AppsRepoStatusPollInterval <= 0 {
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates")
+		appContext.AppsRepoStatusPollInterval = 0
 	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval

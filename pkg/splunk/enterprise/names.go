@@ -68,6 +68,8 @@ const (
 	// Pod location for app related config
 	appConfLocationOnPod = "/mnt/app-listing/"
 
+	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
+
 	// command merger
 	commandMerger = " && "
 
@@ -165,6 +167,11 @@ func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
 // GetSplunkAppsConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkAppsConfigMapName(identifier string, crKind string) string {
 	return fmt.Sprintf(appListingTemplateStr, identifier, strings.ToLower(crKind))
+}
+
+// GetSplunkManualAppUpdateConfigMapName returns the manual app update configMap name for that namespace
+func GetSplunkManualAppUpdateConfigMapName(namespace string) string {
+	return fmt.Sprintf(manualAppUpdateCMStr, namespace)
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.

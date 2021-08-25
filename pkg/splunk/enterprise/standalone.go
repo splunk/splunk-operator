@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -99,6 +100,16 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 		if err != nil {
 			return result, err
+		}
+
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkStandalone)
+			if err != nil {
+				return result, err
+			}
 		}
 
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
@@ -228,4 +239,21 @@ func validateStandaloneSpec(cr *enterpriseApi.Standalone) error {
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+// helper function to get the list of Standalone types in the current namespace
+func getStandaloneList(c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	scopedLog := log.WithName("getStandaloneList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.StandaloneList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "Standalone types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }
