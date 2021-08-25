@@ -76,8 +76,8 @@ func CheckMCPodReady(ns string) bool {
 }
 
 // GetConfiguredPeers get list of Peers Configured on Montioring Console
-func GetConfiguredPeers(ns string, deploymentName string) []string {
-	podName := fmt.Sprintf(MonitoringConsolePod, deploymentName, 0)
+func GetConfiguredPeers(ns string, mcName string) []string {
+	podName := fmt.Sprintf(MonitoringConsolePod, mcName, 0)
 	var peerList []string
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
@@ -100,6 +100,7 @@ func GetConfiguredPeers(ns string, deploymentName string) []string {
 			}
 		}
 	}
+	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
 	return peerList
 }
 
@@ -134,10 +135,10 @@ func MCPodReady(ns string, deployment *Deployment) {
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
-// CheckPodNameOnMC Check Standalone Pod configured on MC
-func CheckPodNameOnMC(ns string, deploymentName string, podName string) bool {
+// CheckPodNameOnMC Check given pod is configured on Monitoring console pod
+func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 	// Get Peers configured on Monitoring Console
-	peerList := GetConfiguredPeers(ns, deploymentName)
+	peerList := GetConfiguredPeers(ns, mcName)
 	logf.Log.Info("Peer List", "instance", peerList)
 	found := false
 	for _, peer := range peerList {
@@ -169,13 +170,13 @@ func GetPodIP(ns string, podName string) string {
 
 // GetMCConfigMap gets config map for give Monitoring Console Name
 func GetMCConfigMap(deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
-	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(deployment.GetName(), enterprise.SplunkMonitoringConsole)
+	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(mcName, enterprise.SplunkMonitoringConsole)
 	mcConfigMap, err := GetConfigMap(deployment, ns, mcConfigMapName)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
 		return mcConfigMap, err
 	}
-	logf.Log.Info("MC Config Map contents", "Data", mcConfigMap.Data)
+	logf.Log.Info("MC Config Map contents", "MC CONFIG MAP NAME", mcConfigMapName, "Data", mcConfigMap.Data)
 	return mcConfigMap, err
 }
 
