@@ -108,7 +108,8 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 		}
 
 		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterMaster)
 			if err != nil {
