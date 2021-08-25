@@ -511,7 +511,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, appframework: can deploy a C3 SVA with apps installed locally on CM and SHC Deployer, and cluster-wide on Peers and SHs", func() {
+		It("c3, appframework: can deploy a C3 SVA with apps installed locally on CM and SHC Deployer, and cluster-wide on Peers and SHs", func() {
 
 			//Delete apps on S3 for new Apps to split them accorss both cluster and local
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
