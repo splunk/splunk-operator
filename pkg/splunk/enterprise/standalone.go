@@ -140,7 +140,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	// download and install all the apps.
 	// TODO: Improve this logic so that we only recycle the new pod/replica
 	// and not all the existing pods.
-	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Spec.Replicas > 1 {
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
