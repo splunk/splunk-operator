@@ -72,7 +72,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
-			Scope:   "local",
+			Scope:   enterpriseApi.ScopeLocal,
 		},
 		VolList: []enterpriseApi.VolumeSpec{
 			{
@@ -97,13 +97,13 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 			{Name: "securityApps",
 				Location: "securityAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 			{Name: "authenticationApps",
 				Location: "authenticationAppsRepo",
@@ -228,7 +228,7 @@ func TestGetAppsListShouldFail(t *testing.T) {
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
-					Scope:   "local"},
+					Scope:   enterpriseApi.ScopeLocal},
 			},
 		},
 	}

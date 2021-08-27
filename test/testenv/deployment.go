@@ -589,8 +589,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			LivenessInitialDelaySeconds:  int32(delaySeconds),
-			ReadinessInitialDelaySeconds: int32(delaySeconds),
+			// LivenessInitialDelaySeconds:  int32(delaySeconds),
+			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
@@ -617,8 +617,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			LivenessInitialDelaySeconds:  int32(delaySeconds),
-			ReadinessInitialDelaySeconds: int32(delaySeconds),
+			// LivenessInitialDelaySeconds:  int32(delaySeconds),
+			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpec,
@@ -673,9 +673,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults:                     defaults,
-			LivenessInitialDelaySeconds:  int32(delaySeconds),
-			ReadinessInitialDelaySeconds: int32(delaySeconds),
+			Defaults: defaults,
+			// LivenessInitialDelaySeconds:  int32(delaySeconds),
+			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
@@ -715,9 +715,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults:                     siteDefaults,
-			LivenessInitialDelaySeconds:  int32(delaySeconds),
-			ReadinessInitialDelaySeconds: int32(delaySeconds),
+			Defaults: siteDefaults,
+			// LivenessInitialDelaySeconds:  int32(delaySeconds),
+			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpec,

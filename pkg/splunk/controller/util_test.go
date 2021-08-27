@@ -129,6 +129,22 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers[0].Env, revised.Spec.Containers[0].Env) }
 	podUpdateTester("Pod Env changed")
 
+	// Check if the liveness probe initalDelay is updated
+	revised.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 5000}
+	current.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 10}
+	matcher = func() bool {
+		return current.Spec.Containers[0].LivenessProbe.InitialDelaySeconds == revised.Spec.Containers[0].LivenessProbe.InitialDelaySeconds
+	}
+	podUpdateTester("Pod LivenessProbe changed")
+
+	// Check if the readiness probe initalDelay is updated
+	revised.Spec.Containers[0].ReadinessProbe = &corev1.Probe{InitialDelaySeconds: 200}
+	current.Spec.Containers[0].ReadinessProbe = &corev1.Probe{InitialDelaySeconds: 30}
+	matcher = func() bool {
+		return current.Spec.Containers[0].ReadinessProbe.InitialDelaySeconds == revised.Spec.Containers[0].ReadinessProbe.InitialDelaySeconds
+	}
+	podUpdateTester("Pod ReadinessProbe changed")
+
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
