@@ -19,6 +19,8 @@
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test
 # Acceptable input is a regex matching test names
 : "${TEST_REGEX:=smoke}"
+# Regex to skip Test Cases
+: "${SKIP_REGEX:=}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then
