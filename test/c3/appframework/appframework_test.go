@@ -61,7 +61,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with SHC (C3) with App Framework", func() {
-		It("appfwint, c3, appframework: can deploy a C3 SVA with App Framework enabled", func() {
+		It("integration, c3, appframework: can deploy a C3 SVA with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -405,7 +405,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("appfwint, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
+		It("integration, c3, appframework: can deploy a C3 SVA and have ES app installed on SHC", func() {
 
 			//Delete apps on S3 for new Apps
 			testenvInstance.Log.Info("Delete existing apps on S3 before starting upload of ES App")
