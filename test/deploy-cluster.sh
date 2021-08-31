@@ -16,11 +16,6 @@ if [[ -z "${TEST_CLUSTER_NAME}" ]]; then
   export TEST_CLUSTER_NAME="${CLUSTER_NAME}"
 fi
 
-if [[ -z "${CLUSTER_NODES}" ]]; then
-  echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
-  export CLUSTER_NODES="${NUM_NODES}"
-fi
-
 if [[ -z "${CLUSTER_WORKERS}" ]]; then
   echo "Test Cluster Workers Not Set in Environment Variables. Changing to env.sh value"
   export CLUSTER_WORKERS="${NUM_WORKERS}"
