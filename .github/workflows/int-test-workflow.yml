@@ -1,7 +1,7 @@
 name: Integration Test WorkFlow
 on:
   schedule:
-    - cron: "0 23 * * *" 
+    - cron: '0 09 30 * *' 
 jobs:
   int-tests:
     strategy:
