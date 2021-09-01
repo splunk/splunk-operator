@@ -462,7 +462,6 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	// ToDo: Exclude MC, once it's own CR is available
 	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
@@ -610,7 +609,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		// Always sort the slice, so that map entries are ordered, to avoid pod resets
 		sort.Strings(appListingFiles)
 
-		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster || instanceType == SplunkMonitoringConsole {
+		if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
 		}
 	}
@@ -620,13 +619,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
-	// Check for apps defaults and add it to only the standalone or deployer/cm instances
-	if spec.DefaultsURLApps != "" &&
-		(instanceType == SplunkDeployer ||
-			instanceType == SplunkStandalone ||
-			instanceType == SplunkClusterMaster ||
-			instanceType == SplunkLicenseMaster ||
-			instanceType == SplunkMonitoringConsole) {
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
 	}
 	if spec.DefaultsURL != "" {

@@ -50,7 +50,7 @@ type MonitoringConsoleStatus struct {
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
 	// App Framework status
-	AppContext AppDeploymentContext `json:"appContext"`
+	AppContext AppDeploymentContext `json:"appContext,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
