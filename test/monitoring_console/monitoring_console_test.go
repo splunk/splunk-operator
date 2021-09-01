@@ -704,6 +704,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// ############################  VERIFICATOIN FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
+			// Verify MC ONE is Ready and stays in ready state before running verfications
+			testenv.VerifyMonitoringConsoleReady(deployment, mcName, mc, testenvInstance)
+
 			// Check Cluster Master Not in Monitoring Console One Config Map
 			testenvInstance.Log.Info("Verify Cluster Master NOT in Monitoring Console One Config Map after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)

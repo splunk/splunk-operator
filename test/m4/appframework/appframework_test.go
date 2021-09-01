@@ -61,7 +61,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
-		It("smoke, m4, appframework: can deploy a M4 SVA with App Framework enabled", func() {
+		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled", func() {
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -264,7 +264,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Clustered deployment (M4 - clustered indexer, search head cluster)", func() {
-		It("appfwint, m4, appframework: can deploy a M4 SVA and have apps installed locally on CM and SHC Deployer", func() {
+		It("integration, m4, appframework: can deploy a M4 SVA and have apps installed locally on CM and SHC Deployer", func() {
 
 			// Create App framework Spec
 			// volumeSpec: Volume name, Endpoint, Path and SecretRef
