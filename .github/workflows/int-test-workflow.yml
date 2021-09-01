@@ -8,7 +8,7 @@ jobs:
   int-tests:
     strategy:
       matrix:
-        test: [appframework, secret, smartstore, monitoring_console, scaling]
+        test: [appframework, secret, smartstore, monitoringconsole, scaling]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
