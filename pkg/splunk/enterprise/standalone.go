@@ -129,7 +129,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	// download and install all the apps.
 	// TODO: Improve this logic so that we only recycle the new pod/replica
 	// and not all the existing pods.
-	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Spec.Replicas > 1 {
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
@@ -154,6 +154,12 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(client, cr)
+	if err != nil {
+		return result, err
+	}
+
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		return result, err
 	}

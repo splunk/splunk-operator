@@ -47,6 +47,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
 	labels := map[string]string{

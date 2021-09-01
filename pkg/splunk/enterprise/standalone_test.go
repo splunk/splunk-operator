@@ -42,6 +42,7 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -99,6 +100,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	labels := map[string]string{

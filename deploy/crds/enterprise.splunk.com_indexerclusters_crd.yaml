@@ -2612,6 +2612,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2621,6 +2622,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2630,6 +2632,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2639,6 +2642,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string

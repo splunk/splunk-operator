@@ -60,9 +60,9 @@ type PodDetailsStruct struct {
 }
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
-func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
+func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {
-		err := deployment.GetInstance(deploymentName, monitoringConsole)
+		err := deployment.GetInstance(mcName, monitoringConsole)
 		if err != nil {
 			return splcommon.PhaseError
 		}
@@ -73,7 +73,7 @@ func VerifyMonitoringConsoleReady(deployment *Deployment, deploymentName string,
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
-		_ = deployment.GetInstance(deployment.GetName(), monitoringConsole)
+		_ = deployment.GetInstance(mcName, monitoringConsole)
 		return monitoringConsole.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
@@ -622,26 +622,35 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
 				comparison := strings.EqualFold(status, statusCheck)
 				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
+				var check bool
 				if clusterWideInstall {
 					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						gomega.Expect(comparison).Should(gomega.Equal(true))
+						check = true
+						testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
+						gomega.Expect(comparison).Should(gomega.Equal(check))
 					}
 				} else {
 					// For local install check pods individually
 					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						gomega.Expect(comparison).Should(gomega.Equal(false))
+						check = false
 					} else {
-						gomega.Expect(comparison).Should(gomega.Equal(true))
+						check = true
 					}
+					testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
+					gomega.Expect(comparison).Should(gomega.Equal(check))
 				}
+
 				if versionCheck {
 					// For clusterwide install do not check for versions on deployer and cluster-master as the apps arent installed there
 					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-master-"))) {
+						var expectedVersion string
 						if checkupdated {
-							gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V2"]))
+							expectedVersion = AppInfo[appName]["V2"]
 						} else {
-							gomega.Expect(versionInstalled).Should(gomega.Equal(AppInfo[appName]["V1"]))
+							expectedVersion = AppInfo[appName]["V1"]
 						}
+						testenvInstance.Log.Info("Verify app Version", "Pod Name", podName, "App Name", appName, "Expected Version", expectedVersion, "Version Installed", versionInstalled, "Updated", checkupdated)
+						gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
 					}
 				}
 			}
@@ -649,7 +658,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 	}
 }
 
-// VerifyAppsCopied verify that apps are copied to correct location based on POD
+// VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
 func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
 	for _, podName := range pods {
 		if !strings.Contains(podName, "monitoring-console") {
@@ -664,20 +673,22 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 					path = "etc/slave-apps/"
 				}
 			}
+			testenvInstance.Log.Info("Verifying App in Directory", "Directory Name", path, "Pod Name", podName)
 			VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path, checkAppDirectory)
 		}
 	}
 }
 
-// VerifyAppsInFolder verify that apps are present in folder
+// VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
 func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
 	gomega.Eventually(func() bool {
+		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
 			folderName := app + "/"
 			found := CheckStringInSlice(appList, folderName)
-			logf.Log.Info("Copy Status for app", "App-name", folderName, "status", found)
+			logf.Log.Info("Check App in Directory", "Pod Name", podName, "App-name", folderName, "Path", path, "status", found)
 			if found != checkAppDirectory {
 				return false
 			}
@@ -693,7 +704,34 @@ func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
 			found := CheckStringInSlice(appList, app)
+			testenvInstance.Log.Info("Check App directory downloaded by init container", "Pod Name", podName, "App Name", app, "Status", found)
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
+	}
+}
+
+// VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigMap(deployment *Deployment, testenvInstance *TestEnv, pods []string, key string, mcName string, expected bool) {
+	// Get contents of MC config map
+	mcConfigMap, err := GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get MC config map")
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking for POD on  MC Config Map", "POD Name", podName, "DATA", mcConfigMap.Data)
+		gomega.Expect(expected).To(gomega.Equal(CheckPodNameInString(podName, mcConfigMap.Data[key])), "Verify Pod in MC Config Map. Pod Name %s.", podName)
+	}
+}
+
+// VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigString(deployment *Deployment, testenvInstance *TestEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking pod configured in MC POD Peers String", "Pod Name", podName)
+		var found bool
+		if checkPodIP {
+			podIP := GetPodIP(testenvInstance.GetName(), podName)
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+		} else {
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+		}
+		gomega.Expect(expected).To(gomega.Equal(found), "Verify Pod in MC Config String. Pod Name %s.", podName)
 	}
 }

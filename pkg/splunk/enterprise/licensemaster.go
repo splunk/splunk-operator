@@ -96,6 +96,13 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	if err != nil {
 		return result, err
 	}
+
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(client, statefulSet, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+	if err != nil {
+		return result, err
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(client, statefulSet, 1)
 	if err != nil {

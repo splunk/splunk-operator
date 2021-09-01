@@ -38,6 +38,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-licensemaster-app-list"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",

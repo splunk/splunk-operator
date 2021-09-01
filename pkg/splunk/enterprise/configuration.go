@@ -714,13 +714,17 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 
+	// append REF for monitoring console if configured
+	if spec.MonitoringConsoleRef.Name != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+			Value: spec.MonitoringConsoleRef.Name,
+		})
+	}
+
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	// Exclude MC as it derives the Spec from multiple CRs
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		for _, envVar := range spec.ExtraEnv {
-			extraEnv = append(extraEnv, envVar)
-		}
+	for _, envVar := range spec.ExtraEnv {
+		extraEnv = append(extraEnv, envVar)
 	}
 
 	// append any extra variables
@@ -742,17 +746,12 @@ func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *
 
 	livenessDelay := int32(livenessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the Liveness initial delay from the CR
-		if spec.LivenessInitialDelaySeconds != 0 {
-			livenessDelay = spec.LivenessInitialDelaySeconds
-		} else {
-			livenessDelay += additionalDelay
-		}
+	// If configured, always use the Liveness initial delay from the CR
+	if spec.LivenessInitialDelaySeconds != 0 {
+		livenessDelay = spec.LivenessInitialDelaySeconds
+	} else {
+		livenessDelay += additionalDelay
 	}
-
 	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
 
 	livenessCommand := []string{
@@ -769,15 +768,11 @@ func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec 
 
 	readinessDelay := int32(readinessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the readiness initial delay from the CR
-		if spec.ReadinessInitialDelaySeconds != 0 {
-			readinessDelay = spec.ReadinessInitialDelaySeconds
-		} else {
-			readinessDelay += additionalDelay
-		}
+	// If configured, always use the readiness initial delay from the CR
+	if spec.ReadinessInitialDelaySeconds != 0 {
+		readinessDelay = spec.ReadinessInitialDelaySeconds
+	} else {
+		readinessDelay += additionalDelay
 	}
 
 	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
