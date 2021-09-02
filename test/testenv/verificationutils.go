@@ -649,7 +649,7 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 // VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
 func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
 	gomega.Eventually(func() bool {
-		// Useing checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
+		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
