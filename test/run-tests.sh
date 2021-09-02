@@ -104,11 +104,22 @@ if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
   export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
 fi
 
+if [[ -z "${CLUSTER_NODES}" ]]; then
+  echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
+  export CLUSTER_NODES="${NUM_NODES}"
+fi
+
 if [[ -z "${S3_REGION}" ]]; then
   echo "S3 Region not set. Changing to default"
   export S3_REGION="${AWS_S3_REGION}"
 fi
 
+if [[ -z "${TEST_TO_SKIP}" ]]; then
+  echo "TEST_TO_SKIP not set. Changing to default"
+  export TEST_TO_SKIP="${SKIP_REGEX}"
+fi
+echo "Skipping following test :: ${TEST_TO_SKIP}"
+
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v -progress -r -stream -keepGoing -nodes=${NUM_NODES} --focus="${TEST_TO_RUN}" ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

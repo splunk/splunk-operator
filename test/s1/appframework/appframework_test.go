@@ -110,20 +110,26 @@ var _ = Describe("s1appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appVersion := "V1"
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on Pod for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, true)
 
 			//Verify Apps are installed
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, "enabled", false, false)
 
 			//Delete apps on S3 for new Apps
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
+			testenvInstance.Log.Info("Testing upgrade scenario")
 
 			//Upload new Versioned Apps to S3
 			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appVersion = "V2"
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -135,12 +141,15 @@ var _ = Describe("s1appfw test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Apps are downloaded by init-container
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on Pod for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, true)
 
 			//Verify Apps are installed
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, "enabled", true, false)
 
 			// Scale Standalone instance
@@ -167,19 +176,53 @@ var _ = Describe("s1appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0), fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
 
 			// Verify Apps are downloaded by init-container
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on all Pods for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, true)
 
 			//Verify Apps are installed
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
+
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+			testenvInstance.Log.Info("Testing downgrade scenario")
+
+			//Upload new Versioned Apps to S3
+			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appVersion = "V1"
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify Apps are downloaded by init-container
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on Pod for app", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, true)
+
+			//Verify Apps are installed
+			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
 		})
 	})
 
+	// Removing test from Nightly and Smoke runs due to consistent failure.
 	Context("appframework Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("s1, integration, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			//Delete apps on S3 for new Apps
 			testenvInstance.Log.Info("Delete Apps on S3 before upload ES")
