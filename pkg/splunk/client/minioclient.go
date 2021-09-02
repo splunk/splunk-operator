@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -114,7 +115,7 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 func (client *MinioClient) GetAppsList() (S3Response, error) {
 	scopedLog := log.WithName("GetAppsList")
 
-	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName)
+	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
 	s3Resp := S3Response{}
 	s3Client := client.Client
 
@@ -132,7 +133,15 @@ func (client *MinioClient) GetAppsList() (S3Response, error) {
 			return s3Resp, nil
 		}
 		scopedLog.Info("Got an object", "object", object)
-		s3Resp.Objects = append(s3Resp.Objects, &RemoteObject{Etag: &object.ETag, Key: &object.Key, LastModified: &object.LastModified, Size: &object.Size, StorageClass: &object.StorageClass})
+
+		// Create a new object to add to append to the response
+		newETag := object.ETag
+		newKey := object.Key
+		newLastModified := object.LastModified
+		newSize := object.Size
+		newStorageClass := object.StorageClass
+		newRemoteObject := RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
+		s3Resp.Objects = append(s3Resp.Objects, &newRemoteObject)
 	}
 
 	return s3Resp, nil
@@ -145,5 +154,8 @@ func (client *MinioClient) GetInitContainerImage() string {
 
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
 func (client *MinioClient) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
-	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s/%s", bucket, path), fmt.Sprintf("%s/%s", appMnt, appSrcName)})
+	s3AppSrcPath := filepath.Join(bucket, path) + "/"
+	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
+
+	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s", s3AppSrcPath), podSyncPath})
 }
