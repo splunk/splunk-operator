@@ -18,15 +18,17 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
-
-	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 // blank assignment to verify that AWSS3Client implements S3Client
@@ -35,6 +37,11 @@ var _ S3Client = &AWSS3Client{}
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
 	ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
+}
+
+// SplunkAWSDownloadClient is used to download the apps from remote storage
+type SplunkAWSDownloadClient interface {
+	Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (n int64, err error)
 }
 
 // AWSS3Client is a client to implement S3 specific APIs
@@ -47,6 +54,7 @@ type AWSS3Client struct {
 	StartAfter         string
 	Endpoint           string
 	Client             SplunkAWSS3Client
+	Downloader         SplunkAWSDownloadClient
 }
 
 // regex to extract the region from the s3 endpoint
@@ -114,11 +122,12 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 	region := GetRegion(endpoint)
 	cl := fn(region, accessKeyID, secretAccessKey)
 	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
+		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
 	}
 
 	s3SplunkClient = cl.(*s3.S3)
+	downloader := s3manager.NewDownloaderWithClient(cl.(*s3.S3))
 
 	return &AWSS3Client{
 		Region:             region,
@@ -129,6 +138,7 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
 		Client:             s3SplunkClient,
+		Downloader:         downloader,
 	}, nil
 }
 
@@ -176,7 +186,7 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	}
 
 	if resp.Contents == nil {
-		err = fmt.Errorf("Empty objects list in the bucket: %s", awsclient.BucketName)
+		err = fmt.Errorf("empty objects list in the bucket: %s", awsclient.BucketName)
 		return s3Resp, err
 	}
 
@@ -193,6 +203,34 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	}
 
 	return s3Resp, nil
+}
+
+// DownloadApp downloads the app from remote storage to local file system
+func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile string) (bool, error) {
+	scopedLog := log.WithName("DownloadApp")
+
+	var numBytes int64
+	file, err := os.Create(localFile)
+	if err != nil {
+		scopedLog.Error(err, "Unable to open file", "localFile", localFile)
+		return false, err
+	}
+	defer file.Close()
+
+	downloader := awsclient.Downloader
+	numBytes, err = downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(awsclient.BucketName),
+			Key:    aws.String(remoteFile),
+		})
+	if err != nil {
+		scopedLog.Error(err, "Unable to download item %s, %v", remoteFile, err)
+		return false, err
+	}
+
+	scopedLog.Info("File Downloaded", "remoteFile: ", remoteFile, "numBytes: ", numBytes, "localFile: ", localFile)
+
+	return true, err
 }
 
 // GetInitContainerImage returns the initContainer image to be used with this s3 client

@@ -169,7 +169,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 			return result, err
 		}
 
-		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
+		if !cr.Status.BundlePushTracker.NeedToPushMasterApps {
 			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 				result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
@@ -231,7 +231,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
 	if err != nil || stdErr != "" {
-		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
+		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
 	smartStoreConfigMap := getSmartstoreConfigMap(c, cr, SplunkClusterMaster)
@@ -241,16 +241,16 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
 		}
-		return fmt.Errorf("Waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
+		return fmt.Errorf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
 	}
 
 	// Somehow the configmap was deleted, ideally this should not happen
-	return fmt.Errorf("Smartstore ConfigMap is missing")
+	return fmt.Errorf("smartstore ConfigMap is missing")
 }
 
 // PerformCmBundlePush initiates the bundle push from cluster master
 func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
-	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
+	if !cr.Status.BundlePushTracker.NeedToPushMasterApps {
 		return nil
 	}
 
@@ -260,7 +260,7 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 	// This helps, to wait for the required time
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
-		return fmt.Errorf("Will re-attempt to push the bundle after the 5 seconds period passed from last check. LastCheckInterval=%d, current epoch=%d", cr.Status.BundlePushTracker.LastCheckInterval, currentEpoch)
+		return fmt.Errorf("will re-attempt to push the bundle after the 5 seconds period passed from last check. LastCheckInterval=%d, current epoch=%d", cr.Status.BundlePushTracker.LastCheckInterval, currentEpoch)
 	}
 
 	scopedLog.Info("Attempting to push the bundle")
@@ -293,13 +293,13 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.Cluste
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(c, cr, defaultSecretObjName)
 	if err != nil {
-		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
+		return fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
-	if foundSecret == false {
-		return fmt.Errorf("Could not find admin password while trying to push the master apps bundle")
+	if !foundSecret {
+		return fmt.Errorf("could not find admin password while trying to push the master apps bundle")
 	}
 
 	scopedLog.Info("Issuing REST call to push master aps bundle")

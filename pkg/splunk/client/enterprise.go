@@ -83,8 +83,8 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 			break
 		}
 	}
-	if expectedStatusFlag == false {
-		return fmt.Errorf("Response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
+	if !expectedStatusFlag {
+		return fmt.Errorf("response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
 	}
 	if obj == nil {
 		return nil
@@ -93,7 +93,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 	// unmarshall response if obj != nil
 	data, _ := ioutil.ReadAll(response.Body)
 	if len(data) == 0 {
-		return fmt.Errorf("Received empty response body from %s", request.URL)
+		return fmt.Errorf("received empty response body from %s", request.URL)
 	}
 	return json.Unmarshal(data, obj)
 }
@@ -158,7 +158,7 @@ func (c *SplunkClient) GetSearchHeadCaptainInfo() (*SearchHeadCaptainInfo, error
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -284,7 +284,7 @@ func (c *SplunkClient) GetSearchHeadClusterMemberInfo() (*SearchHeadClusterMembe
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -327,7 +327,7 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 		return nil
 	}
 	if response.StatusCode != 503 {
-		return fmt.Errorf("Response code=%d from %s; want %d", response.StatusCode, request.URL, 200)
+		return fmt.Errorf("response code=%d from %s; want %d", response.StatusCode, request.URL, 200)
 	}
 
 	// unmarshall 503 response
@@ -338,16 +338,16 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 	}{}
 	data, _ := ioutil.ReadAll(response.Body)
 	if len(data) == 0 {
-		return fmt.Errorf("Received 503 response with empty body from %s", request.URL)
+		return fmt.Errorf("received 503 response with empty body from %s", request.URL)
 	}
 	err = json.Unmarshal(data, &apiResponse)
 	if err != nil {
-		return fmt.Errorf("Failed to unmarshal response from %s: %v", request.URL, err)
+		return fmt.Errorf("failed to unmarshal response from %s: %v", request.URL, err)
 	}
 
 	// check if request failed because member was already removed
 	if len(apiResponse.Messages) == 0 {
-		return fmt.Errorf("Received 503 response with empty Messages from %s", request.URL)
+		return fmt.Errorf("received 503 response with empty Messages from %s", request.URL)
 	}
 	msg1 := regexp.MustCompile(`Server .* is not part of configuration, hence cannot be removed`)
 	msg2 := regexp.MustCompile(`This node is not part of any cluster configuration`)
@@ -356,7 +356,7 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 		return nil
 	}
 
-	return fmt.Errorf("Received unrecognized 503 response from %s", request.URL)
+	return fmt.Errorf("received unrecognized 503 response from %s", request.URL)
 }
 
 // ClusterBundleInfo represents the status of a configuration bundle.
@@ -418,7 +418,7 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -465,7 +465,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }
@@ -715,9 +715,7 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 	clusterRoleDict := make(map[string][]string)
 	//map of Name to Roles
 	for _, e := range apiResponseMCDistributedPeers.Entry {
-		for _, s := range e.Content.ClusterLabel {
-			clusterRoleDict[e.Name] = append(clusterRoleDict[e.Name], s)
-		}
+		clusterRoleDict[e.Name] = append(clusterRoleDict[e.Name], e.Content.ClusterLabel...)
 	}
 	//TODO: check different labels here
 	clusterRoleDictToDict := make(map[string][]string)
@@ -780,7 +778,7 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 		return nil, err
 	}
 	if len(apiResponseServerRoles.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseServerRoles.Entry[0].Content, nil
 }
@@ -788,9 +786,9 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 //UpdateDMCGroups dmc* groups with new members
 func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/%s/edit", c.ManagementURI, dmcGroupName)
-	request, err := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
+	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
 	expectedStatus := []int{200, 201, 409}
-	err = c.Do(request, expectedStatus, nil)
+	err := c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -798,9 +796,9 @@ func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string)
 func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/dmc_indexerclustergroup_%s/edit", c.ManagementURI, groupName)
 	reqBodyClusterGroup := groupMembers + "&default=false"
-	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyClusterGroup))
+	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyClusterGroup))
 	expectedStatus := []int{200, 201, 409}
-	err = c.Do(request, expectedStatus, nil)
+	err := c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -823,7 +821,7 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, err
 		return nil, err
 	}
 	if len(apiResponseMCAssetTableBuild.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseMCAssetTableBuild.Entry[0].Content, nil
 }
@@ -831,11 +829,11 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, err
 //PostMonitoringConsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
 func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBuild *MCAssetBuildTable) error {
 	reqBodyAssetTable := "&trigger_actions=true&dispatch.auto_cancel=" + apiResponseMCAssetTableBuild.DispatchAutoCancel + "&dispatch.buckets=" + strconv.FormatInt(apiResponseMCAssetTableBuild.DispatchBuckets, 10) + "&dispatch.enablePreview=true"
-	endpoint := fmt.Sprintf("%s", c.ManagementURI) + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
-	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyAssetTable))
+	endpoint := c.ManagementURI + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
+	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyAssetTable))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	expectedStatus := []int{200, 201, 409}
-	err = c.Do(request, expectedStatus, nil)
+	err := c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -861,7 +859,7 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 		return nil, err
 	}
 	if len(apiResponseUISettings.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponseUISettings.Entry[0].Content, nil
 }
@@ -870,10 +868,10 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiResponseUISettings *UISettings) error {
 	reqBodyMCLookups := "configuredPeers=" + configuredPeers + "&eai:appName=" + apiResponseUISettings.EaiAppName + "&eai:acl=" + apiResponseUISettings.EaiACL + "&eai:userName=" + apiResponseUISettings.EaiUserName + "&disabled=" + strconv.FormatBool(apiResponseUISettings.Disabled)
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
-	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyMCLookups))
+	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(reqBodyMCLookups))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	expectedStatus := []int{200, 201, 409}
-	err = c.Do(request, expectedStatus, nil)
+	err := c.Do(request, expectedStatus, nil)
 	return err
 }
 
@@ -913,7 +911,7 @@ func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 		return nil, err
 	}
 	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("Invalid response from %s%s", c.ManagementURI, path)
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
 	return &apiResponse.Entry[0].Content, nil
 }

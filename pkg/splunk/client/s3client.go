@@ -62,6 +62,7 @@ type S3Client interface {
 	GetAppsList() (S3Response, error)
 	GetInitContainerImage() string
 	GetInitContainerCmd(string /* endpoint */, string /* bucket */, string /* path */, string /* app src name */, string /* app mnt */) []string
+	DownloadApp(string, string) (bool, error)
 }
 
 // SplunkS3Client is a simple object used to connect to S3

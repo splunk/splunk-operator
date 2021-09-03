@@ -183,7 +183,7 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.I
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 {
 		masterIdxcName = cr.Spec.ClusterMasterRef.Name
 	} else {
-		return errors.New("Empty cluster master reference")
+		return errors.New("empty cluster master reference")
 	}
 	cmPodName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, cmPodName, cr.GetNamespace(), "password")
@@ -320,7 +320,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 			if mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] {
 				podSecret, err := splutil.GetSecretByName(mgr.c, mgr.cr, podSecretName)
 				if err != nil {
-					return fmt.Errorf("Could not read secret %s, reason - %v", podSecretName, err)
+					return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 				}
 
 				// Retrieve namespaced scoped secret data in splunk readable format
@@ -407,7 +407,7 @@ func (mgr *indexerClusterPodManager) PrepareRecycle(n int32) (bool, error) {
 // FinishRecycle for indexerClusterPodManager completes recycle event for indexer pod; it returns true when complete
 func (mgr *indexerClusterPodManager) FinishRecycle(n int32) (bool, error) {
 	if n >= int32(len(mgr.cr.Status.Peers)) {
-		return false, fmt.Errorf("Incorrect Peer got %d length of peer list %d", n, int32(len(mgr.cr.Status.Peers)))
+		return false, fmt.Errorf("incorrect Peer got %d length of peer list %d", n, int32(len(mgr.cr.Status.Peers)))
 	}
 	return mgr.cr.Status.Peers[n].Status == "Up", nil
 }
@@ -509,7 +509,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient)
 	cm := mgr.getClusterMasterClient()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return fmt.Errorf("Could not get cluster info from cluster master")
+		return fmt.Errorf("could not get cluster info from cluster master")
 	}
 	var replicationFactor int32
 	// if it is a multisite indexer cluster, check site_replication_factor
@@ -535,7 +535,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
 		mgr.cr.Status.MaintenanceMode = false
-		return fmt.Errorf("Waiting for cluster master to become ready")
+		return fmt.Errorf("waiting for cluster master to become ready")
 	}
 
 	// get indexer cluster info from cluster master if it's ready
@@ -607,7 +607,7 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 
 	// Multisite / multipart clusters: can't reference a cluster master located in another namespace because of Service and Secret limitations
 	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
-		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
+		return fmt.Errorf("multisite cluster does not support cluster master to be located in a different namespace")
 	}
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

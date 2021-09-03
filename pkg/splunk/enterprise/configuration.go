@@ -33,10 +33,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -213,11 +210,11 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	}
 
 	if spec.LivenessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
 	}
 
 	if spec.ReadinessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
 	setVolumeDefaults(spec)
@@ -723,9 +720,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	// Exclude MC as it derives the Spec from multiple CRs
 	// ToDo: Remove the Check once the MC CRD is in place
 	if instanceType != SplunkMonitoringConsole {
-		for _, envVar := range spec.ExtraEnv {
-			extraEnv = append(extraEnv, envVar)
-		}
+		extraEnv = append(extraEnv, spec.ExtraEnv...)
 	}
 
 	// append any extra variables
@@ -845,7 +840,7 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
 func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
-	if isSmartstoreConfigured(smartstore) == false {
+	if !isSmartstoreConfigured(smartstore) {
 		return false
 	}
 
@@ -856,7 +851,7 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 		namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
 		// Ideally, this should have been detected in Spec validation time
 		if err != nil {
-			*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+			*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
 			return false
 		}
 
@@ -1063,22 +1058,22 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	// Make sure that all the App Sources are provided with the mandatory config values.
 	for i, appSrc := range appFramework.AppSources {
 		if appSrc.Name == "" {
-			return fmt.Errorf("App Source name is missing for AppSource at: %d", i)
+			return fmt.Errorf("app Source name is missing for AppSource at: %d", i)
 		}
 
 		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
-			return fmt.Errorf("Multiple app sources with the name %s is not allowed", appSrc.Name)
+			return fmt.Errorf("multiple app sources with the name %s is not allowed", appSrc.Name)
 		}
 		duplicateAppSourceNameChecker[appSrc.Name] = true
 
 		if appSrc.Location == "" {
-			return fmt.Errorf("App Source location is missing for AppSource: %s", appSrc.Name)
+			return fmt.Errorf("app Source location is missing for AppSource: %s", appSrc.Name)
 		}
 
 		if appSrc.VolName != "" {
 			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
-				return fmt.Errorf("Invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
+				return fmt.Errorf("invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
 			}
 			vol = appSrc.VolName
 		} else {
@@ -1090,35 +1085,35 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 		if appSrc.Scope != "" {
 			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
-				return fmt.Errorf("Invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
 			}
 
 			if !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopeCluster || appSrc.Scope == enterpriseApi.ScopeClusterWithPreConfig) {
-				return fmt.Errorf("Scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
+				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
 			}
 		} else if appFramework.Defaults.Scope == "" {
-			return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
+			return fmt.Errorf("app Source scope is missing for: %s", appSrc.Name)
 		}
 
 		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
-			return fmt.Errorf("Duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
+			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
 		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
 
 	}
 
 	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
-		return fmt.Errorf("Invalid scope for defaults config. Only local scope is supported for this kind of CR")
+		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
 	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopeCluster && appFramework.Defaults.Scope != enterpriseApi.ScopeClusterWithPreConfig {
-		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
+		return fmt.Errorf("scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
 
 	if appFramework.Defaults.VolName != "" {
 		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
-			return fmt.Errorf("Invalid Volume Name for Defaults. Error: %s", err)
+			return fmt.Errorf("invalid Volume Name for Defaults. Error: %s", err)
 		}
 	}
 
@@ -1177,32 +1172,32 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {
-			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
+			return fmt.Errorf("duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
 		}
 		duplicateChecker[volume.Name] = true
 		// Make sure that the smartstore volume info is correct
 		if volume.Name == "" {
-			return fmt.Errorf("Volume name is missing for volume at : %d", i)
+			return fmt.Errorf("volume name is missing for volume at : %d", i)
 		}
 		if volume.Endpoint == "" {
-			return fmt.Errorf("Volume Endpoint URI is missing")
+			return fmt.Errorf("volume Endpoint URI is missing")
 		}
 		if volume.Path == "" {
-			return fmt.Errorf("Volume Path is missing")
+			return fmt.Errorf("volume Path is missing")
 		}
 		if volume.SecretRef == "" {
-			return fmt.Errorf("Volume SecretRef is missing")
+			return fmt.Errorf("volume SecretRef is missing")
 		}
 
 		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
 			if !isValidStorageType(volume.Type) {
-				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported")
+				return fmt.Errorf("remote volume type is invalid. Only storageType=s3 is supported")
 			}
 
 			if !isValidProvider(volume.Provider) {
-				return fmt.Errorf("S3 Provider is invalid")
+				return fmt.Errorf("s3 Provider is invalid")
 			}
 		}
 	}
@@ -1227,11 +1222,11 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 	// Make sure that all the indexes are provided with the mandatory config values.
 	for i, index := range smartstore.IndexList {
 		if index.Name == "" {
-			return fmt.Errorf("Index name is missing for index at: %d", i)
+			return fmt.Errorf("index name is missing for index at: %d", i)
 		}
 
 		if _, ok := duplicateChecker[index.Name]; ok {
-			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
+			return fmt.Errorf("duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
 		}
 		duplicateChecker[index.Name] = true
 		if index.VolName == "" && smartstore.Defaults.VolName == "" {
@@ -1241,7 +1236,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 		if index.VolName != "" {
 			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
-				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
+				return fmt.Errorf("invalid configuration for index: %s. %s", index.Name, err)
 			}
 		}
 	}
@@ -1261,7 +1256,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 	numVolumes := len(smartstore.VolList)
 	numIndexes := len(smartstore.IndexList)
 	if numIndexes > 0 && numVolumes == 0 {
-		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
+		return fmt.Errorf("volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
 	err = validateRemoteVolumeSpec(smartstore.VolList, false)
@@ -1274,7 +1269,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 	if defaults.VolName != "" {
 		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
-			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
+			return fmt.Errorf("invalid configuration for defaults volume. %s", err)
 		}
 	}
 
@@ -1290,7 +1285,7 @@ func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.
 	for i := 0; i < len(volumes); i++ {
 		s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
 		if err != nil {
-			return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+			return "", fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 		}
 
 		volumesConf = fmt.Sprintf(`%s

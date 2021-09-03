@@ -31,8 +31,7 @@ func init() {
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
 func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) error {
-	var objectKind string
-	objectKind = cr.GetObjectKind().GroupVersionKind().Kind
+	objectKind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())

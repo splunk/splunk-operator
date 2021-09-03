@@ -33,11 +33,12 @@ func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey s
 
 	cl := fn(region, accessKeyID, secretAccessKey)
 	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
+		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
 	}
 
 	s3SplunkClient = cl.(SplunkAWSS3Client)
+	downloader := spltest.MockAWSDownloadClient{}
 
 	return &AWSS3Client{
 		Region:             region,
@@ -48,14 +49,38 @@ func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey s
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
 		Client:             s3SplunkClient,
+		Downloader:         downloader,
+	}, nil
+}
+
+func NewMockMinioS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+	var s3SplunkClient SplunkMinioClient
+	var err error
+
+	cl := fn(endpoint, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(SplunkMinioClient)
+
+	return &MinioClient{
+		BucketName:        bucketName,
+		S3AccessKeyID:     accessKeyID,
+		S3SecretAccessKey: secretAccessKey,
+		Prefix:            prefix,
+		StartAfter:        startAfter,
+		Endpoint:          endpoint,
+		Client:            s3SplunkClient,
 	}, nil
 }
 
 // ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(s3Response S3Response) (spltest.MockAWSS3Client, error) {
+func ConvertS3Response(s3Response S3Response) (spltest.MockS3Client, error) {
 	scopedLog := log.WithName("ConvertS3Response")
 
-	var mockResponse spltest.MockAWSS3Client
+	var mockResponse spltest.MockS3Client
 
 	tmp, err := json.Marshal(s3Response)
 	if err != nil {
@@ -80,7 +105,7 @@ func CheckIfVolumeExists(volumeList []enterpriseApi.VolumeSpec, volName string) 
 		}
 	}
 
-	return -1, fmt.Errorf("Volume: %s, doesn't exist", volName)
+	return -1, fmt.Errorf("volume: %s, doesn't exist", volName)
 }
 
 // GetAppSrcVolume gets the volume defintion for an app source

@@ -280,7 +280,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 	}
 
 	//If no configMap and deletion of CR is requested then create a empty configMap
-	if err != nil && addNewURLs == false {
+	if err != nil && !addNewURLs {
 		current = corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      configMap,

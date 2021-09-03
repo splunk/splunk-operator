@@ -70,9 +70,6 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	// command merger
-	commandMerger = " && "
-
 	// command for init container on a standalone
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
 
@@ -102,9 +99,6 @@ const (
 
 	// Mount location for the shared app package volume
 	appBktMnt = "/init-apps/"
-
-	// Average amount of time an app installation takes
-	avgAppInstallationTime = 5
 
 	// Time delay involved in installating the Splunk Apps.
 	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
