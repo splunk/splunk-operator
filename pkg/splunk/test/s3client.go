@@ -21,6 +21,7 @@ type MockS3Client struct {
 	Objects []*MockS3Object
 }
 
+// MockS3DownloadClient is a mock download client
 type MockS3DownloadClient struct {
 	RemoteFile      string
 	DownloadSuccess bool
@@ -48,11 +49,13 @@ func checkS3Response(t *testing.T, testMethod string, gotObjects, wantObjects []
 	}
 }
 
+// MockS3DownloadHandler is a mock handler to check mock download response
 type MockS3DownloadHandler struct {
 	WantLocalToRemoteFileMap map[string]MockS3DownloadClient
 	GotLocalToRemoteFileMap  map[string]MockS3DownloadClient
 }
 
+// AddObjects adds objects to MockS3DownloadHandler
 func (c *MockS3DownloadHandler) AddObjects(localFiles []string, objects ...MockS3DownloadClient) {
 	for n := range objects {
 		mockMinioDownloadClient := objects[n]

@@ -53,6 +53,7 @@ func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey s
 	}, nil
 }
 
+// NewMockMinioS3Client is mock client for testing minio client
 func NewMockMinioS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkMinioClient
 	var err error

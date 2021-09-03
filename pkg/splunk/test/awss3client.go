@@ -78,8 +78,11 @@ func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) 
 	return output, nil
 }
 
+// MockAWSDownloadClient is mock aws client for download
 type MockAWSDownloadClient struct{}
 
+// Download is a mock call for aws sdk download api.
+// It just does some error checking.
 func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (size int64, err error) {
 	var bytes int64
 

@@ -88,6 +88,8 @@ func (mockClient MockMinioS3Client) ListObjects(ctx context.Context, bucketName 
 	return objectCh
 }
 
+// FGetObject is a mock call to download file/app from minio client.
+// It just does some error checking.
 func (mockClient MockMinioS3Client) FGetObject(ctx context.Context, bucketName string, remoteFileName string, localFileName string, opts minio.GetObjectOptions) error {
 
 	var err error
