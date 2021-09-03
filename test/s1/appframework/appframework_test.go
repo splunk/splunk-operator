@@ -15,6 +15,7 @@ package s1appfw
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -285,6 +286,126 @@ var _ = Describe("s1appfw test", func() {
 			// Verify apps are installed locally
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, esApp, false, "enabled", false, false)
+		})
+	})
+
+	Context("appframework Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+
+			// Create App framework Spec
+			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+				VolName: volumeName,
+				Scope:   enterpriseApi.ScopeLocal,
+			}
+
+			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+			appSourceName := "appframework" + testenv.RandomDNSName(3)
+			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+
+			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+				Defaults:             appSourceDefaultSpec,
+				AppsRepoPollInterval: 0,
+				VolList:              volumeSpec,
+				AppSources:           appSourceSpec,
+			}
+
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Create Standalone Deployment with App Framework
+			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			// Verify Apps are downloaded by init-container
+			appVersion := "V1"
+			initContDownloadLocation := "/init-apps/" + appSourceName
+			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
+
+			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on standalone(/etc/apps/) for app", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, true)
+
+			//Verify Apps are installed
+			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, "enabled", false, false)
+
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			//Upload new Versioned Apps to S3
+			appVersion = "V2"
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			standalone.Spec.AppFrameworkConfig.AppsRepoPollInterval = int64(0)
+			err = deployment.UpdateCR(standalone)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
+
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(2 * time.Minute)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			//Verify Apps are not updated
+			testenvInstance.Log.Info("Verify Apps are not auto installed on standalone by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, "enabled", false, false)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err := testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+			testenvInstance.Log.Info("config map data for", "Standalone", config.Data["Standalone"])
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Wait for Standalone to be in READY status
+			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+
+			//Verify config map set back to off after poll trigger
+			testenvInstance.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
+			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
+
+			//Verify Apps are copied to location
+			testenvInstance.Log.Info("Verify Apps are copied to correct location on standalone(/etc/apps/) for app", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, true)
+
+			//Verify Apps are updated
+			testenvInstance.Log.Info("Verify Apps are installed Locally on standalone by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, "enabled", true, false)
 		})
 	})
 })
