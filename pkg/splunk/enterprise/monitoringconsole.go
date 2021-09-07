@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -127,7 +127,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		} else {
 			result.Requeue = false
 		}
-		result.Requeue = false
 	}
 	return result, nil
 }

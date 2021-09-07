@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: lm-example
@@ -11,7 +11,7 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm-example
@@ -42,7 +42,7 @@ spec:
       apps_location:
         - "/mnt/apps/<my_index_config>.tgz"
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: idxc-example
@@ -55,7 +55,7 @@ spec:
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: sh-example

@@ -30,7 +30,7 @@ Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=i
 Example. Standalone.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: s1
@@ -77,7 +77,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 Example. Clustermaster.yaml:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: <name>

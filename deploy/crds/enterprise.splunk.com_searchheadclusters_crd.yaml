@@ -34,7 +34,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v2
+    name: v3
     schema:
       openAPIV3Schema:
         description: SearchHeadCluster is the Schema for a Splunk Enterprise search
@@ -2827,6 +2827,16 @@ spec:
         specReplicasPath: .spec.replicas
         statusReplicasPath: .status.replicas
       status: {}
+  - name: v2
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+        properties:
+          apiVersion:
+            type: string
   - name: v1
     served: true
     storage: false

@@ -31,7 +31,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
 Example: Standalone.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: stdln
@@ -88,7 +88,7 @@ This example describes the installation of apps on Indexer Cluster as well as Cl
 Example: ClusterMaster.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
@@ -149,7 +149,7 @@ This example describes the installation of apps on Search Head Cluster as well a
 Example: SearchHeadCluster.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: shc 

@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -173,13 +173,6 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-		}
-
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
 		}
 
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.

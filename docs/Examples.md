@@ -37,7 +37,7 @@ The two basic building blocks of Splunk Enterprise infrastructure are search hea
 that can perform either, or both of these roles.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: single
@@ -55,7 +55,7 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMast
 #### Cluster Master
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
@@ -74,7 +74,7 @@ This example includes the `monitoringConsoleRef` parameter used to define a moni
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
@@ -90,7 +90,7 @@ The passwords for the instance are generated automatically. To review the passwo
 #### Indexer cluster peers
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
@@ -124,7 +124,7 @@ If you want to add more indexers as cluster peers, update your `IndexerCluster` 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
@@ -183,7 +183,7 @@ metadata:
   name: idc-example
 spec:
   scaleTargetRef:
-    apiVersion: enterprise.splunk.com/v2
+    apiVersion: enterprise.splunk.com/v3
     kind: IndexerCluster
     name: example
   minReplicas: 5
@@ -203,7 +203,7 @@ To create a standalone search head that is preconfigured to search your indexer 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: single
@@ -236,7 +236,7 @@ Having a separate CR for cluster master allows you to define parameters differen
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
@@ -250,7 +250,7 @@ spec:
     storageClassName: customStorageClass
     storageCapacity: 25Gi
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: idxc-part1
@@ -274,7 +274,7 @@ The Monitoring Console provides detailed topology and performance information ab
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
@@ -295,7 +295,7 @@ and adding the `clusterMasterRef` parameter.
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -313,7 +313,7 @@ This will automatically create a deployer with 3 search heads clustered together
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
@@ -412,7 +412,7 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -483,7 +483,7 @@ like the following:
 In the standalone example, app1 and app2 are installed on Splunk Standalone instances.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -506,7 +506,7 @@ spec:
 In the ClusterMaster example, app3 and app4 are installed on any indexer instances that are managed by the cluster master. App5 and app6 are installed locally on the ClusterMaster instance.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cmexample
@@ -640,7 +640,7 @@ You can create a `LicenseMaster` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
@@ -673,7 +673,7 @@ Once a LicenseMaster is created, you can configure your `Standalone` to use
 the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -690,7 +690,7 @@ While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -700,7 +700,7 @@ spec:
   licenseMasterRef:
     name: example
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example-idc
@@ -715,7 +715,7 @@ EOF
 In order to forward `LicenseMaster` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
@@ -788,7 +788,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret objec
 Enterprise custom resource to use your External LM:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -857,7 +857,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret creat
 Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -907,7 +907,7 @@ metadata:
   name: splunk-default-secret
   namespace: default
   ownerReferences:
-  - apiVersion: enterprise.splunk.com/v2
+  - apiVersion: enterprise.splunk.com/v3
     controller: false
     kind: SearchHeadCluster
     name: example-shc
