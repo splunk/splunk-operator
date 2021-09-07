@@ -41,13 +41,13 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-
+	scopedLog := log.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
 	// validate and updates defaults for CR
-	err := validateMonitoringConsoleSpec(&cr.Spec)
+	err := validateMonitoringConsoleSpec(cr)
 	if err != nil {
 		return result, err
 	}
@@ -55,9 +55,22 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
 	}()
 
 	// create or update general config resources
@@ -104,6 +117,16 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+		}
+
+		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+		} else {
+			result.Requeue = false
+		}
 		result.Requeue = false
 	}
 	return result, nil
@@ -136,12 +159,21 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *ente
 		return nil, err
 	}
 	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
 }
 
-// validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsoleSpec, and returns error if something is wrong.
-func validateMonitoringConsoleSpec(spec *enterpriseApi.MonitoringConsoleSpec) error {
-	return validateCommonSplunkSpec(&spec.CommonSplunkSpec)
+// validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
+func validateMonitoringConsoleSpec(cr *enterpriseApi.MonitoringConsole) error {
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		if err != nil {
+			return err
+		}
+	}
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
