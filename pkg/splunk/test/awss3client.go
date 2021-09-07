@@ -85,9 +85,12 @@ type MockAWSDownloadClient struct{}
 // It just does some error checking.
 func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (size int64, err error) {
 	var bytes int64
+	remoteFile := *input.Key
+	localFile := w.(*os.File).Name()
+	eTag := *input.IfMatch
 
-	if *input.Key == "" || w.(*os.File).Name() == "" {
-		err := fmt.Errorf("empty localFile/remoteFile name")
+	if remoteFile == "" || localFile == "" || eTag == "" {
+		err := fmt.Errorf("empty localFile/remoteFile/eTag. remoteFile=%s, localFile=%s, etag=%s", remoteFile, localFile, eTag)
 		return bytes, err
 	}
 

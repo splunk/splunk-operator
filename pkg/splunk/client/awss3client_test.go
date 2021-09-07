@@ -342,6 +342,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
 	mockAwsDownloadHandler := spltest.MockS3DownloadHandler{}
 
@@ -389,7 +390,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 		awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		downloadSuccess, err := awsClient.DownloadApp(RemoteFiles[index], LocalFiles[index])
+		downloadSuccess, err := awsClient.DownloadApp(RemoteFiles[index], LocalFiles[index], Etags[index])
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
@@ -451,17 +452,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	RemoteFile := ""
 	LocalFile := []string{""}
-
-	mockAwsDownloadHandler := spltest.MockS3DownloadHandler{}
-
-	mockAwsDownloadObjects := []spltest.MockS3DownloadClient{
-		{
-			RemoteFile:      RemoteFile,
-			DownloadSuccess: true,
-		},
-	}
-
-	mockAwsDownloadHandler.AddObjects(LocalFile, mockAwsDownloadObjects...)
+	Etag := ""
 
 	var vol enterpriseApi.VolumeSpec
 	var err error
@@ -488,7 +479,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0])
+	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
@@ -496,7 +487,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
 
-	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0])
+	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")

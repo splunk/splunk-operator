@@ -507,18 +507,18 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 }
 
 // DownloadApp downloads the app from remote storage
-func (s3mgr *S3ClientManager) DownloadApp(remoteFile string, localFile string) error {
+func (s3mgr *S3ClientManager) DownloadApp(remoteFile string, localFile string, etag string) error {
 
 	c, err := s3mgr.getS3Client(s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.Client.DownloadApp(remoteFile, localFile)
+	_, err = c.Client.DownloadApp(remoteFile, localFile, etag)
 	if err != nil {
 		return err
 	}
-	return nil
+	return err
 }
 
 // GetAppListFromS3Bucket gets the list of apps from remote storage.

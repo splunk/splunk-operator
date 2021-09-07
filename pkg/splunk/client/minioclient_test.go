@@ -345,6 +345,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
 	mockMinioDownloadHandler := spltest.MockS3DownloadHandler{}
 
@@ -392,7 +393,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 		minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-		downloadSuccess, err := minioClient.DownloadApp(RemoteFiles[index], LocalFiles[index])
+		downloadSuccess, err := minioClient.DownloadApp(RemoteFiles[index], LocalFiles[index], Etags[index])
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
@@ -451,18 +452,8 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 	minioClient := &MinioClient{}
 
 	RemoteFile := ""
+	Etag := ""
 	LocalFile := []string{""}
-
-	mockMinioDownloadHandler := spltest.MockS3DownloadHandler{}
-
-	mockMinioDownloadObjects := []spltest.MockS3DownloadClient{
-		{
-			RemoteFile:      RemoteFile,
-			DownloadSuccess: true,
-		},
-	}
-
-	mockMinioDownloadHandler.AddObjects(LocalFile, mockMinioDownloadObjects...)
 
 	var vol enterpriseApi.VolumeSpec
 	var err error
@@ -489,7 +480,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0])
+	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
@@ -497,7 +488,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
 
-	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0])
+	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")

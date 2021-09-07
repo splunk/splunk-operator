@@ -206,13 +206,13 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 }
 
 // DownloadApp downloads the app from remote storage to local file system
-func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile string) (bool, error) {
-	scopedLog := log.WithName("DownloadApp")
+func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile, etag string) (bool, error) {
+	scopedLog := log.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
 
 	var numBytes int64
 	file, err := os.Create(localFile)
 	if err != nil {
-		scopedLog.Error(err, "Unable to open file", "localFile", localFile)
+		scopedLog.Error(err, "Unable to open local file")
 		return false, err
 	}
 	defer file.Close()
@@ -220,15 +220,16 @@ func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile string) (bool, e
 	downloader := awsclient.Downloader
 	numBytes, err = downloader.Download(file,
 		&s3.GetObjectInput{
-			Bucket: aws.String(awsclient.BucketName),
-			Key:    aws.String(remoteFile),
+			Bucket:  aws.String(awsclient.BucketName),
+			Key:     aws.String(remoteFile),
+			IfMatch: aws.String(etag),
 		})
 	if err != nil {
 		scopedLog.Error(err, "Unable to download item %s, %v", remoteFile, err)
 		return false, err
 	}
 
-	scopedLog.Info("File Downloaded", "remoteFile: ", remoteFile, "numBytes: ", numBytes, "localFile: ", localFile)
+	scopedLog.Info("File downloaded", "numBytes: ", numBytes)
 
 	return true, err
 }

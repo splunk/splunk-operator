@@ -141,24 +141,29 @@ func (client *MinioClient) GetAppsList() (S3Response, error) {
 }
 
 // DownloadApp downloads an app package from remote storage
-func (client *MinioClient) DownloadApp(remoteFile string, localFile string) (bool, error) {
-	scopedLog := log.WithName("DownloadApp")
+func (client *MinioClient) DownloadApp(remoteFile string, localFile, etag string) (bool, error) {
+	scopedLog := log.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
 
 	file, err := os.Create(localFile)
 	if err != nil {
-		scopedLog.Error(err, "Unable to create local item", "localFile", localFile)
+		scopedLog.Error(err, "Unable to create local file")
 		return false, err
 	}
 	defer file.Close()
 
 	s3Client := client.Client
-	err = s3Client.FGetObject(context.Background(), client.BucketName, remoteFile, localFile, minio.GetObjectOptions{})
+
+	options := minio.GetObjectOptions{}
+	// set the option to match the specified etag on remote storage
+	options.SetMatchETag(etag)
+
+	err = s3Client.FGetObject(context.Background(), client.BucketName, remoteFile, localFile, options)
 	if err != nil {
-		scopedLog.Error(err, "Unable to download item", "remoteFile", remoteFile)
+		scopedLog.Error(err, "Unable to download remote file")
 		return false, err
 	}
 
-	scopedLog.Info("File Downloaded", "remoteFile", remoteFile, "localFile", localFile)
+	scopedLog.Info("File downloaded")
 
 	return true, nil
 }

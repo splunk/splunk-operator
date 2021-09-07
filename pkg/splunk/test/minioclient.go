@@ -17,6 +17,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
@@ -93,8 +94,10 @@ func (mockClient MockMinioS3Client) ListObjects(ctx context.Context, bucketName 
 func (mockClient MockMinioS3Client) FGetObject(ctx context.Context, bucketName string, remoteFileName string, localFileName string, opts minio.GetObjectOptions) error {
 
 	var err error
-	if remoteFileName == "" || localFileName == "" {
-		err = fmt.Errorf("empty remoteFileName/localFileName")
+	headers := opts.Header()
+	etag := headers[http.CanonicalHeaderKey("If-Match")]
+	if remoteFileName == "" || localFileName == "" || etag[0] == "" {
+		err = fmt.Errorf("empty remoteFileName/localFileName/etag. remoteFileName=%s, localFileName=%s, etag=%s", remoteFileName, localFileName, etag)
 	}
 	return err
 }
