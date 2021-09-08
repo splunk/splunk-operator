@@ -28,8 +28,8 @@ const (
 	SecretNotFoundError = "Couldn't find secret"
 
 	// SecretTokenNotRetrievable indicates missing secret token in pod secret
-	SecretTokenNotRetrievable = "Couldn't retrieve %s from secret data"
+	SecretTokenNotRetrievable = "couldn't retrieve %s from secret data"
 
 	// EmptyClusterMasterRef indicates an empty cluster master reference
-	EmptyClusterMasterRef = "Empty cluster master reference"
+	EmptyClusterMasterRef = "empty cluster master reference"
 )

@@ -77,7 +77,7 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 func coreObjectCopier(dst, src *runtime.Object) bool {
 	dstP := *dst
 	srcP := *src
-	if reflect.TypeOf(dstP).String() == reflect.TypeOf((*src).(runtime.Object)).String() {
+	if reflect.TypeOf(dstP).String() == reflect.TypeOf(*src).String() {
 		switch (srcP).(type) {
 		case *corev1.ConfigMap:
 			*dstP.(*corev1.ConfigMap) = *srcP.(*corev1.ConfigMap)
@@ -212,7 +212,7 @@ func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		srcObj := listObj.(runtime.Object)
+		srcObj := listObj
 		copyMockObject(&obj, &srcObj)
 		return nil
 	}

@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -29,6 +30,7 @@ var _ S3Client = &MinioClient{}
 // SplunkMinioClient is an interface to Minio S3 client
 type SplunkMinioClient interface {
 	ListObjects(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	FGetObject(ctx context.Context, bucketName string, remoteFileName string, localFileName string, opts minio.GetObjectOptions) error
 }
 
 // MinioClient is a client to implement S3 specific APIs
@@ -49,7 +51,7 @@ func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey strin
 
 	cl := fn(endpoint, accessKeyID, secretAccessKey)
 	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
+		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
 	}
 
@@ -128,14 +130,42 @@ func (client *MinioClient) GetAppsList() (S3Response, error) {
 	// List all objects from a bucket-name with a matching prefix.
 	for object := range s3Client.ListObjects(context.Background(), client.BucketName, opts) {
 		if object.Err != nil {
-			scopedLog.Info("Got an object error", "object.Err", object.Err, "client.BucketName", client.BucketName)
-			return s3Resp, nil
+			err := fmt.Errorf("got an object error: %v for bucket: %s", object.Err, client.BucketName)
+			return s3Resp, err
 		}
 		scopedLog.Info("Got an object", "object", object)
 		s3Resp.Objects = append(s3Resp.Objects, &RemoteObject{Etag: &object.ETag, Key: &object.Key, LastModified: &object.LastModified, Size: &object.Size, StorageClass: &object.StorageClass})
 	}
 
 	return s3Resp, nil
+}
+
+// DownloadApp downloads an app package from remote storage
+func (client *MinioClient) DownloadApp(remoteFile string, localFile, etag string) (bool, error) {
+	scopedLog := log.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
+
+	file, err := os.Create(localFile)
+	if err != nil {
+		scopedLog.Error(err, "Unable to create local file")
+		return false, err
+	}
+	defer file.Close()
+
+	s3Client := client.Client
+
+	options := minio.GetObjectOptions{}
+	// set the option to match the specified etag on remote storage
+	options.SetMatchETag(etag)
+
+	err = s3Client.FGetObject(context.Background(), client.BucketName, remoteFile, localFile, options)
+	if err != nil {
+		scopedLog.Error(err, "Unable to download remote file")
+		return false, err
+	}
+
+	scopedLog.Info("File downloaded")
+
+	return true, nil
 }
 
 // GetInitContainerImage returns the initContainer image to be used with this s3 client

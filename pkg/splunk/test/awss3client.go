@@ -16,26 +16,19 @@ package test
 
 import (
 	"encoding/json"
-	"reflect"
+	"fmt"
+	"io"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 )
 
-// MockAWSS3Object struct contains contents returned as part of S3 response
-type MockAWSS3Object struct {
-	Etag         *string
-	Key          *string
-	LastModified *time.Time
-	Size         *int64
-	StorageClass *string
-}
-
 // MockAWSS3Client is used to store all the objects for an app source
 type MockAWSS3Client struct {
-	Objects []*MockAWSS3Object
+	Objects []*MockS3Object
 }
 
 // MockAWSS3Handler is used for checking response received
@@ -61,27 +54,10 @@ func (c *MockAWSS3Handler) CheckAWSS3Response(t *testing.T, testMethod string) {
 	if len(c.WantSourceAppListResponseMap) != len(c.GotSourceAppListResponseMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotSourceAppListResponseMap), len(c.WantSourceAppListResponseMap))
 	}
+
 	for appSourceName, gotObjects := range c.GotSourceAppListResponseMap {
 		wantObjects := c.WantSourceAppListResponseMap[appSourceName]
-		if !reflect.DeepEqual(gotObjects.Objects, wantObjects.Objects) {
-			for n, gotObject := range gotObjects.Objects {
-				if *gotObject.Etag != *wantObjects.Objects[n].Etag {
-					t.Errorf("%s GotResponse[%s] Etag=%s; want %s", testMethod, appSourceName, *gotObject.Etag, *wantObjects.Objects[n].Etag)
-				}
-				if *gotObject.Key != *wantObjects.Objects[n].Key {
-					t.Errorf("%s GotResponse[%s] Key=%s; want %s", testMethod, appSourceName, *gotObject.Key, *wantObjects.Objects[n].Key)
-				}
-				if *gotObject.StorageClass != *wantObjects.Objects[n].StorageClass {
-					t.Errorf("%s GotResponse[%s] StorageClass=%s; want %s", testMethod, appSourceName, *gotObject.StorageClass, *wantObjects.Objects[n].StorageClass)
-				}
-				if *gotObject.Size != *wantObjects.Objects[n].Size {
-					t.Errorf("%s GotResponse[%s] Size=%d; want %d", testMethod, appSourceName, *gotObject.Size, *wantObjects.Objects[n].Size)
-				}
-				if *gotObject.LastModified != *wantObjects.Objects[n].LastModified {
-					t.Errorf("%s GotResponse[%s] LastModified=%s; want %s", testMethod, appSourceName, gotObject.LastModified.String(), wantObjects.Objects[n].LastModified.String())
-				}
-			}
-		}
+		checkS3Response(t, testMethod, gotObjects.Objects, wantObjects.Objects, appSourceName)
 	}
 }
 
@@ -100,4 +76,23 @@ func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) 
 	}
 
 	return output, nil
+}
+
+// MockAWSDownloadClient is mock aws client for download
+type MockAWSDownloadClient struct{}
+
+// Download is a mock call for aws sdk download api.
+// It just does some error checking.
+func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (size int64, err error) {
+	var bytes int64
+	remoteFile := *input.Key
+	localFile := w.(*os.File).Name()
+	eTag := *input.IfMatch
+
+	if remoteFile == "" || localFile == "" || eTag == "" {
+		err := fmt.Errorf("empty localFile/remoteFile/eTag. remoteFile=%s, localFile=%s, etag=%s", remoteFile, localFile, eTag)
+		return bytes, err
+	}
+
+	return bytes, nil
 }

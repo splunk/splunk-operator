@@ -15,6 +15,7 @@
 package client
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ func TestNewAWSS3Client(t *testing.T) {
 	fn = func(string, string, string) interface{} {
 		return nil
 	}
-	awsS3Client, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	_, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
 		t.Errorf("NewAWSS3Client should have returned error.")
 	}
@@ -67,7 +68,7 @@ func TestGetAWSInitContainerCmd(t *testing.T) {
 	}
 }
 
-func TestGetAppsListShouldNotFail(t *testing.T) {
+func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
@@ -123,7 +124,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -134,7 +135,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -145,7 +146,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -191,7 +192,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockAWSS3Client
+		var mockResponse spltest.MockS3Client
 		mockResponse, err = ConvertS3Response(s3Response)
 		if err != nil {
 			allSuccess = false
@@ -202,7 +203,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
 		}
 
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = mockResponse
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
 	}
 
 	if allSuccess == false {
@@ -212,7 +213,7 @@ func TestGetAppsListShouldNotFail(t *testing.T) {
 	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
-func TestGetAppsListShouldFail(t *testing.T) {
+func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -245,7 +246,7 @@ func TestGetAppsListShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etag,
 					Key:          &Key,
@@ -289,4 +290,206 @@ func TestGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should have returned error since we have empty objects in the response")
 	}
 
+}
+
+func TestAWSDownloadAppShouldNotFail(t *testing.T) {
+
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "msos_s2s3_vol2",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol2",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london2",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+			},
+		},
+	}
+
+	awsClient := &AWSS3Client{
+		Downloader: spltest.MockAWSDownloadClient{},
+	}
+
+	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
+	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
+
+	mockAwsDownloadHandler := spltest.MockS3DownloadHandler{}
+
+	mockAwsDownloadObjects := []spltest.MockS3DownloadClient{
+		{
+			RemoteFile:      RemoteFiles[0],
+			DownloadSuccess: true,
+		},
+
+		{
+			RemoteFile:      RemoteFiles[1],
+			DownloadSuccess: true,
+		},
+
+		{
+			RemoteFile:      RemoteFiles[2],
+			DownloadSuccess: true,
+		},
+	}
+
+	mockAwsDownloadHandler.AddObjects(LocalFiles, mockAwsDownloadObjects...)
+
+	var vol enterpriseApi.VolumeSpec
+	var err error
+
+	for index, appSource := range appFrameworkRef.AppSources {
+
+		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+		if err != nil {
+			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+		}
+
+		// Update the GetS3Client with our mock call which initializes mock AWS client
+		getClientWrapper := S3Clients[vol.Provider]
+		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+
+		initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+			cl := spltest.MockAWSS3Client{}
+			return cl
+		}
+
+		getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+
+		awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+
+		downloadSuccess, err := awsClient.DownloadApp(RemoteFiles[index], LocalFiles[index], Etags[index])
+		if err != nil {
+			t.Errorf("Unable to download app: %s", RemoteFiles[index])
+		}
+
+		mockDownloadObject := spltest.MockS3DownloadClient{
+			RemoteFile:      RemoteFiles[index],
+			DownloadSuccess: downloadSuccess,
+		}
+
+		if mockAwsDownloadHandler.GotLocalToRemoteFileMap == nil {
+			mockAwsDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockS3DownloadClient)
+		}
+
+		mockAwsDownloadHandler.GotLocalToRemoteFileMap[LocalFiles[index]] = mockDownloadObject
+	}
+
+	method := "DownloadApp"
+	mockAwsDownloadHandler.CheckS3DownloadResponse(t, method)
+}
+
+func TestAWSDownloadAppShouldFail(t *testing.T) {
+
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "msos_s2s3_vol2",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol2",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london2",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
+	awsClient := &AWSS3Client{
+		Downloader: spltest.MockAWSDownloadClient{},
+	}
+
+	RemoteFile := ""
+	LocalFile := []string{""}
+	Etag := ""
+
+	var vol enterpriseApi.VolumeSpec
+	var err error
+
+	appSource := appFrameworkRef.AppSources[0]
+
+	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetS3Client with our mock call which initializes mock AWS client
+	getClientWrapper := S3Clients[vol.Provider]
+	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+
+	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+		cl := spltest.MockAWSS3Client{}
+		return cl
+	}
+
+	getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+
+	awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+
+	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	if err == nil {
+		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
+	}
+
+	// Now make the localFile name non-empty string
+	LocalFile[0] = "randomFile"
+
+	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	os.Remove(LocalFile[0])
+	if err == nil {
+		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")
+	}
 }

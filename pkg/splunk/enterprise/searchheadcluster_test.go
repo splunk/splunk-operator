@@ -766,7 +766,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -777,7 +777,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -788,7 +788,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -839,7 +839,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockAWSS3Client
+		var mockResponse spltest.MockS3Client
 		mockResponse, err = splclient.ConvertS3Response(s3Response)
 		if err != nil {
 			allSuccess = false
@@ -849,7 +849,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
 		}
 
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = mockResponse
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
 	}
 
 	if allSuccess == false {
@@ -907,7 +907,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -1103,8 +1103,10 @@ func TestGetSearchHeadClusterList(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
+	var numOfObjects int
+
 	// Invalid scenario since we haven't added shc to the list yet
-	numOfObjects, err := getSearchHeadClusterList(client, &shc, listOpts)
+	_, err := getSearchHeadClusterList(client, &shc, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added shc to the list yet")
 	}

@@ -64,7 +64,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 		return s3Client, err
 	}
 	if secretAccessKey == "" {
-		err = fmt.Errorf("S3 Secret Key is missing")
+		err = fmt.Errorf("s3 Secret Key is missing")
 		return s3Client, err
 	}
 
@@ -214,9 +214,9 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client sp
 	splutil.SetSecretOwnerRef(client, volume.SecretRef, cr)
 
 	if accessKey == "" {
-		return "", "", "", fmt.Errorf("S3 Access Key is missing")
+		return "", "", "", fmt.Errorf("s3 Access Key is missing")
 	} else if secretKey == "" {
-		return "", "", "", fmt.Errorf("S3 Secret Key is missing")
+		return "", "", "", fmt.Errorf("s3 Secret Key is missing")
 	}
 
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
@@ -373,7 +373,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	if indexesConfIni == "" {
 		scopedLog.Info("Index stanza list is empty")
 	} else if volumesConfIni == "" {
-		return nil, configMapDataChanged, fmt.Errorf("Indexes without Volume configuration is not allowed")
+		return nil, configMapDataChanged, fmt.Errorf("indexes without Volume configuration is not allowed")
 	}
 
 	defaultsConfIni := GetSmartstoreIndexesDefaults(smartstore.Defaults)
@@ -440,7 +440,7 @@ func DeleteOwnerReferencesForResources(client splcommon.ControllerClient, cr spl
 	scopedLog := log.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if smartstore != nil {
-		err = DeleteOwnerReferencesForS3SecretObjects(client, cr, smartstore)
+		_ = DeleteOwnerReferencesForS3SecretObjects(client, cr, smartstore)
 	}
 
 	// Delete references to Default secret object
@@ -460,7 +460,7 @@ func DeleteOwnerReferencesForS3SecretObjects(client splcommon.ControllerClient, 
 	scopedLog := log.WithName("DeleteOwnerReferencesForS3Secrets").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error = nil
-	if isSmartstoreConfigured(smartstore) == false {
+	if !isSmartstoreConfigured(smartstore) {
 		return err
 	}
 
@@ -504,6 +504,21 @@ func (s3mgr *S3ClientManager) GetAppsList() (splclient.S3Response, error) {
 		return s3Response, err
 	}
 	return s3Response, nil
+}
+
+// DownloadApp downloads the app from remote storage
+func (s3mgr *S3ClientManager) DownloadApp(remoteFile string, localFile string, etag string) error {
+
+	c, err := s3mgr.getS3Client(s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.Client.DownloadApp(remoteFile, localFile, etag)
+	if err != nil {
+		return err
+	}
+	return err
 }
 
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
@@ -551,8 +566,8 @@ func GetAppListFromS3Bucket(client splcommon.ControllerClient, cr splcommon.Meta
 		sourceToAppListMap[appSource.Name] = s3Response
 	}
 
-	if allSuccess == false {
-		err = fmt.Errorf("Unable to get apps list from remote storage list for all the apps")
+	if !allSuccess {
+		err = fmt.Errorf("unable to get apps list from remote storage list for all the apps")
 	}
 
 	return sourceToAppListMap, err
@@ -627,14 +642,14 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 	var err error
 
 	scopedLog.Info("received App listing", "for App sources", len(remoteObjListingMap))
-	if remoteObjListingMap == nil || len(remoteObjListingMap) == 0 {
+	if len(remoteObjListingMap) == 0 {
 		scopedLog.Error(nil, "remoteObjectList is empty. Any apps that are already deployed will be disabled")
 	}
 
 	// Check if the appSource is still valid in the config
 	for appSrc := range remoteObjListingMap {
 		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
-			err = fmt.Errorf("App source: %s no more exists, this should never happen", appSrc)
+			err = fmt.Errorf("app source: %s no more exists, this should never happen", appSrc)
 			return err
 		}
 	}
@@ -928,7 +943,7 @@ func HasAppRepoCheckTimerExpired(appInfoContext *enterpriseApi.AppDeploymentCont
 	currentEpoch := time.Now().Unix()
 
 	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appInfoContext.AppsRepoStatusPollInterval <= currentEpoch
-	if isTimerExpired == true {
+	if isTimerExpired {
 		scopedLog.Info("App repo polling interval timer has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
 	}
 
@@ -942,9 +957,7 @@ func HasAppRepoCheckTimerExpired(appInfoContext *enterpriseApi.AppDeploymentCont
 func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
 	scopedLog := log.WithName("GetNextRequeueTime")
 	currentEpoch := time.Now().Unix()
-
-	var nextRequeueTimeInSec int64
-	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
+	nextRequeueTimeInSec := appRepoPollInterval - (currentEpoch - lastCheckTime)
 
 	scopedLog.Info("Getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
 
@@ -1048,7 +1061,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			numOfObjects := getManualUpdateRefCount(client, cr, configMapName)
 
 			// turn off the manual checking for this CR kind in the configMap
-			if turnOffManualChecking == true {
+			if turnOffManualChecking {
 				scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
 				// reset the status back to "off" and
 				// refCount to original count
@@ -1133,7 +1146,7 @@ func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon
 
 	numOfObjects := getNumOfOwnerRefsKind(configMap, kind)
 	if numOfObjects == 0 {
-		err = fmt.Errorf("Error getting objects for this type: %s", instanceType.ToString())
+		err = fmt.Errorf("error getting objects for this type: %s", instanceType.ToString())
 		return err
 	}
 

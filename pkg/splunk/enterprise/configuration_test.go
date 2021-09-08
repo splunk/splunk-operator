@@ -1054,7 +1054,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	_ = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1066,14 +1066,13 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	secret.SetResourceVersion(resourceVersion)
 
 	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
-	resourceVersionUpdated, ok := ResourceRev["splunk-test-secret"]
+	resourceVersionUpdated := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
 
 	// No change on the secret object should return false
 	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
-	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
 	}
@@ -1371,7 +1370,7 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	}
 
 	// update the configMap
-	configMap, err = createOrUpdateAppUpdateConfigMap(client, &revised)
+	_, err = createOrUpdateAppUpdateConfigMap(client, &revised)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}
