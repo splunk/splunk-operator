@@ -145,7 +145,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 			}
 
 			// Now apply the configMap will full app listing.
-			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus)
+			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus, false)
 			if err != nil {
 				return result, err
 			}

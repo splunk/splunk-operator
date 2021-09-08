@@ -112,7 +112,7 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	if spec.Defaults != "" {
 		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-		_, err = splctrl.ApplyConfigMap(client, defaultsMap)
+		_, err = splctrl.ApplyConfigMap(client, defaultsMap, false)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +226,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client sp
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
 // ToDo: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
+	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, appsModified bool) (*corev1.ConfigMap, bool, error) {
 
 	var err error
 	var crKind string
@@ -331,8 +331,8 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
-	if len(appListingConfigMap.Data) > 0 {
-		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+	if len(appListingConfigMap.Data) > 0 || appsModified {
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap, appsModified)
 
 		if err != nil {
 			return nil, configMapDataChanged, err
@@ -388,7 +388,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
+	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap, false)
 	if err != nil {
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
@@ -396,7 +396,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapSplunkConfDetails[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// Apply the configMap with a fresh token
-		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap, false)
 		if err != nil {
 			return nil, configMapDataChanged, err
 		}
@@ -619,10 +619,11 @@ func setStateAndStatusForAppDeployInfoList(appDeployList []enterpriseApi.AppDepl
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	scopedLog := log.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	var err error
+	appsModified := false
 
 	scopedLog.Info("received App listing", "for App sources", len(remoteObjListingMap))
 	if remoteObjListingMap == nil || len(remoteObjListingMap) == 0 {
@@ -633,7 +634,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 	for appSrc := range remoteObjListingMap {
 		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
 			err = fmt.Errorf("App source: %s no more exists, this should never happen", appSrc)
-			return err
+			return appsModified, err
 		}
 	}
 
@@ -680,13 +681,14 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
 		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
 			appDeployContext.IsDeploymentInProgress = true
+			appsModified = true
 		}
 
 		// Finally update the Map entry with latest info
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 	}
 
-	return err
+	return appsModified, err
 }
 
 // isAppExtentionValid checks if an app extention is supported or not
@@ -735,13 +737,13 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			if appList[idx].AppName == appName {
 				found = true
 				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
+					scopedLog.Info("App change detected.  Marking for an update.", "appName", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-						scopedLog.Info("App change", "enabling the App name: ", appName, "that was previously disabled/deleted")
+						scopedLog.Info("App change.  Enabling the App that was previously disabled/deleted", "appName", appName)
 						appList[idx].RepoState = enterpriseApi.RepoStateActive
 					}
 					appChangesDetected = true
@@ -754,7 +756,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 
 		// Update our local list if it is a new app
 		if !found {
-			scopedLog.Info("New App", "found: ", appName)
+			scopedLog.Info("New App found", "appName", appName)
 			appDeployInfo.AppName = appName
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
@@ -963,6 +965,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	//check if the apps need to be downloaded from remote storage
 	if HasAppRepoCheckTimerExpired(appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 		var sourceToAppsList map[string]splclient.S3Response
+		appsModified := false
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
@@ -979,13 +982,13 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			}
 
 			// Only handle the app repo changes if we were able to successfully get the apps list
-			err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+			appsModified, err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
 			if err != nil {
 				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
 				return err
 			}
 
-			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus)
+			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus, appsModified)
 			if err != nil {
 				return err
 			}
