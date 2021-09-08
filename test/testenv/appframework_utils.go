@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -70,9 +69,9 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 	//For cluster-wide install the apps are extracted to different locations
 	if clusterWideInstall {
 		if strings.Contains(podName, "-indexer-") {
-			path = splcommon.NodeApps
+			path = "etc/slave-apps"
 		} else if strings.Contains(podName, "cluster-master") {
-			path = splcommon.ManagerApps
+			path = "etc/master-apps"
 		} else if strings.Contains(podName, "-deployer-") {
 			path = "etc/shcluster/apps"
 		}

@@ -73,7 +73,7 @@ type ClusterMasterHealthContent struct {
 func CheckRFSF(deployment *Deployment) bool {
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services" + splcommon.ClusterManager + "/health?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.ManagerHealthJSON
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {
@@ -120,9 +120,9 @@ type ClusterMasterPeersAndSearchHeadResponse struct {
 func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
 	url := ""
 	if endpoint == "sh" {
-		url = "https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+		url = splcommon.ManagerSearchHeadsJSON
 	} else {
-		url = "https://localhost:8089/services/cluster/master/peers?output_mode=json"
+		url = splcommon.ManagerPeersJSON
 	}
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
@@ -212,7 +212,7 @@ type RollingRestartEndpointResponse struct {
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
 func CheckRollingRestartStatus(deployment *Deployment) bool {
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089" + splcommon.ClusterManagerInfoAPI + "?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.ManagerInfoJSON
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {

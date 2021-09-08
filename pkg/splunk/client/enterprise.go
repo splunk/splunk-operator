@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -25,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -413,7 +413,7 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 			Content ClusterMasterInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := splcommon.ClusterManagerInfoAPI
+	path := splcommon.ClusterManagerInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -460,7 +460,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 			Content IndexerClusterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/" + splcommon.ClusterNode + "/info"
+	path := splcommon.ClusterPeerInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -583,7 +583,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 			Content ClusterMasterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := splcommon.ClusterManagerPeersAPI
+	path := splcommon.ClusterManagerPeers
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -620,7 +620,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s/services/%s/control/control/decommission?enforce_counts=%d", c.ManagementURI, splcommon.ClusterNode, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s/services/%s/control/control/decommission?enforce_counts=%d", c.ManagementURI, splcommon.ClusterPeer, enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
