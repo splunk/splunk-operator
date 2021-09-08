@@ -17,6 +17,7 @@ package testenv
 import (
 	"encoding/json"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
@@ -72,7 +73,7 @@ type ClusterMasterHealthContent struct {
 func CheckRFSF(deployment *Deployment) bool {
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/health?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services" + splcommon.ClusterManager + "/health?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {
@@ -211,7 +212,7 @@ type RollingRestartEndpointResponse struct {
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
 func CheckRollingRestartStatus(deployment *Deployment) bool {
 	podName := fmt.Sprintf("splunk-%s-cluster-master-0", deployment.GetName())
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/info?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089" + splcommon.ClusterManagerInfoAPI + "?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {

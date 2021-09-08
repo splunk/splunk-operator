@@ -16,6 +16,7 @@ package client
 
 import (
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"net/http"
 	"strings"
 	"testing"
@@ -176,7 +177,7 @@ func TestSetSearchHeadDetention(t *testing.T) {
 
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/default/apply", body)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services"+splcommon.ClusterManager+"/control/default/apply", body)
 
 	test := func(c SplunkClient) error {
 		return c.BundlePush(true)
@@ -227,7 +228,7 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 }
 
 func TestGetClusterMasterInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089"+splcommon.ClusterManagerInfoAPI+"?count=0&output_mode=json", nil)
 	wantInfo := ClusterMasterInfo{
 		Initialized:     true,
 		IndexingReady:   true,
@@ -276,7 +277,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 }
 
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/slave/info?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/"+splcommon.ClusterNode+"/info?count=0&output_mode=json", nil)
 	wantMemberStatus := "Up"
 	test := func(c SplunkClient) error {
 		info, err := c.GetIndexerClusterPeerInfo()
@@ -307,7 +308,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 }
 
 func TestGetClusterMasterPeers(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089"+splcommon.ClusterManagerPeersAPI+"?count=0&output_mode=json", nil)
 	var wantPeers = []struct {
 		ID     string
 		Label  string
@@ -355,7 +356,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089"+splcommon.ClusterManagerServices+"/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
@@ -363,7 +364,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/slave/control/control/decommission?enforce_counts=1", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.ClusterNodeServicesAPI+"/control/control/decommission?enforce_counts=1", nil)
 	test := func(c SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}

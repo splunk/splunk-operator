@@ -554,7 +554,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	// test pod needs update => decommission
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/slave/control/control/decommission?enforce_counts=0",
+		URL:    "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/" + splcommon.ClusterNode + "/control/control/decommission?enforce_counts=0",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
