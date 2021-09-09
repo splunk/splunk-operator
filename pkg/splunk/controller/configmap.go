@@ -17,7 +17,6 @@ package controller
 import (
 	"context"
 	"reflect"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +27,7 @@ import (
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
-func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigMap, forceUpdate bool) (bool, error) {
+func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
 	scopedLog := log.WithName("ApplyConfigMap").WithValues(
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
@@ -39,23 +38,8 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 	err := client.Get(context.TODO(), namespacedName, &current)
 	var dataUpdated bool
 	if err == nil {
-		if !reflect.DeepEqual(configMap.Data, current.Data) || forceUpdate {
-			scopedLog.Info("Updating existing ConfigMap", "forceUpdate", forceUpdate, "ResourceVerison", current.GetResourceVersion())
-			if forceUpdate {
-				// Add or increment the revision label to force a new resourceVersion for the ConfigMap
-				labels := current.GetLabels()
-				if labels == nil {
-					newLabels := make(map[string]string)
-					newLabels["revision"] = "1"
-					labels = newLabels
-				} else if val, ok := labels["revision"]; ok {
-					revision, _ := strconv.Atoi(val)
-					labels["revision"] = strconv.Itoa(revision + 1)
-				} else {
-					labels["revision"] = "1"
-				}
-				current.SetLabels(labels)
-			}
+		if !reflect.DeepEqual(configMap.Data, current.Data) {
+			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			err = splutil.UpdateResource(client, &current)
 			if err == nil {

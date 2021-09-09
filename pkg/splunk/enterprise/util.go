@@ -112,7 +112,7 @@ func ApplySplunkConfig(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	if spec.Defaults != "" {
 		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-		_, err = splctrl.ApplyConfigMap(client, defaultsMap, false)
+		_, err = splctrl.ApplyConfigMap(client, defaultsMap)
 		if err != nil {
 			return nil, err
 		}
@@ -331,8 +331,20 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
-	if len(appListingConfigMap.Data) > 0 || appsModified {
-		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap, appsModified)
+	if len(appListingConfigMap.Data) > 0 {
+		if appsModified {
+			// App packages are modified, reset configmap to insure a new resourceVersion
+			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
+			savedData := appListingConfigMap.Data
+			appListingConfigMap.Data = make(map[string]string)
+			_, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+			if err != nil {
+				scopedLog.Error(err, "failed reset of configmap", "configMapName", configMapName)
+			}
+			appListingConfigMap.Data = savedData
+		}
+
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
 
 		if err != nil {
 			return nil, configMapDataChanged, err
@@ -388,7 +400,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap, false)
+	configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
 	if err != nil {
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
@@ -396,7 +408,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		mapSplunkConfDetails[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// Apply the configMap with a fresh token
-		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap, false)
+		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
 		if err != nil {
 			return nil, configMapDataChanged, err
 		}

@@ -358,7 +358,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 		Data: map[string]string{configToken: ""},
 	}
 
-	_, err = splctrl.ApplyConfigMap(client, &smartstoreConfigMap, false)
+	_, err = splctrl.ApplyConfigMap(client, &smartstoreConfigMap)
 	if err != nil {
 		t.Errorf(err.Error())
 	}

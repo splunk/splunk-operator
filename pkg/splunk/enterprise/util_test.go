@@ -259,7 +259,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	// set the status context
 	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 
-	_, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
+	appsModified, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -267,7 +267,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, false)
+			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, appsModified)
 			// Make the config token as predictable
 			configMap.Data[appsUpdateToken] = "1601945361"
 			return configMap, err
