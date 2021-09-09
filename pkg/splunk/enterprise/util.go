@@ -333,7 +333,7 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 
 	if len(appListingConfigMap.Data) > 0 {
 		if appsModified {
-			// App packages are modified, reset configmap to insure a new resourceVersion
+			// App packages are modified, reset configmap to ensure a new resourceVersion
 			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
 			savedData := appListingConfigMap.Data
 			appListingConfigMap.Data = make(map[string]string)
