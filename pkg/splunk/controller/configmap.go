@@ -42,20 +42,19 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 		if !reflect.DeepEqual(configMap.Data, current.Data) || forceUpdate {
 			scopedLog.Info("Updating existing ConfigMap", "forceUpdate", forceUpdate, "ResourceVerison", current.GetResourceVersion())
 			if forceUpdate {
-				// Add or Increment the revision label to force a new ResourceVersion for the ConfigMap
+				// Add or increment the revision label to force a new resourceVersion for the ConfigMap
 				labels := current.GetLabels()
 				if labels == nil {
 					newLabels := make(map[string]string)
 					newLabels["revision"] = "1"
-					current.SetLabels(newLabels)
+					labels = newLabels
 				} else if val, ok := labels["revision"]; ok {
 					revision, _ := strconv.Atoi(val)
 					labels["revision"] = strconv.Itoa(revision + 1)
-					current.SetLabels(labels)
 				} else {
 					labels["revision"] = "1"
-					current.SetLabels(labels)
 				}
+				current.SetLabels(labels)
 			}
 			current.Data = configMap.Data
 			err = splutil.UpdateResource(client, &current)
