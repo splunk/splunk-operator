@@ -471,7 +471,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 }
 
 // ClusterMasterPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Fpeers
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
 type ClusterMasterPeerInfo struct {
 	// Unique identifier or GUID for the peer
 	ID string `json:"guid"`

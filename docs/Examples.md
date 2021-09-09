@@ -460,7 +460,7 @@ spec:
 
 
 ### Example: Cluster Manager
-In the ClusterMaster example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterMaster instance.
+In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterMaster instance.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v2
@@ -725,7 +725,7 @@ There are two ways to configure `pass4Symmkey` with an External LM:
   ```
 - Setup the above decrypted plain-text [`pass4Symmkey`](PasswordManagement.md#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
 
-### Configuring license_manager_url:
+### Configuring license_master_url:
 
 Assuming that the hostname for your LM is `license-master.splunk.mydomain.com`,
 you should create a `default.yml` file with the following contents:
