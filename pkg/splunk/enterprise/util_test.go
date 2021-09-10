@@ -65,7 +65,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
-	// test indexer with license master
+	// test indexer with license manager
 	indexerCR := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -281,7 +281,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	cr.Kind = "SearchHeadCluster"
 	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-searchheadcluster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"SearchHeadCluster","name":"example","uid":"","controller":true}]},"data":{"app-list-cluster-with-pre-config.yaml":"splunk:\n  apps_location:\n      - \"/init-apps/appsWithPreConfigRequired/1_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/2_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/3_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/4_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/5_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/6_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/7_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/8_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/9_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/10_appWithPreConfigReqOne.tgz\"","app-list-cluster.yaml":"splunk:\n  app_paths_install:\n    shc:\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
 
-	// Now test the Cluster master stateful set, to validate the Pod updates with the app listing config map
+	// Now test the Cluster manager stateful set, to validate the Pod updates with the app listing config map
 	cr.Kind = "ClusterMaster"
 	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {

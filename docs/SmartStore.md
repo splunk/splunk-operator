@@ -69,7 +69,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 1. Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
-4. Create/Update the Cluster Master Customer Resource specification with volume and index configuration (see Example below)
+4. Create/Update the Cluster Manager Customer Resource specification with volume and index configuration (see Example below)
 5. Apply the Customer Resource specification: kubectl -f apply Clustermaster.yaml
 6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
 
@@ -103,8 +103,8 @@ spec:
 ```
 
 
-The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster master at `/opt/splunk/etc/master-apps/`. 
-Once the SmartStore configuration is populated to Cluster Master's `splunk-operator` app, Operator issues a bundle push command to Cluster Master, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
+The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster manager at `/opt/splunk/etc/master-apps/`. 
+Once the SmartStore configuration is populated to Cluster Manager's `splunk-operator` app, Operator issues a bundle push command to Cluster Manager, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
 
 Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
 

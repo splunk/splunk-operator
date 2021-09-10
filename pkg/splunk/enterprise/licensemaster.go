@@ -28,7 +28,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
-// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license master.
+// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
 func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
@@ -123,7 +123,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	return result, nil
 }
 
-// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
+// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
 	if err != nil {

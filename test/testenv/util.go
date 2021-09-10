@@ -402,7 +402,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 	return &operator
 }
 
-// newStandaloneWithLM creates and initializes CR for Standalone Kind with License Master
+// newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
 func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseApi.Standalone {
 
 	new := enterpriseApi.Standalone{
@@ -586,7 +586,7 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseAp
 	return &new
 }
 
-// newLicenseMasterWithGivenSpec create and initializes CR for License Master Kind with Given Spec
+// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
 func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
 	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{

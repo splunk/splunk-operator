@@ -26,7 +26,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
    * In this example, the Splunk Apps are located at `bucket-app-framework-us-west-2/Standalone-us/networkAppsLoc/` and `bucket-app-framework-us-west-2/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the standalone CR specification and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone and License Master CRs always use a local scope.
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone and License Manager CRs always use a local scope.
 
 Example: Standalone.yaml
 
@@ -62,28 +62,28 @@ spec:
 
 The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps to the standalone instance for local use. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance. A Pod reset is triggered to install the new or modified apps.
 
-Note: A similar approach can be used for installing apps on License Master using it's own CR.
+Note: A similar approach can be used for installing apps on License Manager using it's own CR.
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
 
 ### How to use the App Framework on Indexer Cluster
 
-This example describes the installation of apps on Indexer Cluster as well as Cluster Master. This is achieved by deploying a ClusterMaster CR with a remote storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
+This example describes the installation of apps on Indexer Cluster as well as Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
 2. Create a Kubernetes Secret Object with the storage credentials. 
    * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 3. Create folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the cluster master, and apps that will be distributed to all cluster peers by the cluster master. 
-   * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster master instance only.
+   * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the cluster manager, and apps that will be distributed to all cluster peers by the cluster manager. 
+   * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
 4. Copy your Splunk App or Add-on archive files to the App Source.
-   * In this example, the Splunk Apps for the cluster peers are located at `bucket-app-framework-us-west-2/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework-us-west-2/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster master are located at`bucket-app-framework-us-west-2/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
+   * In this example, the Splunk Apps for the cluster peers are located at `bucket-app-framework-us-west-2/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework-us-west-2/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework-us-west-2/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the ClusterMaster CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CR's where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes.
-   * In this example, the cluster master will run some apps locally, and deploy other apps to the cluster peers. The App Source folder `adminApps` are Splunk Apps that are installed on the cluster master, and will use a local scope. The apps in the App Source folders `networkApps` and `clusterBase` will be deployed from the cluster master to the peers, and will use a cluster scope.
+   * In this example, the cluster manager will run some apps locally, and deploy other apps to the cluster peers. The App Source folder `adminApps` are Splunk Apps that are installed on the cluster manager, and will use a local scope. The apps in the App Source folders `networkApps` and `clusterBase` will be deployed from the cluster manager to the peers, and will use a cluster scope.
 
 Example: ClusterMaster.yaml
 
@@ -120,9 +120,9 @@ spec:
 
 6. Apply the Custom Resource specification: `kubectl apply -f ClusterMaster.yaml`
 
-The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the cluster master instance for local use. A Pod reset is triggered on the cluster master to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
+The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the cluster manager instance for local use. A Pod reset is triggered on the cluster manager to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
 
-The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster master for use on the cluster. The cluster master is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster. The cluster manager is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
@@ -320,7 +320,7 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 * Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes
 * When App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs)
-* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Master, Standalone and License Master CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
+* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
 
 ## App Framework Limitations
 
@@ -330,4 +330,4 @@ The App Framework does not review, preview, analyze, or enable Splunk Apps and A
 
 2. The App Framework tracks the app installation state per CR. Whenever you scale up a Standalone CR, all the existing pods will recycle and all the apps in app sources will be re-installed. This is done so that the new replica(s) can install all the apps and not just the apps that were changed recently.
 
-3. When a change in the App Repo is detected by the App Framework, a pod reset is initiated to install the new or modified applications. For the ClusterMaster and SearchHeadCluster CR’s, a pod reset is applied to the cluster master and deployer instances only. A cluster peer restart might be triggered by the contents of the Splunk apps deployed, but are not initiated by the App Framework.
+3. When a change in the App Repo is detected by the App Framework, a pod reset is initiated to install the new or modified applications. For the ClusterMaster and SearchHeadCluster CR’s, a pod reset is applied to the cluster manager and deployer instances only. A cluster peer restart might be triggered by the contents of the Splunk apps deployed, but are not initiated by the App Framework.
