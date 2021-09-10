@@ -259,7 +259,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	// set the status context
 	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 
-	err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
+	appsModified, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -267,7 +267,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus)
+			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, appsModified)
 			// Make the config token as predictable
 			configMap.Data[appsUpdateToken] = "1601945361"
 			return configMap, err
@@ -513,7 +513,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	var S3Response splclient.S3Response
 
 	// Test-1: Empty remoteObjectList Map should return an error
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -527,7 +527,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Set the app source with a matching one
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
 
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-3: If the App Resource is not found in the remote object listing, all the corresponding Apps should be deleted/disabled
 	delete(remoteObjListMap, appFramworkConf.AppSources[0].Name)
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -553,7 +553,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-4: If the App Resource is not found in the config, all the corresponding Apps should be deleted/disabled
 	tmpAppSrcName := appFramworkConf.AppSources[0].Name
 	appFramworkConf.AppSources[0].Name = "invalidName"
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -579,7 +579,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	tmpS3Response.Objects = append(tmpS3Response.Objects[:0], tmpS3Response.Objects[1:]...)
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpS3Response
 
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -595,7 +595,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -608,7 +608,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-8:  For an AppSrc, when all the Apps are deleted on remote store and re-introduced, should modify the state to active and pending
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -623,7 +623,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	invalidAppSourceName := "UnknownAppSourceInConfig"
 	remoteObjListMap[invalidAppSourceName] = S3Response
-	err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err == nil {
 		t.Errorf("Unable to return an error, when the remote listing contain unknown App source")
