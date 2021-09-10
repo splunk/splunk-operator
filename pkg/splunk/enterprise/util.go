@@ -48,22 +48,33 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 	getClient := getClientWrapper.GetS3ClientFuncPtr()
 
 	appSecretRef := vol.SecretRef
-	s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
-	if err != nil {
-		return s3Client, err
-	}
+	var accessKeyID string
+	var secretAccessKey string
+	if appSecretRef == "" {
+		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
+		scopedLog.Info("No secrectRef provided.  Attempt to access remote storage client without access/secret keys")
+		accessKeyID = ""
+		secretAccessKey = ""
+	} else {
+		// Get credentials through the secretRef
+		s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
+		if err != nil {
+			return s3Client, err
+		}
 
-	// Get access keys
-	accessKeyID := string(s3ClientSecret.Data["s3_access_key"])
-	secretAccessKey := string(s3ClientSecret.Data["s3_secret_key"])
+		// Get access keys
+		accessKeyID = string(s3ClientSecret.Data["s3_access_key"])
+		secretAccessKey = string(s3ClientSecret.Data["s3_secret_key"])
 
-	if accessKeyID == "" {
-		err = fmt.Errorf("accessKey missing")
-		return s3Client, err
-	}
-	if secretAccessKey == "" {
-		err = fmt.Errorf("S3 Secret Key is missing")
-		return s3Client, err
+		// Do we need to handle if IAM_ROLE is set in the secret as well?
+		if accessKeyID == "" {
+			err = fmt.Errorf("accessKey missing")
+			return s3Client, err
+		}
+		if secretAccessKey == "" {
+			err = fmt.Errorf("S3 Secret Key is missing")
+			return s3Client, err
+		}
 	}
 
 	// Get the bucket name form the "path" field
@@ -83,6 +94,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
+	var err error
 	s3Client.Client, err = getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint, fn)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
@@ -721,7 +733,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
 		if !isAppExtentionValid(receivedKey) {
-			scopedLog.Error(nil, "App name Parsing: Ignoring the key: ", receivedKey, "with invalid extention")
+			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extention", "receivedKey", receivedKey)
 			continue
 		}
 
@@ -754,7 +766,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 
 		// Update our local list if it is a new app
 		if !found {
-			scopedLog.Info("New App", "found: ", appName)
+			scopedLog.Info("New App found:", "appName", appName)
 			appDeployInfo.AppName = appName
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
@@ -866,36 +878,39 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
 			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
 
+			initEnv := []corev1.EnvVar{}
+			if appSecretRef != "" {
+				initEnv = append(initEnv, corev1.EnvVar{
+					Name: "AWS_ACCESS_KEY_ID",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: s3AccessKey,
+						},
+					},
+				})
+				initEnv = append(initEnv, corev1.EnvVar{
+					Name: "AWS_SECRET_ACCESS_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: s3SecretKey,
+						},
+					},
+				})
+			}
+
 			// Setup init container
 			initContainerSpec := corev1.Container{
 				Image:           s3Client.Client.GetInitContainerImage(),
 				ImagePullPolicy: "IfNotPresent",
 				Name:            initContainerName,
 				Args:            s3Client.Client.GetInitContainerCmd(appS3Endpoint, appBkt, appSrcPath, appSrcName, appBktMnt),
-				Env: []corev1.EnvVar{
-					{
-						Name: "AWS_ACCESS_KEY_ID",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: appSecretRef,
-								},
-								Key: s3AccessKey,
-							},
-						},
-					},
-					{
-						Name: "AWS_SECRET_ACCESS_KEY",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: appSecretRef,
-								},
-								Key: s3SecretKey,
-							},
-						},
-					},
-				},
+				Env:             initEnv,
 			}
 
 			// Add mount to initContainer, same mount used for Splunk instance container as well

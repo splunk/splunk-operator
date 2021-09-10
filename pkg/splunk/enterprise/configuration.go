@@ -851,25 +851,29 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
-		// Ideally, this should have been detected in Spec validation time
-		if err != nil {
-			*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
-			return false
-		}
-
-		// Check if the secret version is already tracked, and if there is a change in it
-		if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
-			if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-				scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
-				ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
-				return true
+		if volume.SecretRef != "" {
+			namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
+			// Ideally, this should have been detected in Spec validation time
+			if err != nil {
+				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+				return false
 			}
-			return false
-		}
 
-		// First time adding to track the secret resource version
-		ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+			// Check if the secret version is already tracked, and if there is a change in it
+			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
+				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
+					scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
+					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+					return true
+				}
+				return false
+			}
+
+			// First time adding to track the secret resource version
+			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+		} else {
+			scopedLog.Info("No valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+		}
 	}
 
 	return false
@@ -1034,6 +1038,8 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 
 	duplicateChecker := make(map[string]bool)
 
+	scopedLog := log.WithName("validateRemoteVolumeSpec")
+
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {
@@ -1050,8 +1056,9 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 		if volume.Path == "" {
 			return fmt.Errorf("Volume Path is missing")
 		}
+		// Make the secretRef optional if theyre using IAM roles
 		if volume.SecretRef == "" {
-			return fmt.Errorf("Volume SecretRef is missing")
+			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
 		}
 
 		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
@@ -1146,14 +1153,17 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
+	scopedLog := log.WithName("GetSmartstoreVolumesConfig")
+
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {
-		s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
-		if err != nil {
-			return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
-		}
+		if volumes[i].SecretRef != "" {
+			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
+			if err != nil {
+				return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+			}
 
-		volumesConf = fmt.Sprintf(`%s
+			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
 path = s3://%s
@@ -1161,6 +1171,15 @@ remote.s3.access_key = %s
 remote.s3.secret_key = %s
 remote.s3.endpoint = %s
 `, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint)
+		} else {
+			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
+			volumesConf = fmt.Sprintf(`%s
+[volume:%s]
+storageType = remote
+path = s3://%s
+remote.s3.endpoint = %s
+`, volumesConf, volumes[i].Name, volumes[i].Path, volumes[i].Endpoint)
+		}
 	}
 
 	return volumesConf, nil

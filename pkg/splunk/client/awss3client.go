@@ -79,15 +79,26 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 	tr.ForceAttemptHTTP2 = true
 	httpClient := http.Client{Transport: tr}
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(region),
-		Credentials: credentials.NewStaticCredentials(
-			accessKeyID,     // id
-			secretAccessKey, // secret
-			""),
-		MaxRetries: aws.Int(3),
-		HTTPClient: &httpClient,
-	})
+	var err error
+	var sess *session.Session
+	if accessKeyID != "" && secretAccessKey != "" {
+		sess, err = session.NewSession(&aws.Config{
+			Region: aws.String(region),
+			Credentials: credentials.NewStaticCredentials(
+				accessKeyID,     // id
+				secretAccessKey, // secret
+				""),
+			MaxRetries: aws.Int(3),
+			HTTPClient: &httpClient,
+		})
+	} else {
+		scopedLog.Info("No valid access/secret keys.  Attempt to connect without them")
+		sess, err = session.NewSession(&aws.Config{
+			Region:     aws.String(region),
+			MaxRetries: aws.Int(3),
+			HTTPClient: &httpClient,
+		})
+	}
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
 		return nil

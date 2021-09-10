@@ -99,10 +99,19 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 	// New returns an Minio compatible client object. API compatibility (v2 or v4) is automatically
 	// determined based on the Endpoint value.
 	scopedLog.Info("Connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
-	s3Client, err := minio.New(appS3Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure: useSSL,
-	})
+	var s3Client *minio.Client
+	var err error
+	if accessKeyID == "" && secretAccessKey == "" {
+		scopedLog.Info("No Access/Secret Keys, attempt connection without them", "appS3Endpoint", appS3Endpoint)
+		s3Client, err = minio.New(appS3Endpoint, &minio.Options{
+			Secure: useSSL,
+		})
+	} else {
+		s3Client, err = minio.New(appS3Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+			Secure: useSSL,
+		})
+	}
 	if err != nil {
 		scopedLog.Info("Error creating new Minio Client Session", "err", err)
 		return nil
