@@ -18,7 +18,7 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
-    name: v2
+    name: v3
     schema:
       openAPIV3Schema:
         description: MonitoringConsole is the Schema for the monitoringconsole API
@@ -2729,12 +2729,23 @@ spec:
     storage: true
     subresources:
       status: {}
+  - name: v2
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+        properties:
+          apiVersion:
+            type: string
   - name: v1
     served: true
     storage: false
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2744,6 +2755,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2753,6 +2765,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string
@@ -2762,6 +2775,7 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        x-kubernetes-preserve-unknown-fields: true
         properties:
           apiVersion:
             type: string

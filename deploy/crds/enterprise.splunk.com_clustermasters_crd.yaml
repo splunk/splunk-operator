@@ -18,7 +18,7 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
-    name: v2
+    name: v3
     schema:
       openAPIV3Schema:
         description: ClusterMaster is the Schema for the clustermasters API
@@ -2949,6 +2949,16 @@ spec:
     storage: true
     subresources:
       status: {}
+  - name: v2
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+        properties:
+          apiVersion:
+            type: string
   - name: v1
     served: true
     storage: false

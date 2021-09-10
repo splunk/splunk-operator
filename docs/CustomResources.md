@@ -34,7 +34,7 @@ you would like the resource to reside within:
 If you do not provide a `namespace`, you current context will be used.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: s1
@@ -52,7 +52,7 @@ associated with the instance when you delete it.
 ## Common Spec Parameters for All Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -93,7 +93,7 @@ configuration parameters:
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -135,7 +135,7 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 ## LicenseMaster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
@@ -155,7 +155,7 @@ The `LicenseMaster` resource does not provide any additional configuration param
 ## Standalone Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: standalone
@@ -178,7 +178,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 ## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -197,7 +197,7 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 ## ClusterMaster Resource Spec Parameters
 ClusterMaster resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -226,7 +226,7 @@ spec:
 ## IndexerCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
@@ -250,7 +250,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
@@ -282,7 +282,7 @@ Set equal ```requests``` and ```limits``` values for CPU and memory to establish
 Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -303,7 +303,7 @@ Set the ```requests``` value for CPU and memory lower than the ```limits``` valu
 Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
