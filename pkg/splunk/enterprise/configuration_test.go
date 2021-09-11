@@ -637,7 +637,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.VolList[0].SecretRef = ""
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
-		t.Errorf("Missing Secret Object reference is a valid configthat should not cause error: %v", err)
+		t.Errorf("Missing Secret Object reference is a valid config that should not cause error: %v", err)
 	}
 	AppFramework.VolList[0].SecretRef = "s3-secret"
 
