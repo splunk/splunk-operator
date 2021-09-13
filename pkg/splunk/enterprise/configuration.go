@@ -38,7 +38,7 @@ var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
-	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-master is used
+	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
 	// to set the label app.kubernetes.io/part-of on all the parts so that its indexer service can select
 	// the indexers from all the parts. Otherwise partOfIdentifier is equal to instanceIdentifier.
 	if instanceType != SplunkIndexer || len(partOfIdentifier) == 0 {
@@ -133,7 +133,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 			partOfIdentifier = instanceIdentifier
 			instanceIdentifier = ""
 		} else {
-			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-master
+			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
 			partOfIdentifier = spec.ClusterMasterRef.Name
 		}
@@ -573,7 +573,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 
 		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
-		// propagated through the CM master apps bundle push
+		// propagated through the CM manager apps bundle push
 		// 2. In case of Standalone, reset the Pod, by updating the latest Resource version of the
 		// smartstore config map.
 		if instanceType == SplunkStandalone {
@@ -677,10 +677,10 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 
-	// append URL for cluster master, if configured
+	// append URL for cluster manager, if configured
 	var clusterMasterURL string
 	if instanceType == SplunkClusterMaster {
-		// This makes splunk-ansible configure indexer-discovery on cluster-master
+		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterMasterURL = "localhost"
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
