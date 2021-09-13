@@ -847,7 +847,7 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 		return false
 	}
 
-	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
