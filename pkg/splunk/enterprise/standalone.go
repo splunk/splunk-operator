@@ -75,6 +75,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
 	}
@@ -139,6 +140,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		} else if isScalingUp {
 			// if we are indeed scaling up, then mark the deploy status to Pending
 			// for all the app sources so that we add all the app sources in configMap.
+			cr.Status.AppContext.IsDeploymentInProgress = true
 			appStatusContext := cr.Status.AppContext
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
 				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
@@ -170,6 +172,11 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	if cr.Status.Phase == splcommon.PhaseReady {
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+			if cr.Status.AppContext.IsDeploymentInProgress {
+				cr.Status.AppContext.IsDeploymentInProgress = false
+				return result, nil
+			}
 		}
 
 		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
