@@ -7,7 +7,7 @@ The Splunk Operator provides support for Splunk App and Add-on deployment using 
 Utilizing the App Framework requires:
 
 * An Amazon S3 or S3-API-compliant remote object storage location. App framework requires read-only access to the path containing the apps.
-* The remote object storage credentials via a secret or role.
+* The remote object storage credentials via a secret, or an IAM role.
 * Splunk Apps and Add-ons in a .tgz or .spl archive format.
 * Connections to the remote object storage endpoint need to be secure using a minimum version of TLS 1.2.
 
@@ -19,7 +19,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
 1. Confirm your S3-based remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by either:
-   * Configure roles for the Operator and Splunk instance pods using a service role or annotations, or
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
    * Create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
@@ -78,7 +78,7 @@ This example describes the installation of apps on Indexer Cluster as well as Cl
 1. Confirm your S3-based remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by either:
-   * Configure roles for the Operator and Splunk instance pods using a service role or annotations, or
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
    * Create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
@@ -141,7 +141,7 @@ This example describes the installation of apps on Search Head Cluster as well a
 1. Confirm your S3-based remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by either:
-   * Configure roles for the Operator and Splunk instance pods using a service role or annotations, or
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
    * Create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
