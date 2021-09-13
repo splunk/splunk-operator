@@ -371,7 +371,7 @@ type ClusterBundleInfo struct {
 	Timestamp int64 `json:"timestamp"`
 }
 
-// ClusterMasterInfo represents the status of the indexer cluster master.
+// ClusterMasterInfo represents the status of the indexer cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Finfo
 type ClusterMasterInfo struct {
 	// Indicates if the cluster is initialized.
@@ -380,31 +380,31 @@ type ClusterMasterInfo struct {
 	// Indicates if the cluster is ready for indexing.
 	IndexingReady bool `json:"indexing_ready_flag"`
 
-	// Indicates whether the master is ready to begin servicing, based on whether it is initialized.
+	// Indicates whether the manager is ready to begin servicing, based on whether it is initialized.
 	ServiceReady bool `json:"service_ready_flag"`
 
 	// Indicates if the cluster is in maintenance mode.
 	MaintenanceMode bool `json:"maintenance_mode"`
 
-	// Indicates whether the master is restarting the peers in a cluster.
+	// Indicates whether the manager is restarting the peers in a cluster.
 	RollingRestart bool `json:"rolling_restart_flag"`
 
-	// The name for the master. Displayed in the Splunk Web manager page.
+	// The name for the manager. Displayed in the Splunk Web manager page.
 	Label string `json:"label"`
 
-	// Provides information about the active bundle for this master.
+	// Provides information about the active bundle for this manager.
 	ActiveBundle ClusterBundleInfo `json:"active_bundle"`
 
-	// The most recent information reflecting any changes made to the master-apps configuration bundle.
+	// The most recent information reflecting any changes made to the manager-apps configuration bundle.
 	// In steady state, this is equal to active_bundle. If it is not equal, then pushing the latest bundle to all peers is in process (or needs to be started).
 	LatestBundle ClusterBundleInfo `json:"latest_bundle"`
 
-	// Timestamp corresponding to the creation of the master.
+	// Timestamp corresponding to the creation of the manager.
 	StartTime int64 `json:"start_time"`
 }
 
-// GetClusterMasterInfo queries the cluster master for info about the indexer cluster.
-// You can only use this on a cluster master.
+// GetClusterMasterInfo queries the cluster manager for info about the indexer cluster.
+// You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Finfo
 func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 	apiResponse := struct {
@@ -424,23 +424,23 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 }
 
 // IndexerClusterPeerInfo represents the status of a indexer cluster peer.
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fslave.2Finfo
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fpeer.2Finfo
 type IndexerClusterPeerInfo struct {
 	// Current bundle being used by this peer.
 	ActiveBundle ClusterBundleInfo `json:"active_bundle"`
 
-	// Lists information about the most recent bundle downloaded from the master.
+	// Lists information about the most recent bundle downloaded from the manager.
 	LatestBundle ClusterBundleInfo `json:"latest_bundle"`
 
 	// The initial bundle generation ID recognized by this peer. Any searches from previous generations fail.
-	// The initial bundle generation ID is created when a peer first comes online, restarts, or recontacts the master.
+	// The initial bundle generation ID is created when a peer first comes online, restarts, or recontacts the manager.
 	// Note that this is reported as a very large number (18446744073709552000) that breaks Go's JSON library, while the peer is being decommissioned.
 	//BaseGenerationID uint64 `json:"base_generation_id"`
 
-	// Indicates if this peer is registered with the master in the cluster.
+	// Indicates if this peer is registered with the manager in the cluster.
 	Registered bool `json:"is_registered"`
 
-	// Timestamp for the last attempt to contact the master.
+	// Timestamp for the last attempt to contact the manager.
 	LastHeartbeatAttempt int64 `json:"last_heartbeat_attempt"`
 
 	// Indicates whether the peer needs to be restarted to enable its cluster configuration.
@@ -452,7 +452,7 @@ type IndexerClusterPeerInfo struct {
 
 // GetIndexerClusterPeerInfo queries info from a indexer cluster peer.
 // You can use this on any peer in an indexer cluster.
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fslave.2Finfo
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fpeer.2Finfo
 func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
@@ -470,8 +470,8 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 	return &apiResponse.Entry[0].Content, nil
 }
 
-// ClusterMasterPeerInfo represents the status of a indexer cluster peer (cluster master endpoint).
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Fpeers
+// ClusterMasterPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
 type ClusterMasterPeerInfo struct {
 	// Unique identifier or GUID for the peer
 	ID string `json:"guid"`
@@ -479,11 +479,11 @@ type ClusterMasterPeerInfo struct {
 	// The name for the peer. Displayed on the manager page.
 	Label string `json:"label"`
 
-	// The ID of the configuration bundle currently being used by the master.
+	// The ID of the configuration bundle currently being used by the manager.
 	ActiveBundleID string `json:"active_bundle_id"`
 
 	// The initial bundle generation ID recognized by this peer. Any searches from previous generations fail.
-	// The initial bundle generation ID is created when a peer first comes online, restarts, or recontacts the master.
+	// The initial bundle generation ID is created when a peer first comes online, restarts, or recontacts the manager.
 	// Note that this is reported as a very large number (18446744073709552000) that breaks Go's JSON library, while the peer is being decommissioned.
 	//BaseGenerationID uint64 `json:"base_generation_id"`
 
@@ -509,7 +509,7 @@ type ClusterMasterPeerInfo struct {
 	// The ID of the configuration bundle this peer is using.
 	LatestBundleID string `json:"latest_bundle_id"`
 
-	// Used by the master to keep track of pending jobs requested by the master to this peer.
+	// Used by the manager to keep track of pending jobs requested by the manager to this peer.
 	PendingJobCount int `json:"pending_job_count"`
 
 	// Number of buckets for which the peer is primary in its local site, or the number of buckets that return search results from same site as the peer.
@@ -572,8 +572,8 @@ type ClusterMasterPeerInfo struct {
 	} `json:"status_counter"`
 }
 
-// GetClusterMasterPeers queries the cluster master for info about indexer cluster peers.
-// You can only use this on a cluster master.
+// GetClusterMasterPeers queries the cluster manager for info about indexer cluster peers.
+// You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Fpeers
 func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo, error) {
 	apiResponse := struct {
@@ -598,10 +598,10 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 }
 
 // RemoveIndexerClusterPeer removes peer from an indexer cluster, where id=unique GUID for the peer.
-// You can only use this on a cluster master.
+// You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
-	// sent request to remove a peer from Cluster Master peers list
+	// sent request to remove a peer from Cluster Manager peers list
 	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.ManagementURI, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
@@ -628,7 +628,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	return c.Do(request, expectedStatus, nil)
 }
 
-// BundlePush pushes the CM master apps bundle to all the indexer peers
+// BundlePush pushes the Cluster manager apps bundle to all the indexer peers
 func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
 	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
@@ -919,7 +919,7 @@ func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 }
 
 // SetIdxcSecret sets idxc_secret for a Splunk Instance
-// Can be used on any peer in an indexer cluster as long as the idxc_secret matches the cluster master
+// Can be used on any peer in an indexer cluster as long as the idxc_secret matches the cluster manager
 // See https://docs.splunk.com/Documentation/Splunk/7.0.0/RESTREF/RESTcluster#cluster.2Fconfig.2Fconfig
 func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	endpoint := fmt.Sprintf("%s/services/cluster/config/config?secret=%s", c.ManagementURI, idxcSecret)
