@@ -149,7 +149,7 @@ func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for cluster-master instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		testenvInstance.Log.Info("Waiting for "+splcommon.CM+"instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		// Test ClusterMaster Phase to see if its ready
 		return cm.Status.Phase
@@ -199,7 +199,7 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 	}
 	gomega.Eventually(func() map[string][]string {
 		podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
-		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/sites?output_mode=json"
+		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.ManagerSiteTest
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 		if err != nil {
@@ -441,7 +441,7 @@ func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, 
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for cluster-master Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
+		testenvInstance.Log.Info("Waiting for"+splcommon.CM+"Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
 		DumpGetPods(testenvInstance.GetName())
 		// Test ClusterMaster Phase to see if its ready
 		return cm.Status.Phase
@@ -609,7 +609,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 
 				if versionCheck {
 					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-master-"))) {
+					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, splcommon.CMDashed))) {
 						var expectedVersion string
 						if checkupdated {
 							expectedVersion = AppInfo[appName]["V2"]
@@ -632,12 +632,12 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 			path := "etc/apps"
 			//For cluster-wide install the apps are extracted to different locations
 			if clusterWideInstall {
-				if strings.Contains(podName, "cluster-master") {
-					path = "etc/master-apps/"
+				if strings.Contains(podName, splcommon.CM) {
+					path = splcommon.ManagerApps
 				} else if strings.Contains(podName, "-deployer-") {
-					path = "etc/shcluster/apps"
+					path = splcommon.SHCApps
 				} else if strings.Contains(podName, "-indexer-") {
-					path = "etc/slave-apps/"
+					path = splcommon.PeerApps
 				}
 			}
 			testenvInstance.Log.Info("Verifying App in Directory", "Directory Name", path, "Pod Name", podName)

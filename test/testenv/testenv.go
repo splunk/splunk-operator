@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os"
 	"time"
 
@@ -69,7 +70,7 @@ const (
 	StandalonePod = "splunk-%s-standalone-%d"
 
 	// LicenseMasterPod Template String for standalone pod
-	LicenseMasterPod = "splunk-%s-license-master-%d"
+	LicenseMasterPod = "splunk-%s-" + splcommon.LM + "-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
@@ -84,7 +85,7 @@ const (
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
 	// ClusterMasterPod ClusterMaster Pod Template String
-	ClusterMasterPod = "splunk-%s-cluster-master-0"
+	ClusterMasterPod = "splunk-%s-" + splcommon.CM + "-0"
 
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
