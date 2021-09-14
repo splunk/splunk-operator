@@ -299,7 +299,7 @@ Here is a typical App framework configuration in a Custom resource definition:
 * `storageType` describes the type of remote storage. Currently `s3` is the only supported type
 * `provider` describes the remote storage provider. Currently `aws` & `minio` are the supported providers 
 * `endpoint` helps configure the URI/URL of the remote storage endpoint that hosts the apps
-* `secretRef` refers to the K8s secret object containing the static remote storage access key.  This paramerter is not required if using role based credentials.
+* `secretRef` refers to the K8s secret object containing the static remote storage access key.  This paramerter is not required if using IAM role based credentials.
 * `path` describes the path (including the bucket) of one or more app sources on the remote store 
 
 ### appSources
