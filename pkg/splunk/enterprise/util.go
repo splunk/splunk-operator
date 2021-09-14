@@ -679,7 +679,6 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			modified, appSrcDeploymentInfo.AppDeploymentInfoList = setStateAndStatusForAppDeployInfoList(curAppDeployList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
 			if modified {
-				appDeployContext.IsDeploymentInProgress = true
 				// Finally update the Map entry with latest info
 				appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 			}
@@ -697,14 +696,12 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
-					appDeployContext.IsDeploymentInProgress = true
 				}
 			}
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
 		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
-			appDeployContext.IsDeploymentInProgress = true
 			appsModified = true
 		}
 
@@ -965,13 +962,16 @@ func HasAppRepoCheckTimerExpired(appInfoContext *enterpriseApi.AppDeploymentCont
 // GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
 // There can be some time elapsed between when we first set lastAppInfoCheckTime and when the CR is in Ready state.
 // Hence we need to subtract the delta time elapsed from the actual polling interval,
-// so that the next reconile would happen at the right time.
+// so that the next reconcile would happen at the right time.
 func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
 	scopedLog := log.WithName("GetNextRequeueTime")
 	currentEpoch := time.Now().Unix()
 
 	var nextRequeueTimeInSec int64
 	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
+	if nextRequeueTimeInSec < 0 {
+		nextRequeueTimeInSec = 5
+	}
 
 	scopedLog.Info("Getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
 
@@ -991,6 +991,12 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 	//check if the apps need to be downloaded from remote storage
 	if HasAppRepoCheckTimerExpired(appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+		if appStatusContext.IsDeploymentInProgress {
+			scopedLog.Info("App installation is already in progress. Not checking for any latest app repo changes")
+			return nil
+		}
+
+		appStatusContext.IsDeploymentInProgress = true
 		var sourceToAppsList map[string]splclient.S3Response
 		appsModified := false
 
