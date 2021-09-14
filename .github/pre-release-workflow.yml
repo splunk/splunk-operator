@@ -1,0 +1,174 @@
+name: Pre Release Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Version of Splunk Operator Release'
+        required: true
+      old_operator_version:
+        description: 'OLD OPERATOR VERSION'
+        required: true
+      new_operator_version:
+        description: 'NEW OPERATOR VERSION'
+        required: true
+      old_operator_image_version:
+        description: 'OLD OPERATOR IMAGE VERSION'
+        required: true
+      new_operator_image_version:
+        description: 'NEW OPERATOR IMAGE VERSION'
+        required: true
+      old_enterprise_version:
+        description: 'OLD ENTERPRISE IMAGE VERSION'
+        required: true
+      new_enterprise_version:
+        description: 'NEW ENTERPRISE IMAGE VERSION'
+        required: true
+jobs:
+  automated-release:
+    name: Automated Pre Release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Deep Fetch 
+      run: |
+        git fetch --prune --unshallow
+
+    - name: Create ChangeLog since last release
+      run: |
+        git log $(git describe --tags --abbrev=0)..HEAD --oneline >> docs/ChangeLog-NEW.md
+    
+    - name: Set Release Identifier
+      run: |
+        echo "SHORT_SHA=${GITHUB_SHA::12}" >> $GITHUB_ENV
+        echo $SHORT_SHA
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
+
+    - name: Install yq
+      run: |
+        wget https://github.com/mikefarah/yq/releases/download/3.2.1/yq_linux_amd64 -O /usr/bin/yq
+        chmod +x /usr/bin/yq
+    
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+
+    - name: Configure Docker Credentials
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+    
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.13.6'
+    
+    - name: Install golint
+      run: |
+        go version
+        go get -u golang.org/x/lint/golint
+    
+    - name: Install goveralls
+      run: |
+        go version
+        go get github.com/mattn/goveralls@latest
+
+    - name: Install Operator SDK
+      run: |
+        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
+        sudo chmod +x /usr/local/bin/operator-sdk
+
+    - name: Update Operator Version in version.go
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        include: "version.go"
+
+    - name: Update Operator Image name in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
+        replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: ".*.md"
+
+    - name: Update Splunk Operator Install URL in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator-install.yaml"
+        replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator-install.yaml"
+        exclude: "ChangeLog.md"
+        include: ".*.md"
+
+    - name: Update Splunk Operator VERSION in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "${{ github.event.inputs.old_operator_version }} or later"
+        replace: "${{ github.event.inputs.new_operator_version }} or later"
+        exclude: "ChangeLog.md"
+        include: ".*.md"
+
+    - name: Update Splunk Enterprise Image in operator.yaml
+      if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "${{ github.event.inputs.old_enterprise_version }}"
+        replace: "${{ github.event.inputs.new_enterprise_version }}"
+        include: "operator.yaml"
+
+    - name: Update Splunk Enterprise image in DOCS
+      if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "${{ github.event.inputs.old_enterprise_version }} or later"
+        replace: "${{ github.event.inputs.new_enterprise_version }} or later"
+        exclude: "ChangeLog.md"
+
+    - name: Run Make Package
+      run: |
+        make package
+  
+    - name: Tag and Push release RC Image
+      run: |
+        docker images
+        docker tag splunk/splunk-operator:latest splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
+        docker push splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
+        docker images
+
+    - name: Update Operator Image name in Release Folder
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
+        replace: "splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}"
+        include: "release-${{ env.SHORT_SHA }}/"
+
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: "release-artifacts-${{ github.event.inputs.release_version }}"
+        path: "release-**"
+
+    - name: Reset go.mod and go.sum before creating Pull Request
+      run: |
+        git checkout go.sum
+        git checkout go.mod
+        git status
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v3.10.1
+      with:
+        branch: "release/${{ github.event.inputs.release_version }}"
+        title: "Splunk Operator ${{ github.event.inputs.release_version }} release"
+        reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
+        body: |
+          Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
+          Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
