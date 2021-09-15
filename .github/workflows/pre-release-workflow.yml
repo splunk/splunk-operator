@@ -102,8 +102,8 @@ jobs:
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@master
       with:
-        find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator-install.yaml"
-        replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator-install.yaml"
+        find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator"
+        replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator"
         exclude: "ChangeLog.md"
         include: ".*.md"
 
