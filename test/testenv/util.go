@@ -493,6 +493,23 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *
 	return &mcSpec
 }
 
+// newMonitoringConsoleSpecWithGivenSpec returns MC Spec with given name, namespace and Spec
+func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpriseApi.MonitoringConsoleSpec) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &mcSpec
+}
+
 // DumpGetPods prints and returns list of pods in the namespace
 func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
