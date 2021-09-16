@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -255,7 +257,11 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 
 			// Change shc secret key
 			command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
-			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+			streamOptions := &remotecommand.StreamOptions{
+				//Stdin: stdin,
+				Stdin: strings.NewReader(command),
+			}
+			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
 			if err != nil {
 				if !mock {
 					return err
@@ -291,7 +297,10 @@ func ApplyShcSecret(mgr *searchHeadClusterPodManager, replicas int32, mock bool)
 
 			// Change admin password on splunk instance of pod
 			command := fmt.Sprintf("/opt/splunk/bin/splunk cmd splunkd rest --noauth POST /services/admin/users/admin 'password=%s'", nsAdminSecret)
-			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+			streamOptions := &remotecommand.StreamOptions{
+				Stdin: strings.NewReader(command),
+			}
+			_, _, err = splutil.PodExecCommand(mgr.c, shPodName, mgr.cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
 			if err != nil {
 				if !mock {
 					return err

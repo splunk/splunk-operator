@@ -17,11 +17,13 @@ package util
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 func TestCreateResource(t *testing.T) {
@@ -157,12 +159,16 @@ func TestPodExecCommand(t *testing.T) {
 
 	// Create client and add object
 	c := spltest.NewMockClient()
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader("ls -ltr"),
+	}
+
+	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Add object
 	c.AddObject(pod)
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Hit some error legs
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, false)
+	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
 }

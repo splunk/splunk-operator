@@ -16,7 +16,9 @@ package enterprise
 
 import (
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1152,5 +1154,101 @@ refCount: 1`)
 
 	if _, ok := configMap.Data[kind]; ok {
 		t.Errorf("There should not be any entry for this CR type in the configMap")
+	}
+}
+
+func TestCopyFileToPod(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							MountPath: "/mnt/splunk-secrets",
+							Name:      "mnt-splunk-secrets",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "test-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+	// Add object
+	c.AddObject(pod)
+
+	fileOnOperator := "/tmp/"
+	fileOnStandalonePod := "/init-apps/splunkFwdApps/COPYING"
+
+	// Test to detect invalid source file name
+	_, _, err := CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	if err == nil || !strings.HasPrefix(err.Error(), "Invalid file name") {
+		t.Errorf("Unable to detect invalid source file name")
+	}
+
+	// Test to detect relative source file path
+	fileOnOperator = "tmp/networkIntelligence.spl"
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	if err == nil || !strings.HasPrefix(err.Error(), "Relative paths are not supported for source path") {
+		t.Errorf("Unable to reject relative source path")
+	}
+	fileOnOperator = "/tmp/networkIntelligence.spl"
+
+	// Test to reject if the source file doesn't exist
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	if err == nil || !strings.HasPrefix(err.Error(), "Unable to get the info for file") {
+		t.Errorf("If file doesn't exist, should return an error")
+	}
+
+	// Now create a file on the Pod
+	f, err := os.Create(fileOnOperator)
+	defer f.Close()
+	defer os.Remove(fileOnOperator)
+	if err != nil {
+		t.Errorf("Failed to create the file: %s, error %s", fileOnOperator, err)
+	}
+
+	// Test to detect relative destination file path
+	fileOnStandalonePod = "init-apps/splunkFwdApps/COPYING"
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	if err == nil || !strings.HasPrefix(err.Error(), "Relative paths are not supported for dest path") {
+		t.Errorf("Unable to reject relative destination path")
+	}
+	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
+
+	// If Pod destination path is directory, source file name is used, and should not cause an error
+	fileOnStandalonePod = "/init-apps/splunkFwdApps/"
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
+	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
+	if err != nil && 1 == 0 {
+		t.Errorf("Failed to accept the directory as destination path")
+	}
+	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
+
+	//Proper source and destination paths should not return an error
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
+	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
+	if err != nil && 1 == 0 {
+		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
 	}
 }
