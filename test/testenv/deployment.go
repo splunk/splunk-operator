@@ -111,6 +111,16 @@ func (d *Deployment) DeployMonitoringConsole(name string, licenseMasterRef strin
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
+// DeployMonitoringConsoleWithGivenSpec deploys MC instance on specified testenv with given spec
+func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ns string, name string, mcSpec enterpriseApi.MonitoringConsoleSpec) (*enterpriseApi.MonitoringConsole, error) {
+	mc := newMonitoringConsoleSpecWithGivenSpec(name, ns, mcSpec)
+	deployed, err := d.deployCR(name, mc)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.MonitoringConsole), err
+}
+
 // GetInstance retrieves the standalone, indexer, searchhead, licensemaster instance
 func (d *Deployment) GetInstance(name string, instance runtime.Object) error {
 	key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
