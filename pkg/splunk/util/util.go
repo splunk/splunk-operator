@@ -19,7 +19,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strings"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -139,7 +138,7 @@ func generateHECToken() []byte {
 }
 
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
@@ -175,7 +174,7 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 		Stderr:  true,
 		TTY:     tty,
 	}
-	if stdin == "" {
+	if streamOptions == nil {
 		option.Stdin = false
 	}
 	execReq.VersionedParams(
@@ -186,14 +185,14 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 	if err != nil {
 		return "", "", err
 	}
-	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
-		Stdin:  stdinReader,
-		Stdout: stdout,
-		Stderr: stderr,
-	})
+
+	streamOptions.Stdout = stdout
+	streamOptions.Stderr = stderr
+
+	err = exec.Stream(*streamOptions)
+
 	if err != nil {
 		return "", "", err
 	}

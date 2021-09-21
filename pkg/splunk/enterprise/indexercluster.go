@@ -20,11 +20,13 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -197,7 +199,11 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.I
 	} else {
 		command = fmt.Sprintf("/opt/splunk/bin/splunk disable maintenance-mode --answer-yes -auth admin:%s", adminPwd)
 	}
-	_, _, err = splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+	_, _, err = splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
 	if err != nil {
 		if !mock {
 			return err

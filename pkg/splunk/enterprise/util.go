@@ -16,6 +16,9 @@ package enterprise
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -27,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/remotecommand"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -34,6 +38,12 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+
+	// Used to move files between pods
+	_ "unsafe"
+
+	// Import kubectl cmd cp utils
+	_ "k8s.io/kubernetes/pkg/kubectl/cmd/cp"
 )
 
 // kubernetes logger used by splunk.enterprise package
@@ -1213,3 +1223,79 @@ func extractFieldFromConfigMapData(fieldRegex, data string) string {
 	}
 	return result
 }
+
+// CopyFileToPod copies a file from Operator Pod to any given Pod of a custom resource
+func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName string, srcPath string, destPath string) (string, string, error) {
+	scopedLog := log.WithName("CopyFileToPod").WithValues("podName", podName, "namespace", namespace).WithValues("srcPath", srcPath, "destPath", destPath)
+
+	var err error
+	reader, writer := io.Pipe()
+
+	// Check if the source file path is valid
+	if strings.HasSuffix(srcPath, "/") {
+		return "", "", fmt.Errorf("Invalid file name %s", srcPath)
+	}
+
+	// Do not accept relative path for source file path
+	srcPath = path.Clean(srcPath)
+	if !strings.HasPrefix(srcPath, "/") {
+		return "", "", fmt.Errorf("Relative paths are not supported for source path: %s", srcPath)
+	}
+
+	// Make sure that the source file exists
+	_, err = os.Stat(srcPath)
+	if err != nil {
+		return "", "", fmt.Errorf("Unable to get the info for file: %s, error: %s", srcPath, err)
+	}
+
+	// If the Pod destination path is a directory, use the source file name
+	if strings.HasSuffix(destPath, "/") {
+		destPath = destPath + path.Base(srcPath)
+	}
+
+	destPath = path.Clean(destPath)
+	// Do not accept relative path for Pod destination path
+	if !strings.HasPrefix(destPath, "/") {
+		return "", "", fmt.Errorf("Relative paths are not supported for dest path: %s", destPath)
+	}
+
+	// Make sure the destination directory is existing
+	destDir := path.Dir(destPath)
+	command := fmt.Sprintf("test -d %s; echo -n $?", destDir)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+
+	// If the Pod directory doesn't exist, do not try to create it. Instead throw an error
+	// Otherwise, in case of invalid dest path, we may end up creating too many invalid directories/files
+	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
+	dirTestResult, _ := strconv.Atoi(stdOut)
+	if dirTestResult != 0 {
+		return stdOut, stdErr, fmt.Errorf("Directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
+	}
+
+	go func() {
+		defer writer.Close()
+		err := cpMakeTar(srcPath, destPath, writer)
+		if err != nil {
+			scopedLog.Error(err, "Failed to send file on writer pipe", "srcPath", srcPath, "destPath", destPath)
+			return
+		}
+	}()
+	var cmdArr []string
+
+	// Untar the input stream on the Pod
+	cmdArr = []string{"tar", "-xf", "-"}
+	if len(destDir) > 0 {
+		cmdArr = append(cmdArr, "-C", destDir)
+	}
+
+	streamOptions = &remotecommand.StreamOptions{
+		Stdin: reader,
+	}
+
+	return splutil.PodExecCommand(c, podName, namespace, cmdArr, streamOptions, false, false)
+}
+
+//go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
+func cpMakeTar(srcPath, destPath string, writer io.Writer) error

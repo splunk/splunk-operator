@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -229,7 +231,10 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	cmPodName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
-	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
 	if err != nil || stdErr != "" {
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
