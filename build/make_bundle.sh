@@ -137,7 +137,12 @@ cat << EOF >$YAML_SCRIPT_FILE
 EOF
 
 echo Updating $OLM_CATALOG
-operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --make-manifests=false --verbose
+VERSION_CHECK=""
+if [[ $VERSION != $LAST_RELEASE_VERSION ]];
+then
+	VERSION_CHECK="--from-version $LAST_RELEASE_VERSION"
+fi
+operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --make-manifests=false --verbose $VERSION_CHECK
 yq w -i -s $YAML_SCRIPT_FILE $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml
 rm -f $YAML_SCRIPT_FILE
 
