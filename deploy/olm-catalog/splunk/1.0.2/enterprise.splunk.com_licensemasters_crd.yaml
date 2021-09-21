@@ -14,18 +14,18 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of license master
+    - description: Status of license manager
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of license master
+    - description: Age of license manager
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v2
     schema:
       openAPIV3Schema:
-        description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+        description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -41,7 +41,7 @@ spec:
             type: object
           spec:
             description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-              license master.
+              license manager.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -765,7 +765,7 @@ spec:
                 description: Full path or URL for one or more defaults.yml files specific
                   to App install, separated by commas.  The defaults listed here will
                   be installed on the CM, standalone, search head deployer or license
-                  master instance.
+                  manager instance.
                 type: string
               etcVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/etc volume
@@ -901,7 +901,7 @@ spec:
                 type: string
               licenseMasterRef:
                 description: LicenseMasterRef refers to a Splunk Enterprise license
-                  master managed by the operator within Kubernetes
+                  manager managed by the operator within Kubernetes
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -2526,7 +2526,7 @@ spec:
             type: object
           status:
             description: LicenseMasterStatus defines the observed state of a Splunk
-              Enterprise license master.
+              Enterprise license manager.
             properties:
               appContext:
                 description: App Framework Context
@@ -2665,7 +2665,7 @@ spec:
                     type: integer
                 type: object
               phase:
-                description: current phase of the license master
+                description: current phase of the license manager
                 enum:
                 - Pending
                 - Ready

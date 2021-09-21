@@ -66,7 +66,7 @@ var _ = Describe("Smoke test", func() {
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
@@ -90,7 +90,7 @@ var _ = Describe("Smoke test", func() {
 			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
@@ -117,7 +117,7 @@ var _ = Describe("Smoke test", func() {
 			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
@@ -150,7 +150,7 @@ var _ = Describe("Smoke test", func() {
 				},
 			}
 
-			// Create standalone Deployment with License Master
+			// Create standalone Deployment with License Manager
 			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), standaloneSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 

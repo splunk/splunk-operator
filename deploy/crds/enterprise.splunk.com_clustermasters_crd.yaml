@@ -14,7 +14,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of cluster master
+    - description: Status of cluster manager
       jsonPath: .status.phase
       name: Phase
       type: string
@@ -760,7 +760,7 @@ spec:
                 description: Full path or URL for one or more defaults.yml files specific
                   to App install, separated by commas.  The defaults listed here will
                   be installed on the CM, standalone, search head deployer or license
-                  master instance.
+                  manager instance.
                 type: string
               etcVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/etc volume
@@ -896,7 +896,7 @@ spec:
                 type: string
               licenseMasterRef:
                 description: LicenseMasterRef refers to a Splunk Enterprise license
-                  master managed by the operator within Kubernetes
+                  manager managed by the operator within Kubernetes
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -2778,7 +2778,7 @@ spec:
                     type: boolean
                 type: object
               phase:
-                description: current phase of the cluster master
+                description: current phase of the cluster manager
                 enum:
                 - Pending
                 - Ready
