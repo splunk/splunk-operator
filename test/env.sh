@@ -10,7 +10,7 @@
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
-# Below env variables required to run license master test cases
+# Below env variables required to run license manager test cases
 : "${ENTERPRISE_LICENSE_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
 # Below env variables requried to run remote indexes test cases

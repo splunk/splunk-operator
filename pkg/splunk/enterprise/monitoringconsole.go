@@ -72,7 +72,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 		addNewURLs = false
 	}
 
-	//get cluster info from cluster master
+	//get cluster info from cluster manager
 	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
 		c := mgr.getClusterMasterClient(cr)
@@ -115,7 +115,7 @@ func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
-// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster master
+// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster manager
 func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
@@ -208,7 +208,7 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splco
 							},
 							//Below requests/limits for MC are defined taking into account below EC2 validated architecture and its defined limits
 							//1. https://www.splunk.com/pdfs/technical-briefs/deploying-splunk-enterprise-on-amazon-web-services-technical-brief.pdf
-							//defines the validate architecture for License Master and Monitoring console i.e, c5.2xlarge
+							//defines the validate architecture for License Manager and Monitoring console i.e, c5.2xlarge
 							//2. (c5.2xlarge) architecture req from https://aws.amazon.com/ec2/instance-types/c5/
 							//defines that for c5.2xlarge architecture we need 8vCPU and 16Gi memory
 							//since we only have MC here (as we have separate LM) so 4vCPU and 8Gi memory has been set as limit for MC pod

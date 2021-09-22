@@ -210,7 +210,7 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.I
 		}
 	}
 
-	// Set cluster master maintenance mode
+	// Set cluster manager maintenance mode
 	if enable {
 		cr.Status.MaintenanceMode = true
 	} else {
@@ -317,7 +317,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 		During the recycle of indexer pods due to an idxc secret change, if there is a container
 		restart(for example if the splunkd process dies) before the operator
 		deletes the pod, the container restart fails due to mismatch of idxc password between Cluster
-		master and that particular indexer.
+		manager and that particular indexer.
 
 		Changing the idxc passwords on the secrets mounted on the indexer pods to avoid the above.
 	*/
@@ -473,7 +473,7 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
-// getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster master
+// getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster manager
 func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
 	scopedLog := log.WithName("indexerClusterPodManager.getClusterMasterClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
@@ -544,7 +544,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 		return fmt.Errorf("waiting for cluster master to become ready")
 	}
 
-	// get indexer cluster info from cluster master if it's ready
+	// get indexer cluster info from cluster manager if it's ready
 	c := mgr.getClusterMasterClient()
 	clusterInfo, err := c.GetClusterMasterInfo()
 	if err != nil {
@@ -555,7 +555,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 	mgr.cr.Status.ServiceReady = clusterInfo.ServiceReady
 	mgr.cr.Status.MaintenanceMode = clusterInfo.MaintenanceMode
 
-	// get peer information from cluster master
+	// get peer information from cluster manager
 	peers, err := c.GetClusterMasterPeers()
 	if err != nil {
 		return err
@@ -611,7 +611,7 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 		return fmt.Errorf("IndexerCluster spec should refer to ClusterMaster via clusterMasterRef")
 	}
 
-	// Multisite / multipart clusters: can't reference a cluster master located in another namespace because of Service and Secret limitations
+	// Multisite / multipart clusters: can't reference a cluster manager located in another namespace because of Service and Secret limitations
 	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("multisite cluster does not support cluster master to be located in a different namespace")
 	}
