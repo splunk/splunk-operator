@@ -594,6 +594,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 		t.Errorf("Got wrong status or/and refCount. Expected status=on, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
+	appDeployContext2.IsDeploymentInProgress = false
 	err = initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
