@@ -12,6 +12,7 @@ jobs:
   automated-release:
     name: Automated Pre Release
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
