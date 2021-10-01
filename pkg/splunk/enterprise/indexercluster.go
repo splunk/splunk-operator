@@ -139,6 +139,9 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(client, cr, cr.Spec.ClusterMasterRef.Name)
+		if err != nil {
+			return result, err
+		}
 		if cmMonitoringConsoleConfigRef != "" {
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
 			_, err := splctrl.GetStatefulSetByName(client, namespacedName)
@@ -637,7 +640,7 @@ func RetrieveCMSpec(client splcommon.ControllerClient, cr *enterpriseApi.Indexer
 	var monitoringConsoleRef string = ""
 
 	err := client.Get(context.TODO(), namespacedName, &cmCR)
-	if err != nil {
+	if err == nil {
 		monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
 		return monitoringConsoleRef, err
 	}
