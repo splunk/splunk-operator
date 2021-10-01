@@ -91,7 +91,7 @@ var _ = Describe("c3appfw test", func() {
 			err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, 10)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
@@ -145,7 +145,7 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
@@ -217,7 +217,7 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
 
-			// Verify New Indexer On Cluster Master
+			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
 			testenvInstance.Log.Info("Checking for New Indexer On Cluster Master", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
@@ -259,7 +259,7 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase

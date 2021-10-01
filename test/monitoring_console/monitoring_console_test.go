@@ -210,7 +210,7 @@ var _ = Describe("Monitoring Console test", func() {
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), defaultIndexerReplicas, true)
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase

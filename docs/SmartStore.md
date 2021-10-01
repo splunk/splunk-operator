@@ -11,16 +11,18 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
  * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).
  
 
-SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. However, the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custom Resource with SmartStore volume spec, through `SecretRef`
+SmartStore configuration involves indexes, volumes, and the volume credentials. Indexes and volume configurations are configured through the Custom Resource specification. The credentials for accessing the volume can either be done through IAM roles or static credential.  For roles these can be configured via service accounts or annotations.  For static keys the volume credentials are configured securely in a Kubernetes secret object, and that secret object is referred by the Custom Resource with SmartStore volume spec, through `SecretRef`
 
 ## Storing Smartstore Secrets
-Here is an example command to encode and load your remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal=s3_access_key=<access_key> --from-literal=s3_secret_key=<secret_key>`
+Here is an example command to encode and load your static remote storage volume secret key and access key in the kubernetes secret object: `kubectl create secret generic <secret_store_obj> --from-literal=s3_access_key=<access_key> --from-literal=s3_secret_key=<secret_key>`
 
 Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=iRo9guRpeT2EWn18QvpdcqLBcZmW1SDg== --from-literal=s3_secret_key=ZXvNDSfRo64UelY7Y4JZTO1iGSZt5xaQ2`
   
 
 ## Creating a SmartStore-enabled Standalone instance
-1. Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
+1. Configure remote store credentials by either:
+   * Configure IAM role based credentials via service account or annotations, or
+   * Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
 4. Create/Update the Standalone Customer Resource specification with volume and index configuration (see Example below)
@@ -66,10 +68,12 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
  
  
 ## Creating a SmartStore-enabled Indexer Cluster
-1. Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
+1. Configure remote store credentials by either:
+   * Configure IAM role based credentials via service account or annotations, or
+   * Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
-4. Create/Update the Cluster Master Customer Resource specification with volume and index configuration (see Example below)
+4. Create/Update the Cluster Manager Customer Resource specification with volume and index configuration (see Example below)
 5. Apply the Customer Resource specification: kubectl -f apply Clustermaster.yaml
 6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
 
@@ -103,8 +107,8 @@ spec:
 ```
 
 
-The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster master at `/opt/splunk/etc/master-apps/`. 
-Once the SmartStore configuration is populated to Cluster Master's `splunk-operator` app, Operator issues a bundle push command to Cluster Master, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
+The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster manager at `/opt/splunk/etc/master-apps/`. 
+Once the SmartStore configuration is populated to Cluster Manager's `splunk-operator` app, Operator issues a bundle push command to Cluster Manager, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
 
 Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
 
