@@ -56,7 +56,7 @@ func NewAppInstallWorkerPool(numOfWorkers uint64, jobs []enterpriseApi.AppDeploy
 	return w
 }
 
-// Run() is the main work that workers do to install the apps.
+// Run is the main work that workers do to install the apps.
 // Workers wait for the jobs on the jobs channel and pick them up as they come in
 func (w *AppInstallWorkerPool) Run(id int, jobs <-chan *enterpriseApi.AppDeploymentInfo) {
 	scopedLog := log.WithName("AppInstallWorkerPool.run()").WithValues("worker id", id)
@@ -125,7 +125,7 @@ func (w *AppInstallWorkerPool) isAppAlreadyDownloaded(app *enterpriseApi.AppDepl
 	return true
 }
 
-// Start() kicks off the workers to do the job of app installation
+// Start kicks off the workers to do the job of app installation
 func (w *AppInstallWorkerPool) Start() {
 	// start the workers
 	for i := 1; i <= int(w.NumOfWorkers); i++ {

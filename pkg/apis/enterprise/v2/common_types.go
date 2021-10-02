@@ -301,7 +301,7 @@ type AppFrameworkSpec struct {
 	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
-// AppInstallState represents the current install state of the app
+// AppInstallStatus represents the current install state of the app
 type AppInstallStatus struct {
 	AppInstallState AppInstallState `json:"appInstallState,omitempty"`
 }
