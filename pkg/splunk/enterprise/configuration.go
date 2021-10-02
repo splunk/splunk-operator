@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1038,6 +1039,26 @@ func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName
 	return appFrameworkConf.Defaults.Scope
 }
 
+// getAppSrcSpec returns AppSourceSpec from the app source name
+func getAppSrcSpec(appSources []enterpriseApi.AppSourceSpec, appSrcName string) (enterpriseApi.AppSourceSpec, error) {
+	var appSrcSpec enterpriseApi.AppSourceSpec
+	var err error
+	var found bool
+
+	for _, appSrc := range appSources {
+		if appSrc.Name == appSrcName {
+			appSrcSpec = appSrc
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		err = fmt.Errorf("unable to find app source spec for app source: %s", appSrcName)
+	}
+	return appSrcSpec, err
+}
+
 // CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
 func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) bool {
 	for _, appSrc := range appFrameworkConf.AppSources {
@@ -1139,6 +1160,7 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 
 	// Set the value in status field to be same as that in spec.
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
+	appContext.AppsStatusMaxConcurrentAppDownloads = appFramework.MaxConcurrentAppDownloads
 
 	if appContext.AppsRepoStatusPollInterval <= 0 {
 		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates")
@@ -1149,6 +1171,17 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
+	}
+
+	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
+		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Defaulting to 5.")
+		appContext.AppsStatusMaxConcurrentAppDownloads = 5
+	}
+
+	// check whether the temporary volume to download apps is mounted or not on the operator pod
+	if _, err := os.Stat(splcommon.AppDownloadVolume); os.IsNotExist(err) {
+		scopedLog.Error(err, "directory /opt/splunk/appframework/ needs to be mounted on operator pod to download apps. Please mount this as a separate volume on operator pod.")
+		return err
 	}
 
 	err = validateRemoteVolumeSpec(appFramework.VolList, true)

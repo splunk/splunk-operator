@@ -697,6 +697,11 @@ spec:
                         description: Remote Storage Volume name
                         type: string
                     type: object
+                  maxConcurrentAppDownloads:
+                    description: Maximum number of apps that can be downloaded at
+                      same time
+                    format: int64
+                    type: integer
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -2706,6 +2711,11 @@ spec:
                             description: Remote Storage Volume name
                             type: string
                         type: object
+                      maxConcurrentAppDownloads:
+                        description: Maximum number of apps that can be downloaded
+                          at same time
+                        format: int64
+                        type: integer
                       volumes:
                         description: List of remote storage volumes
                         items:
@@ -2747,6 +2757,15 @@ spec:
                               Size:
                                 format: int64
                                 type: integer
+                              appInstallStatus:
+                                description: AppInstallState represents the current
+                                  install state of the app
+                                properties:
+                                  appInstallState:
+                                    description: AppInstallState represents the install
+                                      status of app
+                                    type: integer
+                                type: object
                               appName:
                                 type: string
                               deployStatus:
@@ -2771,6 +2790,11 @@ spec:
                       App changes This is introduced here so that we dont do spec
                       validation in every reconcile just because the spec and status
                       are different.
+                    format: int64
+                    type: integer
+                  appsStatusMaxConcurrentAppDownloads:
+                    description: Represents the Status field for maximum number of
+                      apps that can be downloaded at same time
                     format: int64
                     type: integer
                   isDeploymentInProgress:

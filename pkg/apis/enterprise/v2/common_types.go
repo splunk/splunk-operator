@@ -71,6 +71,24 @@ const (
 	DeployStatusError
 )
 
+// AppInstallState represents the install status of app
+type AppInstallState uint8
+
+// Values to represent the Pod App deployment status
+const (
+	// Indicates that download of app has not started yet
+	DownloadNotStarted AppInstallState = iota + 1
+
+	// Download of the app on splunk operator pod is in progress
+	DownloadInProgress
+
+	// Download of app is complete on the Splunk operator pod
+	DownloadComplete
+
+	// Failed to download the App on the Splunk Operator pod
+	DownloadError
+)
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
@@ -278,6 +296,14 @@ type AppFrameworkSpec struct {
 
 	// List of App sources on remote storage
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
+
+	// Maximum number of apps that can be downloaded at same time
+	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
+}
+
+// AppInstallState represents the current install state of the app
+type AppInstallStatus struct {
+	AppInstallState AppInstallState `json:"appInstallState,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information
@@ -288,6 +314,7 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+	AppInstallStatus AppInstallStatus    `json:"appInstallStatus"`
 }
 
 // AppSrcDeployInfo represents deployment info for list of Apps
@@ -316,4 +343,7 @@ type AppDeploymentContext struct {
 	// This is introduced here so that we dont do spec validation in every reconcile just
 	// because the spec and status are different.
 	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
+
+	// Represents the Status field for maximum number of apps that can be downloaded at same time
+	AppsStatusMaxConcurrentAppDownloads uint64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
 }
