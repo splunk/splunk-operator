@@ -38,7 +38,7 @@ var logC = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
-	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-master is used
+	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
 	// to set the label app.kubernetes.io/part-of on all the parts so that its indexer service can select
 	// the indexers from all the parts. Otherwise partOfIdentifier is equal to instanceIdentifier.
 	if instanceType != SplunkIndexer || len(partOfIdentifier) == 0 {
@@ -133,7 +133,7 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 			partOfIdentifier = instanceIdentifier
 			instanceIdentifier = ""
 		} else {
-			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-master
+			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
 			partOfIdentifier = spec.ClusterMasterRef.Name
 		}
@@ -573,7 +573,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 
 		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
-		// propagated through the CM master apps bundle push
+		// propagated through the CM manager apps bundle push
 		// 2. In case of Standalone, reset the Pod, by updating the latest Resource version of the
 		// smartstore config map.
 		if instanceType == SplunkStandalone {
@@ -677,10 +677,10 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		})
 	}
 
-	// append URL for cluster master, if configured
+	// append URL for cluster manager, if configured
 	var clusterMasterURL string
 	if instanceType == SplunkClusterMaster {
-		// This makes splunk-ansible configure indexer-discovery on cluster-master
+		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterMasterURL = "localhost"
 	} else if spec.ClusterMasterRef.Name != "" {
 		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
@@ -847,29 +847,33 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 		return false
 	}
 
-	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
-		// Ideally, this should have been detected in Spec validation time
-		if err != nil {
-			*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
-			return false
-		}
-
-		// Check if the secret version is already tracked, and if there is a change in it
-		if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
-			if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-				scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
-				ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
-				return true
+		if volume.SecretRef != "" {
+			namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
+			// Ideally, this should have been detected in Spec validation time
+			if err != nil {
+				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+				return false
 			}
-			return false
-		}
 
-		// First time adding to track the secret resource version
-		ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+			// Check if the secret version is already tracked, and if there is a change in it
+			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
+				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
+					scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
+					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+					return true
+				}
+				return false
+			}
+
+			// First time adding to track the secret resource version
+			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
+		} else {
+			scopedLog.Info("No valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+		}
 	}
 
 	return false
@@ -1034,6 +1038,8 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 
 	duplicateChecker := make(map[string]bool)
 
+	scopedLog := log.WithName("validateRemoteVolumeSpec")
+
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {
@@ -1050,8 +1056,9 @@ func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework
 		if volume.Path == "" {
 			return fmt.Errorf("Volume Path is missing")
 		}
+		// Make the secretRef optional if theyre using IAM roles
 		if volume.SecretRef == "" {
-			return fmt.Errorf("Volume SecretRef is missing")
+			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
 		}
 
 		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
@@ -1146,14 +1153,17 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
+	scopedLog := log.WithName("GetSmartstoreVolumesConfig")
+
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {
-		s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
-		if err != nil {
-			return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
-		}
+		if volumes[i].SecretRef != "" {
+			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
+			if err != nil {
+				return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+			}
 
-		volumesConf = fmt.Sprintf(`%s
+			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
 path = s3://%s
@@ -1161,6 +1171,15 @@ remote.s3.access_key = %s
 remote.s3.secret_key = %s
 remote.s3.endpoint = %s
 `, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint)
+		} else {
+			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
+			volumesConf = fmt.Sprintf(`%s
+[volume:%s]
+storageType = remote
+path = s3://%s
+remote.s3.endpoint = %s
+`, volumesConf, volumes[i].Name, volumes[i].Path, volumes[i].Endpoint)
+		}
 	}
 
 	return volumesConf, nil

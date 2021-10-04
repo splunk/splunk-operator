@@ -51,7 +51,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("monitoring_console, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("monitoringconsole, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 
 			standaloneOneName := deployment.GetName()
 			standaloneOne, err := deployment.DeployStandalone(standaloneOneName)
@@ -144,7 +144,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("monitoring_console: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("monitoringconsole, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -203,14 +203,14 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("monitoring_console, integration: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("monitoringconsole, integration: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), defaultIndexerReplicas, true)
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase

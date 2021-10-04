@@ -2,8 +2,6 @@ package smartstore
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,14 +10,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-func dumpGetPods(ns string) {
-	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	for _, line := range strings.Split(string(output), "\n") {
-		testenvInstance.Log.Info(line)
-	}
-}
-
-var _ = Describe("Smoke test", func() {
+var _ = Describe("Smartstore test", func() {
 
 	var deployment *testenv.Deployment
 
@@ -171,7 +162,7 @@ var _ = Describe("Smoke test", func() {
 			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(deployment.GetName(), 1, siteCount, testenvInstance.GetIndexSecretName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase

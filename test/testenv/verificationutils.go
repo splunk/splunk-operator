@@ -140,9 +140,9 @@ func SingleSiteIndexersReady(deployment *Deployment, testenvInstance *TestEnv) {
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
-// ClusterMasterReady verify Cluster Master Instance is in ready status
+// ClusterMasterReady verify Cluster Manager Instance is in ready status
 func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
-	// Ensure that the cluster-master goes to Ready phase
+	// Ensure that the cluster-manager goes to Ready phase
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), cm)
@@ -155,7 +155,7 @@ func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
-	// In a steady state, cluster-master should stay in Ready and not flip-flop around
+	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(deployment.GetName(), cm)
 		return cm.Status.Phase
@@ -229,7 +229,7 @@ func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyNoDisconnectedSHPresentOnCM is present on cluster master
+// VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
 func VerifyNoDisconnectedSHPresentOnCM(deployment *Deployment, testenvInstance *TestEnv) {
 	gomega.Consistently(func() bool {
 		shStatus := CheckSearchHeadRemoved(deployment)
@@ -433,7 +433,7 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyClusterMasterPhase verify phase of cluster master
+// VerifyClusterMasterPhase verify phase of cluster manager
 func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
@@ -608,7 +608,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 				}
 
 				if versionCheck {
-					// For clusterwide install do not check for versions on deployer and cluster-master as the apps arent installed there
+					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
 					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-master-"))) {
 						var expectedVersion string
 						if checkupdated {
@@ -649,7 +649,7 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 // VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
 func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
 	gomega.Eventually(func() bool {
-		// Useing checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
+		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(deployment, podName, path, checkAppDirectory)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
