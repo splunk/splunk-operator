@@ -37,10 +37,6 @@ jobs:
       run: |
         echo "SHORT_SHA=${GITHUB_SHA::12}" >> $GITHUB_ENV
         echo $SHORT_SHA
-   
-    - name: Get current date
-      id: date
-      run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
 
     - name: Configure Docker Credentials
       uses: docker/login-action@v1
@@ -76,6 +72,7 @@ jobs:
     - name: Run Make Package
       run: |
         build/package.sh
+        docker images
   
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v2
@@ -97,11 +94,15 @@ jobs:
         tag: "${{ github.event.inputs.release_version }}"
         draft: true
 
-    - name: Tag Splunk Operator Image
+    - name: Promote LATEST Splunk Operator Image to Release TAG
+      run: |
+        docker tag splunk/splunk-operator:latest splunk/splunk-operator:${{ github.event.inputs.release_version }}
+
+    - name: Tag Splunk Operator Image if not same as release tag
       if: github.event.inputs.release_version != github.event.inputs.operator_image_tag
       run: |
         docker tag splunk/splunk-operator:${{ github.event.inputs.release_version }} splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
 
-    - name: Tag and Push release RC Image
+    - name: Push Release Image
       run: |
         docker push splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
