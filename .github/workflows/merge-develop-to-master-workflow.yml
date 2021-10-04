@@ -25,7 +25,7 @@ jobs:
       with:
         branch: "promote-develop-to-master-${{ github.event.inputs.release_version }}"
         base: "master"
-        title: "Promote Develop to Master for Splunk Operator Release ${{ github.event.inputs.release_version }}"
+        title: "Splunk Operator Release ${{ github.event.inputs.release_version }}"
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
           Automated Pull Request To Merge Develop To Master For Release Version ${{ github.event.inputs.release_version }}
