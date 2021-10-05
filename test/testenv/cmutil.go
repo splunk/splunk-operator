@@ -17,10 +17,12 @@ package testenv
 import (
 	"encoding/json"
 	"fmt"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-manager
@@ -112,6 +114,7 @@ type ClusterMasterPeersAndSearchHeadResponse struct {
 			SplunkVersion                          string `json:"splunk_version"`
 			Status                                 string `json:"status"`
 			SummaryReplicationCount                int    `json:"summary_replication_count"`
+			BundleID                               string `json:"active_bundle_id"`
 		} `json:"content"`
 	} `json:"entry"`
 }
@@ -200,13 +203,33 @@ func RollHotBuckets(deployment *Deployment) bool {
 	return false
 }
 
-// RollingRestartEndpointResponse is represtentation of /services/cluster/manager/info endpiont
-type RollingRestartEndpointResponse struct {
+// ClusterMasterInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint
+type ClusterMasterInfoEndpointResponse struct {
 	Entry []struct {
 		Content struct {
-			RollingRestartFlag bool `json:"rolling_restart_flag"`
+			RollingRestartFlag bool              `json:"rolling_restart_flag"`
+			ActiveBundle       map[string]string `json:"active_bundle"`
 		} `json:"content"`
 	} `json:"entry"`
+}
+
+// ClusterMasterInfoResponse Get cluster Manager response
+func ClusterMasterInfoResponse(deployment *Deployment, podName string) ClusterMasterInfoEndpointResponse {
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/info?output_mode=json"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	restResponse := ClusterMasterInfoEndpointResponse{}
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return restResponse
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	err = json.Unmarshal([]byte(stdout), &restResponse)
+	if err != nil {
+		logf.Log.Error(err, "Failed to parse cluster Manager response")
+		return restResponse
+	}
+	return restResponse
 }
 
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
@@ -220,7 +243,7 @@ func CheckRollingRestartStatus(deployment *Deployment) bool {
 		return false
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := RollingRestartEndpointResponse{}
+	restResponse := ClusterMasterInfoEndpointResponse{}
 	err = json.Unmarshal([]byte(stdout), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse cluster searchheads")
@@ -231,4 +254,34 @@ func CheckRollingRestartStatus(deployment *Deployment) bool {
 		rollingRestart = entry.Content.RollingRestartFlag
 	}
 	return rollingRestart
+}
+
+// ClusterManagerBundlePushstatus Check for bundle push status on ClusterManager
+func ClusterManagerBundlePushstatus(deployment *Deployment, previousBundleHash string) map[string]string {
+	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "")
+
+	bundleStatus := make(map[string]string)
+	for _, entry := range restResponse.Entry {
+		// Check if new bundle was pushed by comparing hash
+		if previousBundleHash != "" {
+			if entry.Content.BundleID == previousBundleHash {
+				logf.Log.Info("Bundle hash not updated", "old Bundle hash", previousBundleHash, "new Bundle hash", entry.Content.BundleID)
+				continue
+			}
+		}
+		bundleStatus[entry.Content.Label] = entry.Content.Status
+	}
+
+	logf.Log.Info("Bundle status", "status", bundleStatus)
+	return bundleStatus
+}
+
+// GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
+func GetClusterManagerBundleHash(deployment *Deployment) string {
+	podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+	restResponse := ClusterMasterInfoResponse(deployment, podName)
+
+	bundleHash := restResponse.Entry[0].Content.ActiveBundle["checksum"]
+	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
+	return bundleHash
 }
