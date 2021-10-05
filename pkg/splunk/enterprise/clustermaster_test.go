@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -478,6 +479,14 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		},
 	}
 
+	// to pass the validation stage, add the directory to download apps
+	err := os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
 	client := spltest.NewMockClient()
 
 	// Create S3 secret
@@ -486,7 +495,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -573,6 +582,14 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 
 	_, err = ApplyClusterMaster(c, &cm)
 	if err != nil {

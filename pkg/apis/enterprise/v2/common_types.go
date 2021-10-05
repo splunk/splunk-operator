@@ -71,13 +71,13 @@ const (
 	DeployStatusError
 )
 
-// AppInstallState represents the install status of app
-type AppInstallState uint8
+// AppDownloadState represents the download status of app
+type AppDownloadState uint8
 
 // Values to represent the Pod App deployment status
 const (
 	// Indicates that download of app has not started yet
-	DownloadNotStarted AppInstallState = iota + 1
+	DownloadNotStarted AppDownloadState = iota + 1
 
 	// Download of the app on splunk operator pod is in progress
 	DownloadInProgress
@@ -303,7 +303,7 @@ type AppFrameworkSpec struct {
 
 // AppInstallStatus represents the current install state of the app
 type AppInstallStatus struct {
-	AppInstallState AppInstallState `json:"appInstallState,omitempty"`
+	AppDownloadState AppDownloadState `json:"appInstallState,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information

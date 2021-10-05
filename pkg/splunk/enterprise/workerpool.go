@@ -71,10 +71,10 @@ func (w *AppInstallWorkerPool) Run(id int, jobs <-chan *enterpriseApi.AppDeploym
 		err := w.S3ClientMgr.DownloadApp(remoteFile, localFile, *object.Etag)
 		if err != nil {
 			scopedLog.Error(err, "unable to download app", "appName", job.AppName)
-			setAppInstallState(job, enterpriseApi.DownloadError)
+			setAppDownloadState(job, enterpriseApi.DownloadError)
 		} else {
 			// download is successfull, update the state
-			setAppInstallState(job, enterpriseApi.DownloadComplete)
+			setAppDownloadState(job, enterpriseApi.DownloadComplete)
 
 			//TODO: gaurav, need to fill in below code
 			// copy the app to the splunk pod
@@ -119,9 +119,6 @@ func (w *AppInstallWorkerPool) isAppAlreadyDownloaded(app *enterpriseApi.AppDepl
 		return false
 	}
 
-	// If we reached here, this means app was downloaded successfuly to operator pod,
-	// mark this as DownloadComplete
-	setAppInstallState(app, enterpriseApi.DownloadComplete)
 	return true
 }
 
@@ -138,10 +135,14 @@ func (w *AppInstallWorkerPool) Start() {
 		for index := 0; index < len(w.JobList); index++ {
 			app := w.JobList[index]
 
-			switch getAppInstallState(app) {
+			switch getAppDownloadState(app) {
 			case enterpriseApi.DownloadNotStarted:
 				// check if we have already downloaded the app
 				if w.isAppAlreadyDownloaded(app) {
+					// This means app was downloaded successfuly to operator pod,
+					// mark this as DownloadComplete
+					setAppDownloadState(app, enterpriseApi.DownloadComplete)
+
 					//TODO: check for app copy and untar state
 					continue
 				}
@@ -150,8 +151,8 @@ func (w *AppInstallWorkerPool) Start() {
 					w.availableDiskSpace = w.availableDiskSpace - app.Size
 					w.wg.Add(1)
 
-					// set the app install state as DownloadInProgress
-					setAppInstallState(app, enterpriseApi.DownloadInProgress)
+					// set the app download state as DownloadInProgress
+					setAppDownloadState(app, enterpriseApi.DownloadInProgress)
 
 					// add the job to the jobs channel
 					w.JobsChan <- app

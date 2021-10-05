@@ -269,8 +269,8 @@ func getRemoteObjectFromS3Response(appName string, s3Response splclient.S3Respon
 	return nil
 }
 
-// appInstallStateAsStr cnoverts the state enum to corresponding string
-func appInstallStateAsStr(state enterpriseApi.AppInstallState) string {
+// appDownloadStateAsStr cnoverts the state enum to corresponding string
+func appDownloadStateAsStr(state enterpriseApi.AppDownloadState) string {
 	switch state {
 	case enterpriseApi.DownloadNotStarted:
 		return "Download Not Started"
@@ -283,16 +283,16 @@ func appInstallStateAsStr(state enterpriseApi.AppInstallState) string {
 	}
 }
 
-// setAppInstallState sets tha app install state for an app
-func setAppInstallState(appInfo *enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppInstallState) {
-	scopedLog := log.WithName("setAppInstallState").WithValues("app name", appInfo.AppName)
-	scopedLog.Info("Setting the install state for app", "old install state", appInstallStateAsStr(appInfo.AppInstallStatus.AppInstallState), "new install state", appInstallStateAsStr(state))
-	appInfo.AppInstallStatus.AppInstallState = state
+// setAppDownloadState sets tha app install state for an app
+func setAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppDownloadState) {
+	scopedLog := log.WithName("setAppDownloadState").WithValues("app name", appInfo.AppName)
+	scopedLog.Info("Setting the download state for app", "old download state", appDownloadStateAsStr(appInfo.AppInstallStatus.AppDownloadState), "new download state", appDownloadStateAsStr(state))
+	appInfo.AppInstallStatus.AppDownloadState = state
 }
 
-// getAppInstallState returns the current app install state of the app
-func getAppInstallState(appInfo *enterpriseApi.AppDeploymentInfo) enterpriseApi.AppInstallState {
-	return appInfo.AppInstallStatus.AppInstallState
+// getAppDownloadState returns the current app install state of the app
+func getAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo) enterpriseApi.AppDownloadState {
+	return appInfo.AppInstallStatus.AppDownloadState
 }
 
 // createAppDownloadDir creates the app download directory on the operator pod
@@ -357,7 +357,7 @@ func handleAppInstallPerAppSrc(client splcommon.ControllerClient, cr splcommon.M
 // 3. untar the app in correct location on splunk pod.
 // 4. And finally, installing app on the splunk pod.
 // This is how the directory structure will look like on operator pod -
-// /opt/splunk/appframework
+// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/
 // |--<crname>
 //       |--<cluster>
 //       |   |--appSrc_1
@@ -386,7 +386,13 @@ func handleAppInstall(client splcommon.ControllerClient, cr splcommon.MetaObject
 
 		scope = getAppSrcScope(appFrameworkConfig, appSrcName)
 
-		localPath := filepath.Join(splcommon.AppDownloadVolume, cr.GetName(), scope, appSrcName) + "/"
+		kind := cr.GetObjectKind().GroupVersionKind().Kind
+		// This is how the path to download apps looks like -
+		// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/<CR_Name>/<scope>/<appSrc_Name>/
+		// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
+		// in default namespace, then it will be downloaded at the path -
+		// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
+		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), kind, cr.GetName(), scope, appSrcName) + "/"
 
 		// create the sub-directories on the volume for downloading scoped apps
 		err = createAppDownloadDir(localPath)
@@ -394,14 +400,16 @@ func handleAppInstall(client splcommon.ControllerClient, cr splcommon.MetaObject
 			return err
 		}
 
-		// get the app source spec to get the volume configuration
+		//TODO: gaurav, handle below two conditions more gracefully in future,
+		// and continue with installation of apps in other app sources.
+		// Get the app source spec to get the volume configuration
 		var vol enterpriseApi.VolumeSpec
 		appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
 		if err != nil {
 			return err
 		}
 
-		vol, err = splclient.GetAppSrcVolume(appSrc, appFrameworkConfig)
+		vol, err = splclient.GetAppSrcVolume(*appSrc, appFrameworkConfig)
 		if err != nil {
 			return err
 		}
@@ -964,7 +972,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 					scopedLog.Info("App change detected,marking for an update.", "App name", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
-					appList[idx].AppInstallStatus.AppInstallState = enterpriseApi.DownloadNotStarted
+					appList[idx].AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
@@ -986,7 +994,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
 			appDeployInfo.DeployStatus = enterpriseApi.DeployStatusPending
-			appDeployInfo.AppInstallStatus.AppInstallState = enterpriseApi.DownloadNotStarted
+			appDeployInfo.AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
 
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
@@ -1253,6 +1261,9 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 			// TODO: gaurav, this will eventually go outside this if condition,
 			// so that we can continue installation work across reconciles.
+			// As of now, we will only return from this function when the download of apps is complete
+			// in the current reconcile. We have to implement a yield logic to break from the
+			// installations in the current reconcile and continue in the next reconcile.
 			// handle the app install
 			err = handleAppInstall(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
 			if err != nil {

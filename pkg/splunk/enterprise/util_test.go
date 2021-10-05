@@ -291,6 +291,14 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		t.Errorf("Failed to create namespace scoped object")
 	}
 
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateClusterMasterSpec(&cr); err != nil {

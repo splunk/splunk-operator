@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -678,6 +679,14 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
 	_, err = ApplySearchHeadCluster(client, &cr)
 	if err != nil {
 		t.Errorf("ApplySearchHeadCluster should be successful")
@@ -1087,6 +1096,14 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 
 	_, err = ApplySearchHeadCluster(c, &shc)
 	if err != nil {

@@ -2636,11 +2636,11 @@ spec:
                                 format: int64
                                 type: integer
                               appInstallStatus:
-                                description: AppInstallState represents the current
+                                description: AppInstallStatus represents the current
                                   install state of the app
                                 properties:
                                   appInstallState:
-                                    description: AppInstallState represents the install
+                                    description: AppDownloadState represents the download
                                       status of app
                                     type: integer
                                 type: object

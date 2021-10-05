@@ -1040,23 +1040,17 @@ func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName
 }
 
 // getAppSrcSpec returns AppSourceSpec from the app source name
-func getAppSrcSpec(appSources []enterpriseApi.AppSourceSpec, appSrcName string) (enterpriseApi.AppSourceSpec, error) {
-	var appSrcSpec enterpriseApi.AppSourceSpec
+func getAppSrcSpec(appSources []enterpriseApi.AppSourceSpec, appSrcName string) (*enterpriseApi.AppSourceSpec, error) {
 	var err error
-	var found bool
 
 	for _, appSrc := range appSources {
 		if appSrc.Name == appSrcName {
-			appSrcSpec = appSrc
-			found = true
-			break
+			return &appSrc, err
 		}
 	}
 
-	if !found {
-		err = fmt.Errorf("unable to find app source spec for app source: %s", appSrcName)
-	}
-	return appSrcSpec, err
+	err = fmt.Errorf("unable to find app source spec for app source: %s", appSrcName)
+	return nil, err
 }
 
 // CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
@@ -1174,13 +1168,13 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 	}
 
 	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
-		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Defaulting to 5.")
-		appContext.AppsStatusMaxConcurrentAppDownloads = 5
+		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Setting it to default value", splcommon.DefaultMaxConcurrentAppDownloads)
+		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
 	}
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
 	if _, err := os.Stat(splcommon.AppDownloadVolume); os.IsNotExist(err) {
-		scopedLog.Error(err, "directory /opt/splunk/appframework/ needs to be mounted on operator pod to download apps. Please mount this as a separate volume on operator pod.")
+		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", splcommon.AppDownloadVolume)
 		return err
 	}
 
