@@ -1,44 +1,45 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: searchheadclusters.enterprise.splunk.com
+  name: indexerclusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: SearchHeadCluster
-    listKind: SearchHeadClusterList
-    plural: searchheadclusters
+    kind: IndexerCluster
+    listKind: IndexerClusterList
+    plural: indexerclusters
     shortNames:
-    - shc
-    singular: searchheadcluster
+    - idc
+    - idxc
+    singular: indexercluster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of search head cluster
+    - description: Status of indexer cluster
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of the deployer
-      jsonPath: .status.deployerPhase
-      name: Deployer
+    - description: Status of cluster master
+      jsonPath: .status.clusterMasterPhase
+      name: Master
       type: string
-    - description: Desired number of search head cluster members
+    - description: Desired number of indexer peers
       jsonPath: .status.replicas
       name: Desired
       type: integer
-    - description: Current number of ready search head cluster members
+    - description: Current number of ready indexer peers
       jsonPath: .status.readyReplicas
       name: Ready
       type: integer
-    - description: Age of search head cluster
+    - description: Age of indexer cluster
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    name: v2
     schema:
       openAPIV3Schema:
-        description: SearchHeadCluster is the Schema for a Splunk Enterprise search
-          head cluster
+        description: IndexerCluster is the Schema for a Splunk Enterprise indexer
+          cluster
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -53,8 +54,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: SearchHeadClusterSpec defines the desired state of a Splunk
-              Enterprise search head cluster
+            description: IndexerClusterSpec defines the desired state of a Splunk
+              Enterprise indexer cluster
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -651,84 +652,6 @@ spec:
                         type: array
                     type: object
                 type: object
-              appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
-                  location and scope for Splunk App management
-                properties:
-                  appSources:
-                    description: List of App sources on remote storage
-                    items:
-                      description: AppSourceSpec defines list of App package (*.spl,
-                        *.tgz) locations on remote volumes
-                      properties:
-                        location:
-                          description: Location relative to the volume path
-                          type: string
-                        name:
-                          description: Logical name for the set of apps placed in
-                            this location. Logical name must be unique to the appRepo
-                          type: string
-                        scope:
-                          description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                            local. Scope determines whether the App(s) is/are installed
-                            locally or cluster-wide'
-                          type: string
-                        volumeName:
-                          description: Remote Storage Volume name
-                          type: string
-                      type: object
-                    type: array
-                  appsRepoPollIntervalSeconds:
-                    description: Interval in seconds to check the Remote Storage for
-                      App changes. The default value for this config is 1 hour(3600
-                      sec), minimum value is 1 minute(60sec) and maximum value is
-                      1 day(86400 sec). We assign the value based on following conditions
-                      -    1. If no value or 0 is specified then it will be defaulted
-                      to 1 hour.    2. If anything less than min is specified then
-                      we set it to 1 min.    3. If anything more than the max value
-                      is specified then we set it to 1 day.
-                    format: int64
-                    type: integer
-                  defaults:
-                    description: Defines the default configuration settings for App
-                      sources
-                    properties:
-                      scope:
-                        description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                          local. Scope determines whether the App(s) is/are installed
-                          locally or cluster-wide'
-                        type: string
-                      volumeName:
-                        description: Remote Storage Volume name
-                        type: string
-                    type: object
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3'
-                          type: string
-                      type: object
-                    type: array
-                type: object
               clusterMasterRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -959,43 +882,6 @@ spec:
                   a higher value'
                 format: int32
                 type: integer
-              monitoringConsoleRef:
-                description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
-                  console managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: 'If referring to a piece of an object instead of
-                      an entire object, this string should contain a valid JSON/Go
-                      field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within
-                      a pod, this would take on a value like: "spec.containers{name}"
-                      (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]"
-                      (container with index 2 in this pod). This syntax is chosen
-                      only to have some well-defined way of referencing a part of
-                      an object. TODO: this design is not final and this field is
-                      subject to change in the future.'
-                    type: string
-                  kind:
-                    description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                    type: string
-                  name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
-                    type: string
-                  namespace:
-                    description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
-                    type: string
-                  resourceVersion:
-                    description: 'Specific resourceVersion to which this reference
-                      is made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                    type: string
-                  uid:
-                    description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
-                    type: string
-                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
@@ -2580,165 +2466,16 @@ spec:
                 type: array
             type: object
           status:
-            description: SearchHeadClusterStatus defines the observed state of a Splunk
-              Enterprise search head cluster
+            description: IndexerClusterStatus defines the observed state of a Splunk
+              Enterprise indexer cluster
             properties:
-              adminPasswordChangedSecrets:
+              IdxcPasswordChangedSecrets:
                 additionalProperties:
                   type: boolean
-                description: Holds secrets whose admin password has changed
+                description: Holds secrets whose IDXC password has changed
                 type: object
-              adminSecretChangedFlag:
-                description: Indicates when the admin password has been changed for
-                  a peer
-                items:
-                  type: boolean
-                type: array
-              appContext:
-                description: App Framework Context
-                properties:
-                  appRepo:
-                    description: List of App package (*.spl, *.tgz) locations on remote
-                      volume
-                    properties:
-                      appSources:
-                        description: List of App sources on remote storage
-                        items:
-                          description: AppSourceSpec defines list of App package (*.spl,
-                            *.tgz) locations on remote volumes
-                          properties:
-                            location:
-                              description: Location relative to the volume path
-                              type: string
-                            name:
-                              description: Logical name for the set of apps placed
-                                in this location. Logical name must be unique to the
-                                appRepo
-                              type: string
-                            scope:
-                              description: 'Scope of the App deployment: cluster,
-                                clusterWithPreConfig, local. Scope determines whether
-                                the App(s) is/are installed locally or cluster-wide'
-                              type: string
-                            volumeName:
-                              description: Remote Storage Volume name
-                              type: string
-                          type: object
-                        type: array
-                      appsRepoPollIntervalSeconds:
-                        description: Interval in seconds to check the Remote Storage
-                          for App changes. The default value for this config is 1
-                          hour(3600 sec), minimum value is 1 minute(60sec) and maximum
-                          value is 1 day(86400 sec). We assign the value based on
-                          following conditions -    1. If no value or 0 is specified
-                          then it will be defaulted to 1 hour.    2. If anything less
-                          than min is specified then we set it to 1 min.    3. If
-                          anything more than the max value is specified then we set
-                          it to 1 day.
-                        format: int64
-                        type: integer
-                      defaults:
-                        description: Defines the default configuration settings for
-                          App sources
-                        properties:
-                          scope:
-                            description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                              local. Scope determines whether the App(s) is/are installed
-                              locally or cluster-wide'
-                            type: string
-                          volumeName:
-                            description: Remote Storage Volume name
-                            type: string
-                        type: object
-                      volumes:
-                        description: List of remote storage volumes
-                        items:
-                          description: VolumeSpec defines remote volume config
-                          properties:
-                            endpoint:
-                              description: Remote volume URI
-                              type: string
-                            name:
-                              description: Remote volume name
-                              type: string
-                            path:
-                              description: Remote volume path
-                              type: string
-                            provider:
-                              description: 'App Package Remote Store provider. Supported
-                                values: aws, minio'
-                              type: string
-                            secretRef:
-                              description: Secret object name
-                              type: string
-                            storageType:
-                              description: 'Remote Storage type. Supported values:
-                                s3'
-                              type: string
-                          type: object
-                        type: array
-                    type: object
-                  appSrcDeployStatus:
-                    additionalProperties:
-                      description: AppSrcDeployInfo represents deployment info for
-                        list of Apps
-                      properties:
-                        appDeploymentInfo:
-                          items:
-                            description: AppDeploymentInfo represents a single App
-                              deployment information
-                            properties:
-                              Size:
-                                format: int64
-                                type: integer
-                              appName:
-                                type: string
-                              deployStatus:
-                                description: AppDeploymentStatus represents the status
-                                  of an App on the Pod
-                                type: integer
-                              lastModifiedTime:
-                                type: string
-                              objectHash:
-                                type: string
-                              repoState:
-                                description: AppRepoState represent the App state
-                                  on remote store
-                                type: integer
-                            type: object
-                          type: array
-                      type: object
-                    description: Represents the Apps deployment status
-                    type: object
-                  appsRepoStatusPollIntervalSeconds:
-                    description: Interval in seconds to check the Remote Storage for
-                      App changes This is introduced here so that we dont do spec
-                      validation in every reconcile just because the spec and status
-                      are different.
-                    format: int64
-                    type: integer
-                  isDeploymentInProgress:
-                    description: IsDeploymentInProgress indicates if the Apps deployment
-                      is in progress
-                    type: boolean
-                  lastAppInfoCheckTime:
-                    description: This is set to the time when we get the list of apps
-                      from remote storage.
-                    format: int64
-                    type: integer
-                  version:
-                    description: App Framework version info for future use
-                    type: integer
-                type: object
-              captain:
-                description: name or label of the search head captain
-                type: string
-              captainReady:
-                description: true if the search head cluster's captain is ready to
-                  service requests
-                type: boolean
-              deployerPhase:
-                description: current phase of the deployer
+              clusterMasterPhase:
+                description: current phase of the cluster manager
                 enum:
                 - Pending
                 - Ready
@@ -2748,49 +2485,56 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              initialized:
-                description: true if the search head cluster has finished initialization
-                type: boolean
-              maintenanceMode:
-                description: true if the search head cluster is in maintenance mode
-                type: boolean
-              members:
-                description: status of each search head cluster member
+              indexer_secret_changed_flag:
+                description: Indicates when the idxc_secret has been changed for a
+                  peer
                 items:
-                  description: SearchHeadClusterMemberStatus is used to track the
-                    status of each search head cluster member
-                  properties:
-                    active_historical_search_count:
-                      description: Number of currently running historical searches.
-                      type: integer
-                    active_realtime_search_count:
-                      description: Number of currently running realtime searches.
-                      type: integer
-                    adhoc_searchhead:
-                      description: Flag that indicates if this member can run scheduled
-                        searches.
-                      type: boolean
-                    is_registered:
-                      description: Indicates if this member is registered with the
-                        searchhead cluster captain.
-                      type: boolean
-                    name:
-                      description: Name of the search head cluster member
-                      type: string
-                    status:
-                      description: Indicates the status of the member.
-                      type: string
-                  type: object
+                  type: boolean
                 type: array
-              minPeersJoined:
-                description: true if the minimum number of search head cluster members
-                  have joined
+              indexing_ready_flag:
+                description: Indicates if the cluster is ready for indexing.
+                type: boolean
+              initialized_flag:
+                description: Indicates if the cluster is initialized.
+                type: boolean
+              maintenance_mode:
+                description: Indicates if the cluster is in maintenance mode.
                 type: boolean
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
                 type: string
+              peers:
+                description: status of each indexer cluster peer
+                items:
+                  description: IndexerClusterMemberStatus is used to track the status
+                    of each indexer cluster peer.
+                  properties:
+                    active_bundle_id:
+                      description: The ID of the configuration bundle currently being
+                        used by the manager.
+                      type: string
+                    bucket_count:
+                      description: Count of the number of buckets on this peer, across
+                        all indexes.
+                      format: int64
+                      type: integer
+                    guid:
+                      description: Unique identifier or GUID for the peer
+                      type: string
+                    is_searchable:
+                      description: Flag indicating if this peer belongs to the current
+                        committed generation and is searchable.
+                      type: boolean
+                    name:
+                      description: Name of the indexer cluster peer
+                      type: string
+                    status:
+                      description: Status of the indexer cluster peer
+                      type: string
+                  type: object
+                type: array
               phase:
-                description: current phase of the search head cluster
+                description: current phase of the indexer cluster
                 enum:
                 - Pending
                 - Ready
@@ -2801,22 +2545,20 @@ spec:
                 - Error
                 type: string
               readyReplicas:
-                description: current number of ready search head cluster members
+                description: current number of ready indexer peers
                 format: int32
                 type: integer
               replicas:
-                description: desired number of search head cluster members
+                description: desired number of indexer peers
                 format: int32
                 type: integer
               selector:
                 description: selector for pods, used by HorizontalPodAutoscaler
                 type: string
-              shcSecretChangedFlag:
-                description: Indicates when the shc_secret has been changed for a
-                  peer
-                items:
-                  type: boolean
-                type: array
+              service_ready_flag:
+                description: Indicates whether the manager is ready to begin servicing,
+                  based on whether it is initialized.
+                type: boolean
             type: object
         type: object
     served: true
@@ -2827,16 +2569,6 @@ spec:
         specReplicasPath: .spec.replicas
         statusReplicasPath: .status.replicas
       status: {}
-  - name: v2
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
   - name: v1
     served: true
     storage: false

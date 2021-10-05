@@ -54,6 +54,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
 	}
@@ -171,10 +172,6 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 				return result, err
 			}
 		}
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-		}
-
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
@@ -546,7 +543,7 @@ func getSearchHeadStatefulSet(client splcommon.ControllerClient, cr *enterpriseA
 	return ss, nil
 }
 
-// getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
+// getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {

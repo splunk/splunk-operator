@@ -29,7 +29,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
-// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license master.
+// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
 func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
@@ -51,6 +51,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
 	}
@@ -126,6 +127,11 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+			if cr.Status.AppContext.IsDeploymentInProgress {
+				cr.Status.AppContext.IsDeploymentInProgress = false
+				return result, nil
+			}
 		}
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
@@ -137,7 +143,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	return result, nil
 }
 
-// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
+// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
 	if err != nil {

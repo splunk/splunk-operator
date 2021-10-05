@@ -1,44 +1,31 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: searchheadclusters.enterprise.splunk.com
+  name: licensemasters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: SearchHeadCluster
-    listKind: SearchHeadClusterList
-    plural: searchheadclusters
+    kind: LicenseMaster
+    listKind: LicenseMasterList
+    plural: licensemasters
     shortNames:
-    - shc
-    singular: searchheadcluster
+    - lm
+    singular: licensemaster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of search head cluster
+    - description: Status of license manager
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of the deployer
-      jsonPath: .status.deployerPhase
-      name: Deployer
-      type: string
-    - description: Desired number of search head cluster members
-      jsonPath: .status.replicas
-      name: Desired
-      type: integer
-    - description: Current number of ready search head cluster members
-      jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
-    - description: Age of search head cluster
+    - description: Age of license manager
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    name: v2
     schema:
       openAPIV3Schema:
-        description: SearchHeadCluster is the Schema for a Splunk Enterprise search
-          head cluster
+        description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -53,8 +40,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: SearchHeadClusterSpec defines the desired state of a Splunk
-              Enterprise search head cluster
+            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
+              license manager.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -652,7 +639,7 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
+                description: Splunk enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
                   appSources:
@@ -959,53 +946,11 @@ spec:
                   a higher value'
                 format: int32
                 type: integer
-              monitoringConsoleRef:
-                description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
-                  console managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: 'If referring to a piece of an object instead of
-                      an entire object, this string should contain a valid JSON/Go
-                      field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within
-                      a pod, this would take on a value like: "spec.containers{name}"
-                      (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]"
-                      (container with index 2 in this pod). This syntax is chosen
-                      only to have some well-defined way of referencing a part of
-                      an object. TODO: this design is not final and this field is
-                      subject to change in the future.'
-                    type: string
-                  kind:
-                    description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                    type: string
-                  name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
-                    type: string
-                  namespace:
-                    description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
-                    type: string
-                  resourceVersion:
-                    description: 'Specific resourceVersion to which this reference
-                      is made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                    type: string
-                  uid:
-                    description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
-                    type: string
-                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
                   for Readiness probe Note: If needed, Operator overrides with a higher
                   value'
-                format: int32
-                type: integer
-              replicas:
-                description: Number of search head pods; a search head cluster will
-                  be created if > 1
                 format: int32
                 type: integer
               resources:
@@ -2580,20 +2525,9 @@ spec:
                 type: array
             type: object
           status:
-            description: SearchHeadClusterStatus defines the observed state of a Splunk
-              Enterprise search head cluster
+            description: LicenseMasterStatus defines the observed state of a Splunk
+              Enterprise license manager.
             properties:
-              adminPasswordChangedSecrets:
-                additionalProperties:
-                  type: boolean
-                description: Holds secrets whose admin password has changed
-                type: object
-              adminSecretChangedFlag:
-                description: Indicates when the admin password has been changed for
-                  a peer
-                items:
-                  type: boolean
-                type: array
               appContext:
                 description: App Framework Context
                 properties:
@@ -2730,67 +2664,8 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              captain:
-                description: name or label of the search head captain
-                type: string
-              captainReady:
-                description: true if the search head cluster's captain is ready to
-                  service requests
-                type: boolean
-              deployerPhase:
-                description: current phase of the deployer
-                enum:
-                - Pending
-                - Ready
-                - Updating
-                - ScalingUp
-                - ScalingDown
-                - Terminating
-                - Error
-                type: string
-              initialized:
-                description: true if the search head cluster has finished initialization
-                type: boolean
-              maintenanceMode:
-                description: true if the search head cluster is in maintenance mode
-                type: boolean
-              members:
-                description: status of each search head cluster member
-                items:
-                  description: SearchHeadClusterMemberStatus is used to track the
-                    status of each search head cluster member
-                  properties:
-                    active_historical_search_count:
-                      description: Number of currently running historical searches.
-                      type: integer
-                    active_realtime_search_count:
-                      description: Number of currently running realtime searches.
-                      type: integer
-                    adhoc_searchhead:
-                      description: Flag that indicates if this member can run scheduled
-                        searches.
-                      type: boolean
-                    is_registered:
-                      description: Indicates if this member is registered with the
-                        searchhead cluster captain.
-                      type: boolean
-                    name:
-                      description: Name of the search head cluster member
-                      type: string
-                    status:
-                      description: Indicates the status of the member.
-                      type: string
-                  type: object
-                type: array
-              minPeersJoined:
-                description: true if the minimum number of search head cluster members
-                  have joined
-                type: boolean
-              namespace_scoped_secret_resource_version:
-                description: Indicates resource version of namespace scoped secret
-                type: string
               phase:
-                description: current phase of the search head cluster
+                description: current phase of the license manager
                 enum:
                 - Pending
                 - Ready
@@ -2800,43 +2675,12 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              readyReplicas:
-                description: current number of ready search head cluster members
-                format: int32
-                type: integer
-              replicas:
-                description: desired number of search head cluster members
-                format: int32
-                type: integer
-              selector:
-                description: selector for pods, used by HorizontalPodAutoscaler
-                type: string
-              shcSecretChangedFlag:
-                description: Indicates when the shc_secret has been changed for a
-                  peer
-                items:
-                  type: boolean
-                type: array
             type: object
         type: object
     served: true
     storage: true
     subresources:
-      scale:
-        labelSelectorPath: .status.selector
-        specReplicasPath: .spec.replicas
-        statusReplicasPath: .status.replicas
       status: {}
-  - name: v2
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
   - name: v1
     served: true
     storage: false

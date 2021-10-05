@@ -162,7 +162,7 @@ var _ = Describe("Smartstore test", func() {
 			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(deployment.GetName(), 1, siteCount, testenvInstance.GetIndexSecretName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase

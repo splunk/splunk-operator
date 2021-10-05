@@ -178,7 +178,7 @@ func (d *Deployment) PodExecCommand(podName string, cmd []string, stdin string, 
 	return stdout.String(), stderr.String(), nil
 }
 
-//DeployLicenseMaster deploys the license master instance
+//DeployLicenseMaster deploys the license manager instance
 func (d *Deployment) DeployLicenseMaster(name string) (*enterpriseApi.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
@@ -193,7 +193,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterpriseApi.LicenseMas
 	return deployed.(*enterpriseApi.LicenseMaster), err
 }
 
-//DeployClusterMaster deploys the cluster master
+//DeployClusterMaster deploys the cluster manager
 func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansibleConfig string) (*enterpriseApi.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
@@ -204,7 +204,7 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
-//DeployClusterMasterWithSmartStoreIndexes deploys the cluster master with smartstore indexes
+//DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
 func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
@@ -303,9 +303,9 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, s
 
 	var licenseMaster string
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -314,7 +314,7 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, s
 		licenseMaster = name
 	}
 
-	// Deploy the cluster master
+	// Deploy the cluster manager
 	_, err := d.DeployClusterMaster(name, licenseMaster, "")
 	if err != nil {
 		return err
@@ -337,14 +337,14 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, s
 	return nil
 }
 
-// DeployMultisiteClusterWithSearchHead deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+// DeployMultisiteClusterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
 func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerReplicas int, siteCount int) error {
 
 	var licenseMaster string
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -353,7 +353,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
 		licenseMaster = name
 	}
 
-	// Deploy the cluster-master
+	// Deploy the cluster-manager
 	defaults := `splunk:
   multisite_master: localhost
   all_sites: site1,site2,site3
@@ -396,14 +396,14 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
 	return nil
 }
 
-// DeployMultisiteCluster deploys a lm, cluster-master, indexers in multiple sites
+// DeployMultisiteCluster deploys a lm, cluster-manager, indexers in multiple sites
 func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, siteCount int) error {
 
 	var licenseMaster string
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -412,7 +412,7 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 		licenseMaster = name
 	}
 
-	// Deploy the cluster-master
+	// Deploy the cluster-manager
 	defaults := `splunk:
   multisite_master: localhost
   all_sites: site1,site2,site3
@@ -446,13 +446,13 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 	return nil
 }
 
-// DeployStandaloneWithLM deploys a standalone splunk enterprise instance with license master on the specified testenv
+// DeployStandaloneWithLM deploys a standalone splunk enterprise instance with license manager on the specified testenv
 func (d *Deployment) DeployStandaloneWithLM(name string) (*enterpriseApi.Standalone, error) {
 	var licenseMaster string
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return nil, err
@@ -499,14 +499,14 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(name string, smartS
 	return deployed.(*enterpriseApi.Standalone), err
 }
 
-// DeployMultisiteClusterWithSearchHeadAndIndexes deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+// DeployMultisiteClusterWithSearchHeadAndIndexes deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
 func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string, indexerReplicas int, siteCount int, indexesSecret string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
 
 	var licenseMaster string
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -515,7 +515,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 		licenseMaster = name
 	}
 
-	// Deploy the cluster-master
+	// Deploy the cluster-manager
 	defaults := `splunk:
   multisite_master: localhost
   all_sites: site1,site2,site3
@@ -554,7 +554,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 	return err
 }
 
-// DeployClusterMasterWithGivenSpec deploys the cluster master with given SPEC
+// DeployClusterMasterWithGivenSpec deploys the cluster manager with given SPEC
 func (d *Deployment) DeployClusterMasterWithGivenSpec(name string, spec enterpriseApi.ClusterMasterSpec) (*enterpriseApi.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, spec)
@@ -573,7 +573,7 @@ func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name string, spec ente
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
-// DeployLicenseMasterWithGivenSpec deploys the license master with given SPEC
+// DeployLicenseMasterWithGivenSpec deploys the license manager with given SPEC
 func (d *Deployment) DeployLicenseMasterWithGivenSpec(name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
 	d.testenv.Log.Info("Deploying license-master", "name", name)
 	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
@@ -589,9 +589,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 
 	licenseMaster := ""
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -600,7 +600,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 		licenseMaster = name
 	}
 
-	// Deploy the cluster master
+	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: splcommon.Spec{
@@ -654,14 +654,14 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 	return nil
 }
 
-// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-master, indexers in multiple sites (SHC LM Optional) with app framework spec
+// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
 func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int) error {
 
 	licenseMaster := ""
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -670,7 +670,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 		licenseMaster = name
 	}
 
-	// Deploy the cluster-master
+	// Deploy the cluster-manager
 	defaults := `splunk:
   multisite_master: localhost
   all_sites: site1,site2,site3
@@ -684,7 +684,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
     replication_factor: 2
 `
 
-	// Cluster Master Spec
+	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: splcommon.Spec{

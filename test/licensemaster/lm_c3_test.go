@@ -61,7 +61,7 @@ var _ = Describe("Licensemaster test", func() {
 			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase

@@ -28,7 +28,7 @@ import (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// LicenseMasterSpec defines the desired state of a Splunk Enterprise license master.
+// LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
 type LicenseMasterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
@@ -36,9 +36,9 @@ type LicenseMasterSpec struct {
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// LicenseMasterStatus defines the observed state of a Splunk Enterprise license master.
+// LicenseMasterStatus defines the observed state of a Splunk Enterprise license manager.
 type LicenseMasterStatus struct {
-	// current phase of the license master
+	// current phase of the license manager
 	Phase splcommon.Phase `json:"phase"`
 
 	// App Framework Context
@@ -47,11 +47,11 @@ type LicenseMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise license master.
+// LicenseMaster is the Schema for a Splunk Enterprise license manager.
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
 // +kubebuilder:storageversion
 type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`

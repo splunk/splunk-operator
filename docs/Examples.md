@@ -5,8 +5,8 @@ This document includes various examples for configuring Splunk Enterprise deploy
 
   - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
     - [Indexer Clusters](#indexer-clusters)
-      - [Cluster Master](#cluster-master)
-      - [Indexer cluster peers](#indexer-cluster-peers)
+      - [Cluster Manager](#cluster-manager)
+      - [Indexer part](#indexer-part)
       - [Scaling cluster peers using replicas](#scaling-cluster-peers-using-replicas)
       - [Scaling cluster peers using pod autoscaling](#scaling-cluster-peers-using-pod-autoscaling)
       - [Create a search head for your index cluster](#create-a-search-head-for-your-index-cluster)
@@ -19,9 +19,9 @@ This document includes various examples for configuring Splunk Enterprise deploy
   - [Installing Splunk Apps](#installing-splunk-apps)
   - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
   - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
-  - [Configuring Standalone to use License Master](#configuring-standalone-to-use-license-master)
-  - [Configuring Indexer Clusters to use License Master](#configuring-indexer-clusters-to-use-license-master)
-  - [Using an External License Master](#using-an-external-license-master)
+  - [Configuring Standalone to use License Manager](#configuring-standalone-to-use-license-manager)
+  - [Configuring Indexer Clusters to use License Manager](#configuring-indexer-clusters-to-use-license-manager)
+  - [Using an External License Manager](#using-an-external-license-manager)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
   - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
     - [Creating global kubernetes secret object](#creating-global-kubernetes-secret-object)
@@ -52,7 +52,7 @@ The passwords for the instance are generated automatically. To review the passwo
 When customers outgrow the capabilites of single instance for indexing and search, they will scale the infrastructure up to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
 The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMaster` resource for Cluster Master, and using the `IndexerCluster` resource for the cluster peers:
 
-#### Cluster Master
+#### Cluster Manager
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
@@ -257,7 +257,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  # No cluster-master created, uses the referenced one
+  # No cluster-manager created, uses the referenced one
   clusterMasterRef:
     name: cm
   replicas: 3
@@ -502,8 +502,8 @@ spec:
 ```
 
 
-### Example: Cluster Master
-In the ClusterMaster example, app3 and app4 are installed on any indexer instances that are managed by the cluster master. App5 and app6 are installed locally on the ClusterMaster instance.
+### Example: Cluster Manager
+In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterMaster instance.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
@@ -558,7 +558,7 @@ Unlike `defaultsUrl` which is applied at every instance created by the CR, the
 installed via a bundle push.  Search head and indexer cluster members will not have
 the `defaultsUrlApps` parameter applied.  This means:
 
- - For Standalone & License Master, these applications will be installed as normal.
+ - For Standalone & License Manager, these applications will be installed as normal.
  - For SearchHeadClusters, these applications will only be installed on the SHC Deployer
 and pushed to the members via SH Bundle push.
  - For IndexerClusters, these applications will only be installed on the ClusterMaster
@@ -667,7 +667,7 @@ Note that `licenseUrl` may specify a local path or URL such as
 "https://myco.com/enterprise.lic", and the `volumes` parameter can
 be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
 
-## Configuring Standalone to use License Master
+## Configuring Standalone to use License Manager
 
 Once a LicenseMaster is created, you can configure your `Standalone` to use
 the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
@@ -684,7 +684,7 @@ spec:
     name: example
 ```
 
-## Configuring Indexer Clusters to use License Master
+## Configuring Indexer Clusters to use License Manager
 
 While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseMaster`, you need to add `licenseMasterRef` only to the `ClusterMaster` spec as follows:
 
@@ -731,12 +731,12 @@ spec:
     name: example-cm
 ```
 
-## Using an External License Master
+## Using an External License Manager
 
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external License
-Master(LM) with the custom resources it manages. To do this, you will
+Manager(LM) with the custom resources it manages. To do this, you will
 share the same `pass4Symmkey` between the global secret object setup by the
 operator & the external LM, and configure the `splunk.license_master_url`.
 The operator requires that the external LM have a configured
@@ -817,10 +817,10 @@ operator & the external indexer cluster, and configure the `splunk.cluster_maste
 There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Cluster:
 #### Approach 1
 - Setup the desired plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
-- Setup the same plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster master's and indexers' `server.conf` file.
+- Setup the same plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster manager's and indexers' `server.conf` file.
 
 #### Approach 2
-- Retrieve the plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster master's `server.conf` file.
+- Retrieve the plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster manager's `server.conf` file.
   ```
   cat $SPLUNK_HOME/etc/system/local/server.conf
   ...
@@ -839,7 +839,7 @@ There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Clu
 
 ### Configuring cluster_master_url:
 
-Assuming the hostname for your cluster master is `cluster-master.splunk.mydomain.com`,
+Assuming the hostname for your cluster manager is `cluster-master.splunk.mydomain.com`,
 you should create a `default.yml` file with the following contents:
 
 ```yaml

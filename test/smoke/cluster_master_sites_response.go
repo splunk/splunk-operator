@@ -14,7 +14,7 @@
 
 package smoke
 
-// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
+// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-manager
 // Endpoint: /services/cluster/master/sites
 type ClusterMasterSitesResponse struct {
 	Entries []ClusterMasterSitesEntry `json:"entry"`

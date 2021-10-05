@@ -33,7 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster master.
+// ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster manager.
 func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
@@ -91,6 +91,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
 	}
@@ -126,13 +127,13 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 		return result, err
 	}
 
-	// create or update a regular service for the cluster master
+	// create or update a regular service for the cluster manager
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, false))
 	if err != nil {
 		return result, err
 	}
 
-	// create or update statefulset for the cluster master
+	// create or update statefulset for the cluster manager
 	statefulSet, err := getClusterMasterStatefulSet(client, cr)
 	if err != nil {
 		return result, err
@@ -167,12 +168,16 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 				return result, err
 			}
 		}
-
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+			if cr.Status.AppContext.IsDeploymentInProgress {
+				cr.Status.AppContext.IsDeploymentInProgress = false
+				return result, nil
+			}
 		}
 
-		// Master apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
+		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(client, cr)
 		if err != nil {
@@ -226,7 +231,7 @@ func validateClusterMasterSpec(cr *enterpriseApi.ClusterMaster) error {
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
-// getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
+// getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getClusterMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
@@ -273,7 +278,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	return fmt.Errorf("Smartstore ConfigMap is missing")
 }
 
-// PerformCmBundlePush initiates the bundle push from cluster master
+// PerformCmBundlePush initiates the bundle push from cluster manager
 func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
@@ -294,7 +299,7 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 	// The amount of time it takes for the configMap update to Pod depends on
 	// how often the Kubelet on the K8 node refreshes its cache with API server.
 	// From our tests, the Pod can take as high as 90 seconds. So keep checking
-	// for the configMap update to the Pod before proceeding for the master apps
+	// for the configMap update to the Pod before proceeding for the manager apps
 	// bundle push.
 
 	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, cr)
@@ -311,7 +316,7 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 	return err
 }
 
-// PushMasterAppsBundle issues the REST command to for cluster master bundle push
+// PushMasterAppsBundle issues the REST command to for cluster manager bundle push
 func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
