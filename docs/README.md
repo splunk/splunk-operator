@@ -23,7 +23,7 @@ COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product de
 If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
 
 **Community Support & Discussions on
-[Slack](https://splunk-usergroups.slack.com)** channel #kubernetes
+[Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator-for-kubernetes
 
 **File Issues or Enhancements in
 [GitHub](https://github.com/splunk/splunk-operator/issues)** splunk/splunk-operator
