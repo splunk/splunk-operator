@@ -2743,7 +2743,7 @@ spec:
                                 description: AppInstallStatus represents the current
                                   install state of the app
                                 properties:
-                                  appInstallState:
+                                  appDownloadState:
                                     description: AppDownloadState represents the download
                                       status of app
                                     type: integer
