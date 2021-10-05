@@ -74,7 +74,7 @@ const (
 // AppDownloadState represents the download status of app
 type AppDownloadState uint8
 
-// Values to represent the Pod App deployment status
+// Values to represent the Pod App download status
 const (
 	// Indicates that download of app has not started yet
 	DownloadNotStarted AppDownloadState = iota + 1
@@ -303,7 +303,7 @@ type AppFrameworkSpec struct {
 
 // AppInstallStatus represents the current install state of the app
 type AppInstallStatus struct {
-	AppDownloadState AppDownloadState `json:"appInstallState,omitempty"`
+	AppDownloadState AppDownloadState `json:"appDownloadState,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information
