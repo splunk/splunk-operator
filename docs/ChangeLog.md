@@ -1,4 +1,24 @@
 # Splunk Operator for Kubernetes Change Log
+## 1.0.3 (2021-10-05)
+* This is the 1.0.3 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.2 image with it
+
+* CSPL-1230: Remove need for Secret keys in IAM env
+
+* CSPL-1316: Avoid re-entrant code flow for App framework
+
+* CSPL-1302: Bias-language removal Phase 1 [Comments & Docs]
+
+* CSPL-1301: Trigger app install for modified app packages
+
+* CSPL-1283: Fix AWS & minio S3 client code to support App framework on GCS
+
+* CSPL-1271: Fix a bug where standalone with replicas>1 won't come up
+
+* Functional Automation test updates
+
+* Migration of CI/CD from circleCI to GitHub Actions
 
 ## 1.0.2 (2021-08-20)
 * This is the 1.0.2 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
@@ -45,7 +65,7 @@
   * System resources & Storage requirements
   * How to Upgrade Splunk Operator
   * Ingress documentation updates with ngingx examples
-  * How to configure Indexer cluster to use License Master
+  * How to configure Indexer cluster to use License Manager
 
 * Nightly build pipeline enhanced to run on EKS Cluster
 
@@ -117,7 +137,7 @@
 
 * Introduction of SmartStore Index management feature. With this update, SmartStore-enabled Indexes can be configured through Custom resources. For more details, refer to [SmartStore.md](SmartStore.md) 
 
-* Added support for deployment of Multi-site Indexer Cluster. This release introduces a new ClusterMaster Custom Resource, thus allowing the Cluster Master to have it's own resource specifications. Further, the ClusterMaster & IndexerCluster Custom Resources can together be used to configure both Single & Multi-site Indexer clusters. For more details see [Examples.md](Examples.md) & [MultisiteExamples.md](MultisiteExamples.md)
+* Added support for deployment of Multi-site Indexer Cluster. This release introduces a new ClusterMaster Custom Resource, thus allowing the Cluster Manager to have it's own resource specifications. Further, the ClusterMaster & IndexerCluster Custom Resources can together be used to configure both Single & Multi-site Indexer clusters. For more details see [Examples.md](Examples.md) & [MultisiteExamples.md](MultisiteExamples.md)
 
 * Feature to automatically add a configured Monitoring Console pod within a namespace. With this release, a Monitoring Console pod is automatically configured & also has the ability to reconfigure itself based on the changes within the namespace. For more details, refer to [Examples.md](Examples.md)
 
@@ -160,7 +180,7 @@
   to any corresponding Pod and Service objects that the operator creates.
 
 * A unique pass4SymmKey secret will now be randomly generated, to resolve
-  cluster master warnings about using the default value.
+  cluster manager warnings about using the default value.
 
 * Integrated with CircleCI and Coverall for CICD and code coverage, and
   added a bunch of unit tests to bring coverage up to over 90%.
@@ -198,7 +218,7 @@
 ## 0.0.5 Alpha (2019-10-31)
 
 * Added port 8088 to expose on indexers, and only exposting DFC ports on search heads
-* Bug fix: The spark-master deployment was always updated during reconciliation
+* Bug fix: The spark-manager deployment was always updated during reconciliation
 
 ## 0.0.4 Alpha (2019-10-22)
 
@@ -210,7 +230,7 @@
 
 ## 0.0.3 Alpha (2019-08-14)
 
-* Switched single instances, deployer, cluster master and license master
+* Switched single instances, deployer, cluster manager and license manager
 from using Deployment to StatefulSet
 
 ## 0.0.2 & 0.0.1

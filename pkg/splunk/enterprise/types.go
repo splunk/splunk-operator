@@ -21,7 +21,7 @@ const (
 	// SplunkStandalone is a single instance of Splunk Enterprise
 	SplunkStandalone InstanceType = "standalone"
 
-	// SplunkClusterMaster is the master node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
+	// SplunkClusterMaster is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
 	SplunkClusterMaster InstanceType = "cluster-master"
 
 	// SplunkSearchHead may be a standalone or clustered search head instance
@@ -33,7 +33,7 @@ const (
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
-	// SplunkLicenseMaster controls one or more license slaves
+	// SplunkLicenseMaster controls one or more license nodes
 	SplunkLicenseMaster InstanceType = "license-master"
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
@@ -67,7 +67,7 @@ func (instanceType InstanceType) ToRole() string {
 	return role
 }
 
-// ToKind returns master InstanceType for CRD that manages a given InstanceType
+// ToKind returns manager InstanceType for CRD that manages a given InstanceType
 func (instanceType InstanceType) ToKind() string {
 	var kind string
 	switch instanceType {

@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-master
+// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-manager
 // Endpoint: /services/cluster/master/sites
 type ClusterMasterSitesResponse struct {
 	Entries []ClusterMasterSitesEntry `json:"entry"`
@@ -44,7 +44,7 @@ type ClusterMasterSitesPeer struct {
 	ServerName string `json:"server_name"`
 }
 
-// ClusterMasterHealthResponse is a representation of the health response by a Splunk cluster-master
+// ClusterMasterHealthResponse is a representation of the health response by a Splunk cluster-manager
 // Endpoint: /services/cluster/master/health
 type ClusterMasterHealthResponse struct {
 	Entries []ClusterMasterHealthEntry `json:"entry"`
@@ -115,7 +115,7 @@ type ClusterMasterPeersAndSearchHeadResponse struct {
 	} `json:"entry"`
 }
 
-// GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Master
+// GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Manager
 func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
 	url := ""
 	if endpoint == "sh" {
@@ -141,7 +141,7 @@ func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) Clust
 	return restResponse
 }
 
-// CheckIndexerOnCM check given Indexer on cluster master
+// CheckIndexerOnCM check given Indexer on cluster manager
 func CheckIndexerOnCM(deployment *Deployment, indexerName string) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "peer")
 	found := false
@@ -155,7 +155,7 @@ func CheckIndexerOnCM(deployment *Deployment, indexerName string) bool {
 	return found
 }
 
-// CheckSearchHeadOnCM check given search head on cluster master
+// CheckSearchHeadOnCM check given search head on cluster manager
 func CheckSearchHeadOnCM(deployment *Deployment, searchHeadName string) bool {
 	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "sh")
 	found := false

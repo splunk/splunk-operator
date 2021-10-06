@@ -64,7 +64,7 @@ func TestMinioGetInitContainerImage(t *testing.T) {
 }
 
 func TestGetMinioInitContainerCmd(t *testing.T) {
-	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin", "/mnt/apps-local//admin"}
+	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
 
 	minioClient := &MinioClient{}
 	gotCmd := minioClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
