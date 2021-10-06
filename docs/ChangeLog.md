@@ -1,4 +1,24 @@
 # Splunk Operator for Kubernetes Change Log
+## 1.0.3 (2021-10-05)
+* This is the 1.0.3 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.2 image with it
+
+* CSPL-1230: Remove need for Secret keys in IAM env
+
+* CSPL-1316: Avoid re-entrant code flow for App framework
+
+* CSPL-1302: Bias-language removal Phase 1 [Comments & Docs]
+
+* CSPL-1301: Trigger app install for modified app packages
+
+* CSPL-1283: Fix AWS & minio S3 client code to support App framework on GCS
+
+* CSPL-1271: Fix a bug where standalone with replicas>1 won't come up
+
+* Functional Automation test updates
+
+* Migration of CI/CD from circleCI to GitHub Actions
 
 ## 1.0.2 (2021-08-20)
 * This is the 1.0.2 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
