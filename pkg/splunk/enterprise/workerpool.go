@@ -16,7 +16,6 @@ package enterprise
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"sync"
 
@@ -102,16 +101,23 @@ func (w *AppInstallWorkerPool) isAppAlreadyDownloaded(app *enterpriseApi.AppDepl
 	object := getRemoteObjectFromS3Response(app.AppName, w.S3Reponse)
 	localAppFileName := getLocalAppFileName(w.DownloadPath, app.AppName, *object.Etag)
 
-	var fileInfo fs.FileInfo
+	var fileInfo os.FileInfo
 	var err error
+
 	// 1. First check if the app is present on operator pod
-	if fileInfo, err = os.Stat(localAppFileName); os.IsNotExist(err) {
+	file, err := os.Open(localAppFileName)
+
+	if os.IsNotExist(err) {
 		scopedLog.Info("App not present on operator pod")
 		return false
 	}
+	defer file.Close()
 
 	// 2. Now, since the app is present, check the size
+	fileInfo, _ = os.Stat(localAppFileName)
 	localSize := fileInfo.Size()
+	scopedLog.Info("Size of app on operator pod", "size", localSize)
+
 	remoteSize := *object.Size
 	if localSize != remoteSize {
 		err = fmt.Errorf("size of app on operator pod does not match size on remote storage. localSize: %d, remoteSize:%d", localSize, remoteSize)

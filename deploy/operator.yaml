@@ -13,6 +13,8 @@ spec:
       labels:
         name: splunk-operator
     spec:
+      securityContext:
+          fsGroup: 1001
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator

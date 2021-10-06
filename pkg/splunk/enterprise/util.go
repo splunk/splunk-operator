@@ -302,7 +302,7 @@ func createAppDownloadDir(path string) error {
 	if os.IsNotExist(err) {
 		errDir := os.MkdirAll(path, 0755)
 		if errDir != nil {
-			scopedLog.Error(errDir, "Unable to create directory at path", path)
+			scopedLog.Error(errDir, "Unable to create directory at path")
 			return errDir
 		}
 	}
