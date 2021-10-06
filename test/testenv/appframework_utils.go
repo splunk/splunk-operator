@@ -16,14 +16,16 @@ var AppInfo = map[string]map[string]string{
 	"DA-ESS-ContentUpdate":              {"V1": "3.20.0", "V2": "3.21.0", "V2filename": "splunk-es-content-update_3210.tgz", "V1filename": "splunk-es-content-update_3200.tgz"},
 	"Splunk_TA_paloalto":                {"V1": "6.6.0", "V2": "7.0.0", "V2filename": "palo-alto-networks-add-on-for-splunk_700.tgz", "V1filename": "palo-alto-networks-add-on-for-splunk_660.tgz"},
 	"TA-MS-AAD":                         {"V1": "3.0.0", "V2": "3.1.1", "V2filename": "microsoft-azure-add-on-for-splunk_311.tgz", "V1filename": "microsoft-azure-add-on-for-splunk_300.tgz"},
-	"Splunk_TA_nix":                     {"V1": "8.3.0", "V2": "8.3.0", "V2filename": "splunk-add-on-for-unix-and-linux_830.tgz", "V1filename": "splunk-add-on-for-unix-and-linux_830.tgz"},
+	"Splunk_TA_nix":                     {"V1": "8.3.0", "V2": "8.3.1", "V2filename": "splunk-add-on-for-unix-and-linux_831.tgz", "V1filename": "splunk-add-on-for-unix-and-linux_830.tgz"},
 	"splunk_app_microsoft_exchange":     {"V1": "4.0.1", "V2": "4.0.2", "V2filename": "splunk-app-for-microsoft-exchange_402.tgz", "V1filename": "splunk-app-for-microsoft-exchange_401.tgz"},
-	"splunk_app_aws":                    {"V1": "6.0.1", "V2": "6.0.2", "V2filename": "Splunk-app-for-aws_602.tgz", "V1filename": "Splunk-app-for-aws_601.tgz"},
+	"splunk_app_aws":                    {"V1": "6.0.1", "V2": "6.0.2", "V2filename": "splunk-app-for-aws_602.tgz", "V1filename": "splunk-app-for-aws_601.tgz"},
 	"Splunk_ML_Toolkit":                 {"V1": "5.2.0", "V2": "5.2.1", "V2filename": "splunk-machine-learning-toolkit_521.tgz", "V1filename": "splunk-machine-learning-toolkit_520.tgz"},
 	"Splunk_TA_microsoft-cloudservices": {"V1": "4.1.2", "V2": "4.1.3", "V2filename": "splunk-add-on-for-microsoft-cloud-services_413.tgz", "V1filename": "splunk-add-on-for-microsoft-cloud-services_412.tgz"},
-	"splunk_app_stream":                 {"V1": "6.0.1", "V2": "6.0.2", "V2filename": "Splunk-app-for-stream_720.tgz", "V1filename": "Splunk-app-for-stream_720.tgz"},
-	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "V2filename": "Splunk-db-connect_351.tgz", "V1filename": "Splunk-db-connect_350.tgz"},
-	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "V2filename": "Splunk-security-essentials_333.tgz", "V1filename": "Splunk-security-essentials_332.tgz"},
+	"splunk_app_stream":                 {"V1": "7.3.0", "V2": "7.4.0", "V2filename": "splunk-app-for-stream_740.tgz", "V1filename": "splunk-app-for-stream_730.tgz"},
+	"Splunk_TA_stream_wire_data":        {"V1": "7.3.0", "V2": "7.4.0", "V2filename": "splunk-add-on-for-stream-wire-data_740.tgz", "V1filename": "splunk-add-on-for-stream-wire-data_730.tgz"},
+	"Splunk_TA_stream":                  {"V1": "7.3.0", "V2": "7.4.0", "V2filename": "splunk-add-on-for-stream-forwarders_740.tgz", "V1filename": "splunk-add-on-for-stream-forwarders_730.tgz"},
+	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "V2filename": "splunk-db-connect_351.tgz", "V1filename": "splunk-db-connect_350.tgz"},
+	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "V2filename": "splunk-security-essentials_333.tgz", "V1filename": "splunk-security-essentials_332.tgz"},
 	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "V2filename": "splunk-enterprise-security_641.spl", "V1filename": "splunk-enterprise-security_640.spl"},
 }
 
@@ -31,7 +33,7 @@ var AppInfo = map[string]map[string]string{
 var BasicApps = []string{"Splunk_SA_CIM", "DA-ESS-ContentUpdate", "Splunk_TA_paloalto", "TA-MS-AAD"}
 
 //RestartNeededApps Apps that require restart to be installed
-var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange", "splunk_app_aws", "Splunk_ML_Toolkit", "Splunk_TA_microsoft-cloudservices", "splunk_app_stream", "splunk_app_db_connect", "Splunk_Security_Essentials"}
+var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange", "splunk_app_aws", "Splunk_ML_Toolkit", "Splunk_TA_microsoft-cloudservices", "splunk_app_stream", "Splunk_TA_stream", "Splunk_TA_stream_wire_data", "splunk_app_db_connect", "Splunk_Security_Essentials"}
 
 //NewAppsAddedBetweenPolls Apps to be installed as poll after
 var NewAppsAddedBetweenPolls = []string{"TA-LDAP"}
@@ -47,7 +49,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 
 // GetPodAppStatus Get the app install status and version number
 func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
-	// For clusterwide install do not check for versions on deployer and cluster-master as the apps arent installed there
+	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
 	if clusterWideInstall && (strings.Contains(podName, "-cluster-master-") || strings.Contains(podName, "-deployer-")) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil

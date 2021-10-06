@@ -60,22 +60,33 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 	getClient := getClientWrapper.GetS3ClientFuncPtr()
 
 	appSecretRef := vol.SecretRef
-	s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
-	if err != nil {
-		return s3Client, err
-	}
+	var accessKeyID string
+	var secretAccessKey string
+	if appSecretRef == "" {
+		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
+		scopedLog.Info("No secrectRef provided.  Attempt to access remote storage client without access/secret keys")
+		accessKeyID = ""
+		secretAccessKey = ""
+	} else {
+		// Get credentials through the secretRef
+		s3ClientSecret, err := splutil.GetSecretByName(client, cr, appSecretRef)
+		if err != nil {
+			return s3Client, err
+		}
 
-	// Get access keys
-	accessKeyID := string(s3ClientSecret.Data["s3_access_key"])
-	secretAccessKey := string(s3ClientSecret.Data["s3_secret_key"])
+		// Get access keys
+		accessKeyID = string(s3ClientSecret.Data["s3_access_key"])
+		secretAccessKey = string(s3ClientSecret.Data["s3_secret_key"])
 
-	if accessKeyID == "" {
-		err = fmt.Errorf("accessKey missing")
-		return s3Client, err
-	}
-	if secretAccessKey == "" {
-		err = fmt.Errorf("s3 Secret Key is missing")
-		return s3Client, err
+		// Do we need to handle if IAM_ROLE is set in the secret as well?
+		if accessKeyID == "" {
+			err = fmt.Errorf("accessKey missing")
+			return s3Client, err
+		}
+		if secretAccessKey == "" {
+			err = fmt.Errorf("S3 Secret Key is missing")
+			return s3Client, err
+		}
 	}
 
 	// Get the bucket name form the "path" field
@@ -95,6 +106,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
+	var err error
 	s3Client.Client, err = getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint, fn)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
@@ -163,7 +175,7 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
-// getLicenseMasterURL returns URL of license master
+// getLicenseMasterURL returns URL of license manager
 func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseMasterRef.Name != "" {
 		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
@@ -238,7 +250,7 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client sp
 // Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
 // ToDo: Deletes to be handled for phase-3
 func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) (*corev1.ConfigMap, bool, error) {
+	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, appsModified bool) (*corev1.ConfigMap, bool, error) {
 
 	var err error
 	var crKind string
@@ -344,6 +356,18 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	if len(appListingConfigMap.Data) > 0 {
+		if appsModified {
+			// App packages are modified, reset configmap to ensure a new resourceVersion
+			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
+			savedData := appListingConfigMap.Data
+			appListingConfigMap.Data = make(map[string]string)
+			_, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
+			if err != nil {
+				scopedLog.Error(err, "failed reset of configmap", "configMapName", configMapName)
+			}
+			appListingConfigMap.Data = savedData
+		}
+
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
 
 		if err != nil {
@@ -646,10 +670,11 @@ func setStateAndStatusForAppDeployInfoList(appDeployList []enterpriseApi.AppDepl
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	scopedLog := log.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	var err error
+	appsModified := false
 
 	scopedLog.Info("received App listing", "for App sources", len(remoteObjListingMap))
 	if len(remoteObjListingMap) == 0 {
@@ -660,7 +685,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 	for appSrc := range remoteObjListingMap {
 		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
 			err = fmt.Errorf("app source: %s no more exists, this should never happen", appSrc)
-			return err
+			return appsModified, err
 		}
 	}
 
@@ -681,7 +706,6 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			modified, appSrcDeploymentInfo.AppDeploymentInfoList = setStateAndStatusForAppDeployInfoList(curAppDeployList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
 			if modified {
-				appDeployContext.IsDeploymentInProgress = true
 				// Finally update the Map entry with latest info
 				appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 			}
@@ -699,21 +723,20 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
-					appDeployContext.IsDeploymentInProgress = true
 				}
 			}
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
 		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
-			appDeployContext.IsDeploymentInProgress = true
+			appsModified = true
 		}
 
 		// Finally update the Map entry with latest info
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeploymentInfo
 	}
 
-	return err
+	return appsModified, err
 }
 
 // isAppExtentionValid checks if an app extention is supported or not
@@ -748,7 +771,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
 		if !isAppExtentionValid(receivedKey) {
-			scopedLog.Error(nil, "App name Parsing: Ignoring the key: ", receivedKey, "with invalid extention")
+			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extention", "receivedKey", receivedKey)
 			continue
 		}
 
@@ -762,13 +785,13 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			if appList[idx].AppName == appName {
 				found = true
 				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-					scopedLog.Info("App change detected.", "App name: ", appName, "marking for an update")
+					scopedLog.Info("App change detected.  Marking for an update.", "appName", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-						scopedLog.Info("App change", "enabling the App name: ", appName, "that was previously disabled/deleted")
+						scopedLog.Info("App change.  Enabling the App that was previously disabled/deleted", "appName", appName)
 						appList[idx].RepoState = enterpriseApi.RepoStateActive
 					}
 					appChangesDetected = true
@@ -781,7 +804,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 
 		// Update our local list if it is a new app
 		if !found {
-			scopedLog.Info("New App", "found: ", appName)
+			scopedLog.Info("New App found", "appName", appName)
 			appDeployInfo.AppName = appName
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
@@ -893,36 +916,39 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
 			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
 
+			initEnv := []corev1.EnvVar{}
+			if appSecretRef != "" {
+				initEnv = append(initEnv, corev1.EnvVar{
+					Name: "AWS_ACCESS_KEY_ID",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: s3AccessKey,
+						},
+					},
+				})
+				initEnv = append(initEnv, corev1.EnvVar{
+					Name: "AWS_SECRET_ACCESS_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: appSecretRef,
+							},
+							Key: s3SecretKey,
+						},
+					},
+				})
+			}
+
 			// Setup init container
 			initContainerSpec := corev1.Container{
 				Image:           s3Client.Client.GetInitContainerImage(),
 				ImagePullPolicy: "IfNotPresent",
 				Name:            initContainerName,
 				Args:            s3Client.Client.GetInitContainerCmd(appS3Endpoint, appBkt, appSrcPath, appSrcName, appBktMnt),
-				Env: []corev1.EnvVar{
-					{
-						Name: "AWS_ACCESS_KEY_ID",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: appSecretRef,
-								},
-								Key: s3AccessKey,
-							},
-						},
-					},
-					{
-						Name: "AWS_SECRET_ACCESS_KEY",
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: appSecretRef,
-								},
-								Key: s3SecretKey,
-							},
-						},
-					},
-				},
+				Env:             initEnv,
 			}
 
 			// Add mount to initContainer, same mount used for Splunk instance container as well
@@ -963,11 +989,16 @@ func HasAppRepoCheckTimerExpired(appInfoContext *enterpriseApi.AppDeploymentCont
 // GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
 // There can be some time elapsed between when we first set lastAppInfoCheckTime and when the CR is in Ready state.
 // Hence we need to subtract the delta time elapsed from the actual polling interval,
-// so that the next reconile would happen at the right time.
+// so that the next reconcile would happen at the right time.
 func GetNextRequeueTime(appRepoPollInterval, lastCheckTime int64) time.Duration {
 	scopedLog := log.WithName("GetNextRequeueTime")
 	currentEpoch := time.Now().Unix()
-	nextRequeueTimeInSec := appRepoPollInterval - (currentEpoch - lastCheckTime)
+
+	var nextRequeueTimeInSec int64
+	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
+	if nextRequeueTimeInSec < 0 {
+		nextRequeueTimeInSec = 5
+	}
 
 	scopedLog.Info("Getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
 
@@ -1021,7 +1052,14 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 	//check if the apps need to be downloaded from remote storage
 	if shouldCheckAppRepoStatus(client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+		if appStatusContext.IsDeploymentInProgress {
+			scopedLog.Info("App installation is already in progress. Not checking for any latest app repo changes")
+			return nil
+		}
+
+		appStatusContext.IsDeploymentInProgress = true
 		var sourceToAppsList map[string]splclient.S3Response
+		appsModified := false
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
@@ -1038,13 +1076,13 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			}
 
 			// Only handle the app repo changes if we were able to successfully get the apps list
-			err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+			appsModified, err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
 			if err != nil {
 				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
 				return err
 			}
 
-			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus)
+			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus, appsModified)
 			if err != nil {
 				return err
 			}

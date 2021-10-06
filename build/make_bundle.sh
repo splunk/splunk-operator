@@ -13,6 +13,9 @@ OLM_CATALOG=deploy/olm-catalog
 OLM_CERTIFIED=deploy/olm-certified
 YAML_SCRIPT_FILE=.yq_script.yaml
 CRDS_PATH="deploy/crds"
+echo "$OLM_CATALOG/splunk/*/"
+LAST_RELEASE_VERSION=$(ls -lr $OLM_CATALOG/splunk/ | grep "^d" | head -1 | awk '{print $NF}')
+echo "LAST RELEASE VERSION :: $LAST_RELEASE_VERSION"
 
 # create yq template to append older CRD versions
 rm -f $YAML_SCRIPT_FILE
@@ -134,7 +137,12 @@ cat << EOF >$YAML_SCRIPT_FILE
 EOF
 
 echo Updating $OLM_CATALOG
-operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --make-manifests=false --verbose
+VERSION_CHECK=""
+if [[ $VERSION != $LAST_RELEASE_VERSION ]];
+then
+	VERSION_CHECK="--from-version $LAST_RELEASE_VERSION"
+fi
+operator-sdk generate csv --csv-version $VERSION --operator-name splunk --update-crds --make-manifests=false --verbose $VERSION_CHECK
 yq w -i -s $YAML_SCRIPT_FILE $OLM_CATALOG/splunk/$VERSION/splunk.v${VERSION}.clusterserviceversion.yaml
 rm -f $YAML_SCRIPT_FILE
 
