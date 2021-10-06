@@ -1302,10 +1302,12 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			// As of now, we will only return from this function when the download of apps is complete
 			// in the current reconcile. We have to implement a yield logic to break from the
 			// installations in the current reconcile and continue in the next reconcile.
-			// handle the app install
-			err = handleAppInstall(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
-			if err != nil {
-				return err
+			// Handle the app install only if apps have been modified/added.
+			if appsModified {
+				err = handleAppInstall(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+				if err != nil {
+					return err
+				}
 			}
 
 			appStatusContext.AppFrameworkConfig = *appFrameworkConf
