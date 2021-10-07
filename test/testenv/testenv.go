@@ -103,8 +103,10 @@ const (
 	// for downloading apps on the operator pod
 	DefaultStorageForAppDownloads = "50Gi"
 
+	// DefaultStorageClassName is the storage class for PVC for downloading apps on operator
 	DefaultStorageClassName = "gp2"
 
+	// appDownlodPVCName is the name of PVC for downloading apps on operator
 	appDownlodPVCName = "tmp-app-download"
 )
 
@@ -119,6 +121,7 @@ var (
 	specifiedCommitHash      = ""
 )
 
+// OperatorFSGroup is the fsGroup value for Splunk Operator
 var OperatorFSGroup int64 = 1001
 
 //HTTPCodes Response codes for http request
