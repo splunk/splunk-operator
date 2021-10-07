@@ -839,7 +839,7 @@ Use the kubectl command to create the global kubernetes secret object:
 
 3. Create a kubernetes secret object referencing the namespace. Example: splunk-`<desired_namespace`>-secret.
 In the example below, we are creating the global kubernetes secret object, defining the default administrator and pass4Symmkey tokens, and passing in the values.  
-`kubectl create secret generic splunk-<desired_namespace>-secret --from-literal='password=<admin_password_value>' --from-literal='pass4Symmkey=<pass4Symmkey_value>'`
+`kubectl create secret generic splunk-<desired_namespace>-secret --from-literal='password=<admin_password_value>' --from-literal='pass4SymmKey=<pass4Symmkey_value>'`
 
 ### Reading global kubernetes secret object
 
