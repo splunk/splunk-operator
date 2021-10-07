@@ -340,6 +340,31 @@ func newLicenseConfigMap(name, ns, localLicenseFilePath string) (*corev1.ConfigM
 	return &cm, nil
 }
 
+func newPVC(name, ns, storage, storageClassName string) (*corev1.PersistentVolumeClaim, error) {
+
+	storageCapacity, err := splcommon.ParseResourceQuantity(storage, DefaultStorageForAppDownloads)
+	if err != nil {
+		return nil, err
+	}
+
+	pvc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: storageCapacity,
+				},
+			},
+			StorageClassName: &storageClassName,
+		},
+	}
+	return &pvc, nil
+}
+
 func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
 
@@ -363,6 +388,9 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 					},
 				},
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: &OperatorFSGroup,
+					},
 					ServiceAccountName: account,
 					Containers: []corev1.Container{
 						{

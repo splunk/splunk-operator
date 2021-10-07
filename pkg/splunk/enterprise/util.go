@@ -281,7 +281,7 @@ func getRemoteObjectFromS3Response(appName string, s3Response splclient.S3Respon
 	return nil
 }
 
-// appDownloadStateAsStr cnoverts the state enum to corresponding string
+// appDownloadStateAsStr converts the state enum to corresponding string
 func appDownloadStateAsStr(state enterpriseApi.AppDownloadState) string {
 	switch state {
 	case enterpriseApi.DownloadNotStarted:
@@ -295,14 +295,14 @@ func appDownloadStateAsStr(state enterpriseApi.AppDownloadState) string {
 	}
 }
 
-// setAppDownloadState sets tha app install state for an app
+// setAppDownloadState sets tha app download state for an app
 func setAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppDownloadState) {
 	scopedLog := log.WithName("setAppDownloadState").WithValues("app name", appInfo.AppName)
 	scopedLog.Info("Setting the download state for app", "old download state", appDownloadStateAsStr(appInfo.AppInstallStatus.AppDownloadState), "new download state", appDownloadStateAsStr(state))
 	appInfo.AppInstallStatus.AppDownloadState = state
 }
 
-// getAppDownloadState returns the current app install state of the app
+// getAppDownloadState returns the current app download state of the app
 func getAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo) enterpriseApi.AppDownloadState {
 	return appInfo.AppInstallStatus.AppDownloadState
 }

@@ -263,6 +263,8 @@ spec:
                 imagePullPolicy: IfNotPresent
                 name: splunk-operator
                 resources: {}
+              securityContext:
+                fsGroup: 1001
               serviceAccountName: splunk-operator
       permissions:
       - rules:
