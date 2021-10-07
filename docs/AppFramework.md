@@ -7,7 +7,7 @@ The Splunk Operator provides support for Splunk App and Add-on deployment using 
 Utilizing the App Framework requires:
 
 * An Amazon S3 or S3-API-compliant remote object storage location. App framework requires read-only access to the path containing the apps.
-* The remote object storage credentials.
+* The remote object storage credentials via a secret, or an IAM role.
 * Splunk Apps and Add-ons in a .tgz or .spl archive format.
 * Connections to the remote object storage endpoint need to be secure using a minimum version of TLS 1.2.
 
@@ -17,8 +17,12 @@ Utilizing the App Framework requires:
 In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archives, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
 
 1. Confirm your S3-based remote storage volume path and URL.
-2. Create a Kubernetes Secret Object with the storage credentials. 
-   * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
+2. Configure credentials to connect to remote store by either:
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
+   * Create a Kubernetes Secret Object with the static storage credentials.
+     * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
 3. Create folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we split the network and authentication Splunk Apps into different folders and named them `networkApps` and `authApps`.
 
@@ -72,8 +76,12 @@ For more information, see the [Description of App Framework Specification fields
 This example describes the installation of apps on Indexer Cluster as well as Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
-2. Create a Kubernetes Secret Object with the storage credentials. 
-   * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
+2. Configure credentials to connect to remote store by either:
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
+   * Create a Kubernetes Secret Object with the static storage credentials.
+     * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
 3. Create folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the cluster manager, and apps that will be distributed to all cluster peers by the cluster manager. 
    * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
@@ -131,8 +139,12 @@ For more information, see the [Description of App Framework Specification fields
 This example describes the installation of apps on Search Head Cluster as well as Deployer. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
-2. Create a Kubernetes Secret Object with the storage credentials. 
-   * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
+2. Configure credentials to connect to remote store by either:
+   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
+   * Create a Kubernetes Secret Object with the static storage credentials.
+     * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+
 3. Create folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the Deployer, and apps that will be distributed to all cluster search heads by the Deployer. 
    * The apps are split across 3 folders named `searchApps`, `machineLearningApps`, `adminApps` and `ESapps`. The apps placed into  `searchApps`, `machineLearningApps` and `ESapps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
@@ -287,7 +299,7 @@ Here is a typical App framework configuration in a Custom resource definition:
 * `storageType` describes the type of remote storage. Currently `s3` is the only supported type
 * `provider` describes the remote storage provider. Currently `aws` & `minio` are the supported providers 
 * `endpoint` helps configure the URI/URL of the remote storage endpoint that hosts the apps
-* `secretRef` refers to the K8s secret object containing the remote storage access key
+* `secretRef` refers to the K8s secret object containing the static remote storage access key.  This parameter is not required if using IAM role based credentials.
 * `path` describes the path (including the bucket) of one or more app sources on the remote store 
 
 ### appSources
