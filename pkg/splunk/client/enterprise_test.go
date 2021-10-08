@@ -235,7 +235,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           fmt.Sprintf(splcommon.TestS1ClusterManagerZero, "0"),
+		Label:           fmt.Sprintf(splcommon.TestClusterManagerID, "s1", "0"),
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -249,7 +249,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		StartTime: 1583948636,
 	}
 	test := func(c SplunkClient) error {
-		gotInfo, err := c.GetClusterMasterInfo()
+		gotInfo, err := c.GetClusterManagerInfo()
 		if err != nil {
 			return err
 		}
@@ -263,9 +263,9 @@ func TestGetClusterMasterInfo(t *testing.T) {
 
 	// test body with no entries
 	test = func(c SplunkClient) error {
-		_, err := c.GetClusterMasterInfo()
+		_, err := c.GetClusterManagerInfo()
 		if err == nil {
-			t.Errorf("GetClusterMasterInfo returned nil; want error")
+			t.Errorf("GetClusterManagerInfo returned nil; want error")
 		}
 		return nil
 	}
@@ -273,7 +273,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
 
 	// test error code
-	splunkClientTester(t, "TestGetClusterMasterInfo", 500, "", wantRequest, test)
+	splunkClientTester(t, "TestGetClusterManagerInfo", 500, "", wantRequest, test)
 }
 
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
@@ -307,7 +307,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 500, "", wantRequest, test)
 }
 
-func TestGetClusterMasterPeers(t *testing.T) {
+func TestGetClusterManagerPeers(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetPeers, nil)
 	var wantPeers = []struct {
 		ID     string
@@ -317,7 +317,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 		{ID: "D39B1729-E2C5-4273-B9B2-534DA7C2F866", Label: "splunk-s1-indexer-0", Status: "Up"},
 	}
 	test := func(c SplunkClient) error {
-		peers, err := c.GetClusterMasterPeers()
+		peers, err := c.GetClusterManagerPeers()
 		if err != nil {
 			return err
 		}
@@ -342,17 +342,17 @@ func TestGetClusterMasterPeers(t *testing.T) {
 		return nil
 	}
 	body := splcommon.TestGetCMPeers
-	splunkClientTester(t, "TestGetClusterMasterPeers", 200, body, wantRequest, test)
+	splunkClientTester(t, "TestGetClusterManagerPeers", 200, body, wantRequest, test)
 
 	// test error response
 	test = func(c SplunkClient) error {
-		_, err := c.GetClusterMasterPeers()
+		_, err := c.GetClusterManagerPeers()
 		if err == nil {
-			t.Errorf("GetClusterMasterPeers returned nil; want error")
+			t.Errorf("GetClusterManagerPeers returned nil; want error")
 		}
 		return nil
 	}
-	splunkClientTester(t, "TestGetClusterMasterPeers", 503, "", wantRequest, test)
+	splunkClientTester(t, "TestGetClusterManagerPeers", 503, "", wantRequest, test)
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
@@ -375,7 +375,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 	request1, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
 	request2, _ := http.NewRequest("GET", "https://localhost:8089/services/search/distributed/peers?count=0&output_mode=json", nil)
 	request3, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_indexer/edit", nil)
-	request4, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit", nil)
+	request4, _ := http.NewRequest("POST", splcommon.LocalURLLicenseManagerEdit, nil)
 	request5, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_indexerclustergroup_idxc_label/edit", nil)
 	request6, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", nil)
 	request7, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", nil)

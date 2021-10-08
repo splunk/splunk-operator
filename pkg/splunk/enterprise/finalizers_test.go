@@ -259,7 +259,7 @@ func TestDeleteSplunkPvc(t *testing.T) {
 	}
 }
 
-func TestDeleteSplunkClusterMasterPvc(t *testing.T) {
+func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",

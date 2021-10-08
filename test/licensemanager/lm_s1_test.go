@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemaster
+package licensemanager
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemaster test", func() {
+var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 
@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemanager: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -57,7 +57,7 @@ var _ = Describe("Licensemaster test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)

@@ -93,7 +93,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -110,7 +110,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are downloaded by init-container
 			appVersion := "V1"
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
@@ -121,9 +121,9 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify apps are installed cluster-wide
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
@@ -147,7 +147,7 @@ var _ = Describe("m4appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -171,7 +171,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app after upgrade", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify Apps are installed cluster-wide
 			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app after upgrade", "version", appVersion)
@@ -224,7 +224,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -241,7 +241,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are downloaded by init-container
 			appVersion := "V2"
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
@@ -251,9 +251,9 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app before downgrade", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify apps are installed cluster-wide
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app before downgrade", "version", appVersion)
@@ -289,7 +289,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer after scaling up of indexers", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify Apps are installed cluster-wide
 			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands after scaling up of indexers", "version", appVersion)
@@ -311,8 +311,8 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -333,7 +333,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify older versions of apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify older versions of apps are NOT copied to /etc/apps on CM and Deployer", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Wait for the completion of app downgrade as it could take a while on indexers
 			time.Sleep(2 * time.Minute)
@@ -378,7 +378,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -388,7 +388,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container local install on CM and Deployer for apps", "version", appVersion)
@@ -423,7 +423,7 @@ var _ = Describe("m4appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)

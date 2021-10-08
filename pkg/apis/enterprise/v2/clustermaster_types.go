@@ -67,7 +67,7 @@ type BundlePushInfo struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterMaster is the Schema for the clustermasters API
+// ClusterMaster is the Schema for the clustermanagers API
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc

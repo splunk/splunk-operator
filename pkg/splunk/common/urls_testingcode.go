@@ -45,6 +45,9 @@ const (
 	//TestStack1ClusterManagerStatefulSet = "StatefulSet-test-splunk-stack1-cluster-master"
 	TestStack1ClusterManagerStatefulSet = "StatefulSet-test-splunk-stack1-" + ClusterManager
 
+	//TestStack1ClusterManagerSmartStore = "splunk-stack1-clustermaster-smartstore"
+	TestStack1ClusterManagerSmartStore = "splunk-stack1-clustermaster-smartstore"
+
 	//TestStack1ClusterManagerConfigMapSmartStore = "ConfigMap-test-splunk-stack1-clustermaster-smartstore"
 	TestStack1ClusterManagerConfigMapSmartStore = "ConfigMap-test-splunk-stack1-clustermaster-smartstore"
 
@@ -67,17 +70,20 @@ const (
 	//TestExampleClusterManagerMgmtPort = "splunk-example-cluster-master-service:8089"
 	TestExampleClusterManagerMgmtPort = "splunk-example-" + TestClusterManagerService + ":8089"
 
-	//TestT1ClusterManager = "splunk-t1-cluster-master"
-	TestT1ClusterManager = "splunk-t1-cluster-master"
+	//TestClusterManager = "splunk-%s-cluster-master"
+	TestClusterManager = "splunk-%s-cluster-master"
 
-	//TestS1ClusterManager = "splunk-s1-cluster-master"
-	TestS1ClusterManager = "splunk-s1-cluster-master"
-
-	//TestS1ClusterManagerZero = "splunk-s1-cluster-master-0"
-	TestS1ClusterManagerZero = TestS1ClusterManager + "-%s"
+	//TestClusterManagerID = "splunk-%s-cluster-master"
+	TestClusterManagerID = "splunk-%s-cluster-master-%s"
 
 	//TestClusterManagerDashed = "-cluster-master-"
 	TestClusterManagerDashed = "-" + ClusterManager + "-"
+
+	//TestClusterManager1 = "ClusterMaster-test-master1"
+	TestClusterManager1 = "ClusterMaster-test-master1"
+
+	//TestClusterManager1Secrets = "splunk-master1-indexer-secrets"
+	TestClusterManager1Secrets = "splunk-master1-indexer-secrets"
 )
 
 // Test URLs for Cluster Peers based on Stack1

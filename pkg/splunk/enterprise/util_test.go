@@ -92,7 +92,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
 
-func TestGetLicenseMasterURL(t *testing.T) {
+func TestGetLicenseManagerURL(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -101,7 +101,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got := getlicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -111,11 +111,11 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	result := splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getlicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
 	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got = getlicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -126,7 +126,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	result = splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getlicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 }
 
@@ -290,12 +290,12 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterMasterSpec(&cr); err != nil {
-				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
+			if err := validateClusterManagerSpec(&cr); err != nil {
+				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
-			return getClusterMasterStatefulSet(client, &cr)
+			return getClusterManagerStatefulSet(client, &cr)
 		}
-		configTester(t, fmt.Sprintf("getClusterMasterStatefulSet"), f, want)
+		configTester(t, fmt.Sprintf("getClusterManagerStatefulSet"), f, want)
 	}
 
 	testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)

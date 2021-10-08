@@ -82,10 +82,10 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterMasterRef.Name,
 	}
-	masterIdxCluster := &enterpriseApi.ClusterMaster{}
-	err = client.Get(context.TODO(), namespacedName, masterIdxCluster)
+	managerIdxCluster := &enterpriseApi.ClusterMaster{}
+	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
 	if err == nil {
-		cr.Status.ClusterMasterPhase = masterIdxCluster.Status.Phase
+		cr.Status.ClusterMasterPhase = managerIdxCluster.Status.Phase
 	} else {
 		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
@@ -155,8 +155,8 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermaster
-		scopedLog.Info("Setting indexer cluster as owner for cluster master")
-		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
+		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 		if err != nil {
 			result.Requeue = true
@@ -178,13 +178,13 @@ type indexerClusterPodManager struct {
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
 func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, mock bool) error {
 	// Retrieve admin password from Pod
-	var masterIdxcName string
+	var managerIdxcName string
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 {
-		masterIdxcName = cr.Spec.ClusterMasterRef.Name
+		managerIdxcName = cr.Spec.ClusterMasterRef.Name
 	} else {
-		return errors.New("Empty cluster master reference")
+		return errors.New("Empty cluster manager reference")
 	}
-	cmPodName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
+	cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, cmPodName, cr.GetNamespace(), "password")
 	if err != nil {
 		return err
@@ -362,7 +362,7 @@ func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statef
 			return splcommon.PhaseError, err
 		}
 	} else {
-		mgr.log.Error(err, "Cluster Master is not ready yet")
+		mgr.log.Error(err, "Cluster Manager is not ready yet")
 	}
 
 	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
@@ -394,7 +394,7 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(n int32) (bool, error) {
 	}
 
 	// next, remove the peer
-	c := mgr.getClusterMasterClient()
+	c := mgr.getClusterManagerClient()
 	return true, c.RemoveIndexerClusterPeer(mgr.cr.Status.Peers[n].ID)
 }
 
@@ -466,23 +466,23 @@ func (mgr *indexerClusterPodManager) getClient(n int32) *splclient.SplunkClient 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
-// getClusterMasterClient for indexerClusterPodManager returns a SplunkClient for cluster manager
-func (mgr *indexerClusterPodManager) getClusterMasterClient() *splclient.SplunkClient {
-	scopedLog := log.WithName("indexerClusterPodManager.getClusterMasterClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+// getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
+func (mgr *indexerClusterPodManager) getClusterManagerClient() *splclient.SplunkClient {
+	scopedLog := log.WithName("indexerClusterPodManager.getClusterManagerClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Retrieve admin password from Pod
-	var masterIdxcName string
+	var managerIdxcName string
 	if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
-		masterIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
 	} else {
-		mgr.log.Info("Empty cluster master reference")
+		mgr.log.Info("Empty cluster manager reference")
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, masterIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
 
 	// Retrieve admin password for Pod
-	podName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
+	podName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(mgr.c, podName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
@@ -505,10 +505,10 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(c splcommon.ControllerClient)
 	if mgr.c == nil {
 		mgr.c = c
 	}
-	cm := mgr.getClusterMasterClient()
+	cm := mgr.getClusterManagerClient()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return fmt.Errorf("Could not get cluster info from cluster master")
+		return fmt.Errorf("Could not get cluster info from cluster manager")
 	}
 	var replicationFactor int32
 	// if it is a multisite indexer cluster, check site_replication_factor
@@ -534,12 +534,12 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
 		mgr.cr.Status.MaintenanceMode = false
-		return fmt.Errorf("Waiting for cluster master to become ready")
+		return fmt.Errorf("Waiting for cluster manager to become ready")
 	}
 
 	// get indexer cluster info from cluster manager if it's ready
-	c := mgr.getClusterMasterClient()
-	clusterInfo, err := c.GetClusterMasterInfo()
+	c := mgr.getClusterManagerClient()
+	clusterInfo, err := c.GetClusterManagerInfo()
 	if err != nil {
 		return err
 	}
@@ -549,7 +549,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 	mgr.cr.Status.MaintenanceMode = clusterInfo.MaintenanceMode
 
 	// get peer information from cluster manager
-	peers, err := c.GetClusterMasterPeers()
+	peers, err := c.GetClusterManagerPeers()
 	if err != nil {
 		return err
 	}
@@ -564,7 +564,7 @@ func (mgr *indexerClusterPodManager) updateStatus(statefulSet *appsv1.StatefulSe
 			peerStatus.BucketCount = peerInfo.BucketCount
 			peerStatus.Searchable = peerInfo.Searchable
 		} else {
-			mgr.log.Info("Peer is not known by cluster master", "peerName", peerName)
+			mgr.log.Info("Peer is not known by cluster manager", "peerName", peerName)
 		}
 		if n < int32(len(mgr.cr.Status.Peers)) {
 			mgr.cr.Status.Peers[n] = peerStatus
@@ -606,7 +606,7 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 
 	// Multisite / multipart clusters: can't reference a cluster manager located in another namespace because of Service and Secret limitations
 	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
-		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
+		return fmt.Errorf("Multisite cluster does not support cluster manager to be located in a different namespace")
 	}
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }

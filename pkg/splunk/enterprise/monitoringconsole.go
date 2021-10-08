@@ -75,14 +75,14 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.Meta
 	//get cluster info from cluster manager
 	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
 		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
-		c := mgr.getClusterMasterClient(cr)
+		c := mgr.getClusterManagerClient(cr)
 		clusterInfo, err := c.GetClusterInfo(spec.Mock)
 		if err != nil {
 			return err
 		}
 		multiSite := clusterInfo.MultiSite
 		if multiSite == "true" {
-			extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+			extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
 		}
 	}
 
@@ -115,9 +115,9 @@ func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
-// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster manager
-func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
+// getClusterManagerClient for monitoringConsolePodManager returns a SplunkClient for cluster manager
+func (mgr *monitoringConsolePodManager) getClusterManagerClient(cr splcommon.MetaObject) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
