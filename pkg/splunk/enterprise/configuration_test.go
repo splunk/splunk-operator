@@ -199,7 +199,7 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 }
 
-func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T) {
+func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -222,9 +222,9 @@ func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterMaster(client, &cr)
+	_, err := ApplyClusterManager(client, &cr)
 	if err == nil {
-		t.Errorf("ApplyClusterMaster should fail on invalid smartstore config")
+		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
 }
 
@@ -260,7 +260,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	}
 }
 
-func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
+func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -287,10 +287,10 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterMasterSpec(&cr)
+	err := validateClusterManagerSpec(&cr)
 
 	if err != nil {
-		t.Errorf("Smartstore configuration should not fail on ClusterMaster CR: %v", err)
+		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
 	}
 }
 

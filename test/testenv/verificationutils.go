@@ -140,8 +140,8 @@ func SingleSiteIndexersReady(deployment *Deployment, testenvInstance *TestEnv) {
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
-// ClusterMasterReady verify Cluster Manager Instance is in ready status
-func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
+// ClusterManagerReady verify Cluster Manager Instance is in ready status
+func ClusterManagerReady(deployment *Deployment, testenvInstance *TestEnv) {
 	// Ensure that the cluster-manager goes to Ready phase
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
@@ -198,7 +198,7 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+		podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.ManagerSiteTest
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
@@ -247,17 +247,17 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
 }
 
-// LicenseMasterReady verify LM is in ready status and does not flip flop
-func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
+// LicenseManagerReady verify LM is in ready status and does not flip flop
+func LicenseManagerReady(deployment *Deployment, testenvInstance *TestEnv) {
 	licenseMaster := &enterpriseApi.LicenseMaster{}
 
-	testenvInstance.Log.Info("Verifying License Master becomes READY")
+	testenvInstance.Log.Info("Verifying License Manager becomes READY")
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), licenseMaster)
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
+		testenvInstance.Log.Info("Waiting for License Manager instance status to be ready",
 			"instance", licenseMaster.ObjectMeta.Name, "Phase", licenseMaster.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 
@@ -274,7 +274,7 @@ func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
 func VerifyLMConfiguredOnPod(deployment *Deployment, podName string) {
 	gomega.Consistently(func() bool {
-		lmConfigured := CheckLicenseMasterConfigured(deployment, podName)
+		lmConfigured := CheckLicenseManagerConfigured(deployment, podName)
 		return lmConfigured
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
@@ -433,8 +433,8 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyClusterMasterPhase verify phase of cluster manager
-func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
+// VerifyClusterManagerPhase verify phase of cluster manager
+func VerifyClusterManagerPhase(deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), cm)

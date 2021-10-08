@@ -37,12 +37,12 @@ func TestApplyIndexerCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v2.ClusterMaster-test-master1"},
+		{MetaName: "*v2." + splcommon.TestCM1},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
-		{MetaName: "*v2.ClusterMaster-test-master1"},
+		{MetaName: "*v2." + splcommon.TestCM1},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
 
@@ -98,8 +98,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
-func TestGetClusterMasterClient(t *testing.T) {
-	scopedLog := log.WithName("TestGetClusterMasterClient")
+func TestGetClusterManagerClient(t *testing.T) {
+	scopedLog := log.WithName("TestGetClusterManagerClient")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -122,7 +122,7 @@ func TestGetClusterMasterClient(t *testing.T) {
 	}
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-master1-indexer-secrets",
+			Name:      splcommon.TestIndexerSecrets,
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
@@ -142,9 +142,9 @@ func TestGetClusterMasterClient(t *testing.T) {
 	}
 	c := spltest.NewMockClient()
 	mgr.c = c
-	cm := mgr.getClusterMasterClient()
+	cm := mgr.getClusterManagerClient()
 	if cm.ManagementURI != splcommon.ManagerServiceTest {
-		t.Errorf("getClusterMasterClient() should have returned incorrect mgmt URI")
+		t.Errorf("getClusterManagerClient() should have returned incorrect mgmt URI")
 	}
 }
 
@@ -174,7 +174,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 
 	secrets := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-master1-indexer-secrets",
+			Name:      splcommon.TestIndexerSecrets,
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
@@ -717,7 +717,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	cr.Spec.ClusterMasterRef.Name = ""
 	err = SetClusterMaintenanceMode(c, &cr, false, true)
 	if err.Error() != splcommon.EmptyClusterMasterRef {
-		t.Errorf("Couldn't detect empty Cluster Master reference %s", err.Error())
+		t.Errorf("Couldn't detect empty Cluster Manager reference %s", err.Error())
 	}
 }
 
@@ -1059,6 +1059,6 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 
 	cr.Spec.ClusterMasterRef.Namespace = "other"
 	if err := validateIndexerClusterSpec(&cr); err == nil {
-		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster master located in a different namespace")
+		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")
 	}
 }

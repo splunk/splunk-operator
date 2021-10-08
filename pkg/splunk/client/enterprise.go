@@ -404,10 +404,10 @@ type ClusterMasterInfo struct {
 	StartTime int64 `json:"start_time"`
 }
 
-// GetClusterMasterInfo queries the cluster manager for info about the indexer cluster.
+// GetClusterManagerInfo queries the cluster manager for info about the indexer cluster.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Finfo
-func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
+func (c *SplunkClient) GetClusterManagerInfo() (*ClusterMasterInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Content ClusterMasterInfo `json:"content"`
@@ -573,10 +573,10 @@ type ClusterMasterPeerInfo struct {
 	} `json:"status_counter"`
 }
 
-// GetClusterMasterPeers queries the cluster manager for info about indexer cluster peers.
+// GetClusterManagerPeers queries the cluster manager for info about indexer cluster peers.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Fpeers
-func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo, error) {
+func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Name    string                `json:"name"`
@@ -708,7 +708,7 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 	if err != nil {
 		return err
 	}
-	err = c.UpdateDMCGroups("dmc_group_license_master", reqBodyLicenseMaster)
+	err = c.UpdateDMCGroups(splcommon.DMCLicenseManager, reqBodyLicenseMaster)
 	if err != nil {
 		return err
 	}

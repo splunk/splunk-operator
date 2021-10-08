@@ -28,17 +28,17 @@ import (
 )
 
 func init() {
-	SplunkControllersToAdd = append(SplunkControllersToAdd, ClusterMasterController{})
+	SplunkControllersToAdd = append(SplunkControllersToAdd, ClusterManagerController{})
 }
 
-// blank assignment to verify that ClusterMasterController implements SplunkController
-var _ splctrl.SplunkController = &ClusterMasterController{}
+// blank assignment to verify that ClusterManagerController implements SplunkController
+var _ splctrl.SplunkController = &ClusterManagerController{}
 
-// ClusterMasterController is used to manage ClusterMaster custom resources
-type ClusterMasterController struct{}
+// ClusterManagerController is used to manage ClusterManager custom resources
+type ClusterManagerController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (ctrl ClusterMasterController) GetInstance() splcommon.MetaObject {
+func (ctrl ClusterManagerController) GetInstance() splcommon.MetaObject {
 	return &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterpriseApi.APIVersion,
@@ -48,12 +48,12 @@ func (ctrl ClusterMasterController) GetInstance() splcommon.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl ClusterMasterController) GetWatchTypes() []runtime.Object {
+func (ctrl ClusterManagerController) GetWatchTypes() []runtime.Object {
 	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (ctrl ClusterMasterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
+func (ctrl ClusterManagerController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.ClusterMaster)
-	return enterprise.ApplyClusterMaster(client, instance)
+	return enterprise.ApplyClusterManager(client, instance)
 }

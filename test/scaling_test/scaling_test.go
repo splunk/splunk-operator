@@ -118,7 +118,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -271,7 +271,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
