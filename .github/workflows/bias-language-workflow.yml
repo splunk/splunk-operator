@@ -1,0 +1,11 @@
+name: Bias Language
+on: [push]
+jobs:
+  biased_lang:
+    runs-on: ubuntu-latest
+    name: Detecting Biased Language
+    steps:
+      - uses: actions/checkout@v2
+      - id: biased-lang-linter
+        uses: splunk/biased-lang-linter@main
+        continue-on-error: false
