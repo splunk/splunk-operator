@@ -93,41 +93,6 @@ func (w *AppInstallWorkerPool) Run(id int, jobs <-chan *enterpriseApi.AppDeploym
 	}
 }
 
-// isAppAlreadyDownloaded checks if the app is already downloaded on the operator pod by checking a couple of things -
-// 1. is the app bundle present on the operator pod &&
-// 2. if the size on disk matches the size reported from remote storage
-func (w *AppInstallWorkerPool) isAppAlreadyDownloaded(app *enterpriseApi.AppDeploymentInfo) bool {
-	scopedLog := log.WithName("isAppAlreadyDownloaded").WithValues("app name", app.AppName)
-	object := getRemoteObjectFromS3Response(app.AppName, w.S3Reponse)
-	localAppFileName := getLocalAppFileName(w.DownloadPath, app.AppName, *object.Etag)
-
-	var fileInfo os.FileInfo
-	var err error
-
-	// 1. First check if the app is present on operator pod
-	file, err := os.Open(localAppFileName)
-
-	if os.IsNotExist(err) {
-		scopedLog.Info("App not present on operator pod")
-		return false
-	}
-	defer file.Close()
-
-	// 2. Now, since the app is present, check the size
-	fileInfo, _ = os.Stat(localAppFileName)
-	localSize := fileInfo.Size()
-	scopedLog.Info("Size of app on operator pod", "size", localSize)
-
-	remoteSize := *object.Size
-	if localSize != remoteSize {
-		err = fmt.Errorf("size of app on operator pod does not match size on remote storage. localSize: %d, remoteSize:%d", localSize, remoteSize)
-		scopedLog.Error(err, "need to re-download app")
-		return false
-	}
-
-	return true
-}
-
 // Start kicks off the workers to do the job of app installation
 func (w *AppInstallWorkerPool) Start() {
 	// start the workers
@@ -148,7 +113,7 @@ func (w *AppInstallWorkerPool) Start() {
 					// This means app was downloaded successfuly to operator pod,
 					// mark this as DownloadComplete
 					setAppDownloadState(app, enterpriseApi.DownloadComplete)
-
+					jobsAdded++
 					//TODO: check for app copy and untar state
 					continue
 				}
@@ -188,4 +153,39 @@ func (w *AppInstallWorkerPool) Start() {
 
 	// wait for all the workers to finish their jobs
 	w.wg.Wait()
+}
+
+// isAppAlreadyDownloaded checks if the app is already downloaded on the operator pod by checking a couple of things -
+// 1. is the app bundle present on the operator pod &&
+// 2. if the size on disk matches the size reported from remote storage
+func (w *AppInstallWorkerPool) isAppAlreadyDownloaded(app *enterpriseApi.AppDeploymentInfo) bool {
+	scopedLog := log.WithName("isAppAlreadyDownloaded").WithValues("app name", app.AppName)
+	object := getRemoteObjectFromS3Response(app.AppName, w.S3Reponse)
+	localAppFileName := getLocalAppFileName(w.DownloadPath, app.AppName, *object.Etag)
+
+	var fileInfo os.FileInfo
+	var err error
+
+	// 1. First check if the app is present on operator pod
+	file, err := os.Open(localAppFileName)
+
+	if os.IsNotExist(err) {
+		scopedLog.Info("App not present on operator pod")
+		return false
+	}
+	defer file.Close()
+
+	// 2. Now, since the app is present, check the size
+	fileInfo, _ = os.Stat(localAppFileName)
+	localSize := fileInfo.Size()
+	scopedLog.Info("Size of app on operator pod", "size", localSize)
+
+	remoteSize := *object.Size
+	if localSize != remoteSize {
+		err = fmt.Errorf("size of app on operator pod does not match size on remote storage. localSize: %d, remoteSize:%d", localSize, remoteSize)
+		scopedLog.Error(err, "need to re-download app")
+		return false
+	}
+
+	return true
 }

@@ -101,7 +101,7 @@ const (
 
 	// DefaultStorageForAppDownloads is used to specify the default storage
 	// for downloading apps on the operator pod
-	DefaultStorageForAppDownloads = "50Gi"
+	DefaultStorageForAppDownloads = "10Gi"
 
 	// DefaultStorageClassName is the storage class for PVC for downloading apps on operator
 	DefaultStorageClassName = "gp2"
