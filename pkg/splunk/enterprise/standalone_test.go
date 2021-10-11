@@ -740,8 +740,11 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		return cl
 	}
 
-	_, err = s3ClientMgr.GetAppsList()
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as we have empty objects in MockAWSS3Client")
+	s3Resp, err := s3ClientMgr.GetAppsList()
+	if err != nil {
+		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
+	}
+	if len(s3Resp.Objects) != 0 {
+		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
 	}
 }
