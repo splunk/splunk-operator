@@ -235,7 +235,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           splcommon.ManagerS1,
+		Label:           splcommon.SplunkS1ClusterManagerZero,
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",

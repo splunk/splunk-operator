@@ -609,7 +609,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 
 				if versionCheck {
 					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, splcommon.CMDashed))) {
+					if !(clusterWideInstall && (strings.Contains(podName, splcommon.DeployerDashed) || strings.Contains(podName, splcommon.CMDashed))) {
 						var expectedVersion string
 						if checkupdated {
 							expectedVersion = AppInfo[appName]["V2"]
@@ -634,8 +634,8 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 			if clusterWideInstall {
 				if strings.Contains(podName, splcommon.CM) {
 					path = splcommon.ManagerApps
-				} else if strings.Contains(podName, "-deployer-") {
-					path = splcommon.SHCApps
+				} else if strings.Contains(podName, splcommon.DeployerDashed) {
+					path = splcommon.SHClusterApps
 				} else if strings.Contains(podName, "-indexer-") {
 					path = splcommon.PeerApps
 				}

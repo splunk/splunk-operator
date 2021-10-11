@@ -22,7 +22,7 @@ import (
 
 func TestGetSplunkDeploymentName(t *testing.T) {
 	got := GetSplunkDeploymentName(SplunkClusterMaster, "t1")
-	want := splcommon.ManagerT1
+	want := splcommon.SplunkT1ClusterManager
 	if got != want {
 		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkIndexer.ToString(), "t1", got, want)
 	}

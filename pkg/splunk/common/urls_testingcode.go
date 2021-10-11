@@ -159,11 +159,14 @@ const (
 	// Base URLs
 	//*****************
 
-	//ManagerT1 = "splunk-t1-cluster-master"
-	ManagerT1 = "splunk-t1-cluster-master"
+	//SplunkT1ClusterManager = "splunk-t1-cluster-master"
+	SplunkT1ClusterManager = "splunk-t1-cluster-master"
 
-	//ManagerS1 = "splunk-s1-cluster-master-0"
-	ManagerS1 = "splunk-s1-cluster-master-0"
+	//SplunkS1ClusterManager = "splunk-s1-cluster-master"
+	SplunkS1ClusterManager = "splunk-s1-cluster-master"
+
+	//SplunkS1ClusterManagerZero = "splunk-s1-cluster-master-0"
+	SplunkS1ClusterManagerZero = SplunkS1ClusterManager + Dash + Zero
 
 	//CMTests = "clustermaster"
 	CMTests = Cluster + "master"
@@ -171,11 +174,14 @@ const (
 	//CMDashed = "-cluster-master-"
 	CMDashed = Dash + CM + Dash
 
-	//Stack1CM = "splunk-stack1-cluster-master"
-	Stack1CM = Spl + Dash + Stack1 + Dash + CM
+	//DeployerDashed = "-deployer-"
+	DeployerDashed = "-deployer-"
 
-	//Stack1CM = "splunk-stack1-cluster-master-0"
-	Stack1CMZero = Spl + Dash + Stack1 + Dash + CM + Dash + "0"
+	//SplunkStack1ClusterManager = "splunk-stack1-cluster-master"
+	SplunkStack1ClusterManager = Spl + Dash + Stack1 + Dash + CM
+
+	//SplunkStack1ClusterManagerZero = "splunk-stack1-cluster-master-0"
+	SplunkStack1ClusterManagerZero = SplunkStack1ClusterManager + Dash + Zero
 
 	//ClusterManagerService = "cluster-master-service"
 	ClusterManagerService = CM + Dash + Service

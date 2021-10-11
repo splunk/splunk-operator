@@ -266,7 +266,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.Stack1CMZero,
+			Name:      splcommon.SplunkStack1ClusterManagerZero,
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v1",

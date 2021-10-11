@@ -15,6 +15,9 @@ const (
 	//ManagerApps = "etc/master-apps"
 	ManagerApps = "etc/master-apps"
 
-	//SHCApps = "etc/shcluster/apps"
-	SHCApps = "etc/shcluster/apps"
+	//SHCluster = "etc/shcluster/apps"
+	SHCluster = "etc/shcluster"
+
+	//SHClusterApps = "etc/shcluster/apps"
+	SHClusterApps = SHCluster + "/apps"
 )

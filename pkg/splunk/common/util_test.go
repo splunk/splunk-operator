@@ -577,7 +577,7 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/component":  "indexer",
 		"app.kubernetes.io/name":       CM,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   ManagerT1,
+		"app.kubernetes.io/instance":   SplunkT1ClusterManager,
 	})
 
 	// Multipart IndexerCluster - selector of indexer service for main part
@@ -614,7 +614,7 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/component":  "indexer",
 		"app.kubernetes.io/name":       CM,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   ManagerT1,
+		"app.kubernetes.io/instance":   SplunkT1ClusterManager,
 	}, "")
 
 	// Test a few labels using selectFew option

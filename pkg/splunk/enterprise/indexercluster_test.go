@@ -631,7 +631,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.Stack1CMZero,
+			Name:      splcommon.SplunkStack1ClusterManagerZero,
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -770,7 +770,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 
 	cmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.Stack1CMZero,
+			Name:      splcommon.SplunkStack1ClusterManagerZero,
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
