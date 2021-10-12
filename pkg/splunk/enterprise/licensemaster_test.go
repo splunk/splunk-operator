@@ -33,9 +33,9 @@ func TestApplyLicenseMaster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Service-test-splunk-stack1-license-master-service"},
+		{MetaName: "*v1.Service-test-splunk-stack1-license-"+splcommon.Manager+"-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-license-master-secret-v1"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-license-"+splcommon.Manager+"-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-licensemaster-app-list"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}

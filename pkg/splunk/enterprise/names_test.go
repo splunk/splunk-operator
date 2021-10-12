@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os"
 	"testing"
 )
@@ -54,7 +55,7 @@ func TestGetSplunkServiceName(t *testing.T) {
 
 	test("splunk-t1-deployer-headless", SplunkDeployer, "t1", true)
 	test("splunk-t2-search-head-service", SplunkSearchHead, "t2", false)
-	test("splunk-t3-license-master-service", SplunkLicenseMaster, "t3", false)
+	test("splunk-t3-license-"+splcommon.Manager+"-service", SplunkLicenseMaster, "t3", false)
 
 	LicenseMasterRefName := "stack1"
 	test("splunk-stack1-license-master-service", SplunkLicenseMaster, LicenseMasterRefName, false)

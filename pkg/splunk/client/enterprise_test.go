@@ -16,6 +16,7 @@ package client
 
 import (
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"net/http"
 	"strings"
 	"testing"
@@ -176,7 +177,7 @@ func TestSetSearchHeadDetention(t *testing.T) {
 
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/default/apply", body)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/"+splcommon.Manager+"/control/default/apply", body)
 
 	test := func(c SplunkClient) error {
 		return c.BundlePush(true)
@@ -227,14 +228,14 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 }
 
 func TestGetClusterMasterInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/"+splcommon.Manager+"/info?count=0&output_mode=json", nil)
 	wantInfo := ClusterMasterInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           "splunk-s1-cluster-master-0",
+		Label:           "splunk-s1-cluster-"+splcommon.Manager+"-0",
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -307,7 +308,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 }
 
 func TestGetClusterMasterPeers(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/"+splcommon.Manager+"/peers?count=0&output_mode=json", nil)
 	var wantPeers = []struct {
 		ID     string
 		Label  string
@@ -355,7 +356,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/"+splcommon.Manager+"/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}

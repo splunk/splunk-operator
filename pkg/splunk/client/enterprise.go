@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -412,7 +413,7 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 			Content ClusterMasterInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/info"
+	path := "/services/cluster/"+splcommon.Manager+"/info"
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -582,7 +583,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 			Content ClusterMasterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/peers"
+	path := "/services/cluster/"+splcommon.Manager+"/peers"
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err

@@ -119,7 +119,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service.test.svc.cluster.local",
+			Value: "splunk-stack1-license-"+splcommon.Manager+"-service.test.svc.cluster.local",
 		},
 	}
 
