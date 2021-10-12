@@ -143,7 +143,7 @@ func TestGetClusterMasterClient(t *testing.T) {
 	c := spltest.NewMockClient()
 	mgr.c = c
 	cm := mgr.getClusterMasterClient()
-	if cm.ManagementURI != splcommon.ManagerServiceTest {
+	if cm.ManagementURI != splcommon.TestServiceURLClusterManagerMgmtPort {
 		t.Errorf("getClusterMasterClient() should have returned incorrect mgmt URI")
 	}
 }
@@ -232,7 +232,7 @@ func indexerClusterPodManagerReplicasTester(t *testing.T, method string, mockHan
 func TestVerifyRFPeers(t *testing.T) {
 
 	funcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1." + splcommon.PodTestCM},
+		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestClusterManagerPod, "0")},
 	}
 
 	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0]}}
@@ -241,10 +241,10 @@ func TestVerifyRFPeers(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLConfig,
+			URL:    splcommon.TestServiceURLClusterManagerClusterConfig,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestVerifyRFPeers,
+			Body:   splcommon.TestVerifyRFPeers,
 		},
 	}
 
@@ -256,7 +256,7 @@ func TestVerifyRFPeers(t *testing.T) {
 	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 3 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
 
 	// Now test for multi-site too
-	mockHandlers[0].Body = splcommon.BodyTestVerifyRFPeersMultiSite
+	mockHandlers[0].Body = splcommon.TestVerifyRFPeersMultiSite
 
 	//test for multisite i.e. with site_replication_factor=origin:2,total:2(on ClusterMaster) and replicas=2(on IndexerCluster)
 	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 2 /*replicas*/, 2 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
@@ -285,7 +285,7 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLInfoTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetInfo,
 			Status: 200,
 			Err:    nil,
 			Body:   ``,
@@ -318,11 +318,11 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 		t.Errorf("mgr.updateStatus() should have returned an error here")
 	}
 
-	mockHandlers[0].Body = splcommon.BodyTestUpdateStatusInvalidResponse0
+	mockHandlers[0].Body = splcommon.TestUpdateStatusInvalidResponse0
 
 	mockHandler := spltest.MockHTTPHandler{
 		Method: "GET",
-		URL:    splcommon.ManagerURLPeerTest,
+		URL:    splcommon.TestServiceURLClusterManagerGetPeers,
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
@@ -334,7 +334,7 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 		t.Errorf("mgr.updateStatus() should have returned an error here")
 	}
 
-	mockHandlers[1].Body = splcommon.BodyTestUpdateStatusInvalidResponse1
+	mockHandlers[1].Body = splcommon.TestUpdateStatusInvalidResponse1
 
 	// We would like to call mgr.updateStatus() here twice just to mimic calling reconcile twice,
 	// so that the first call fill the field `mgr.cr.Status.Peers` and the next call can use that.
@@ -370,17 +370,17 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLInfoTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetInfo,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestInvalidPeerStatusInScaleDownInfo,
+			Body:   splcommon.TestInvalidPeerStatusInScaleDownInfo,
 		},
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLPeerTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetPeers,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestInvalidPeerStatusInScaleDownPeer,
+			Body:   splcommon.TestInvalidPeerStatusInScaleDownPeer,
 		},
 	}
 
@@ -429,17 +429,17 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLInfoTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetInfo,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestInvalidPeerInFinishRecycleInfo,
+			Body:   splcommon.TestInvalidPeerInFinishRecycleInfo,
 		},
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLPeerTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetPeers,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestInvalidPeerInFinishRecyclePeer,
+			Body:   splcommon.TestInvalidPeerInFinishRecyclePeer,
 		},
 	}
 
@@ -500,7 +500,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
-		{MetaName: "*v1." + splcommon.PodTestCM},
+		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestClusterManagerPod, "0")},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
 	labels := map[string]string{
@@ -520,17 +520,17 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	mockHandlers := []spltest.MockHTTPHandler{
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLInfoTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetInfo,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestIndexerClusterPodManagerInfo,
+			Body:   splcommon.TestIndexerClusterPodManagerInfo,
 		},
 		{
 			Method: "GET",
-			URL:    splcommon.ManagerURLPeerTest,
+			URL:    splcommon.TestServiceURLClusterManagerGetPeers,
 			Status: 200,
 			Err:    nil,
-			Body:   splcommon.BodyTestIndexerClusterPodManagerPeer,
+			Body:   splcommon.TestIndexerClusterPodManagerPeer,
 		},
 	}
 	pod := &corev1.Pod{
@@ -554,7 +554,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	// test pod needs update => decommission
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    splcommon.DecommisionTest + "enforce_counts=0",
+		URL:    splcommon.TestURLPeerHeadlessDecommission + "enforce_counts=0",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
@@ -597,7 +597,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	mockHandlers[1].Body = `{"entry":[{"name":"aa45bf46-7f46-47af-a760-590d5c606d10","content":{"status":"Up","label":"splunk-stack1-indexer-0"}},{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","content":{"status":"GracefulShutdown","label":"splunk-stack1-indexer-1"}}]}`
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    splcommon.TestIndexerClusterRemovePeers + "peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+		URL:    splcommon.TestServiceURLClusterManagerRemovePeers + "peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
@@ -631,7 +631,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.SplunkStack1ClusterManagerZero,
+			Name:      fmt.Sprintf(splcommon.TestStack1ClusterManagerID, "0"),
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -770,7 +770,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 
 	cmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.SplunkStack1ClusterManagerZero,
+			Name:      fmt.Sprintf(splcommon.TestStack1ClusterManagerID, "0"),
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",

@@ -33,11 +33,11 @@ func TestApplyLicenseMaster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.LMServiceTest},
+		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerServiceTestService},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.SecretTestLM},
-		{MetaName: "*v1." + splcommon.ConfigMapLMAppList},
-		{MetaName: "*v1." + splcommon.StatefulTestLM},
+		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerSecret},
+		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerConfigMapAppList},
+		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 	}
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",

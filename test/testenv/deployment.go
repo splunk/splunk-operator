@@ -174,7 +174,7 @@ func (d *Deployment) DeployLicenseMaster(name string) (*enterpriseApi.LicenseMas
 
 //DeployClusterMaster deploys the cluster manager
 func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansibleConfig string) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.CM, "name", name)
+	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
 	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
 	deployed, err := d.deployCR(name, cm)
 	if err != nil {
@@ -185,7 +185,7 @@ func (d *Deployment) DeployClusterMaster(name, licenseMasterName string, ansible
 
 //DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
 func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(name, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.CM, "name", name)
+	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
 	deployed, err := d.deployCR(name, cm)
 	if err != nil {
@@ -356,7 +356,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.CM, siteName)
+`, name, splcommon.ClusterManager, siteName)
 		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -366,7 +366,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.CM)
+`, name, splcommon.ClusterManager)
 	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
 	if err != nil {
 		return err
@@ -415,7 +415,7 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.CM, siteName)
+`, name, splcommon.ClusterManager, siteName)
 		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -518,7 +518,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.CM, siteName)
+`, name, splcommon.ClusterManager, siteName)
 		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -528,14 +528,14 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.CM)
+`, name, splcommon.ClusterManager)
 	_, err = d.DeploySearchHeadCluster(name+"-shc", name, licenseMaster, siteDefaults)
 	return err
 }
 
 // DeployClusterMasterWithGivenSpec deploys the cluster manager with given SPEC
 func (d *Deployment) DeployClusterMasterWithGivenSpec(name string, spec enterpriseApi.ClusterMasterSpec) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.CM, "name", name)
+	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
 	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, cm)
 	if err != nil {
@@ -691,7 +691,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.CM, siteName)
+`, name, splcommon.ClusterManager, siteName)
 		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -701,7 +701,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.CM)
+`, name, splcommon.ClusterManager)
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

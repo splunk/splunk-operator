@@ -50,7 +50,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 // GetPodAppStatus Get the app install status and version number
 func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-	if clusterWideInstall && (strings.Contains(podName, splcommon.CMDashed) || strings.Contains(podName, splcommon.DeployerDashed)) {
+	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, splcommon.TestDeployerDashed)) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil
 	}
@@ -70,11 +70,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 	//For cluster-wide install the apps are extracted to different locations
 	if clusterWideInstall {
 		if strings.Contains(podName, "-indexer-") {
-			path = splcommon.PeerApps
-		} else if strings.Contains(podName, splcommon.CM) {
-			path = splcommon.ManagerApps
-		} else if strings.Contains(podName, splcommon.DeployerDashed) {
-			path = splcommon.SHClusterApps
+			path = splcommon.PeerAppsLoc
+		} else if strings.Contains(podName, splcommon.ClusterManager) {
+			path = splcommon.ManagerAppsLoc
+		} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+			path = splcommon.SHClusterAppsLoc
 		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)

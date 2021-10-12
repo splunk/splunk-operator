@@ -38,7 +38,7 @@ type licenserLocalSlaveResponse struct {
 
 // CheckLicenseMasterConfigured checks if lm is configured on given pod
 func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.PeerLicenser
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLLicensePeerJSONOutput
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {
@@ -54,5 +54,5 @@ func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
 	}
 	licenseMaster := restResponse.Entry[0].Content.MasterURI
 	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseMaster)
-	return strings.Contains(licenseMaster, splcommon.LMServicePort)
+	return strings.Contains(licenseMaster, splcommon.TestLicenseManagerMgmtPort)
 }

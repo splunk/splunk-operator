@@ -1,134 +1,107 @@
 package common
 
-// URLs for Splunk Endpoints
-// List of most common endpoints used in the Splunk Operator repo
+// URLs for Splunk APIs and REST Endpoints
 
+// ***** Cluster Manager *****
+
+// List of URIs - Cluster Manager
 const (
 
-	//ManagerInfoAPI = "/services/cluster/master/info"
-	ManagerInfoAPI = Services + Manager + Info
+	//ClusterManager = "cluster-master"
+	ClusterManager = "cluster-master"
 
-	//ManagerPeersAPI = "/services/cluster/master/peers"
-	ManagerPeersAPI = Services + Manager + Peers
+	//URIClusterManagerClusterConfig = "/services/cluster/config?"
+	URIClusterManagerClusterConfig = "/services/cluster/config?"
 
-	//ClusterServiceConfig = "/services/cluster/config?"
-	ClusterServiceConfig = Services + Cluster + Config + QM
+	//URICLusterManagerServices = "/services/cluster/master"
+	URICLusterManagerServices = "/services/cluster/master"
 
-	//PeerInfoAPI = "/services/cluster/slave/info"
-	PeerInfoAPI = Services + Peer + Info
+	//URIClusterManagerGetInfo = "/services/cluster/master/info"
+	URIClusterManagerGetInfo = URICLusterManagerServices + "/info"
 
-	//RemovePeersAPI = "/services/cluster/master/control/control/remove_peers?"
-	RemovePeersAPI = Services + Manager + Control + Control + RemovePeers + QM
+	//URIClusterManagerGetPeers = "/services/cluster/master/peers"
+	URIClusterManagerGetPeers = URICLusterManagerServices + "/peers"
 
-	//DecommissionAPI = "/services/cluster/slave/control/control/decommission?"
-	DecommissionAPI = Services + Peer + Control + Control + Decommission + QM
+	//URIClusterManagerRemovePeers = "/services/cluster/master/control/control/remove_peers?"
+	URIClusterManagerRemovePeers = URICLusterManagerServices + "/control/control/remove_peers?"
 
-	//ApplyBundleAPI = "/services/cluster/master/control/default/apply"
-	ApplyBundleAPI = Services + Manager + Control + Default + Apply
+	//URIClusterManagerApplyBundle = "/services/cluster/master/control/default/apply"
+	URIClusterManagerApplyBundle = URICLusterManagerServices + "/control/default/apply"
 
-	//SearchHeadsAPI = "/services/cluster/master/searchheads?"
-	SearchHeadsAPI = Services + Manager + SearchHeads + QM
+	//URIClusterManagerGetHealth = "/services/cluster/master/health?"
+	URIClusterManagerGetHealth = URICLusterManagerServices + "/health?"
 
-	//ManagerHealthAPI = "/services/cluster/master/health?"
-	ManagerHealthAPI = Services + Manager + Health + QM
+	//URIClusterManagerGetSites = "/services/cluster/master/sites?"
+	URIClusterManagerGetSites = URICLusterManagerServices + "/sites?"
 
-	//ManagerSitesAPI = "/services/cluster/master/sites?output_mode=json"
-	ManagerSitesAPI = Services + Manager + Sites + QM
+	//URIClusterManagerGetSearchHeads = "/services/cluster/master/searchheads?"
+	URIClusterManagerGetSearchHeads = URICLusterManagerServices + "/searchheads?"
 )
 
-// Base endpoints
+// List of URLs - Cluster Manager
 const (
 
-	//*****************
-	//   Base Hosts
-	//*****************
+	//LocalURLClusterManagerApplyBundle = "https://localhost:8089/services/cluster/master/control/default/apply"
+	LocalURLClusterManagerApplyBundle = "https://localhost:8089" + URIClusterManagerApplyBundle
 
-	//Port8089 = ":8089"
-	Port8089 = ":8089"
+	//LocalURLClusterManagerGetInfo = "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json"
+	LocalURLClusterManagerGetInfo = "https://localhost:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
 
-	//LocalURL = "https://localhost:8089"
-	LocalURL = "https://localhost" + Port8089
+	//LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089/services/cluster/master/info?output_mode=json"
+	LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089" + URIClusterManagerGetInfo + "output_mode=json"
 
-	//Cluster = "/cluster"
-	Cluster = "/cluster"
+	//LocalURLClusterManagerGetPeers = "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json"
+	LocalURLClusterManagerGetPeers = "https://localhost:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
 
-	//Manager = "/cluster/master"
-	Manager = Cluster + "/master"
+	//LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089/services/cluster/master/peers?output_mode=json"
+	LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089" + URIClusterManagerGetPeers + "output_mode=json"
 
-	//Peer = "/cluster/slave"
-	Peer = Cluster + "/slave"
+	//LocalURLClusterManagerRemovePeers = "https://localhost:8089/services/cluster/master/control/control/remove_peers?
+	LocalURLClusterManagerRemovePeers = "https://localhost:8089" + URIClusterManagerRemovePeers
 
-	//Spl = "splunk"
-	Spl = "splunk"
+	//LocalURLClusterManagerGetSite = https://localhost:8089/services/cluster/master/sites?output_mode=json
+	LocalURLClusterManagerGetSite = "https://localhost:8089" + URIClusterManagerGetSites + "output_mode=json"
 
-	//*****************
-	//  Base Outputs
-	//*****************
+	//LocalURLClusterManagerGetHealth = "https://localhost:8089/services/cluster/master/health?output_mode=json"
+	LocalURLClusterManagerGetHealth = "https://localhost:8089" + URIClusterManagerGetHealth + "output_mode=json"
 
-	//JSONOutput =  "output_mode=json"
-	JSONOutput = "output_mode=json"
+	//LocalURLClusterManagerGetSearchHeads = "https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+	LocalURLClusterManagerGetSearchHeads = "https://localhost:8089" + URIClusterManagerGetSearchHeads + "output_mode=json"
+)
 
-	//CountZero = "count=0"
-	CountZero = "count=0"
+// ***** Cluster Peers *****
 
-	//*****************
-	//   Base APIs
-	//*****************
+// List of URIs - Cluster Peers
+const (
 
-	//Services = "/services"
-	Services = "/services"
+	//URIPeerGetInfo = "/services/cluster/slave/info"
+	URIPeerGetInfo = "/services/cluster/slave/info"
 
-	//Info = "/info"
-	Info = "/info"
+	//URIPeerDecommission = "/services/cluster/slave/control/control/decommission?"
+	URIPeerDecommission = "/services/cluster/slave/control/control/decommission?"
+)
 
-	//Peers = "/peers"
-	Peers = "/peers"
+// List of URLs - Cluster Peers
+const (
 
-	//Data = "/data"
-	Data = "/data"
+	//URLPeerInfo = "https://localhost:8089/services/cluster/slave/info?count=0&output_mode=json"
+	URLPeerInfo = "https://localhost:8089" + URIPeerGetInfo + "?count=0&output_mode=json"
 
-	//Sites = "/sites"
-	Sites = "/sites"
+	//URLPeerDecommission = "https://localhost:8089/services/cluster/slave/control/control/decommission?
+	URLPeerDecommission = "https://localhost:8089" + URIPeerDecommission
+)
 
-	//Health = "/health"
-	Health = "/health"
+// ***** License Manager *****
 
-	//SearchHeads = "/searchheads"
-	SearchHeads = "/searchheads"
+// List of URIs - License Manager
+const (
+	//LicenseManager = "license-master"
+	LicenseManager = "license-master"
+)
 
-	//Indexes = "/indexes"
-	Indexes = "/indexes"
+// List of URLs - License Manager/Peer
+const (
 
-	//Control = "/control"
-	Control = "/control"
-
-	//RemovePeers = "/remove_peers"
-	RemovePeers = "/remove_peers"
-
-	//Decommission = "/decommission"
-	Decommission = "/decommission"
-
-	//Default = "/default"
-	Default = "/default"
-
-	//Apply = "/apply"
-	Apply = "/apply"
-
-	//Config = "/config"
-	Config = "/config"
-
-	//LocalsPeer = "/localslave"
-	LocalsPeer = "/localslave"
-
-	//Licenser = "/licenser"
-	Licenser = "/licenser"
-
-	//QM = Question Mark
-	QM = "?"
-
-	//Amp = ampersand
-	Amp = "&"
-
-	//Dash = "-"
-	Dash = "-"
+	//LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
+	LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
 )

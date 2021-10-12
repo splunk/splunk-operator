@@ -170,7 +170,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, true, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.CM, 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
@@ -200,7 +200,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, false, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.CM, 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, false, verificationTimeout)
 		})
 	})
 })

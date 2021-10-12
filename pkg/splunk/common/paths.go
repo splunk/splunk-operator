@@ -1,23 +1,19 @@
 package common
 
-// PATHS
 // List of all Paths used in the Splunk Operator
 
+//List of Splunk Enterprise Paths
 const (
 
-	//*****************
-	// Splunk Enterprise Paths
-	//*****************
+	//PeerAppsLoc = "etc/slave-apps"
+	PeerAppsLoc = "etc/slave-apps"
 
-	//PeerApps path
-	PeerApps = "etc/slave-apps"
+	//ManagerAppsLoc = "etc/master-apps"
+	ManagerAppsLoc = "etc/master-apps"
 
-	//ManagerApps = "etc/master-apps"
-	ManagerApps = "etc/master-apps"
-
-	//SHCluster = "etc/shcluster/apps"
+	//SHCluster = "etc/shcluster"
 	SHCluster = "etc/shcluster"
 
-	//SHClusterApps = "etc/shcluster/apps"
-	SHClusterApps = SHCluster + "/apps"
+	//SHClusterAppsLoc = "etc/shcluster/apps"
+	SHClusterAppsLoc = SHCluster + "/apps"
 )

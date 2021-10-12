@@ -177,7 +177,7 @@ func TestSetSearchHeadDetention(t *testing.T) {
 
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
-	wantRequest, _ := http.NewRequest("POST", splcommon.ApplyBundleTest, body)
+	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerApplyBundle, body)
 
 	test := func(c SplunkClient) error {
 		return c.BundlePush(true)
@@ -228,14 +228,14 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 }
 
 func TestGetClusterMasterInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.ManagerInfoTest, nil)
+	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetInfo, nil)
 	wantInfo := ClusterMasterInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           splcommon.SplunkS1ClusterManagerZero,
+		Label:           fmt.Sprintf(splcommon.TestS1ClusterManagerZero, "0"),
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -258,7 +258,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetCMInfo
+	body := splcommon.TestGetCMInfo
 	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
@@ -269,7 +269,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body = splcommon.BodyTestGetCMInfoEmpty
+	body = splcommon.TestGetCMInfoEmpty
 	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
 
 	// test error code
@@ -277,7 +277,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 }
 
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.PeerInfoJSON, nil)
+	wantRequest, _ := http.NewRequest("GET", splcommon.URLPeerInfo, nil)
 	wantMemberStatus := "Up"
 	test := func(c SplunkClient) error {
 		info, err := c.GetIndexerClusterPeerInfo()
@@ -289,7 +289,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetIndexerClusterPeerInfo
+	body := splcommon.TestGetIndexerClusterPeerInfo
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
@@ -300,7 +300,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body = splcommon.BodyTestGetIndexerClusterPeerInfoEmpty
+	body = splcommon.TestGetIndexerClusterPeerInfoEmpty
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test error code
@@ -308,7 +308,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 }
 
 func TestGetClusterMasterPeers(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.ManagerPeersTest, nil)
+	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetPeers, nil)
 	var wantPeers = []struct {
 		ID     string
 		Label  string
@@ -341,7 +341,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetCMPeers
+	body := splcommon.TestGetCMPeers
 	splunkClientTester(t, "TestGetClusterMasterPeers", 200, body, wantRequest, test)
 
 	// test error response
@@ -356,7 +356,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.RemovePeersTest+"peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerRemovePeers+"peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
@@ -364,7 +364,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.PeerDecommission+"enforce_counts=1", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.URLPeerDecommission+"enforce_counts=1", nil)
 	test := func(c SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
@@ -416,7 +416,7 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetClusterInfo
+	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
 }
 func TestUpdateDMCGroups(t *testing.T) {
@@ -455,7 +455,7 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetMCAssetTable
+	body := splcommon.TestGetMCAssetTable
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
 }
 
@@ -500,7 +500,7 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		EaiAppName:  "splunk_monitoring_console",
 		EaiUserName: "nobody",
 	}
-	wantconfiguredPeers := "&member=" + splcommon.TestUpdateLookupUISettings
+	wantconfiguredPeers := "&member=" + splcommon.TestExampleClusterManagerMgmtPort + "&"
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -535,7 +535,7 @@ func TestGetClusterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.BodyTestGetClusterInfo
+	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetClusterInfo", 200, body, wantRequest, test)
 }
 

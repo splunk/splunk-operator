@@ -414,7 +414,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
 
 			// Verify apps are not copied in the apps folder on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerApps+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerAppsLoc+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//Delete apps on S3 for new Apps
@@ -459,7 +459,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 
 			// Verify apps are not copied in the apps folder on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerApps+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerAppsLoc+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})

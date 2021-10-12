@@ -37,13 +37,13 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	case "Standalone":
 		component = "standalone"
 	case "LicenseMaster":
-		component = splcommon.LM
+		component = splcommon.LicenseManager
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
 		component = "indexer"
 	case "ClusterMaster":
-		component = splcommon.CM
+		component = splcommon.ClusterManager
 	}
 
 	labelsA := map[string]string{
@@ -181,13 +181,13 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 	case "Standalone":
 		component = "standalone"
 	case "LicenseMaster":
-		component = splcommon.LM
+		component = splcommon.LicenseManager
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
 		component = "indexer"
 	case "ClusterMaster":
-		component = splcommon.CM
+		component = splcommon.ClusterManager
 	}
 
 	labels := map[string]string{

@@ -24,7 +24,7 @@ const (
 	SplunkStandalone InstanceType = "standalone"
 
 	// SplunkClusterMaster is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
-	SplunkClusterMaster InstanceType = splcommon.CM
+	SplunkClusterMaster InstanceType = splcommon.ClusterManager
 
 	// SplunkSearchHead may be a standalone or clustered search head instance
 	SplunkSearchHead InstanceType = "search-head"
@@ -36,7 +36,7 @@ const (
 	SplunkDeployer InstanceType = "deployer"
 
 	// SplunkLicenseMaster controls one or more license nodes
-	SplunkLicenseMaster InstanceType = splcommon.LM
+	SplunkLicenseMaster InstanceType = splcommon.LicenseManager
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
@@ -84,7 +84,7 @@ func (instanceType InstanceType) ToKind() string {
 	case SplunkDeployer:
 		kind = "search-head"
 	case SplunkLicenseMaster:
-		kind = splcommon.LM
+		kind = splcommon.LicenseManager
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
 	}

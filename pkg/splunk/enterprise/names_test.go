@@ -22,7 +22,7 @@ import (
 
 func TestGetSplunkDeploymentName(t *testing.T) {
 	got := GetSplunkDeploymentName(SplunkClusterMaster, "t1")
-	want := splcommon.SplunkT1ClusterManager
+	want := splcommon.TestT1ClusterManager
 	if got != want {
 		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkIndexer.ToString(), "t1", got, want)
 	}
@@ -55,10 +55,10 @@ func TestGetSplunkServiceName(t *testing.T) {
 
 	test("splunk-t1-deployer-headless", SplunkDeployer, "t1", true)
 	test("splunk-t2-search-head-service", SplunkSearchHead, "t2", false)
-	test(splcommon.TestGetSplunkServiceNameT3, SplunkLicenseMaster, "t3", false)
+	test(splcommon.TestT3LicenseManagerService, SplunkLicenseMaster, "t3", false)
 
 	LicenseMasterRefName := "stack1"
-	test(splcommon.Stack1LMService, SplunkLicenseMaster, LicenseMasterRefName, false)
+	test(splcommon.TestStack1LicenseManagerService, SplunkLicenseMaster, LicenseMasterRefName, false)
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {

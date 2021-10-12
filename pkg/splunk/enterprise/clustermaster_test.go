@@ -38,13 +38,13 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
-		{MetaName: "*v1." + splcommon.CMStack1Service},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.CMStack1Secret},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestAppList},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
-		{MetaName: "*v1." + splcommon.StatefulSetCMTest},
+		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestStack1ClusterManagerSecret, "v1")},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapAppList},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 	}
 
 	labels := map[string]string{
@@ -155,19 +155,19 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
-		{MetaName: "*v1." + splcommon.CMStack1Service},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1." + splcommon.CMStack1Secret},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestAppList},
-		{MetaName: "*v1." + splcommon.ConfigMCMTestSmartStore},
-		{MetaName: "*v1." + splcommon.StatefulSetCMTest},
-		{MetaName: "*v1." + splcommon.PodTestCMStack1},
+		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestStack1ClusterManagerSecret, "v1")},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapAppList},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
+		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestStack1ClusterManagerPod, "0")},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-monitoring-console-secret-v1"},
 		{MetaName: "*v1.Service-test-splunk-test-monitoring-console-service"},
@@ -266,7 +266,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splcommon.SplunkStack1ClusterManagerZero,
+			Name:      fmt.Sprintf(splcommon.TestStack1ClusterManagerID, "0"),
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v1",
