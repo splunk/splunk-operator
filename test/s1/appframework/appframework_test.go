@@ -217,6 +217,9 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
+			// Wait for Standalone to be in UPDATING status
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
@@ -295,6 +298,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
+
+			// Wait for Standalone to be in UPDATING status
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
