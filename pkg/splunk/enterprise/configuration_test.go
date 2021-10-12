@@ -17,6 +17,7 @@ package enterprise
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
@@ -627,6 +628,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	appFrameworkContext := enterpriseApi.AppDeploymentContext{
 		AppsRepoStatusPollInterval: 60,
+	}
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)

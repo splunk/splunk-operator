@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -184,6 +185,14 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	client.AddObject(&s3Secret)
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 
 	_, err = ApplyLicenseMaster(client, &cr)
 	if err != nil {
@@ -594,6 +603,14 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 
 	_, err = ApplyLicenseMaster(c, &lm)
 	if err != nil {

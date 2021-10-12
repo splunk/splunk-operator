@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -97,6 +98,16 @@ const (
 
 	// AppframeworkManualUpdateConfigMap Config map for App Framework manual update
 	AppframeworkManualUpdateConfigMap = "splunk-%s-manual-app-update"
+
+	// DefaultStorageForAppDownloads is used to specify the default storage
+	// for downloading apps on the operator pod
+	DefaultStorageForAppDownloads = "10Gi"
+
+	// DefaultStorageClassName is the storage class for PVC for downloading apps on operator
+	DefaultStorageClassName = "gp2"
+
+	// appDownlodPVCName is the name of PVC for downloading apps on operator
+	appDownlodPVCName = "tmp-app-download"
 )
 
 var (
@@ -109,6 +120,9 @@ var (
 	specifiedTestTimeout     = defaultTestTimeout
 	specifiedCommitHash      = ""
 )
+
+// OperatorFSGroup is the fsGroup value for Splunk Operator
+var OperatorFSGroup int64 = 1001
 
 //HTTPCodes Response codes for http request
 var HTTPCodes = map[string]string{
@@ -455,6 +469,48 @@ func (testenv *TestEnv) createRoleBinding() error {
 	return nil
 }
 
+func (testenv *TestEnv) attachPVCToOperator(name string) error {
+	var err error
+
+	// volume name which refers to PVC to be attached
+	volumeName := "app-staging"
+
+	namespacedName := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
+	operator := &appsv1.Deployment{}
+	err = testenv.GetKubeClient().Get(context.TODO(), namespacedName, operator)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to get operator", "operator name", testenv.operatorName)
+		return err
+	}
+
+	volume := corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: name,
+			},
+		},
+	}
+
+	operator.Spec.Template.Spec.Volumes = append(operator.Spec.Template.Spec.Volumes, volume)
+
+	volumeMount := corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: splcommon.AppDownloadVolume,
+	}
+
+	operator.Spec.Template.Spec.Containers[0].VolumeMounts = append(operator.Spec.Template.Spec.Containers[0].VolumeMounts, volumeMount)
+
+	// update the operator deployment now
+	err = testenv.GetKubeClient().Update(context.TODO(), operator)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to update operator", "operator name", testenv.operatorName)
+		return err
+	}
+
+	return err
+}
+
 func (testenv *TestEnv) createOperator() error {
 	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
 	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
@@ -464,10 +520,38 @@ func (testenv *TestEnv) createOperator() error {
 		return err
 	}
 
+	// create the PVC to attach to operator for downloading apps
+	pvc, err := newPVC(appDownlodPVCName, testenv.namespace, DefaultStorageForAppDownloads, DefaultStorageClassName)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to create PVC", "pvcName", pvc.ObjectMeta.Name)
+		return err
+	}
+	err = testenv.GetKubeClient().Create(context.TODO(), pvc)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to create PVC")
+		return err
+	}
+
+	//attach the PVC to operator
+	err = testenv.attachPVCToOperator(pvc.ObjectMeta.Name)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to attach PVC to operator", "pvcName", pvc.ObjectMeta.Name)
+		return err
+	}
+
 	testenv.pushCleanupFunc(func() error {
 		err := testenv.GetKubeClient().Delete(context.TODO(), op)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete operator")
+			return err
+		}
+		return nil
+	})
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), pvc)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete PVC")
 			return err
 		}
 		return nil

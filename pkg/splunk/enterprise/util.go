@@ -17,6 +17,7 @@ package enterprise
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -84,7 +86,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 			return s3Client, err
 		}
 		if secretAccessKey == "" {
-			err = fmt.Errorf("S3 Secret Key is missing")
+			err = fmt.Errorf("s3 Secret Key is missing")
 			return s3Client, err
 		}
 	}
@@ -242,6 +244,211 @@ func GetSmartstoreRemoteVolumeSecrets(volume enterpriseApi.VolumeSpec, client sp
 	}
 
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
+}
+
+// getLocalAppFileName generates the local app file name
+// For e.g., if the app package name is sample_app.tgz
+// and etag is "abcd1234", then it will be downloaded locally as sample_app.tgz_abcd1234
+func getLocalAppFileName(downloadPath, appName, etag string) string {
+	return downloadPath + appName + "_" + strings.Trim(etag, "\"")
+}
+
+// getObjectsAsPointers converts and returns a slice of pointers to objects.
+// For e.g., if we have a slice of ints as []int, then this API will return []*int
+func getObjectsAsPointers(v interface{}) interface{} {
+	in := reflect.ValueOf(v)
+	out := reflect.MakeSlice(reflect.SliceOf(reflect.PtrTo(in.Type().Elem())), in.Len(), in.Len())
+	for i := 0; i < in.Len(); i++ {
+		out.Index(i).Set(in.Index(i).Addr())
+	}
+	return out.Interface()
+}
+
+// extractAppNameFromKey extracts the app name from Key received from remote storage
+func extractAppNameFromKey(key string) string {
+	nameAt := strings.LastIndex(key, "/")
+	return key[nameAt+1:]
+}
+
+// getRemoteObjectFromS3Response returns the remote object for the app from S3Response
+func getRemoteObjectFromS3Response(appName string, s3Response splclient.S3Response) *splclient.RemoteObject {
+	for _, object := range s3Response.Objects {
+		rcvdAppName := extractAppNameFromKey(*object.Key)
+		if rcvdAppName == appName {
+			return object
+		}
+	}
+	return nil
+}
+
+// appDownloadStateAsStr converts the state enum to corresponding string
+func appDownloadStateAsStr(state enterpriseApi.AppDownloadState) string {
+	switch state {
+	case enterpriseApi.DownloadNotStarted:
+		return "Download Not Started"
+	case enterpriseApi.DownloadInProgress:
+		return "Download In Progress"
+	case enterpriseApi.DownloadComplete:
+		return "Download Complete"
+	default:
+		return "Download Error"
+	}
+}
+
+// setAppDownloadState sets tha app download state for an app
+func setAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppDownloadState) {
+	scopedLog := log.WithName("setAppDownloadState").WithValues("app name", appInfo.AppName)
+	scopedLog.Info("Setting the download state for app", "old download state", appDownloadStateAsStr(appInfo.AppInstallStatus.AppDownloadState), "new download state", appDownloadStateAsStr(state))
+	appInfo.AppInstallStatus.AppDownloadState = state
+}
+
+// getAppDownloadState returns the current app download state of the app
+func getAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo) enterpriseApi.AppDownloadState {
+	return appInfo.AppInstallStatus.AppDownloadState
+}
+
+// createAppDownloadDir creates the app download directory on the operator pod
+func createAppDownloadDir(path string) error {
+	scopedLog := log.WithName("createAppDownloadDir").WithValues("path", path)
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		errDir := os.MkdirAll(path, 0755)
+		if errDir != nil {
+			scopedLog.Error(errDir, "Unable to create directory at path")
+			return errDir
+		}
+	}
+	return nil
+}
+
+// getAvailableDiskSpace returns the disk space available to download apps at volume "/opt/splunk/appframework"
+func getAvailableDiskSpace() (uint64, error) {
+	var availDiskSpace uint64
+	var stat syscall.Statfs_t
+	scopedLog := log.WithName("getAvailableDiskSpace").WithValues("volume mount", splcommon.AppDownloadVolume)
+
+	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
+	if err != nil {
+		scopedLog.Error(err, "unable to get the info about disk space for volume")
+	} else {
+		availDiskSpace = stat.Bavail * uint64(stat.Bsize)
+		scopedLog.Info("current available disk space in GB", "availableDiskSpace(GB)", availDiskSpace/1024/1024/1024)
+	}
+
+	return availDiskSpace, err
+}
+
+// handleAppInstallPerAppSrc kicks off the app install work for all apps in an app source
+func handleAppInstallPerAppSrc(client splcommon.ControllerClient, cr splcommon.MetaObject, numOfWorkers uint64,
+	appSrc string, appDeployInfo *enterpriseApi.AppSrcDeployInfo, s3Response splclient.S3Response, s3ClientMgr S3ClientManager, localPath, scope string) error {
+	var err error
+
+	scopedLog := log.WithName("handleAppInstallPerAppSrc").WithValues("cr", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// get the current available disk space for downloading apps on operator pod
+	availableDiskSpace, err := getAvailableDiskSpace()
+	if err != nil {
+		return err
+	}
+
+	// initialize the workpool
+	workPool := NewAppInstallWorkerPool(numOfWorkers,
+		appDeployInfo.AppDeploymentInfoList, s3ClientMgr, s3Response,
+		availableDiskSpace, localPath, scope)
+
+	// kick-off the actual work
+	scopedLog.Info("Starting the work to install apps..")
+	workPool.Start()
+
+	return err
+}
+
+// handleAppInstall is responsible for installing apps on the splunk pod.This includes following -
+// 1. download of apps from remote storage to operator pod.
+// 2. copy of apps from operator pod to splunk pod.
+// 3. untar the app in correct location on splunk pod.
+// 4. And finally, installing app on the splunk pod.
+// This is how the directory structure will look like on operator pod -
+// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/
+// |--<crname>
+//       |--<cluster>
+//       |   |--appSrc_1
+//       |   |   |--app1.tgz_<hash>
+//       |   |
+//       |   |--appSrc_2
+//       |       |--app2.spl_<hash>
+//       |
+//       |--local
+//       |   |--appSrc_3
+//       |       |--app3.spl_<hash>
+//       |
+//       |--clusterWithPreConfig
+//          |--appSrc_4
+//              |--app4.tgz_<hash>
+//
+func handleAppInstall(client splcommon.ControllerClient, cr splcommon.MetaObject,
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
+	var err error
+
+	scopedLog := log.WithName("handleAppInstall").WithValues("cr", cr.GetName(), "namespace", cr.GetNamespace())
+
+	var scope string
+	for appSrcName, appDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		scopedLog.Info("Installing apps for app source", "appSource", appSrcName)
+
+		scope = getAppSrcScope(appFrameworkConfig, appSrcName)
+
+		kind := cr.GetObjectKind().GroupVersionKind().Kind
+		// This is how the path to download apps looks like -
+		// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/<CR_Name>/<scope>/<appSrc_Name>/
+		// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
+		// in default namespace, then it will be downloaded at the path -
+		// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
+		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), kind, cr.GetName(), scope, appSrcName) + "/"
+
+		// create the sub-directories on the volume for downloading scoped apps
+		err = createAppDownloadDir(localPath)
+		if err != nil {
+			return err
+		}
+
+		//TODO: gaurav, handle below two conditions more gracefully in future,
+		// and continue with installation of apps in other app sources.
+		// Get the app source spec to get the volume configuration
+		var vol enterpriseApi.VolumeSpec
+		appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
+		if err != nil {
+			return err
+		}
+
+		vol, err = splclient.GetAppSrcVolume(*appSrc, appFrameworkConfig)
+		if err != nil {
+			return err
+		}
+
+		s3ClientWrapper := splclient.S3Clients[vol.Provider]
+		initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
+		s3ClientMgr := S3ClientManager{
+			client:          client,
+			cr:              cr,
+			appFrameworkRef: appFrameworkConfig,
+			vol:             &vol,
+			location:        appSrc.Location,
+			initFn:          initFunc,
+			getS3Client:     GetRemoteStorageClient,
+		}
+
+		numOfWorkers := math.Min(float64(appDeployContext.AppsStatusMaxConcurrentAppDownloads), float64(len(appDeployInfo.AppDeploymentInfoList)))
+
+		// handle the app install for each app source.
+		err = handleAppInstallPerAppSrc(client, cr, uint64(numOfWorkers),
+			appSrcName, &appDeployInfo, remoteObjListingMap[appSrcName], s3ClientMgr, localPath, scope)
+		if err != nil {
+			scopedLog.Error(err, "Unable to install apps for app source", "appSource", appSrcName)
+		}
+	}
+
+	return err
 }
 
 // ApplyAppListingConfigMap creates the configMap  with two entries:
@@ -760,7 +967,7 @@ func isAppExtentionValid(receivedKey string) bool {
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
 func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.AppSrcDeployInfo, remoteS3ObjList []*splclient.RemoteObject) bool {
-	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length: ", len(remoteS3ObjList))
+	scopedLog := log.WithName("AddOrUpdateAppSrcDeploymentInfoList").WithValues("Called with length", len(remoteS3ObjList))
 
 	var found bool
 	var appName string
@@ -788,6 +995,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 					scopedLog.Info("App change detected.  Marking for an update.", "appName", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
+					appList[idx].AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
@@ -809,6 +1017,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
 			appDeployInfo.DeployStatus = enterpriseApi.DeployStatusPending
+			appDeployInfo.AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
 
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
@@ -1082,9 +1291,23 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 				return err
 			}
 
+			// TODO: gaurav, this needs to be removed eventually in favor of downloading apps locally
 			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus, appsModified)
 			if err != nil {
 				return err
+			}
+
+			// TODO: gaurav, this will eventually go outside this if condition,
+			// so that we can continue installation work across reconciles.
+			// As of now, we will only return from this function when the download of apps is complete
+			// in the current reconcile. We have to implement a yield logic to break from the
+			// installations in the current reconcile and continue in the next reconcile.
+			// Handle the app install only if apps have been modified/added.
+			if appsModified {
+				err = handleAppInstall(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+				if err != nil {
+					return err
+				}
 			}
 
 			appStatusContext.AppFrameworkConfig = *appFrameworkConf
@@ -1271,19 +1494,19 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 
 	// Check if the source file path is valid
 	if strings.HasSuffix(srcPath, "/") {
-		return "", "", fmt.Errorf("Invalid file name %s", srcPath)
+		return "", "", fmt.Errorf("invalid file name %s", srcPath)
 	}
 
 	// Do not accept relative path for source file path
 	srcPath = path.Clean(srcPath)
 	if !strings.HasPrefix(srcPath, "/") {
-		return "", "", fmt.Errorf("Relative paths are not supported for source path: %s", srcPath)
+		return "", "", fmt.Errorf("relative paths are not supported for source path: %s", srcPath)
 	}
 
 	// Make sure that the source file exists
 	_, err = os.Stat(srcPath)
 	if err != nil {
-		return "", "", fmt.Errorf("Unable to get the info for file: %s, error: %s", srcPath, err)
+		return "", "", fmt.Errorf("unable to get the info for file: %s, error: %s", srcPath, err)
 	}
 
 	// If the Pod destination path is a directory, use the source file name
@@ -1294,7 +1517,7 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 	destPath = path.Clean(destPath)
 	// Do not accept relative path for Pod destination path
 	if !strings.HasPrefix(destPath, "/") {
-		return "", "", fmt.Errorf("Relative paths are not supported for dest path: %s", destPath)
+		return "", "", fmt.Errorf("relative paths are not supported for dest path: %s", destPath)
 	}
 
 	// Make sure the destination directory is existing
@@ -1309,7 +1532,7 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
 	dirTestResult, _ := strconv.Atoi(stdOut)
 	if dirTestResult != 0 {
-		return stdOut, stdErr, fmt.Errorf("Directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
+		return stdOut, stdErr, fmt.Errorf("directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
 	}
 
 	go func() {

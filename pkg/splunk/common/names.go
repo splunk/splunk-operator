@@ -83,6 +83,12 @@ const (
 
 	// MaxAppsRepoPollInterval sets the polling interval to one day
 	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
+
+	// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
+	AppDownloadVolume = "/opt/splunk/appframework/"
+
+	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
+	DefaultMaxConcurrentAppDownloads uint64 = 5
 )
 
 // GetVersionedSecretName returns a versioned secret name

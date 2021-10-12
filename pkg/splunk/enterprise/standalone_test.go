@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -358,6 +359,14 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
 	_, err = ApplyStandalone(client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
@@ -416,6 +425,13 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 	_, err = ApplyStandalone(client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
@@ -828,6 +844,14 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
 
 	_, err = ApplyStandalone(c, &stand1)
 	if err != nil {

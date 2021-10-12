@@ -291,6 +291,14 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		t.Errorf("Failed to create namespace scoped object")
 	}
 
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateClusterMasterSpec(&cr); err != nil {
@@ -1201,21 +1209,21 @@ func TestCopyFileToPod(t *testing.T) {
 
 	// Test to detect invalid source file name
 	_, _, err := CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	if err == nil || !strings.HasPrefix(err.Error(), "Invalid file name") {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid file name") {
 		t.Errorf("Unable to detect invalid source file name")
 	}
 
 	// Test to detect relative source file path
 	fileOnOperator = "tmp/networkIntelligence.spl"
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	if err == nil || !strings.HasPrefix(err.Error(), "Relative paths are not supported for source path") {
+	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for source path") {
 		t.Errorf("Unable to reject relative source path")
 	}
 	fileOnOperator = "/tmp/networkIntelligence.spl"
 
 	// Test to reject if the source file doesn't exist
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	if err == nil || !strings.HasPrefix(err.Error(), "Unable to get the info for file") {
+	if err == nil || !strings.HasPrefix(err.Error(), "unable to get the info for file") {
 		t.Errorf("If file doesn't exist, should return an error")
 	}
 
@@ -1230,7 +1238,7 @@ func TestCopyFileToPod(t *testing.T) {
 	// Test to detect relative destination file path
 	fileOnStandalonePod = "init-apps/splunkFwdApps/COPYING"
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	if err == nil || !strings.HasPrefix(err.Error(), "Relative paths are not supported for dest path") {
+	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
