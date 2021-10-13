@@ -158,6 +158,15 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	}
 	cr.Status.Phase = phase
 
+	if cr.Status.AppContext.AppsSrcDeployStatus != nil && cr.Status.DeployerPhase == splcommon.PhaseReady {
+		markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+		// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+		if cr.Status.AppContext.IsDeploymentInProgress {
+			cr.Status.AppContext.IsDeploymentInProgress = false
+			return result, nil
+		}
+	}
+
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//upgrade fron automated MC to MC CRD
