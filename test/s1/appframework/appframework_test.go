@@ -300,7 +300,7 @@ var _ = Describe("s1appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Wait for Standalone to be in UPDATING status
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
+			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
