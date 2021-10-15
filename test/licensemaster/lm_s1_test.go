@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemaster, integration: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
