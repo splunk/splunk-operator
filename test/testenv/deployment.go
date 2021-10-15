@@ -667,10 +667,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 	return nil
 }
 
-// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int) error {
-
-	licenseMaster := ""
+// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-master, indexers in multiple sites (SHC LM Optional) with app framework spec
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -706,6 +704,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
 			},
 			Defaults: defaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
@@ -748,6 +749,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			},
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
 			},
 			Defaults: siteDefaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
