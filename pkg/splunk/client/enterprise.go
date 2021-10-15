@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -412,7 +413,7 @@ func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
 			Content ClusterMasterInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/info"
+	path := splcommon.URIClusterManagerGetInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -459,7 +460,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 			Content IndexerClusterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/slave/info"
+	path := splcommon.URIPeerGetInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -582,7 +583,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 			Content ClusterMasterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/peers"
+	path := splcommon.URIClusterManagerGetPeers
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -602,7 +603,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 // See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	// sent request to remove a peer from Cluster Manager peers list
-	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.ManagementURI, id)
+	endpoint := fmt.Sprintf("%s%speers=%s", c.ManagementURI, splcommon.URIClusterManagerRemovePeers, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -619,7 +620,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s/services/cluster/slave/control/control/decommission?enforce_counts=%d", c.ManagementURI, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s%senforce_counts=%d", c.ManagementURI, splcommon.URIPeerDecommission, enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -630,7 +631,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 
 // BundlePush pushes the Cluster manager apps bundle to all the indexer peers
 func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
-	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, splcommon.URIClusterManagerApplyBundle)
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
 
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBody))

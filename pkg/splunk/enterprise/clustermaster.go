@@ -54,7 +54,7 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
-	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-cluster-master", cr.GetName())
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
@@ -256,7 +256,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	masterIdxcName := cr.GetName()
-	cmPodName := fmt.Sprintf("splunk-%s-cluster-master-0", masterIdxcName)
+	cmPodName := fmt.Sprintf("splunk-%s-%s-0", masterIdxcName, splcommon.ClusterManager)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)

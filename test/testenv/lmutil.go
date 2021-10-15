@@ -16,6 +16,7 @@ package testenv
 
 import (
 	"encoding/json"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"strings"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,7 +38,7 @@ type licenserLocalSlaveResponse struct {
 
 // CheckLicenseMasterConfigured checks if lm is configured on given pod
 func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/licenser/localslave?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLLicensePeerJSONOutput
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {
@@ -53,5 +54,5 @@ func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
 	}
 	licenseMaster := restResponse.Entry[0].Content.MasterURI
 	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseMaster)
-	return strings.Contains(licenseMaster, "license-master-service:8089")
+	return strings.Contains(licenseMaster, splcommon.TestLicenseManagerMgmtPort)
 }
