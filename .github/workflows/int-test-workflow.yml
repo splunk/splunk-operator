@@ -9,7 +9,7 @@ jobs:
   int-tests:
     strategy:
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling]
+        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1

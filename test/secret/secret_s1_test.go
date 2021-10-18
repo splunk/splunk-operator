@@ -44,7 +44,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("secret: Secret update on a standalone instance", func() {
+		It("secret, integration: Secret update on a standalone instance", func() {
 
 			/* Test Scenario
 			1. Update Secrets Data
@@ -199,7 +199,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("secret, smoke, integration: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("secret, smoke: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
 
 			/* Test Scenario
 			1. Delete Secret Passing Empty Data Map to secret Object

@@ -49,7 +49,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("crcrud: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("crcrud, integration: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
 			standalone, err := deployment.DeployStandalone(deployment.GetName())

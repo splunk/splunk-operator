@@ -50,7 +50,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("crcrud : can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
+		It("crcrud, integration : can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
 			siteCount := 3
