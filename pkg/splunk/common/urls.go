@@ -48,13 +48,13 @@ const (
 	LocalURLClusterManagerGetInfo = "https://localhost:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
 
 	//LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089/services/cluster/master/info?output_mode=json"
-	LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089" + URIClusterManagerGetInfo + "output_mode=json"
+	LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089" + URIClusterManagerGetInfo + "?output_mode=json"
 
 	//LocalURLClusterManagerGetPeers = "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json"
 	LocalURLClusterManagerGetPeers = "https://localhost:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
 
 	//LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089/services/cluster/master/peers?output_mode=json"
-	LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089" + URIClusterManagerGetPeers + "output_mode=json"
+	LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089" + URIClusterManagerGetPeers + "?output_mode=json"
 
 	//LocalURLClusterManagerRemovePeers = "https://localhost:8089/services/cluster/master/control/control/remove_peers?
 	LocalURLClusterManagerRemovePeers = "https://localhost:8089" + URIClusterManagerRemovePeers
