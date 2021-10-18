@@ -2646,6 +2646,29 @@ spec:
                                 type: object
                               appName:
                                 type: string
+                              auxPhaseInfo:
+                                description: Used by App framework to track the copy
+                                  and install status for each replica member of standalone
+                                  CR. Each Pod's phase info is mapped to its ordinal
+                                  value.
+                                items:
+                                  description: PhaseInfo defines the status to track
+                                    the App framework installation phase
+                                  properties:
+                                    phase:
+                                      description: Phase type
+                                      type: string
+                                    retryCount:
+                                      description: RetryCount defines the number of
+                                        retries completed so far
+                                      format: int32
+                                      type: integer
+                                    status:
+                                      description: Status of the phase
+                                      format: int32
+                                      type: integer
+                                  type: object
+                                type: array
                               deployStatus:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
@@ -2654,6 +2677,23 @@ spec:
                                 type: string
                               objectHash:
                                 type: string
+                              phaseInfo:
+                                description: App phase info used to track download,
+                                  copy and install phases
+                                properties:
+                                  phase:
+                                    description: Phase type
+                                    type: string
+                                  retryCount:
+                                    description: RetryCount defines the number of
+                                      retries completed so far
+                                    format: int32
+                                    type: integer
+                                  status:
+                                    description: Status of the phase
+                                    format: int32
+                                    type: integer
+                                type: object
                               repoState:
                                 description: AppRepoState represent the App state
                                   on remote store
@@ -2675,6 +2715,15 @@ spec:
                       apps that can be downloaded at same time
                     format: int64
                     type: integer
+                  bundlePushStatus:
+                    description: Internal to the App framework. Used in case of CM(IDXC)
+                      and deployer(SHC)
+                    properties:
+                      bundlePushStage:
+                        description: Represents the current stage. Internal to the
+                          App framework
+                        type: integer
+                    type: object
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment
                       is in progress
