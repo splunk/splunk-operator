@@ -134,9 +134,9 @@ func (w *AppInstallWorkerPool) Start() {
 					_ = fmt.Errorf("not enough space to accomodate app:%s, availableDiskSpace:%d", app.AppName, w.availableDiskSpace)
 					continue
 				}
-			case enterpriseApi.DownloadComplete:
-				// This is done in case if all the apps were already downloaded, we would need to
-				// break from outer loop and close the channel as there is no job to add.
+			case enterpriseApi.DownloadComplete, enterpriseApi.DownloadError:
+				// This is done in case if all the apps were already downloaded or errored in downloading,
+				// we would need to break from outer loop and close the channel as there is no job to add.
 				jobsParsed++
 				continue
 			default:

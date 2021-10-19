@@ -191,11 +191,21 @@ func TestAppInstallWorkerPoolStart(t *testing.T) {
 		s3ClientMgr, s3Response, 200 /*dummy available disk space*/, localPath, scope)
 
 	setAppDownloadState(workPool.JobList[0], enterpriseApi.DownloadNotStarted)
-
 	workPool.Start()
 	// check if all apps are downloaded
 	if ok, err := areAppsDownloadedSuccessfully(appDeployInfoList); !ok {
 		t.Errorf("All apps should have been downloaded successfully, error=%v", err)
+	}
+
+	// Check for the case where one of the apps ends up in DownloadError
+	workPool = NewAppInstallWorkerPool(splcommon.DefaultMaxConcurrentAppDownloads, appDeployInfoList,
+		s3ClientMgr, s3Response, 200 /*dummy available disk space*/, localPath, scope)
+
+	setAppDownloadState(workPool.JobList[0], enterpriseApi.DownloadError)
+	workPool.Start()
+	// check if all apps are downloaded
+	if ok, err := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
+		t.Errorf("We should have returned error here since one app is not downloaded, error=%v", err)
 	}
 
 	// remove the apps locally to test download again
