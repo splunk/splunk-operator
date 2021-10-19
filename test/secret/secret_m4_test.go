@@ -64,10 +64,10 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
@@ -103,13 +103,13 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
-			// Ensure that Cluster Master goes to update phase
+			// Ensure that Cluster Manager goes to update phase
 			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase

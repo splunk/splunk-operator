@@ -1,0 +1,116 @@
+name: Automated Release Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Version of Splunk Operator Release'
+        required: true
+      operator_image_tag:
+        description: 'Tag for Splunk Operator Image'
+        required: true
+jobs:
+  automated-release:
+    name: Automated Pre Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Deep Fetch 
+      run: |
+        git fetch --prune --unshallow
+
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
+
+    - name: Install yq
+      run: |
+        wget https://github.com/mikefarah/yq/releases/download/3.2.1/yq_linux_amd64 -O /usr/bin/yq
+        chmod +x /usr/bin/yq
+
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+
+    - name: Set Release Identifier
+      run: |
+        echo "SHORT_SHA=${GITHUB_SHA::12}" >> $GITHUB_ENV
+        echo $SHORT_SHA
+
+    - name: Configure Docker Credentials
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+    
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.13.6'
+    
+    - name: Install golint
+      run: |
+        go version
+        go get -u golang.org/x/lint/golint
+    
+    - name: Install goveralls
+      run: |
+        go version
+        go get github.com/mattn/goveralls@latest
+    
+    - name: Install Operator SDK
+      run: |
+        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
+        sudo chmod +x /usr/local/bin/operator-sdk
+
+    - name: Make Splunk Operator Image
+      run: |
+        make image
+        docker images
+
+    - name: Run Make Package
+      run: |
+        build/package.sh
+        docker images
+
+    - name: Update Operator Image name in Release Folder
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
+        replace: "splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}"
+        include: "release-${{ env.SHORT_SHA }}/"
+  
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: "release-artifacts-${{ github.event.inputs.release_version }}"
+        path: "release-**"
+
+    - name: Generate Release Notes
+      run: |
+        a=`cat docs/ChangeLog.md | grep -n -m2 "^##" | awk -F":" '{print $1}' | tail -1`
+        a=`expr $a - 1`
+        sed -n "4,${a}p" docs/ChangeLog.md >> docs/ReleaseNotes.md >> docs/ReleaseNotes.md
+
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "release-${{ env.SHORT_SHA }}/splunk-operator-install.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-cluster.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-noadmin.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-crds.yaml"
+        bodyFile: "docs/ReleaseNotes.md"
+        tag: "${{ github.event.inputs.release_version }}"
+        draft: true
+
+    - name: Promote LATEST Splunk Operator Image to Release TAG
+      run: |
+        docker tag splunk/splunk-operator:latest splunk/splunk-operator:${{ github.event.inputs.release_version }}
+
+    - name: Tag Splunk Operator Image if not same as release tag
+      if: github.event.inputs.release_version != github.event.inputs.operator_image_tag
+      run: |
+        docker tag splunk/splunk-operator:${{ github.event.inputs.release_version }} splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+
+    - name: Push Release Image
+      run: |
+        docker push splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}

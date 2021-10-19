@@ -40,7 +40,7 @@ type ClusterMasterSpec struct {
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
 type ClusterMasterStatus struct {
-	// current phase of the cluster master
+	// current phase of the cluster manager
 	Phase splcommon.Phase `json:"phase"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
@@ -69,7 +69,7 @@ type BundlePushInfo struct {
 
 // ClusterMaster is the Schema for the clustermasters API
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster master"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
 // +kubebuilder:storageversion
 type ClusterMaster struct {

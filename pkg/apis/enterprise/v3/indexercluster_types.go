@@ -47,7 +47,7 @@ type IndexerClusterMemberStatus struct {
 	// Status of the indexer cluster peer
 	Status string `json:"status"`
 
-	// The ID of the configuration bundle currently being used by the master.
+	// The ID of the configuration bundle currently being used by the manager.
 	ActiveBundleID string `json:"active_bundle_id"`
 
 	// Count of the number of buckets on this peer, across all indexes.
@@ -62,7 +62,7 @@ type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
 	Phase splcommon.Phase `json:"phase"`
 
-	// current phase of the cluster master
+	// current phase of the cluster manager
 	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase"`
 
 	// desired number of indexer peers
@@ -80,7 +80,7 @@ type IndexerClusterStatus struct {
 	// Indicates if the cluster is ready for indexing.
 	IndexingReady bool `json:"indexing_ready_flag"`
 
-	// Indicates whether the master is ready to begin servicing, based on whether it is initialized.
+	// Indicates whether the manager is ready to begin servicing, based on whether it is initialized.
 	ServiceReady bool `json:"service_ready_flag"`
 
 	// Indicates when the idxc_secret has been changed for a peer

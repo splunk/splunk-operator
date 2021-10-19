@@ -14,6 +14,8 @@
 
 package enterprise
 
+import splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
 type InstanceType string
 
@@ -21,8 +23,8 @@ const (
 	// SplunkStandalone is a single instance of Splunk Enterprise
 	SplunkStandalone InstanceType = "standalone"
 
-	// SplunkClusterMaster is the master node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
-	SplunkClusterMaster InstanceType = "cluster-master"
+	// SplunkClusterMaster is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
+	SplunkClusterMaster InstanceType = splcommon.ClusterManager
 
 	// SplunkSearchHead may be a standalone or clustered search head instance
 	SplunkSearchHead InstanceType = "search-head"
@@ -33,8 +35,8 @@ const (
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
-	// SplunkLicenseMaster controls one or more license slaves
-	SplunkLicenseMaster InstanceType = "license-master"
+	// SplunkLicenseMaster controls one or more license nodes
+	SplunkLicenseMaster InstanceType = splcommon.LicenseManager
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
@@ -67,7 +69,7 @@ func (instanceType InstanceType) ToRole() string {
 	return role
 }
 
-// ToKind returns master InstanceType for CRD that manages a given InstanceType
+// ToKind returns manager InstanceType for CRD that manages a given InstanceType
 func (instanceType InstanceType) ToKind() string {
 	var kind string
 	switch instanceType {
@@ -82,7 +84,7 @@ func (instanceType InstanceType) ToKind() string {
 	case SplunkDeployer:
 		kind = "search-head"
 	case SplunkLicenseMaster:
-		kind = "license-master"
+		kind = splcommon.LicenseManager
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
 	}

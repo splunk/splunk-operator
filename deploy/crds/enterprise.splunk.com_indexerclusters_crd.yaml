@@ -701,7 +701,7 @@ spec:
                 description: Full path or URL for one or more defaults.yml files specific
                   to App install, separated by commas.  The defaults listed here will
                   be installed on the CM, standalone, search head deployer or license
-                  master instance.
+                  manager instance.
                 type: string
               etcVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/etc volume
@@ -837,7 +837,7 @@ spec:
                 type: string
               licenseMasterRef:
                 description: LicenseMasterRef refers to a Splunk Enterprise license
-                  master managed by the operator within Kubernetes
+                  manager managed by the operator within Kubernetes
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -2512,7 +2512,7 @@ spec:
                 description: Holds secrets whose IDXC password has changed
                 type: object
               clusterMasterPhase:
-                description: current phase of the cluster master
+                description: current phase of the cluster manager
                 enum:
                 - Pending
                 - Ready
@@ -2548,7 +2548,7 @@ spec:
                   properties:
                     active_bundle_id:
                       description: The ID of the configuration bundle currently being
-                        used by the master.
+                        used by the manager.
                       type: string
                     bucket_count:
                       description: Count of the number of buckets on this peer, across
@@ -2593,7 +2593,7 @@ spec:
                 description: selector for pods, used by HorizontalPodAutoscaler
                 type: string
               service_ready_flag:
-                description: Indicates whether the master is ready to begin servicing,
+                description: Indicates whether the manager is ready to begin servicing,
                   based on whether it is initialized.
                 type: boolean
             type: object

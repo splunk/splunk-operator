@@ -39,7 +39,7 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 	var dataUpdated bool
 	if err == nil {
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
-			scopedLog.Info("Updating existing ConfigMap")
+			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			err = splutil.UpdateResource(client, &current)
 			if err == nil {

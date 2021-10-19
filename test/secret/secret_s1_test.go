@@ -60,11 +60,11 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
-			// Create standalone Deployment with License Master
+			// Create standalone Deployment with License Manager
 			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
@@ -90,7 +90,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
@@ -140,11 +140,11 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
-			// Create standalone Deployment with License Master
+			// Create standalone Deployment with License Manager
 			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
@@ -166,7 +166,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
-			// Wait for License Master to be in READY status
+			// Wait for License Manager to be in READY status
 			testenv.LicenseMasterReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
@@ -208,7 +208,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
 			5. Verify New Secrets via api access (password)*/
 
-			// Create standalone Deployment with License Master
+			// Create standalone Deployment with License Manager
 			standalone, err := deployment.DeployStandalone(deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 

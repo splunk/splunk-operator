@@ -5,7 +5,7 @@ This document provides examples to configure a multisite cluster using the splun
 
 - [Multisite Indexer Clusters in Kubernetes](#multisite-indexer-clusters-in-kubernetes)
 - [Multipart IndexerCluster](#multipart-indexercluster)
-    - [Deploy the cluster-master](#deploy-the-cluster-master)
+    - [Deploy the cluster-manager](#deploy-the-cluster-manager)
     - [Deploy the indexer sites](#deploy-the-indexer-sites)
 - [Connecting a search-head cluster to a multisite indexer-cluster](#connecting-a-search-head-cluster-to-a-multisite-indexer-cluster)
 
@@ -38,11 +38,11 @@ configured with a hardcoded site.
 
 Advantages:
 - some operations are performed per site which mitigates the risk of impact on the whole cluster (e.g. Splunk upgrades, scaling up resources)
-- specific indexer services are created per site allowing to send events to the indexers located in the same zone, avoiding possible cost of cross-zone traffic. Indexer discovery from cluster-master can do this for forwarders, but this solution also covers http/HEC traffic
+- specific indexer services are created per site allowing to send events to the indexers located in the same zone, avoiding possible cost of cross-zone traffic. Indexer discovery from cluster-manager can do this for forwarders, but this solution also covers http/HEC traffic
 
 Limitation: all the IndexerCluster resources must be located in the same namespace
 
-#### Deploy the cluster-master
+#### Deploy the cluster-manager
 
 Note: the image version is defined in these resources as this allows to control the upgrade cycle 
 
@@ -126,10 +126,10 @@ https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/DeploymultisiteSH
 for artifact replication, so mapping Splunk sites to Kubernetes zones is not relevant in that context.
 
 SearchHeadCluster resources can be connected to a multisite indexer cluster the same way as for single site.
-The name of the IndexerCluster part containing the cluster master must be referenced in parameter `clusterMasterRef`.
+The name of the IndexerCluster part containing the cluster manager must be referenced in parameter `clusterMasterRef`.
 
 Additional ansible default parameters must be set to activate multisite:
-* `multisite_master`: which should reference the cluster-master service of the target indexer cluster
+* `multisite_master`: which should reference the cluster-manager service of the target indexer cluster
 * `site`: which should in general be set to `site: site0` to disable search affinity ([documentation for more details]
 (https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/DeploymultisiteSHC#Integrate_a_search_head_cluster_with_a_multisite_indexer_cluster))
 

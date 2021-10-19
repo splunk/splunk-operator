@@ -93,13 +93,13 @@ type CommonSplunkSpec struct {
 	// Full path or URL for one or more defaults.yml files specific
 	// to App install, separated by commas.  The defaults listed here
 	// will be installed on the CM, standalone, search head deployer
-	// or license master instance.
+	// or license manager instance.
 	DefaultsURLApps string `json:"defaultsUrlApps"`
 
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
 
-	// LicenseMasterRef refers to a Splunk Enterprise license master managed by the operator within Kubernetes
+	// LicenseMasterRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
 	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes

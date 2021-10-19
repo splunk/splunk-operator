@@ -61,6 +61,7 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
 	}
@@ -119,6 +120,11 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 	if cr.Status.Phase == splcommon.PhaseReady {
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+			if cr.Status.AppContext.IsDeploymentInProgress {
+				cr.Status.AppContext.IsDeploymentInProgress = false
+				return result, nil
+			}
 		}
 
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.

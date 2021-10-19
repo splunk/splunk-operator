@@ -66,7 +66,7 @@ Note: To run a specific test, you can
 
 ### Circleci pipeline
 
-The circleci config.xml file will also run the integration tests when merging to master branch. By default, the pipeline workflow will
+The circleci config.xml file will also run the integration tests when merging to manager branch. By default, the pipeline workflow will
 deploy a KIND cluster and run the tests against it. To run the test againsts the EKS cluster, you will
 need to define the following project environment variables in the circleci console
 AWS_ACCESS_KEY_ID

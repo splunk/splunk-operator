@@ -59,7 +59,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the Cluster Master goes to Ready phase
+			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
@@ -145,7 +145,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the Cluster Master goes to Ready phase
+			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
@@ -169,8 +169,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Indexers PVCs (etc and var) exists
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, true, verificationTimeout)
 
-			// Verify Cluster Master PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "cluster-master", 1, true, verificationTimeout)
+			// Verify Cluster Manager PVCs (etc and var) exists
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
@@ -184,7 +184,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err = deployment.DeleteCR(idxc)
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
-			// Delete the Cluster Master
+			// Delete the Cluster Manager
 			cm := &enterpriseApi.ClusterMaster{}
 			deployment.GetInstance(deployment.GetName(), cm)
 			err = deployment.DeleteCR(cm)
@@ -199,8 +199,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Indexers PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, false, verificationTimeout)
 
-			// Verify Cluster Master PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "cluster-master", 1, false, verificationTimeout)
+			// Verify Cluster Manager PVCs (etc and var) have been deleted
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, false, verificationTimeout)
 		})
 	})
 })
