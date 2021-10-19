@@ -554,7 +554,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	// test pod needs update => decommission
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    splcommon.TestURLPeerHeadlessDecommission + "enforce_counts=0",
+		URL:    splcommon.TestURLPeerHeadlessDecommission + "?enforce_counts=0",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
@@ -597,7 +597,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	mockHandlers[1].Body = `{"entry":[{"name":"aa45bf46-7f46-47af-a760-590d5c606d10","content":{"status":"Up","label":"splunk-stack1-indexer-0"}},{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","content":{"status":"GracefulShutdown","label":"splunk-stack1-indexer-1"}}]}`
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    splcommon.TestServiceURLClusterManagerRemovePeers + "peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+		URL:    splcommon.TestServiceURLClusterManagerRemovePeers + "?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,

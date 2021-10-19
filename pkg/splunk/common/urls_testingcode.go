@@ -9,7 +9,7 @@ package common
 const (
 
 	//TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/config?count=0&output_mode=json"
-	TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerClusterConfig + "count=0&output_mode=json"
+	TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerClusterConfig + "?count=0&output_mode=json"
 
 	//TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json"
 	TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
@@ -17,7 +17,7 @@ const (
 	//TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json"
 	TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
 
-	//TestServiceURLClusterManagerRemovePeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/control/control/remove_peers?
+	//TestServiceURLClusterManagerRemovePeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/control/control/remove_peers"
 	TestServiceURLClusterManagerRemovePeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerRemovePeers
 
 	//TestServiceURLClusterManagerMgmtPort = "https://splunk--cluster-master-service.test.svc.cluster.local:8089"
@@ -83,7 +83,7 @@ const (
 // Test URLs for Cluster Peers based on Stack1
 const (
 
-	//TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/slave/control/control/decommission?"
+	//TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/slave/control/control/decommission"
 	TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089" + URIPeerDecommission
 )
 
