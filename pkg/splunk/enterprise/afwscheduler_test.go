@@ -17,11 +17,14 @@ package enterprise
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -264,6 +267,12 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 			t.Errorf("Failed to delete the correct element from the list")
 		}
 	}
+
+	// Call to delete a non-existing worker should return false
+	if ppln.deleteWorkerFromPipelinePhase(enterpriseApi.PhaseDownload, &PipelineWorker{}) {
+		t.Errorf("Deletion of non-existing worker should return false, but received true")
+	}
+
 }
 
 func TestTransitionWorkerPhase(t *testing.T) {
@@ -372,7 +381,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 }
 
-func TestDownloadPhaseManager(t *testing.T) {
+func TestPhaseManagers(t *testing.T) {
 	ppln := initAppInstallPipeline()
 	defer func() {
 		afwPipeline = nil
@@ -445,7 +454,7 @@ func TestDownloadPhaseManager(t *testing.T) {
 	var worker *PipelineWorker
 	for i := 0; i < int(replicas); i++ {
 		worker = <-ppln.pplnPhases[enterpriseApi.PhaseDownload].msgChannel
-		ppln.pplnPhases[enterpriseApi.PhaseDownload].workerWaiter.Done()
+		//ppln.pplnPhases[enterpriseApi.PhaseDownload].workerWaiter.Done()
 	}
 
 	if worker != workerList[0] {
@@ -469,7 +478,7 @@ func TestDownloadPhaseManager(t *testing.T) {
 	// drain the pod copy channel
 	for i := 0; i < int(replicas); i++ {
 		worker = <-ppln.pplnPhases[enterpriseApi.PhasePodCopy].msgChannel
-		ppln.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
+		//ppln.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
 	}
 
 	if worker != workerList[0] {
@@ -493,7 +502,7 @@ func TestDownloadPhaseManager(t *testing.T) {
 
 	for i := 0; i < int(replicas); i++ {
 		worker = <-ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel
-		ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
+		//ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
 	}
 
 	if worker != workerList[0] {
@@ -576,6 +585,84 @@ func TestCheckIfBundlePushNeeded(t *testing.T) {
 
 }
 
+func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Test if STS works for cluster master
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-cluster-master",
+			Namespace: "test",
+		},
+	}
+
+	_, err := splctrl.ApplyStatefulSet(c, &current)
+	if err != nil {
+		return
+	}
+	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+		t.Errorf("Unable to get the sts for CM")
+	}
+
+	// Test if STS works for deployer
+	cr.TypeMeta.Kind = "SearchHeadCluster"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-deployer",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(c, &current)
+	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+	// Test if STS works for LM
+	cr.TypeMeta.Kind = "LicenseMaster"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-license-master",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(c, &current)
+	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+	// Test if STS works for Standalone
+	cr.TypeMeta.Kind = "Standalone"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-standalone",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(c, &current)
+	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+}
+
 func TestAfwSchedulerEntry(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -592,32 +679,73 @@ func TestAfwSchedulerEntry(t *testing.T) {
 		},
 	}
 
-	// var replicas int32 = 1
-	// sts := &appsv1.StatefulSet{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      "splunk-stack1",
-	// 		Namespace: "test",
-	// 	},
-	// 	Spec: appsv1.StatefulSetSpec{
-	// 		Replicas: &replicas,
-	// 	},
-	// }
-
-	var client splcommon.ControllerClient
-	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{}
-	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
-	// appDeployContext.AppsSrcDeployStatus.appDeployContext
-	// appDeployInfo: &enterpriseApi.AppDeploymentInfo{
-	// 	AppName: fmt.Sprintf("app%d.tgz", i),
-	// 	PhaseInfo: enterpriseApi.PhaseInfo{
-	// 		Phase:  enterpriseApi.PhaseDownload,
-	// 		Status: enterpriseApi.AppPkgDownloadPending,
-	// 	},
-	// },
-	var appFrameworkConfig *enterpriseApi.AppFrameworkSpec = &enterpriseApi.AppFrameworkSpec{}
-
-	afwSchedulerEntry(client, &cr, appDeployContext, appFrameworkConfig)
-	if afwPipeline == nil {
-		t.Errorf("Unable to start App Framework scheduler")
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
 	}
+
+	c := spltest.NewMockClient()
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{}
+	// Create 2 apps for each app source, a total of 6 apps
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 3)
+
+	appSrcDeploymentInfo := enterpriseApi.AppSrcDeployInfo{}
+	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, enterpriseApi.AppDeploymentInfo{
+		AppName:    fmt.Sprintf("app1.tgz"),
+		ObjectHash: fmt.Sprintf("abcd1234abcd"),
+		PhaseInfo: enterpriseApi.PhaseInfo{
+			Phase:  enterpriseApi.PhaseDownload,
+			Status: enterpriseApi.AppPkgDownloadPending,
+		},
+	})
+	appDeployContext.AppsSrcDeployStatus[appFrameworkConfig.AppSources[0].Name] = appSrcDeploymentInfo
+
+	appDeployContext.AppFrameworkConfig = *appFrameworkConfig
+
+	afwPipeline = nil
+	afwPipeline = initAppInstallPipeline()
+
+	var schedulerWaiter sync.WaitGroup
+	defer schedulerWaiter.Wait()
+
+	schedulerWaiter.Add(1)
+	go func() {
+		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].msgChannel
+		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadComplete
+		worker.isActive = false
+		// wait for the glue logic
+		//afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].workerWaiter.Done()
+		schedulerWaiter.Done()
+	}()
+
+	schedulerWaiter.Add(1)
+	go func() {
+		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].msgChannel
+		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+		worker.isActive = false
+		// wait for the glue logic
+		//afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
+		schedulerWaiter.Done()
+	}()
+
+	schedulerWaiter.Add(1)
+	go func() {
+		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].msgChannel
+		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+		worker.isActive = false
+		// wait for the glue logic
+		// afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
+		schedulerWaiter.Done()
+	}()
+
+	afwSchedulerEntry(c, &cr, appDeployContext, appFrameworkConfig)
 }

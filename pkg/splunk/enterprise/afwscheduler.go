@@ -21,7 +21,9 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // handle to hold the pipeline
@@ -118,7 +120,12 @@ func (ppln *AppInstallPipeline) TransitionWorkerPhase(worker *PipelineWorker, cu
 	scopedLog := log.WithName("TransitionWorkerPhase").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash, "pod name", worker.targetPodName, "current Phase", currentPhase, "next phase", nextPhase)
 
 	appDeployInfo := worker.appDeployInfo
-	replicaCount := *worker.sts.Spec.Replicas
+	var replicaCount int32
+	if worker.sts != nil {
+		replicaCount = *worker.sts.Spec.Replicas
+	} else {
+		replicaCount = 1
+	}
 
 	// For now Standalone is the only CR unique with multiple replicas that is applicable for the AFW
 	// If the replica count is more than 1, and if it is Standalone, when transitioning from
@@ -187,6 +194,7 @@ func (ppln *AppInstallPipeline) TransitionWorkerPhase(worker *PipelineWorker, cu
 					scopedLog.Info("Created a new fan-out pod copy worker", "pod name", worker.targetPodName)
 					installWorkers = append(installWorkers, &newWorker)
 				} else {
+					//sgontla: check here
 					scopedLog.Info("Created a new fan-out install worker", "pod name", worker.targetPodName)
 					copyWorkers = append(copyWorkers, &newWorker)
 				}
@@ -228,7 +236,7 @@ downloadPhase:
 					case pplnPhase.msgChannel <- downloadWorker:
 						scopedLog.Info("Download worker got a run slot", "name", downloadWorker.cr.GetName(), "namespace", downloadWorker.cr.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "digest", downloadWorker.appDeployInfo.ObjectHash)
 						downloadWorker.isActive = true
-						pplnPhase.workerWaiter.Add(1)
+						//pplnPhase.workerWaiter.Add(1)
 					default:
 						downloadWorker.waiter = nil
 						break scheduleDownloads
@@ -276,7 +284,7 @@ podCopyPhase:
 					select {
 					case pplnPhase.msgChannel <- podCopyWorker:
 						scopedLog.Info("Pod copy worker got a run slot", "name", podCopyWorker.cr.GetName(), "namespace", podCopyWorker.cr.GetNamespace(), "pod name", podCopyWorker.targetPodName, "App name", podCopyWorker.appDeployInfo.AppName, "digest", podCopyWorker.appDeployInfo.ObjectHash)
-						pplnPhase.workerWaiter.Add(1)
+						//pplnPhase.workerWaiter.Add(1)
 						podCopyWorker.isActive = true
 					default:
 						podCopyWorker.waiter = nil
@@ -334,7 +342,7 @@ installPhase:
 					select {
 					case pplnPhase.msgChannel <- installWorker:
 						scopedLog.Info("Install worker got a run slot", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "pod name", installWorker.targetPodName, "App name", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash)
-						pplnPhase.workerWaiter.Add(1)
+						//pplnPhase.workerWaiter.Add(1)
 						installWorker.isActive = true
 					default:
 						installWorker.waiter = nil
@@ -433,11 +441,40 @@ func initAppInstallPipeline() *AppInstallPipeline {
 	return afwPipeline
 }
 
+func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.ControllerClient) *appsv1.StatefulSet {
+	scopedLog := log.WithName("getReleventStatefulsetByKind").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	var instanceID InstanceType
+
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		instanceID = SplunkStandalone
+	case "LicenseMaster":
+		instanceID = SplunkLicenseMaster
+	case "SearchHeadCluster":
+		instanceID = SplunkDeployer
+	case "ClusterMaster":
+		instanceID = SplunkClusterMaster
+	case "MonitoringConsole":
+		instanceID = SplunkMonitoringConsole
+	default:
+		return nil
+	}
+
+	statefulsetName := GetSplunkStatefulsetName(instanceID, cr.GetName())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: statefulsetName}
+	sts, err := splctrl.GetStatefulSetByName(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the stateful set")
+	}
+
+	return sts
+}
+
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "App name")
 	afwPipeline = initAppInstallPipeline()
-	var yieldTime int64 = 90 //Seconds
+	var yieldTime int64 = 90 //seconds
 
 	var clusterScopedApps []*enterpriseApi.AppDeploymentInfo
 
@@ -478,7 +515,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 			} else if deployInfo.PhaseInfo.Phase == enterpriseApi.PhasePodCopy && deployInfo.PhaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
 				pplnPhase = enterpriseApi.PhasePodCopy
 			} else if deployInfo.PhaseInfo.Phase == enterpriseApi.PhaseInstall && deployInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete && deployInfo.PhaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
-				//Cluster scopes do not get to this phase. Only local scoped apps fall into this pipeline.
+				// Cluster scopes do not get to this phase. Only local scoped apps fall into this pipeline.
 				// For cluster scoped apps, all that we need is bundle push. So, a one-shot worker(outside of this logic) serves the purpose
 				pplnPhase = enterpriseApi.PhaseInstall
 			}
@@ -486,8 +523,8 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 			// Ignore any other apps that are not in progress
 			if pplnPhase != "" {
 				podName = getApplicablePodNameForWorker(cr, podID)
-				//sgontla: fill the statefulset info here
-				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfo, appSrcName, podName, appFrameworkConfig, client, cr, nil)
+				sts := afwGetReleventStatefulsetByKind(cr, client)
+				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfo, appSrcName, podName, appFrameworkConfig, client, cr, sts)
 			}
 		}
 	}
@@ -503,7 +540,6 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	go func() {
 		afwEntryTime := time.Now().Unix()
 		for {
-
 			if afwEntryTime+yieldTime < time.Now().Unix() || afwPipeline.isPipelineEmpty() {
 				scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-afwEntryTime)
 				// terminate download Phase
@@ -528,15 +564,14 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 				time.Sleep(1 * time.Second)
 			}
 		}
-
 	}()
 
-	//ToDo: sgontla: for now, just make the UT happy, until we get the glue logic
-	//check if this needs to be pure singleton for the entire reconcile span, considering CSPL-1169. CC: @Gaurav
+	// ToDo: sgontla: for now, just make the UT happy, until we get the glue logic
+	// check if this needs to be pure singleton for the entire reconcile span, considering CSPL-1169. CC: @Gaurav
 	// Finally delete the pipeline
-	// defer func() {
-	// 	afwPipeline = nil
-	// }()
+	defer func() {
+		afwPipeline = nil
+	}()
 	scopedLog.Info("Waiting for the phase managers to finish")
 
 	// Wait for all the pipeline managers to finish
