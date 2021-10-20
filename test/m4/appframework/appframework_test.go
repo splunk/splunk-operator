@@ -115,6 +115,19 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V1 bundle hash for future comparision
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
@@ -164,6 +177,10 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify bundle push status and compare bundle hash with previous V1 bundle
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps are copied to location
 			testenvInstance.Log.Info("Verify apps are copied to correct location based on Pod KIND for app after upgrade", "version", appVersion)
@@ -245,6 +262,17 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app before downgrade", "version", appVersion)
@@ -282,6 +310,12 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount)
+			// Saving current V2 bundle hash for future comparision
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify Apps are copied to correct location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND after scaling up of indexers", "version", appVersion)
@@ -311,7 +345,7 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the cluster-master goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
@@ -326,6 +360,10 @@ var _ = Describe("m4appfw test", func() {
 			// Verify older version of apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify older version of apps are downloaded by init container", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify older version of apps are copied to correct location
 			testenvInstance.Log.Info("Verify older version of apps are copied to correct location based on Pod KIND", "version", appVersion)

@@ -18,13 +18,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -603,7 +604,7 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 // See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	// sent request to remove a peer from Cluster Manager peers list
-	endpoint := fmt.Sprintf("%s%speers=%s", c.ManagementURI, splcommon.URIClusterManagerRemovePeers, id)
+	endpoint := fmt.Sprintf("%s%s?peers=%s", c.ManagementURI, splcommon.URIClusterManagerRemovePeers, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -620,7 +621,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s%senforce_counts=%d", c.ManagementURI, splcommon.URIPeerDecommission, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s%s?enforce_counts=%d", c.ManagementURI, splcommon.URIPeerDecommission, enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err

@@ -181,6 +181,19 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V1 bundle hash for future comparision
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
@@ -215,7 +228,7 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the CM goes to Ready phase
+			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
@@ -233,6 +246,11 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify bundle push status and compare bundle hash with previous v1 bundle hash
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
@@ -409,6 +427,8 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
 
 			// Update Replicas of SHC
+			err = deployment.GetInstance(shcName, shc)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 			shc.Spec.Replicas = int32(scaledSHReplicas)
 			err = deployment.UpdateCR(shc)
 			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
@@ -452,7 +472,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
-			// Verify apps are copied to location
+			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V2 bundle hash to future comparision with new config bundle hash
+			clusterManagerBundleHash = testenv.GetClusterManagerBundleHash(deployment)
+
+			// Verify Apps are copied to location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
@@ -502,7 +528,13 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", " version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
-			// Verify apps are copied to location
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V1 bundle hash to future comparision with new config bundle hash
+			clusterManagerBundleHash = testenv.GetClusterManagerBundleHash(deployment)
+
+			// Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", " version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
@@ -576,8 +608,8 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
 
-			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app", "version", appVersion, "App List", appFileList)
+			// Verify apps are not copied in the apps folder on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerAppsLoc+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//Delete apps on S3 for new Apps
@@ -621,8 +653,8 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 
-			// Verify apps are not copied in /etc/master-apps/ on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
-			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/master-apps/ on CM and /etc/shcluster/ on Deployer for app", "version", appVersion, "App List", appFileList)
+			// Verify apps are not copied in the apps folder on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
+			testenvInstance.Log.Info("Verify Apps are NOT copied to "+splcommon.ManagerAppsLoc+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})
@@ -668,9 +700,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create Single site Cluster and SHC, with App Framework enabled on SHC Deployer
 			// Deploy the CM
-			testenvInstance.Log.Info("Deploy Cluster master in single site configuration")
+			testenvInstance.Log.Info("Deploy Cluster manager in single site configuration")
 			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the indexer cluster
 			testenvInstance.Log.Info("Deploy Indexer Cluster in single site configuration")
@@ -814,6 +846,19 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V1 bundle hash for future comparision
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			localPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
@@ -825,13 +870,6 @@ var _ = Describe("c3appfw test", func() {
 				sh := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
 				clusterPodNames = append(clusterPodNames, string(sh))
 			}
-
-			// Get SH Replicas and add sh pods to pod names
-			shc := &enterpriseApi.SearchHeadCluster{}
-			shcName := deployment.GetName() + "-shc"
-			err = deployment.GetInstance(shcName, shc)
-			Expect(err).To(Succeed(), "Failed to get instance of SHC")
-			shReplicas := shc.Spec.Replicas
 
 			for i := 0; i < int(shReplicas); i++ {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
@@ -885,6 +923,12 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V2 bundle hash for future comparision
+			clusterManagerBundleHash = testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
@@ -937,6 +981,10 @@ var _ = Describe("c3appfw test", func() {
 			appFileList = testenv.GetAppFileList(appListCluster, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
@@ -1004,6 +1052,17 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appFileList, initContDownloadLocation)
+
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())

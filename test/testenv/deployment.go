@@ -842,7 +842,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 
 	// If license file specified, deploy License Master
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -851,7 +851,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 		licenseMaster = name
 	}
 
-	// Deploy the cluster-master
+	// Deploy the cluster-manager
 	defaults := `splunk:
   multisite_master: localhost
   all_sites: site1,site2,site3
@@ -865,7 +865,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
     replication_factor: 2
 `
 
-	// Cluster Master Spec
+	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: splcommon.Spec{
@@ -891,9 +891,9 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
 		siteDefaults := fmt.Sprintf(`splunk:
-  multisite_master: splunk-%s-cluster-master-service
+  multisite_master: splunk-%s-%s-service
   site: %s
-`, name, siteName)
+`, name, splcommon.ClusterManager, siteName)
 		_, err := d.DeployIndexerCluster(name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -901,9 +901,9 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 	}
 
 	siteDefaults := fmt.Sprintf(`splunk:
-  multisite_master: splunk-%s-cluster-master-service
+  multisite_master: splunk-%s-%s-service
   site: site0
-`, name)
+`, name, splcommon.ClusterManager)
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

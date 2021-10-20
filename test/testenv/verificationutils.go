@@ -170,7 +170,7 @@ func ClusterMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		}
 		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+"instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		// Test ClusterMaster Phase to see if its ready
+		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
@@ -239,7 +239,7 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(siteIndexerMap))
 }
 
-// VerifyRFSFMet verify RF SF is met on cluster masterr
+// VerifyRFSFMet verify RF SF is met on cluster Manager
 func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
 	gomega.Eventually(func() bool {
 		rfSfStatus := CheckRFSF(deployment)
@@ -270,13 +270,13 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
 func LicenseMasterReady(deployment *Deployment, testenvInstance *TestEnv) {
 	licenseMaster := &enterpriseApi.LicenseMaster{}
 
-	testenvInstance.Log.Info("Verifying License Master becomes READY")
+	testenvInstance.Log.Info("Verifying License manager becomes READY")
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deployment.GetName(), licenseMaster)
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
+		testenvInstance.Log.Info("Waiting for License Manager instance status to be ready",
 			"instance", licenseMaster.ObjectMeta.Name, "Phase", licenseMaster.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 
@@ -476,7 +476,7 @@ func VerifyClusterMasterPhase(deployment *Deployment, testenvInstance *TestEnv, 
 		}
 		testenvInstance.Log.Info("Waiting for"+splcommon.ClusterManager+"Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
 		DumpGetPods(testenvInstance.GetName())
-		// Test ClusterMaster Phase to see if its ready
+		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
@@ -732,4 +732,49 @@ func VerifyPodsInMCConfigString(deployment *Deployment, testenvInstance *TestEnv
 		}
 		gomega.Expect(expected).To(gomega.Equal(found), "Verify Pod in MC Config String. Pod Name %s.", podName)
 	}
+}
+
+// VerifyClusterManagerBundlePush verify that bundle push was pushed on all indexers
+func VerifyClusterManagerBundlePush(deployment *Deployment, testenvInstance *TestEnv, ns string, replicas int, previousBundleHash string) {
+	gomega.Eventually(func() bool {
+		// Get Bundle status and check that each pod has successfully deployed the latest bundle
+		clusterMasterBundleStatus := ClusterManagerBundlePushstatus(deployment, previousBundleHash)
+		if len(clusterMasterBundleStatus) < replicas {
+			testenvInstance.Log.Info("Bundle push on Pod not complete on all pods", "Pod with bundle push", clusterMasterBundleStatus)
+			return false
+		}
+		clusterPodNames := DumpGetPods(testenvInstance.GetName())
+		for _, podName := range clusterPodNames {
+			if strings.Contains(podName, "-indexer-") {
+				if _, present := clusterMasterBundleStatus[podName]; present {
+					if clusterMasterBundleStatus[podName] != "Up" {
+						testenvInstance.Log.Info("Bundle push on Pod not complete", "Pod Name", podName, "Status", clusterMasterBundleStatus[podName])
+						return false
+					}
+				} else {
+					testenvInstance.Log.Info("Bundle push not found on pod", "Podname", podName)
+					return false
+				}
+			}
+		}
+		return true
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyDeployerBundlePush verify that bundle push was pushed on all search heads
+func VerifyDeployerBundlePush(deployment *Deployment, testenvInstance *TestEnv, ns string, replicas int) {
+	gomega.Eventually(func() bool {
+		deployerAppPushStatus := DeployerBundlePushstatus(deployment, ns)
+		if len(deployerAppPushStatus) == 0 {
+			testenvInstance.Log.Info("Bundle push not complete on all pods")
+			return false
+		}
+		for appName, val := range deployerAppPushStatus {
+			if val < replicas {
+				testenvInstance.Log.Info("Bundle push not complete on all pods for", "AppName", appName)
+				return false
+			}
+		}
+		return true
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
