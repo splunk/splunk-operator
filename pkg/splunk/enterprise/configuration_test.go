@@ -630,13 +630,17 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		AppsRepoStatusPollInterval: 60,
 	}
 
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("App Framework configuration should have returned error as we have not mounted app download volume: %v", err)
+	}
+
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
 	if err != nil {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {

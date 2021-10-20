@@ -100,9 +100,10 @@ func (w *AppInstallWorkerPool) Start() {
 		go w.Run(i, w.JobsChan)
 	}
 
-	var jobsAdded int
+	var actualJobsAdded bool
 	// add the apps to the jobs channel so that workers can pick them up
 	for {
+		jobsParsed := 0
 		for index := 0; index < len(w.JobList); index++ {
 			app := w.JobList[index]
 
@@ -113,12 +114,12 @@ func (w *AppInstallWorkerPool) Start() {
 					// This means app was downloaded successfuly to operator pod,
 					// mark this as DownloadComplete
 					setAppDownloadState(app, enterpriseApi.DownloadComplete)
-					jobsAdded++
+					jobsParsed++
 					//TODO: check for app copy and untar state
 					continue
 				}
 				// only proceed if we have enough disk space to download this app
-				if w.availableDiskSpace-app.Size > 0 {
+				if int64(w.availableDiskSpace-app.Size) > 0 {
 					w.availableDiskSpace = w.availableDiskSpace - app.Size
 					w.wg.Add(1)
 
@@ -127,15 +128,16 @@ func (w *AppInstallWorkerPool) Start() {
 
 					// add the job to the jobs channel
 					w.JobsChan <- app
-					jobsAdded++
+					jobsParsed++
+					actualJobsAdded = true
 				} else {
 					_ = fmt.Errorf("not enough space to accomodate app:%s, availableDiskSpace:%d", app.AppName, w.availableDiskSpace)
 					continue
 				}
-			case enterpriseApi.DownloadComplete:
-				// This is done in case if all the apps were already downloaded, we would need to
-				// break from outer loop and close the channel as there is no job to add.
-				jobsAdded++
+			case enterpriseApi.DownloadComplete, enterpriseApi.DownloadError:
+				// This is done in case if all the apps were already downloaded or errored in downloading,
+				// we would need to break from outer loop and close the channel as there is no job to add.
+				jobsParsed++
 				continue
 			default:
 				continue
@@ -143,13 +145,15 @@ func (w *AppInstallWorkerPool) Start() {
 		}
 
 		// all the jobs are added to the channel, we are done here
-		if jobsAdded == len(w.JobList) {
+		if jobsParsed == len(w.JobList) {
 			break
 		}
 	}
 
-	// close the jobs channel now
-	close(w.JobsChan)
+	// close the jobs channel now, only if it is not closed yet
+	if actualJobsAdded {
+		close(w.JobsChan)
+	}
 
 	// wait for all the workers to finish their jobs
 	w.wg.Wait()
