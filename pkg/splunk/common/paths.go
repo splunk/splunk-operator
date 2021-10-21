@@ -5,13 +5,13 @@ package common
 //List of Splunk Enterprise Paths
 const (
 
-	//PeerAppsLoc = "etc/slave-apps"
+	//PeerAppsLoc
 	PeerAppsLoc = "etc/slave-apps"
 
-	//ManagerAppsLoc = "etc/master-apps"
+	//ManagerAppsLoc
 	ManagerAppsLoc = "etc/master-apps"
 
-	//SHCluster = "etc/shcluster"
+	//SHCluster
 	SHCluster = "etc/shcluster"
 
 	//SHClusterAppsLoc = "etc/shcluster/apps"
@@ -21,18 +21,18 @@ const (
 // List of Operator Paths
 const (
 
-	//ManagerAppsOperatorLocal = "/opt/splk/etc/master-apps/splunk-operator/local"
+	//ManagerAppsOperatorLocal
 	OperatorClusterManagerAppsLocal = "/opt/splk/etc/master-apps/splunk-operator/local"
 
-	//OperatorClusterManagerAppsLocalIndexesConf = "/opt/splk/etc/master-apps/splunk-operator/local/indexes.conf"
+	//OperatorClusterManagerAppsLocalIndexesConf
 	OperatorClusterManagerAppsLocalIndexesConf = "/opt/splk/etc/master-apps/splunk-operator/local/indexes.conf"
 
-	//OperatorClusterManagerAppsLocalServerConf = "/opt/splk/etc/master-apps/splunk-operator/local/server.conf"
+	//OperatorClusterManagerAppsLocalServerConf
 	OperatorClusterManagerAppsLocalServerConf = "/opt/splk/etc/master-apps/splunk-operator/local/server.conf"
 
-	//OperatorMountLocalIndexesConf = "/mnt/splunk-operator/local/indexes.conf"
+	//OperatorMountLocalIndexesConf
 	OperatorMountLocalIndexesConf = "/mnt/splunk-operator/local/indexes.conf"
 
-	//OperatorMountLocalServerConf = "/mnt/splunk-operator/local/server.conf"
+	//OperatorMountLocalServerConf
 	OperatorMountLocalServerConf = "/mnt/splunk-operator/local/server.conf"
 )

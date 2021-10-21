@@ -356,7 +356,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerRemovePeers+"peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerRemovePeers+"?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
@@ -364,7 +364,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.URLPeerDecommission+"enforce_counts=1", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.URLPeerDecommission+"?enforce_counts=1", nil)
 	test := func(c SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
