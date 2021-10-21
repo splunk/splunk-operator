@@ -278,7 +278,7 @@ func ClusterManagerBundlePushstatus(deployment *Deployment, previousBundleHash s
 
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
 func GetClusterManagerBundleHash(deployment *Deployment) string {
-	podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 	restResponse := ClusterMasterInfoResponse(deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle["checksum"]
