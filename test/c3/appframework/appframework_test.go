@@ -71,10 +71,12 @@ var _ = Describe("c3appfw test", func() {
 			   * Prepare MC CRD with App Config
 			   * Wait for MC to be READY
 			   ################## VERIFICATIONS #############
+			   * Verify bundle push is successful
 			   * Verify apps are copied, installed on MC AND SH,Indexers pods
 			   ############ UPGRADE APPS #############################
 			   * Upgrade apps in app sources
 			   * Wait for MC and C3 are READY
+			   * Verify bundle push is successful
 			   * Verify apps are copied, installed and upgraded on MC AND SH,Indexers pods
 			*/
 
@@ -279,6 +281,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Prepare MC CRD with App Config
 			   * Wait for MC to be READY
 			   ################## VERIFICATIONS #############
+			   * Verify bundle push is successful
 			   * Verify apps are copied, installed on MC AND SH,Indexers pods
 			   ##########  SCALE UP SHC and Indexers ###########
 			   * Wait for SHC, indexers and MC to be ready
@@ -286,6 +289,7 @@ var _ = Describe("c3appfw test", func() {
 			   ############ DOWNGRADE APPS #############################
 			   * Downgrade apps in app sources
 			   * Wait for MC and C3 to be READY
+			   * Verify bundle push is successful
 			   * Verify apps are copied, installed and downgraded on MC AND SH,Indexers pods
 			*/
 
@@ -401,6 +405,19 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
+			// Get instance of current SHC CR with latest config
+			shcName := deployment.GetName() + "-shc"
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(shcName, shc)
+			shReplicas := int(shc.Spec.Replicas)
+			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
+
+			// Verify bundle push status
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V1 bundle hash for future comparision
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 			// Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
@@ -416,8 +433,8 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			// Get instance of current SHC CR with latest config
-			shcName := deployment.GetName() + "-shc"
-			shc := &enterpriseApi.SearchHeadCluster{}
+			shcName = deployment.GetName() + "-shc"
+			shc = &enterpriseApi.SearchHeadCluster{}
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
@@ -474,7 +491,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
 			// Saving current V2 bundle hash to future comparision with new config bundle hash
 			clusterManagerBundleHash = testenv.GetClusterManagerBundleHash(deployment)
 
@@ -529,10 +546,8 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify bundle push status
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-			// Saving current V1 bundle hash to future comparision with new config bundle hash
-			clusterManagerBundleHash = testenv.GetClusterManagerBundleHash(deployment)
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
 
 			// Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", " version", appVersion)
@@ -1079,11 +1094,7 @@ var _ = Describe("c3appfw test", func() {
 				sh := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
 				podNames = append(podNames, string(sh))
 			}
-			shc := &enterpriseApi.SearchHeadCluster{}
-			shcName := deployment.GetName() + "-shc"
-			err = deployment.GetInstance(shcName, shc)
-			Expect(err).To(Succeed(), "Failed to get instance of SHC")
-			shReplicas := shc.Spec.Replicas
+
 			for i := 0; i < int(shReplicas); i++ {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				podNames = append(podNames, string(sh))

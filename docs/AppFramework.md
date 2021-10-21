@@ -333,7 +333,7 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 * Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes
 * When App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs)
-* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Master, Standalone, Monitoring Console and License Master CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
+* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone, Monitoring Console and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
 
 ## App Framework Limitations
 
