@@ -1,16 +1,16 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: licensemasters.enterprise.splunk.com
+  name: licensemanagers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: LicenseMaster
-    listKind: LicenseMasterList
-    plural: licensemasters
+    kind: LicenseManager
+    listKind: LicenseManagerList
+    plural: licensemanagers
     shortNames:
     - lm
-    singular: licensemaster
+    singular: licensemanager
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -25,7 +25,8 @@ spec:
     name: v2
     schema:
       openAPIV3Schema:
-        description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
+        description: LicenseManager is the Schema for a Splunk Enterprise license
+          manager.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -40,8 +41,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-              license manager.
+            description: LicenseManagerSpec defines the desired state of a Splunk
+              Enterprise license manager.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -2562,7 +2563,7 @@ spec:
                 type: array
             type: object
           status:
-            description: LicenseMasterStatus defines the observed state of a Splunk
+            description: LicenseManagerStatus defines the observed state of a Splunk
               Enterprise license manager.
             properties:
               appContext:

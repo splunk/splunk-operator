@@ -38,6 +38,9 @@ const (
 	// SplunkLicenseMaster controls one or more license nodes
 	SplunkLicenseMaster InstanceType = splcommon.LicenseManager
 
+	// SplunkLicenseManager controls one or more license nodes
+	SplunkLicenseManager InstanceType = "license-manager"
+
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
 )
@@ -63,6 +66,8 @@ func (instanceType InstanceType) ToRole() string {
 		role = "splunk_deployer"
 	case SplunkLicenseMaster:
 		role = "splunk_license_master"
+	case SplunkLicenseManager:
+		role = "splunk_license_manager"
 	case SplunkMonitoringConsole:
 		role = "splunk_monitor"
 	}
@@ -85,6 +90,8 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "search-head"
 	case SplunkLicenseMaster:
 		kind = splcommon.LicenseManager
+	case SplunkLicenseManager:
+		kind = "license-master"
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
 	}

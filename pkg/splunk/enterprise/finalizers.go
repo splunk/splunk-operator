@@ -43,6 +43,8 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 		components = append(components, "standalone")
 	case "LicenseMaster":
 		components = append(components, splcommon.LicenseManager)
+	case "LicenseManager":
+		components = append(components, "license-master")
 	case "SearchHeadCluster":
 		components = append(components, "search-head", "deployer")
 	case "IndexerCluster":

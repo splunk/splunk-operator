@@ -177,10 +177,46 @@ func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplu
 			},
 		}
 	}
+
+	if spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_LICENSE_MANAGER_URL",
+				Value: licenseManagerURL,
+			},
+		}
+	}
+
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
 			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
+		},
+	}
+}
+
+// getLicenseManagerURL returns URL of license manager
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_LICENSE_MANAGER_URL",
+				Value: licenseManagerURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MANAGER_URL",
+			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
 		},
 	}
 }
