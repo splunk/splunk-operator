@@ -113,7 +113,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -163,7 +163,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
@@ -277,7 +277,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", " version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", " version", appVersion)
@@ -333,7 +333,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, customAppFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, customAppFileList, initContDownloadLocation)
 
 			// Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app version", appVersion)
@@ -404,7 +404,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app", "version", appVersion)
@@ -449,7 +449,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info("Verify Apps are copied to correct location on CM and on Deployer (/etc/apps/) for app", "version", appVersion)
@@ -554,7 +554,7 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verfiy ES app is downloaded by init container on deployer pod")
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
 
 			// Verify ES app is installed locally on SHC Deployer
 			testenvInstance.Log.Info("Verfiy ES app is installed locally on deployer pod")
@@ -644,13 +644,13 @@ var _ = Describe("c3appfw test", func() {
 			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList = testenv.GetAppFileList(appListLocal, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			localPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
@@ -715,13 +715,13 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
 			appFileList = testenv.GetAppFileList(appListLocal, 2)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 2)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
@@ -768,13 +768,13 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
 			appFileList = testenv.GetAppFileList(appListLocal, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded by init-container
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
 			appFileList = testenv.GetAppFileList(appListCluster, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
@@ -841,7 +841,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -926,7 +926,7 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -1012,7 +1012,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)

@@ -664,8 +664,8 @@ func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns str
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container
-func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
+// VerifyAppsDownloadedOnContainer verify that apps are downloaded by init container
+func VerifyAppsDownloadedOnContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
 	for _, podName := range pods {
 		appList, err := GetDirsOrFilesInPath(deployment, podName, path, false)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
@@ -675,4 +675,23 @@ func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
 	}
+}
+
+// VerifyAppListDownloadStatus verify app download status for the given list of apps
+func VerifyAppListDownloadStatus(deployment *Deployment, testenvInstance *TestEnv, appDeploymentInfo []enterpriseApi.AppDeploymentInfo, appList []string) {
+	for _, appDeploymentInfo := range appDeploymentInfo {
+		testenvInstance.Log.Info("Check App Download Status", "App Name", appDeploymentInfo.AppName)
+		if CheckStringInSlice(appList, appDeploymentInfo.AppName) {
+			VerifyAppDownloadStatus(deployment, testenvInstance, appDeploymentInfo, appDeploymentInfo.AppName)
+		}
+	}
+}
+
+// VerifyAppDownloadStatus verify app download status for a given app
+func VerifyAppDownloadStatus(deployment *Deployment, testenvInstance *TestEnv, appDeploymentInfo enterpriseApi.AppDeploymentInfo, appName string) {
+	gomega.Eventually(func() int {
+		appDownloadState := int(appDeploymentInfo.AppInstallStatus.AppDownloadState)
+		testenvInstance.Log.Info("App State found", "App Name", appDeploymentInfo.AppName, "App State", appDownloadState)
+		return int(appDownloadState)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(3))
 }

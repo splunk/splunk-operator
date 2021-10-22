@@ -114,7 +114,7 @@ var _ = Describe("m4appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -164,7 +164,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
@@ -210,7 +210,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND after Scaling up of Indexer Site for app", "version", appVersion)
@@ -312,7 +312,7 @@ var _ = Describe("m4appfw test", func() {
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container local install on CM and Deployer for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info("Verify Apps are copied to /etc/apps on CM and Deployer for app", "version", appVersion)
@@ -353,7 +353,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container local install on CM and Deployer for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			// Verify apps are copied at the correct location on CM and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info("Verify Apps are copied to /etc/apps on CM and Deployer for app", "version", appVersion)
@@ -422,7 +422,7 @@ var _ = Describe("m4appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -508,7 +508,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location based on Pod KIND for app", "version", appVersion)
