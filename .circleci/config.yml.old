@@ -46,7 +46,6 @@ workflows:
           requires:
             - build-image
             - unit-tests
-      - vulnerability-scan
   monitoring-console-integration-test:          
     jobs:
       - build-image

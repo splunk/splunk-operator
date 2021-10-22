@@ -1,4 +1,4 @@
- name: Nightly Integration Test WorkFlow
+name: Nightly Integration Test WorkFlow
 on:
   schedule:
     - cron: '0 06 * * *'

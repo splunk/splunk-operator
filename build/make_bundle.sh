@@ -39,7 +39,11 @@ done
 
 # append older versions to CRD files
 for crd in deploy/crds/*_crd.yaml; do
-  yq w -i -s $YAML_SCRIPT_FILE $crd
+  # when moving from V3 to V4 version re-evaluate this condition CSPL-1401
+  if [ "$crd" != *monitoringconsoles_crd.yaml ]
+  then
+    yq w -i -s $YAML_SCRIPT_FILE $crd
+  fi
 done
 
 RESOURCES="

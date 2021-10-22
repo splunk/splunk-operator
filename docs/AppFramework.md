@@ -30,7 +30,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
    * In this example, the Splunk Apps are located at `bucket-app-framework-us-west-2/Standalone-us/networkAppsLoc/` and `bucket-app-framework-us-west-2/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the standalone CR specification and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone, Monitoring Console and License Master CRs always use a local scope.
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone, Monitoring Console and License Manager CRs always use a local scope.
 
 Example: Standalone.yaml
 
@@ -208,7 +208,7 @@ App Framework configuration is supported on the following Custom Resources: Stan
 
 * Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
 * Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)
-* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone, Monitoring Console and License Master) or cluster-wide (such as Indexer cluster, Search Head Cluster)
+* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone, Monitoring Console and License Manager) or cluster-wide (such as Indexer cluster, Search Head Cluster)
 
 Here is a typical App framework configuration in a Custom resource definition:
 

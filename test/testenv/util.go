@@ -466,7 +466,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 	return &new
 }
 
-// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license master Ref
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
 func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
 	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{

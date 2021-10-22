@@ -596,7 +596,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 		mcName = ""
 	}
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
@@ -774,9 +774,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(name stri
 
 	licenseMaster := ""
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license master
+		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)
 		if err != nil {
 			return err
@@ -785,7 +785,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(name stri
 		licenseMaster = name
 	}
 
-	// Deploy the cluster master
+	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: splcommon.Spec{
@@ -844,7 +844,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 
 	licenseMaster := ""
 
-	// If license file specified, deploy License Master
+	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseMaster(name)

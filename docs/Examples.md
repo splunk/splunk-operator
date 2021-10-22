@@ -50,7 +50,7 @@ The passwords for the instance are generated automatically. To review the passwo
 ### Indexer Clusters
 
 When customers outgrow the capabilites of single instance for indexing and search, they will scale the infrastructure up to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMaster` resource for Cluster Master, and using the `IndexerCluster` resource for the cluster peers:
+The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMaster` resource for Cluster Manager, and using the `IndexerCluster` resource for the cluster peers:
 
 #### Cluster Manager
 ```yaml
@@ -66,9 +66,9 @@ spec:
     name: example_mc
 EOF
 ```
-The Splunk Operator is responsible for configuring and maintaing the connection between the cluster master and the index cluster peers, but it does not manage Splunk Apps. The cluster master manages the Splunk Apps and Add-ons distributed to all peers in the indexer cluster. See [Installing Splunk Apps](#installing-splunk-apps) for more information.
+The Splunk Operator is responsible for configuring and maintaing the connection between the cluster manager and the index cluster peers, but it does not manage Splunk Apps. The cluster manager manages the Splunk Apps and Add-ons distributed to all peers in the indexer cluster. See [Installing Splunk Apps](#installing-splunk-apps) for more information.
 
-The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster master, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
+The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster manager, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
 This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console), or use the example below:
 
@@ -107,7 +107,7 @@ This will automatically configure a cluster, with a predetermined number of inde
 
 NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
-After starting the cluster master, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
+After starting the cluster manager, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
 ```
 $ kubectl get pods
 NAME                                       READY   STATUS    RESTARTS    AGE
@@ -217,7 +217,7 @@ spec:
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the cluster master for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
+Note that the `clusterMasterRef` field points to the cluster manager for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
 ```
 $ kubectl get pods
@@ -231,8 +231,8 @@ splunk-single-standalone-0                    1/1     Running   0          90s
 splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
-#### Another Cluster Master example
-Having a separate CR for cluster master allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
+#### Another Cluster Manager example
+Having a separate CR for cluster manager allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -283,7 +283,7 @@ metadata:
 EOF
 ```
 
-There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster master and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
+There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster manager and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
 
 
 ### Search Head Clusters
