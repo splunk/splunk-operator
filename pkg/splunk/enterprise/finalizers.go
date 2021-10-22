@@ -49,6 +49,8 @@ func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) erro
 		components = append(components, "indexer")
 	case "ClusterMaster":
 		components = append(components, splcommon.ClusterManager)
+	case "MonitoringConsole":
+		components = append(components, "monitoring-console")
 	default:
 		scopedLog.Info("Skipping PVC removal")
 		return nil

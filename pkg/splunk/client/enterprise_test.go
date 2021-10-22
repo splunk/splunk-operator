@@ -16,10 +16,11 @@ package client
 
 import (
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"net/http"
 	"strings"
 	"testing"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )

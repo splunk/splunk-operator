@@ -21,9 +21,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
@@ -36,9 +37,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-
 	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(cr)
 	if err != nil {
@@ -71,9 +70,11 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getlicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			if err != nil {
+				return result, err
+			}
 		}
 		DeleteOwnerReferencesForResources(client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -96,6 +97,13 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 	if err != nil {
 		return result, err
 	}
+
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
+	if err != nil {
+		return result, err
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(client, statefulSet, 1)
 	if err != nil {
@@ -105,6 +113,18 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		//upgrade fron automated MC to MC CRD
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
+			if err != nil {
+				return result, err
+			}
+		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
@@ -113,12 +133,6 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 				return result, nil
 			}
 		}
-
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getlicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
-		}
-
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)

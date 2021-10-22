@@ -20,10 +20,11 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -101,7 +102,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getlicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -111,11 +112,11 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	result := splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getlicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
 	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getlicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -126,7 +127,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	result = splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getlicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 }
 
@@ -787,5 +788,113 @@ func TestGetNextRequeueTime(t *testing.T) {
 	nextRequeueTime := GetNextRequeueTime(appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
+	}
+}
+
+func TestValidateMonitoringConsoleRef(t *testing.T) {
+	currentCM := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	revised := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "abc",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	//create configmap
+	_, err := splctrl.ApplyConfigMap(client, &currentCM)
+	if err != nil {
+		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
+	}
+
+	// Create statefulset
+	err = splutil.CreateResource(client, current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	var serviceURLs []corev1.EnvVar
+	serviceURLs = []corev1.EnvVar{
+		{
+			Name:  "A",
+			Value: "a",
+		},
+	}
+
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
+	}
+
+	revised = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
 }

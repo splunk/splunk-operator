@@ -24,7 +24,7 @@ import (
 
 	gomega "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -57,6 +57,25 @@ type PodDetailsStruct struct {
 			IP string `json:"ip"`
 		} `json:"podIPs"`
 	} `json:"status"`
+}
+
+// VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
+func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(mcName, monitoringConsole)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Monitoring Console STATUS to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return monitoringConsole.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() splcommon.Phase {
+		_ = deployment.GetInstance(mcName, monitoringConsole)
+		return monitoringConsole.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
 // StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
@@ -406,6 +425,20 @@ func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crN
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
+// VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
+func VerifyMonitoringConsolePhase(deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
+	gomega.Eventually(func() splcommon.Phase {
+		mc := &enterpriseApi.MonitoringConsole{}
+		err := deployment.GetInstance(crName, mc)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for monitoring console CR status", "instance", mc.ObjectMeta.Name, "Expected", phase, " Actual Phase", mc.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		return mc.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
 // VerifyCPULimits verifies value of CPU limits is as expected
 func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
 	gomega.Eventually(func() bool {
@@ -628,21 +661,19 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
 func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
 	for _, podName := range pods {
-		if !strings.Contains(podName, "monitoring-console") {
-			path := "etc/apps"
-			//For cluster-wide install the apps are extracted to different locations
-			if clusterWideInstall {
-				if strings.Contains(podName, splcommon.ClusterManager) {
-					path = splcommon.ManagerAppsLoc
-				} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
-					path = splcommon.SHClusterAppsLoc
-				} else if strings.Contains(podName, "-indexer-") {
-					path = splcommon.PeerAppsLoc
-				}
+		path := "etc/apps"
+		//For cluster-wide install the apps are extracted to different locations
+		if clusterWideInstall {
+			if strings.Contains(podName, splcommon.ClusterManager) {
+				path = splcommon.ManagerAppsLoc
+			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+				path = splcommon.SHClusterAppsLoc
+			} else if strings.Contains(podName, "-indexer-") {
+				path = splcommon.PeerAppsLoc
 			}
-			testenvInstance.Log.Info("Verifying App in Directory", "Directory Name", path, "Pod Name", podName)
-			VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path, checkAppDirectory)
 		}
+		testenvInstance.Log.Info("Verifying App in Directory", "Directory Name", path, "Pod Name", podName)
+		VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path, checkAppDirectory)
 	}
 }
 
@@ -674,6 +705,32 @@ func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance
 			testenvInstance.Log.Info("Check App directory downloaded by init container", "Pod Name", podName, "App Name", app, "Status", found)
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
+	}
+}
+
+// VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigMap(deployment *Deployment, testenvInstance *TestEnv, pods []string, key string, mcName string, expected bool) {
+	// Get contents of MC config map
+	mcConfigMap, err := GetMCConfigMap(deployment, testenvInstance.GetName(), mcName)
+	gomega.Expect(err).To(gomega.Succeed(), "Unable to get MC config map")
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking for POD on  MC Config Map", "POD Name", podName, "DATA", mcConfigMap.Data)
+		gomega.Expect(expected).To(gomega.Equal(CheckPodNameInString(podName, mcConfigMap.Data[key])), "Verify Pod in MC Config Map. Pod Name %s.", podName)
+	}
+}
+
+// VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
+func VerifyPodsInMCConfigString(deployment *Deployment, testenvInstance *TestEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
+	for _, podName := range pods {
+		testenvInstance.Log.Info("Checking pod configured in MC POD Peers String", "Pod Name", podName)
+		var found bool
+		if checkPodIP {
+			podIP := GetPodIP(testenvInstance.GetName(), podName)
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podIP)
+		} else {
+			found = CheckPodNameOnMC(testenvInstance.GetName(), mcName, podName)
+		}
+		gomega.Expect(expected).To(gomega.Equal(found), "Verify Pod in MC Config String. Pod Name %s.", podName)
 	}
 }
 
