@@ -20,245 +20,174 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyMonitoringConsole creates the statefulset for monitoring console statefulset of Splunk Enterprise.
-func ApplyMonitoringConsole(client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, extraEnv []corev1.EnvVar) error {
-	secrets, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace()))
+// ApplyMonitoringConsole reconciles the StatefulSet for N monitoring console instances of Splunk Enterprise.
+func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+
+	// unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
+	scopedLog := log.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	if cr.Status.ResourceRevMap == nil {
+		cr.Status.ResourceRevMap = make(map[string]string)
+	}
+
+	// validate and updates defaults for CR
+	err := validateMonitoringConsoleSpec(cr)
 	if err != nil {
-		return err
+		return result, err
 	}
 
-	secretName := ""
-	if secrets != nil {
-		secretName = secrets.GetName()
-	}
+	// updates status after function completes
+	cr.Status.Phase = splcommon.PhaseError
 
-	//For IndexerCluster custom resource click "Apply changes" on MC and return
-	if cr.GetObjectKind().GroupVersionKind().Kind == "IndexerCluster" {
-		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
-		c := mgr.getMonitoringConsoleClient(cr)
-		err := c.AutomateMCApplyChanges(spec.Mock)
-		return err
-	}
-
-	// create or update a regular monitoring console service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &spec, SplunkMonitoringConsole, false))
-	if err != nil {
-		return err
-	}
-
-	// create or update a headless monitoring console service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &spec, SplunkMonitoringConsole, true))
-	if err != nil {
-		return err
-	}
-
-	//by default assume we are adding new instances in the monitoring console configMap
-	addNewURLs := true
-
-	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
-		addNewURLs = false
-	}
-
-	//get cluster info from cluster manager
-	if cr.GetObjectKind().GroupVersionKind().Kind == "ClusterMaster" && !spec.Mock {
-		mgr := monitoringConsolePodManager{cr: &cr, spec: &spec, secrets: secrets, newSplunkClient: splclient.NewSplunkClient}
-		c := mgr.getClusterMasterClient(cr)
-		clusterInfo, err := c.GetClusterInfo(spec.Mock)
+	// If the app framework is configured then do following things -
+	// 1. Initialize the S3Clients based on providers
+	// 2. Check the status of apps on remote storage.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			return err
-		}
-		multiSite := clusterInfo.MultiSite
-		if multiSite == "true" {
-			extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+			cr.Status.AppContext.IsDeploymentInProgress = false
+			return result, err
 		}
 	}
 
-	_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), extraEnv, addNewURLs)
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
+	defer func() {
+		client.Status().Update(context.TODO(), cr)
+		if err != nil {
+			scopedLog.Error(err, "Status update failed")
+		}
+	}()
+
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
-		return err
+		return result, err
 	}
 
-	statefulset, err := getMonitoringConsoleStatefulSet(client, cr, &spec, SplunkMonitoringConsole, secretName)
+	// check if deletion has been requested
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		terminating, err := splctrl.CheckForDeletion(cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = splcommon.PhaseTerminating
+		} else {
+			result.Requeue = false
+		}
+		return result, err
+	}
+
+	// create or update a headless service
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
-		return err
+		return result, err
+	}
+
+	// create or update a regular service
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
+	if err != nil {
+		return result, err
+	}
+
+	// create or update statefulset
+	statefulSet, err := getMonitoringConsoleStatefulSet(client, cr)
+	if err != nil {
+		return result, err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	_, err = mgr.Update(client, statefulset, 1)
+	phase, err := mgr.Update(client, statefulSet, 1)
 	if err != nil {
-		return err
+		return result, err
 	}
+	cr.Status.Phase = phase
 
-	//set owner reference for splunk monitoring console statefulset
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-	err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
+	// no need to requeue if everything is ready
+	if cr.Status.Phase == splcommon.PhaseReady {
+		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
+			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
+			if cr.Status.AppContext.IsDeploymentInProgress {
+				cr.Status.AppContext.IsDeploymentInProgress = false
+				return result, nil
+			}
+		}
 
-	return err
+		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
+		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
+			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+		} else {
+			result.Requeue = false
+		}
+	}
+	return result, nil
 }
 
-// getMonitoringConsoleClient for monitoringConsolePodManager returns a SplunkClient for monitoring console
-func (mgr *monitoringConsolePodManager) getMonitoringConsoleClient(cr splcommon.MetaObject) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cr.GetNamespace(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
-}
-
-// getClusterMasterClient for monitoringConsolePodManager returns a SplunkClient for cluster manager
-func (mgr *monitoringConsolePodManager) getClusterMasterClient(cr splcommon.MetaObject) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
-}
-
-// monitoringConsolePodManager is used to manage the monitoring console pod
-type monitoringConsolePodManager struct {
-	cr              *splcommon.MetaObject
-	spec            *enterpriseApi.CommonSplunkSpec
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
-}
-
-// getMonitoringConsoleStatefulSet returns a Kubernetes Statefulset object for Splunk Enterprise monitoring console instance.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, secretName string) (*appsv1.StatefulSet, error) {
-	var partOfIdentifier string
+// getMonitoringConsoleStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise monitoring console instances.
+func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
+	// get generic statefulset for Splunk Enterprise objects
 	var monitoringConsoleConfigMap *corev1.ConfigMap
-	// there will be always 1 replica of monitoring console
-	replicas := int32(1)
-	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(SplunkMonitoringConsole))
-	annotations := splcommon.GetIstioAnnotations(ports)
-	//using Namespace here so that with every CR the name should remain same Ex- splunk-<namespace>-monitoring-console
-	selectLabels := getSplunkLabels(cr.GetNamespace(), instanceType, partOfIdentifier)
-	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetNamespace(), instanceType.ToString())
-	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetNamespace(), SplunkMonitoringConsole)
-
-	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
-	labels := make(map[string]string)
-	for k, v := range selectLabels {
-		labels[k] = v
-	}
-
-	emptyVolumeSource := corev1.VolumeSource{
-		EmptyDir: &corev1.EmptyDirVolumeSource{},
-	}
-
-	//create statefulset configuration
-	statefulSet := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StatefulSet",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(instanceType, cr.GetNamespace()),
-			Namespace: cr.GetNamespace(),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectLabels,
-			},
-			ServiceName:         GetSplunkServiceName(instanceType, cr.GetNamespace(), true),
-			Replicas:            &replicas,
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
-					Annotations: annotations,
-				},
-				Spec: corev1.PodSpec{
-					Affinity:      affinity,
-					Tolerations:   spec.Tolerations,
-					SchedulerName: spec.SchedulerName,
-					Containers: []corev1.Container{
-						{
-							Image:           spec.Image,
-							ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
-							Name:            "splunk",
-							Ports:           ports,
-							EnvFrom: []corev1.EnvFromSource{
-								{
-									ConfigMapRef: &corev1.ConfigMapEnvSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: configMap, //monitoring console env variables configMap
-										},
-									},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "mnt-splunk-etc",
-									MountPath: "/opt/splunk/etc",
-								},
-								{
-									Name:      "mnt-splunk-var",
-									MountPath: "/opt/splunk/var",
-								},
-							},
-							//Below requests/limits for MC are defined taking into account below EC2 validated architecture and its defined limits
-							//1. https://www.splunk.com/pdfs/technical-briefs/deploying-splunk-enterprise-on-amazon-web-services-technical-brief.pdf
-							//defines the validate architecture for License Manager and Monitoring console i.e, c5.2xlarge
-							//2. (c5.2xlarge) architecture req from https://aws.amazon.com/ec2/instance-types/c5/
-							//defines that for c5.2xlarge architecture we need 8vCPU and 16Gi memory
-							//since we only have MC here (as we have separate LM) so 4vCPU and 8Gi memory has been set as limit for MC pod
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("0.1"),
-									corev1.ResourceMemory: resource.MustParse("512Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("4"),
-									corev1.ResourceMemory: resource.MustParse("8Gi"),
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{Name: "mnt-splunk-etc", VolumeSource: emptyVolumeSource},
-						{Name: "mnt-splunk-var", VolumeSource: emptyVolumeSource},
-					},
-				},
-			},
-		},
-	}
-
-	env := []corev1.EnvVar{}
-
-	// append labels and annotations from parent
-	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
-
-	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, env, secretName)
-
-	//update podTemplate annotation with configMap resource version
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
-	monitoringConsoleConfigMap, err := splctrl.GetConfigMap(client, namespacedName)
+	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}
-	statefulSet.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+	//use mc configmap as EnvFrom source
+	ss.Spec.Template.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMap, //monitoring console env variables configMap
+				},
+			},
+		},
+	}
 
-	return statefulSet, nil
+	//update podTemplate annotation with configMap resource version
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
+	monitoringConsoleConfigMap, err = splctrl.GetMCConfigMap(client, cr, namespacedName)
+	if err != nil {
+		return nil, err
+	}
+	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+
+	// Setup App framework init containers
+	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	return ss, nil
+}
+
+// validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
+func validateMonitoringConsoleSpec(cr *enterpriseApi.MonitoringConsole) error {
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		if err != nil {
+			return err
+		}
+	}
+	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)
 
-	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
+	configMap := GetSplunkMonitoringconsoleConfigMapName(monitoringConsoleRef, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
 	err := client.Get(context.TODO(), namespacedName, &current)
 

@@ -18,13 +18,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )

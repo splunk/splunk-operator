@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("licensemaster: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
+		It("licensemaster, integration: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -69,7 +69,7 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)

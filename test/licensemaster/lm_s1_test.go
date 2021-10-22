@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemaster, integration: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -63,7 +63,7 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)

@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -136,9 +136,24 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getIndexerExtraEnv(cr, cr.Spec.Replicas))
+		//update MC
+		//Retrieve monitoring  console ref from CM Spec
+		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(client, cr, cr.Spec.ClusterMasterRef.Name)
 		if err != nil {
 			return result, err
+		}
+		if cmMonitoringConsoleConfigRef != "" {
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
+			_, err := splctrl.GetStatefulSetByName(client, namespacedName)
+			//if MC pod already exists
+			if err == nil {
+				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
+				err := c.AutomateMCApplyChanges(false)
+				return result, err
+			}
+			if cr.Spec.MonitoringConsoleRef.Name != "" || cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef {
+				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef if same is specified in Cluster Master spec and if specified both should be same")
+			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
 			// Disable maintenance mode
@@ -173,6 +188,12 @@ type indexerClusterPodManager struct {
 	cr              *enterpriseApi.IndexerCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+//getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
+func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster, cmMonitoringConsoleConfigRef string) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
@@ -609,4 +630,19 @@ func validateIndexerClusterSpec(cr *enterpriseApi.IndexerCluster) error {
 		return fmt.Errorf("Multisite cluster does not support cluster master to be located in a different namespace")
 	}
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+//RetrieveCMSpec finds monitoringConsole ref from cm spec
+func RetrieveCMSpec(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, clusterMasterRef string) (string, error) {
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterMasterRef}
+	var cmCR enterpriseApi.ClusterMaster
+	var monitoringConsoleRef string = ""
+
+	err := client.Get(context.TODO(), namespacedName, &cmCR)
+	if err == nil {
+		monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
+		return monitoringConsoleRef, err
+	}
+	return "", err
 }

@@ -30,12 +30,12 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
    * In this example, the Splunk Apps are located at `bucket-app-framework-us-west-2/Standalone-us/networkAppsLoc/` and `bucket-app-framework-us-west-2/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the standalone CR specification and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone and License Manager CRs always use a local scope.
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone, Monitoring Console and License Manager CRs always use a local scope.
 
 Example: Standalone.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: stdln
@@ -96,7 +96,7 @@ This example describes the installation of apps on Indexer Cluster as well as Cl
 Example: ClusterMaster.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
@@ -161,7 +161,7 @@ This example describes the installation of apps on Search Head Cluster as well a
 Example: SearchHeadCluster.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: shc 
@@ -204,11 +204,11 @@ For more information, see the [Description of App Framework Specification fields
 
 
 ## Description of App Framework Specification fields
-App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, and LicenseMaster. Configuring the App framework involves the following steps:
+App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework involves the following steps:
 
 * Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
 * Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)
-* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone) or cluster-wide (such as Indexer cluster, Search Head Cluster)
+* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone, Monitoring Console and License Manager) or cluster-wide (such as Indexer cluster, Search Head Cluster)
 
 Here is a typical App framework configuration in a Custom resource definition:
 
@@ -319,6 +319,7 @@ Here is a typical App framework configuration in a Custom resource definition:
     | SearchHeadCluster | cluster, clusterWithPreConfig, local   | Yes                   |
     | Standalone        | local                                  | Yes                   |
     | LicenceMaster     | local                                  | Yes                   |
+    | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
 * `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section)
@@ -332,7 +333,7 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 * Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes
 * When App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs)
-* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
+* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone, Monitoring Console and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
 
 ## App Framework Limitations
 

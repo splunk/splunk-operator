@@ -15,46 +15,45 @@
 package controller
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 func init() {
-	SplunkControllersToAdd = append(SplunkControllersToAdd, SearchHeadClusterController{})
+	SplunkControllersToAdd = append(SplunkControllersToAdd, MonitoringConsoleController{})
 }
 
-// blank assignment to verify that SearchHeadClusterController implements SplunkController
-var _ splctrl.SplunkController = &SearchHeadClusterController{}
+// blank assignment to verify that MonitoringConsoleController implements SplunkController
+var _ splctrl.SplunkController = &MonitoringConsoleController{}
 
-// SearchHeadClusterController is used to manage SearchHeadCluster custom resources
-type SearchHeadClusterController struct{}
+// MonitoringConsoleController is used to manage MonitoringConsole custom resources
+type MonitoringConsoleController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (ctrl SearchHeadClusterController) GetInstance() splcommon.MetaObject {
-	return &enterpriseApi.SearchHeadCluster{
+func (ctrl MonitoringConsoleController) GetInstance() splcommon.MetaObject {
+	return &enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterpriseApi.APIVersion,
-			Kind:       "SearchHeadCluster",
+			Kind:       "MonitoringConsole",
 		},
 	}
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl SearchHeadClusterController) GetWatchTypes() []runtime.Object {
-	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
+func (ctrl MonitoringConsoleController) GetWatchTypes() []runtime.Object {
+	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}, &corev1.ConfigMap{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (ctrl SearchHeadClusterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
-	instance := cr.(*enterpriseApi.SearchHeadCluster)
-	return enterprise.ApplySearchHeadCluster(client, instance)
+func (ctrl MonitoringConsoleController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
+	instance := cr.(*enterpriseApi.MonitoringConsole)
+	return enterprise.ApplyMonitoringConsole(client, instance)
 }

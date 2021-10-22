@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -37,6 +37,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerSecret},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerConfigMapAppList},
+		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 	}
 	labels := map[string]string{

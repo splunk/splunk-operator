@@ -20,8 +20,10 @@ import (
 	"reflect"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	"github.com/go-logr/logr"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -95,18 +97,20 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 	}
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		return result, err
 	}
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
+			if err != nil {
+				return result, err
+			}
 		}
-
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -134,6 +138,14 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 	if err != nil {
 		return result, err
 	}
+
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
+	err = validateMonitoringConsoleRef(client, statefulSet, extraEnv)
+	if err != nil {
+		return result, err
+	}
+
 	clusterMasterManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := clusterMasterManager.Update(client, statefulSet, 1)
 	if err != nil {
@@ -143,6 +155,19 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		//upgrade fron automated MC to MC CRD
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
+		//Update MC configmap
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
+			if err != nil {
+				return result, err
+			}
+		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
@@ -150,11 +175,6 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 				cr.Status.AppContext.IsDeploymentInProgress = false
 				return result, nil
 			}
-		}
-
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec))
-		if err != nil {
-			return result, err
 		}
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
@@ -174,6 +194,21 @@ func ApplyClusterMaster(client splcommon.ControllerClient, cr *enterpriseApi.Clu
 		}
 	}
 	return result, nil
+}
+
+// clusterMasterPodManager is used to manage the cluster master pod
+type clusterMasterPodManager struct {
+	c               splcommon.ControllerClient
+	log             logr.Logger
+	cr              *enterpriseApi.ClusterMaster
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+// getClusterMasterClient for clusterMasterPodManager returns a SplunkClient for cluster master
+func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApi.ClusterMaster) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
@@ -306,4 +341,22 @@ func PushMasterAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.Cluste
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 	return splunkClient.BundlePush(true)
+}
+
+//VerifyCMisMultisite checks if its a multisite
+func VerifyCMisMultisite(cr *enterpriseApi.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	var err error
+	scopedLog := log.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	mgr := clusterMasterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	cm := mgr.getClusterMasterClient(cr)
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return nil, err
+	}
+	multiSite := clusterInfo.MultiSite
+	extraEnv := getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+	if multiSite == "true" {
+		extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
+	}
+	return extraEnv, err
 }

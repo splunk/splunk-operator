@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 )
 
 const (
@@ -81,7 +81,7 @@ const (
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
-	// MonitoringConsolePod Monitoring Console Statefulset Template
+	// MonitoringConsolePod Monitoring Console Pod Template String
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
 	// ClusterMasterPod ClusterMaster Pod Template String
@@ -95,6 +95,12 @@ const (
 
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
+
+	// ClusterMasterServiceName Cluster Master Service Template String
+	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
+
+	// DeployerServiceName Cluster Master Service Template String
+	DeployerServiceName = "splunk-%s-shc-deployer-service"
 )
 
 var (
