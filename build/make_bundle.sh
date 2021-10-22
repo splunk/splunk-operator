@@ -40,7 +40,7 @@ done
 # append older versions to CRD files
 for crd in deploy/crds/*_crd.yaml; do
   # when moving from V3 to V4 version re-evaluate this condition CSPL-1401
-  if [ "$crd" != *monitoringconsoles_crd.yaml ]
+  if [ "$crd" != deploy/crds/enterprise.splunk.com_monitoringconsoles_crd.yaml ]
   then
     yq w -i -s $YAML_SCRIPT_FILE $crd
   fi
