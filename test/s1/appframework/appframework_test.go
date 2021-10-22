@@ -42,7 +42,7 @@ var _ = Describe("s1appfw test", func() {
 
 		// Upload V1 apps to S3
 		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-		appFileList := testenv.GetAppFileList(appListV1, 1)
+		appFileList := testenv.GetAppFileListPhase3(appListV1)
 		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 		uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -110,12 +110,12 @@ var _ = Describe("s1appfw test", func() {
 			kind := standalone.Kind
 			opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileListPhase3(appListV1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
-			// Verify App Downlaod State on CR
+			// Verify App Download State on CR
 			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
@@ -147,7 +147,7 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Testing upgrade scenario")
 
 			// Upload new Versioned Apps to S3
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileListPhase3(appListV2)
 			appVersion = "V2"
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
@@ -222,7 +222,7 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Testing downgrade scenario")
 
 			// Upload new Versioned Apps to S3
-			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appFileList = testenv.GetAppFileListPhase3(appListV1)
 			appVersion = "V1"
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
@@ -263,8 +263,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// New List of apps: 1 new app to install, 2 apps to update, 1 app unchanged, 1 app removed from list
 			customAppList := []string{appListV1[0], appListV2[2], appListV2[3], appListV2[4]}
-			appFileListV1 := testenv.GetAppFileList(appListV1, 1)
-			appFileListV2 := testenv.GetAppFileList(appListV2, 2)
+			appFileListV1 := testenv.GetAppFileListPhase3(appListV1)
+			appFileListV2 := testenv.GetAppFileListPhase3(appListV2)
 
 			customAppFileList := []string{appFileListV1[0], appFileListV2[2], appFileListV2[3], appFileListV2[4]}
 			customAppFileListV1 := []string{appFileListV1[0]}
@@ -321,7 +321,7 @@ var _ = Describe("s1appfw test", func() {
 			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
-			appFileList := testenv.GetAppFileList(esApp, 1)
+			appFileList := testenv.GetAppFileListPhase3(esApp)
 
 			// Download ES App from S3
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
@@ -391,7 +391,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("appframework Standalone deployment (S1) with App Framework", func() {
+	Context("appframework Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
 
 			// Create App framework Spec
@@ -433,7 +433,7 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App Downlaod State on CR
 			err = deployment.GetInstance(deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileListPhase3(appListV1)
 			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Verify Apps download on Operator Pod
@@ -470,7 +470,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//Upload new Versioned Apps to S3
 			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileListPhase3(appListV2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)

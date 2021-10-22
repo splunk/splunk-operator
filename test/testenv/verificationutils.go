@@ -671,7 +671,7 @@ func VerifyAppsDownloadedOnContainer(deployment *Deployment, testenvInstance *Te
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
 			found := CheckStringInSlice(appList, app)
-			testenvInstance.Log.Info("Check App directory downloaded by init container", "Pod Name", podName, "App Name", app, "Status", found)
+			testenvInstance.Log.Info("Check App files present on the pod", "Pod Name", podName, "App Name", app, "directory", path, "Status", found)
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
 	}
