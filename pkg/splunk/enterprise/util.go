@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -23,11 +24,13 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -147,7 +150,7 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Name:  "SPLUNK_CLUSTER_MANAGER_URL",
 			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
@@ -163,8 +166,8 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
-// getlicenseManagerURL returns URL of license manager
-func getlicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+// getLicenseManagerURL returns URL of license manager
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseMasterRef.Name != "" {
 		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
@@ -172,14 +175,14 @@ func getlicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSpl
 		}
 		return []corev1.EnvVar{
 			{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Name:  "SPLUNK_LICENSE_MANAGER_URL",
 				Value: licenseManagerURL,
 			},
 		}
 	}
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  "SPLUNK_LICENSE_MANAGER_URL",
 			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
 		},
 	}
@@ -1033,5 +1036,52 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 		SetLastAppInfoCheckTime(appStatusContext)
 	}
 
+	return nil
+}
+
+//validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
+func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
+	var err error
+	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
+	var current appsv1.StatefulSet
+
+	err = c.Get(context.TODO(), namespacedName, &current)
+	if err == nil {
+		currEnv := current.Spec.Template.Spec.Containers[0].Env
+		revEnv := revised.Spec.Template.Spec.Containers[0].Env
+
+		var cEnv, rEnv corev1.EnvVar
+
+		for _, cEnvTemp := range currEnv {
+			if cEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
+				cEnv.Value = cEnvTemp.Value
+			}
+		}
+
+		for _, rEnvTemp := range revEnv {
+			if rEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
+				rEnv.Value = rEnvTemp.Value
+			}
+		}
+
+		if cEnv.Value != "" && rEnv.Value != "" && cEnv.Value != rEnv.Value {
+			//1. if revised Spec has different mcRef defined
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
+			if err != nil {
+				return err
+			}
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), rEnv.Value, serviceURLs, true)
+			if err != nil {
+				return err
+			}
+		} else if cEnv.Value != "" && rEnv.Value == "" {
+			//2. if revised Spec doesn't have mcRef defined
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	//if the sts doesn't exists no need for any change
 	return nil
 }

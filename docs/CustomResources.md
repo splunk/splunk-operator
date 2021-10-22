@@ -13,6 +13,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+  - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
 
 For examples on how to use these custom resources, please see
@@ -33,7 +34,7 @@ you would like the resource to reside within:
 If you do not provide a `namespace`, you current context will be used.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: s1
@@ -51,7 +52,7 @@ associated with the instance when you delete it.
 ## Common Spec Parameters for All Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -92,7 +93,7 @@ configuration parameters:
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -128,12 +129,13 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
 | licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
+| monitoringConsoleRef  | string     | Logical name assigned to the Monitoring Console pod. You can set the name before or after the MC pod creation.|
 | serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
 
 ## LicenseMaster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
@@ -153,7 +155,7 @@ The `LicenseMaster` resource does not provide any additional configuration param
 ## Standalone Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: standalone
@@ -176,7 +178,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 ## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -195,7 +197,7 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 ## ClusterMaster Resource Spec Parameters
 ClusterMaster resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: example-cm
@@ -224,7 +226,7 @@ spec:
 ## IndexerCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
@@ -244,19 +246,43 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | replicas   | integer | The number of indexer cluster members (defaults to 1) |
 
 
+## MonitoringConsole Resource Spec Parameters
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  name: example_mc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+EOF
+```
+
+Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
+
+The Splunk Operator now includes a CRD for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management. 
+
+* An MC pod is not created automatically in the default namespace when using other Splunk Operator CR's. 
+* When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted. 
+* To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
+
+The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
+
+
 ## Examples of Guaranteed and Burstable QoS
 
 You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
   
 ### A Guaranteed QoS Class example:
-The minimum resource requirements for a Standalone Splunk Enterprise instance are 24 vCPU and 12GB RAM. Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
+Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
 
-*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` value.*
+*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` values.*
 
-Example:
+Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -272,12 +298,12 @@ spec:
 ```
 
 ### A Burstable QoS Class example:
-Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. The Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but should be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory upto ```limits``` values.
+Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. 
 
-Example:
+Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
@@ -293,7 +319,7 @@ spec:
 ```
 
 ### A BestEffort QoS Class example:
-With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. As the Splunk Operator sets the default values for resources when you don’t provide any values for the CPU/Mem resources, so the BestEffort QoS is not a viable option with Splunk Operator.
+With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. The BestEffort QoS is not recommended for use with Splunk Operator.
 
 ### Pod Resources Management
 
@@ -304,4 +330,3 @@ Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value se
 __POD Eviction - OOM__
 
 As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
-

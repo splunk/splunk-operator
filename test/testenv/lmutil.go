@@ -53,6 +53,6 @@ func CheckLicenseManagerConfigured(deployment *Deployment, podName string) bool 
 		return false
 	}
 	licenseManager := restResponse.Entry[0].Content.MasterURI
-	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseManager)
+	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
 	return strings.Contains(licenseManager, splcommon.TestLicenseManagerMgmtPort)
 }

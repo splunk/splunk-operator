@@ -5,7 +5,7 @@
 set -e
 
 VERSION=`grep "Version.*=.*\".*\"" version/version.go | sed "s,.*Version.*=.*\"\(.*\)\".*,\1,"`
-OLD_VERSIONS="v1 v1beta1 v1alpha3 v1alpha2"
+OLD_VERSIONS="v2 v1 v1beta1 v1alpha3 v1alpha2"
 DOCKER_IO_PATH="docker.io/splunk"
 REDHAT_REGISTRY_PATH="registry.connect.redhat.com/splunk"
 OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
@@ -39,7 +39,11 @@ done
 
 # append older versions to CRD files
 for crd in deploy/crds/*_crd.yaml; do
-  yq w -i -s $YAML_SCRIPT_FILE $crd
+  # when moving from V3 to V4 version re-evaluate this condition CSPL-1401
+  if [ "$crd" != deploy/crds/enterprise.splunk.com_monitoringconsoles_crd.yaml ]
+  then
+    yq w -i -s $YAML_SCRIPT_FILE $crd
+  fi
 done
 
 RESOURCES="
@@ -95,7 +99,7 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: metadata.annotations.alm-examples
   value: |-
     [{
-      "apiVersion": "enterprise.splunk.com/v2",
+      "apiVersion": "enterprise.splunk.com/v3",
       "kind": "IndexerCluster",
       "metadata": {
         "name": "example",
@@ -106,7 +110,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v2",
+      "apiVersion": "enterprise.splunk.com/v3",
       "kind": "LicenseMaster",
       "metadata": {
         "name": "example",
@@ -115,7 +119,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       "spec": {}
     },
     {
-      "apiVersion": "enterprise.splunk.com/v2",
+      "apiVersion": "enterprise.splunk.com/v3",
       "kind": "SearchHeadCluster",
       "metadata": {
         "name": "example",
@@ -126,7 +130,7 @@ cat << EOF >$YAML_SCRIPT_FILE
       }
     },
     {
-      "apiVersion": "enterprise.splunk.com/v2",
+      "apiVersion": "enterprise.splunk.com/v3",
       "kind": "Standalone",
       "metadata": {
         "name": "example",

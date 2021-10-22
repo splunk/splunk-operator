@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -466,6 +466,50 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 	return &new
 }
 
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
+func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: LicenseMasterRef,
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	return &mcSpec
+}
+
+// newMonitoringConsoleSpecWithGivenSpec returns MC Spec with given name, namespace and Spec
+func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpriseApi.MonitoringConsoleSpec) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &mcSpec
+}
+
 // DumpGetPods prints and returns list of pods in the namespace
 func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
@@ -552,6 +596,16 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
+}
+
+// GetConfigMap Gets the config map for a given k8 config map name
+func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := deployment.GetInstance(configMapName, configMap)
+	if err != nil {
+		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+	}
+	return configMap, err
 }
 
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
@@ -642,4 +696,21 @@ func CheckStringInSlice(stringSlice []string, compString string) bool {
 		}
 	}
 	return false
+}
+
+// GeneratePodNameSlice returns slice of PodNames based on given key and count.
+func GeneratePodNameSlice(formatString string, key string, count int, multisite bool, siteCount int) []string {
+	var podNames []string
+	if multisite {
+		for site := 1; site <= siteCount; site++ {
+			for i := 0; i < count; i++ {
+				podNames = append(podNames, fmt.Sprintf(formatString, key, site, i))
+			}
+		}
+	} else {
+		for i := 0; i < count; i++ {
+			podNames = append(podNames, fmt.Sprintf(formatString, key, i))
+		}
+	}
+	return podNames
 }

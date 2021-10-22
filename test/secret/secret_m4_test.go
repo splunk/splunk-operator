@@ -80,7 +80,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -119,7 +119,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)

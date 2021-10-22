@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -59,10 +59,10 @@ var _ = Describe("Scaling test", func() {
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Scale Standalone instance
@@ -84,7 +84,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Scale Down Standalone
 			testenvInstance.Log.Info("Scaling Down Standalone CR")
@@ -127,7 +127,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
@@ -186,7 +186,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify New SearchHead is added to Cluster Manager
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
@@ -283,7 +283,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Ingest data on Indexers
 			for i := 1; i <= siteCount; i++ {
@@ -326,7 +326,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
 
 			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Wait for RF SF is Met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
