@@ -69,8 +69,8 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// LicenseMasterPod Template String for standalone pod
-	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
+	// LicenseManagerPod Template String for standalone pod
+	LicenseManagerPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
@@ -84,8 +84,8 @@ const (
 	// MonitoringConsolePod Monitoring Console Pod Template String
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
-	// ClusterMasterPod ClusterMaster Pod Template String
-	ClusterMasterPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
+	// ClusterManagerPod ClusterMaster Pod Template String
+	ClusterManagerPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
 
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
@@ -96,10 +96,10 @@ const (
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
 
-	// ClusterMasterServiceName Cluster Master Service Template String
-	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
+	// ClusterMasterServiceName Cluster Manager Service Template String
+	ClusterMasterServiceName = splcommon.TestClusterManager + "-service"
 
-	// DeployerServiceName Cluster Master Service Template String
+	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
 )
 

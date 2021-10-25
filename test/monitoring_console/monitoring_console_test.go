@@ -404,10 +404,10 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultIndexerReplicas := 3
 			mcName := deployment.GetName()
 			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, true, mcName)
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -415,7 +415,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Check Cluster Master in Monitoring Console Config Map
+			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
 
 			// Check Deployer in Monitoring Console Config Map
@@ -539,7 +539,7 @@ var _ = Describe("Monitoring Console test", func() {
 				4. Verify SH are configured in MC Config Map
 				5. Verify SH are configured in peer strings on MC Pod
 				6. Verify Monitoring Console Pod has peers in Peer string on MC Pod
-				--------------- RECONFIG CLUSTER MASTER WITH NEW MC --------------------------
+				--------------- RECONFIG CLUSTER MANAGER WITH NEW MC --------------------------
 				13. Reconfigure CM with Second MC
 				14. Verify CM in config map of Second MC
 				15. Create Second MC Pod
@@ -560,10 +560,10 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultIndexerReplicas := 3
 			mcName := deployment.GetName()
 			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, true, mcName)
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -571,7 +571,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Check Cluster Master in Monitoring Console Config Map
+			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
 
 			// Check Deployer in Monitoring Console Config Map
@@ -595,22 +595,22 @@ var _ = Describe("Monitoring Console test", func() {
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
 
-			// #################  Update Monitoring Console In Cluster Master CR ##################################
+			// #################  Update Monitoring Console In Cluster Manager CR ##################################
 
 			mcTwoName := deployment.GetName() + "-two"
 			cm := &enterpriseApi.ClusterMaster{}
 			err = deployment.GetInstance(deployment.GetName(), cm)
-			Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
+			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(cm)
-			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Master")
+			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
-			// Ensure Cluster Master Goes to Updating Phase
-			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			// Ensure Cluster Manager Goes to Updating Phase
+			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
 
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -622,45 +622,45 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console TWO is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
 
-			// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MASTER RECONFIG  ###################################
+			// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MANAGER RECONFIG  ###################################
 
-			// Check Cluster Master in Monitoring Console Two Config Map
-			testenvInstance.Log.Info("Verify Cluster Master in Monitoring Console Two Config Map after Cluster Master Reconfig")
+			// Check Cluster Manager in Monitoring Console Two Config Map
+			testenvInstance.Log.Info("Verify Cluster Manager in Monitoring Console Two Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Monitoring console Two is configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Verify Indexers in Monitoring Console Pod TWO Config String after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Indexers in Monitoring Console Pod TWO Config String after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcTwoName, true, true)
 
 			// Check Deployer NOT in Monitoring Console TWO Config Map
-			testenvInstance.Log.Info("Verify DEPLOYER NOT on Monitoring Console TWO Config Map after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify DEPLOYER NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, false)
 
 			// Check Monitoring Console TWO is NOT configured with Search Head in namespace
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Config Map after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
 
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Pod after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Pod after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcTwoName, false, false)
 
-			// ##############  VERIFY MONITORING CONSOLE ONE AFTER CLUSTER MASTER RECONFIG #######################
+			// ##############  VERIFY MONITORING CONSOLE ONE AFTER CLUSTER MANAGER RECONFIG #######################
 
 			// Verify Monitoring Console One Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Check Cluster Master Not in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Verify Cluster Master NOT in Monitoring Console One Config Map after Cluster Master Reconfig")
+			// Check Cluster Manager Not in Monitoring Console One Config Map
+			testenvInstance.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check Monitoring console One is NOT configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
 
 			// Check Monitoring Console One is still configured with Search Head in namespace
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console One Config Map after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console One Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Cluster Master Reconfig")
+			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
 
 			// #################  Update Monitoring Console In SHC CR ##################################
@@ -684,8 +684,8 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// ############################  VERIFICATOIN FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
 
-			// Check Cluster Master in Monitoring Console Two Config Map
-			testenvInstance.Log.Info("Verify Cluster Master on Monitoring Console Two Config Map after SHC Reconfig")
+			// Check Cluster Manager in Monitoring Console Two Config Map
+			testenvInstance.Log.Info("Verify Cluster Manager on Monitoring Console Two Config Map after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Deployer in Monitoring Console Two Config Map
@@ -708,8 +708,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify MC ONE is Ready and stays in ready state before running verfications
 			testenv.VerifyMonitoringConsoleReady(deployment, mcName, mc, testenvInstance)
 
-			// Check Cluster Master Not in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Verify Cluster Master NOT in Monitoring Console One Config Map after SHC Reconfig")
+			// Check Cluster Manager Not in Monitoring Console One Config Map
+			testenvInstance.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check DEPLOYER Not in Monitoring Console One Config Map
@@ -731,7 +731,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("monitoring_console, integration: MC can configure SHC, indexer instances and reconfigure Cluster Master to new Monitoring Console", func() {
+		It("monitoring_console, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster
@@ -741,14 +741,14 @@ var _ = Describe("Monitoring Console test", func() {
 				5. Verify SH are configured in peer strings on MC Pod
 				6. Verify Indexers are configured in MC Config Map
 				7. Verify Monitoring Console Pod has peers in Peer string on MC Pod
-				############ CLUSTER MASTER MC RECONFIG #################################
-				8.  Configure Cluster Master to use 2nd Monitoring Console
-				9.  Verify Cluster Master is configured Config Maps of Second MC
+				############ CLUSTER MANAGER MC RECONFIG #################################
+				8.  Configure Cluster Manager to use 2nd Monitoring Console
+				9.  Verify Cluster Manager is configured Config Maps of Second MC
 				10. Deploy 2nd MC pod
 				11. Verify Indexers in 2nd MC Pod
 				12. Verify SHC not in 2nd MC CM
 				13. Verify SHC not in 2nd MC Pod
-				14. Verify Cluster Master not 1st MC Config Map
+				14. Verify Cluster Manager not 1st MC Config Map
 				15. Verify Indexers not in 1st MC Pod
 			*/
 			defaultSHReplicas := 3
@@ -756,10 +756,10 @@ var _ = Describe("Monitoring Console test", func() {
 			siteCount := 3
 			mcName := deployment.GetName()
 			err := deployment.DeployMultisiteClusterWithMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true)
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Master")
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -770,7 +770,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Check Cluster Master in Monitoring Console Config Map
+			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
 
 			// Check Deployer in Monitoring Console Config Map
@@ -797,21 +797,21 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Checking for Indexer Pods on MC POD")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
 
-			// ############ CLUSTER MASTER MC RECONFIG #################################
+			// ############ CLUSTER MANAGER MC RECONFIG #################################
 			mcTwoName := deployment.GetName() + "-two"
 			cm := &enterpriseApi.ClusterMaster{}
 			err = deployment.GetInstance(deployment.GetName(), cm)
-			Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
+			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(cm)
-			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Master")
+			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
-			// Ensure Cluster Master Goes to Updating Phase
-			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			// Ensure Cluster Manager Goes to Updating Phase
+			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
 
-			// Ensure that the cluster-master goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Deploy Monitoring Console Pod
 			mcTwo, err := deployment.DeployMonitoringConsole(mcTwoName, "")
@@ -820,42 +820,42 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console TWO is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
 
-			// Check Cluster Master in Monitoring Console Config Map
-			testenvInstance.Log.Info("Checking for Cluster Master on MC TWO CONFIG MAP after Cluster Master RECONFIG")
+			// Check Cluster Manager in Monitoring Console Config Map
+			testenvInstance.Log.Info("Checking for Cluster Manager on MC TWO CONFIG MAP after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Monitoring Console TWO is configured with all Indexers in Name Space
-			testenvInstance.Log.Info("Checking for Indexer Pods on MC TWO POD after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Indexer Pods on MC TWO POD after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcTwoName, true, true)
 
 			// Check Monitoring console Two is NOT configured with all search head instances in namespace
-			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Config Map after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Config Map after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
 
-			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Pod after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Pod after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcTwoName, false, false)
 
 			// Verify Monitoring Console One is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Check Cluster Master NOT configured on  Monitoring Console One Config Map
-			testenvInstance.Log.Info("Checking for Cluster Master NOT in MC One Config Map after Cluster Master RECONFIG")
+			// Check Cluster Manager NOT configured on  Monitoring Console One Config Map
+			testenvInstance.Log.Info("Checking for Cluster Manager NOT in MC One Config Map after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619
-			// testenvInstance.Log.Info("Checking for Indexer Pods Not on MC one POD after Cluster Master RECONFIG")
+			// testenvInstance.Log.Info("Checking for Indexer Pods Not on MC one POD after Cluster Manager RECONFIG")
 			//testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
 
 			// Check Deployer in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Checking for Deployer in MC One Config Map after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Deployer in MC One Config Map after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
 
 			// Check Monitoring console  One is configured with all search head instances in namespace
-			testenvInstance.Log.Info("Checking for Search Head on MC ONE Config Map after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Search Head on MC ONE Config Map after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Checking for Search Head on MC ONE Pod after Cluster Master RECONFIG")
+			testenvInstance.Log.Info("Checking for Search Head on MC ONE Pod after Cluster Manager RECONFIG")
 			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
 
 		})

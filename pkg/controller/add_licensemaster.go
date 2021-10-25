@@ -56,5 +56,5 @@ func (ctrl LicenseMasterController) GetWatchTypes() []runtime.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl LicenseMasterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.LicenseMaster)
-	return enterprise.ApplyLicenseMaster(client, instance)
+	return enterprise.ApplyLicenseManager(client, instance)
 }

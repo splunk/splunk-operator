@@ -475,7 +475,7 @@ func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Meta
 func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
+	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
@@ -657,54 +657,54 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Value: spec.LicenseURL,
 		})
 	}
-	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+	if instanceType != SplunkLicenseManager && spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: licenseManagerURL,
 		})
 	}
 
 	// append URL for cluster manager, if configured
-	var clusterMasterURL string
-	if instanceType == SplunkClusterMaster {
+	var clusterManagerURL string
+	if instanceType == SplunkClusterManager {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
-		clusterMasterURL = "localhost"
+		clusterManagerURL = "localhost"
 	} else if spec.ClusterMasterRef.Name != "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
 		//Check if CM is connected to a LicenseMaster
 		namespacedName := types.NamespacedName{
 			Namespace: cr.GetNamespace(),
 			Name:      spec.ClusterMasterRef.Name,
 		}
-		masterIdxCluster := &enterpriseApi.ClusterMaster{}
-		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
+		managerIdxCluster := &enterpriseApi.ClusterMaster{}
+		err := client.Get(context.TODO(), namespacedName, managerIdxCluster)
 		if err != nil {
 			scopedLog.Error(err, "Unable to get ClusterMaster")
 		}
 
-		if masterIdxCluster.Spec.LicenseMasterRef.Name != "" {
-			licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, masterIdxCluster.Spec.LicenseMasterRef.Name, false)
-			if masterIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-				licenseMasterURL = splcommon.GetServiceFQDN(masterIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+			licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+			if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+				licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
 			}
 			env = append(env, corev1.EnvVar{
 				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseMasterURL,
+				Value: licenseManagerURL,
 			})
 		}
 	}
 
-	if clusterMasterURL != "" {
+	if clusterManagerURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: clusterMasterURL,
+			Value: clusterManagerURL,
 		})
 	}
 

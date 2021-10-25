@@ -178,14 +178,14 @@ func (d *Deployment) PodExecCommand(podName string, cmd []string, stdin string, 
 	return stdout.String(), stderr.String(), nil
 }
 
-//DeployLicenseMaster deploys the license manager instance
-func (d *Deployment) DeployLicenseMaster(name string) (*enterpriseApi.LicenseMaster, error) {
+//DeployLicenseManager deploys the license manager instance
+func (d *Deployment) DeployLicenseManager(name string) (*enterpriseApi.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
 		return nil, fmt.Errorf("no license file path specified")
 	}
 
-	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
+	lm := newLicenseManager(name, d.testenv.namespace, d.testenv.licenseCMName)
 	deployed, err := d.deployCR(name, lm)
 	if err != nil {
 		return nil, err
@@ -306,7 +306,7 @@ func (d *Deployment) DeploySingleSiteCluster(name string, indexerReplicas int, s
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -345,7 +345,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(name string, indexerRe
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -404,7 +404,7 @@ func (d *Deployment) DeployMultisiteCluster(name string, indexerReplicas int, si
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -453,7 +453,7 @@ func (d *Deployment) DeployStandaloneWithLM(name string) (*enterpriseApi.Standal
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return nil, err
 		}
@@ -507,7 +507,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(name string,
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -573,10 +573,10 @@ func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(name string, spec ente
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
-// DeployLicenseMasterWithGivenSpec deploys the license manager with given SPEC
-func (d *Deployment) DeployLicenseMasterWithGivenSpec(name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
-	d.testenv.Log.Info("Deploying license-master", "name", name)
-	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
+// DeployLicenseManagerWithGivenSpec deploys the license manager with given SPEC
+func (d *Deployment) DeployLicenseManagerWithGivenSpec(name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
+	d.testenv.Log.Info("Deploying license-manager", "name", name)
+	lm := newLicenseManagerWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(name, lm)
 	if err != nil {
 		return nil, err
@@ -599,7 +599,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -667,13 +667,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 	return nil
 }
 
-// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-master, indexers in multiple sites (SHC LM Optional) with app framework spec
+// DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
 func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -777,7 +777,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(name stri
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}
@@ -839,7 +839,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(name stri
 	return nil
 }
 
-// DeployMultisiteClusterWithMonitoringConsole deploys cluster-master, indexers in multiple sites (SHC LM Optional) with monitoring console
+// DeployMultisiteClusterWithMonitoringConsole deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with monitoring console
 func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
 	licenseMaster := ""
@@ -847,7 +847,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(name string, in
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseMaster(name)
+		_, err := d.DeployLicenseManager(name)
 		if err != nil {
 			return err
 		}

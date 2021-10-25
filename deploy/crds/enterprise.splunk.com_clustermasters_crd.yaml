@@ -21,7 +21,7 @@ spec:
     name: v3
     schema:
       openAPIV3Schema:
-        description: ClusterMaster is the Schema for the clustermasters API
+        description: ClusterMaster is the Schema for the clustermanagers API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

@@ -91,3 +91,5 @@ clair-scanner-logs
 release-*
 deploy/olm-certified
 *junit.xml
+# Bias Language Linter
+.biaslanguage/
