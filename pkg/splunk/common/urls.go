@@ -97,6 +97,9 @@ const (
 const (
 	//LicenseManager = "license-master"
 	LicenseManager = "license-master"
+
+	//LicenseManagerDMCGroup = "dmc_group_license_master"
+	LicenseManagerDMCGroup = "dmc_group_license_master"
 )
 
 // List of URLs - License Manager/Peer
@@ -104,4 +107,7 @@ const (
 
 	//LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
 	LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
+
+	//LocalURLLicenseManagerEdit = "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
+	LocalURLLicenseManagerEdit = "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
 )

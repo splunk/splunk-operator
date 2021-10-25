@@ -65,7 +65,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -91,7 +91,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -145,7 +145,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -167,7 +167,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)

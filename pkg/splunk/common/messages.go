@@ -31,5 +31,5 @@ const (
 	SecretTokenNotRetrievable = "Couldn't retrieve %s from secret data"
 
 	// EmptyClusterMasterRef indicates an empty cluster manager reference
-	EmptyClusterMasterRef = "Empty cluster master reference"
+	EmptyClusterMasterRef = "Empty cluster manager reference"
 )

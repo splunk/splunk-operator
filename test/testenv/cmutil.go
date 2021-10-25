@@ -215,7 +215,7 @@ type ClusterMasterInfoEndpointResponse struct {
 
 // ClusterMasterInfoResponse Get cluster Manager response
 func ClusterMasterInfoResponse(deployment *Deployment, podName string) ClusterMasterInfoEndpointResponse {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/master/info?output_mode=json"
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	restResponse := ClusterMasterInfoEndpointResponse{}
@@ -278,7 +278,7 @@ func ClusterManagerBundlePushstatus(deployment *Deployment, previousBundleHash s
 
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
 func GetClusterManagerBundleHash(deployment *Deployment) string {
-	podName := fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 	restResponse := ClusterMasterInfoResponse(deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle["checksum"]

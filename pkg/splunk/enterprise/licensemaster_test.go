@@ -29,7 +29,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
-func TestApplyLicenseMaster(t *testing.T) {
+func TestApplyLicenseManager(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -64,23 +64,23 @@ func TestApplyLicenseMaster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseMaster(c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseManager(c, cr.(*enterpriseApi.LicenseMaster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseMaster", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseMaster(c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseManager(c, cr.(*enterpriseApi.LicenseMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
-func TestGetLicenseMasterStatefulSet(t *testing.T) {
+func TestGetLicenseManagerStatefulSet(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -96,12 +96,12 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseMasterSpec(&cr); err != nil {
-				t.Errorf("validateLicenseMasterSpec() returned error: %v", err)
+			if err := validateLicenseManagerSpec(&cr); err != nil {
+				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
-			return getLicenseMasterStatefulSet(c, &cr)
+			return getLicenseManagerStatefulSet(c, &cr)
 		}
-		configTester(t, "getLicenseMasterStatefulSet()", f, want)
+		configTester(t, "getLicenseManagerStatefulSet()", f, want)
 	}
 
 	test(splcommon.TestGetLMStatefulSetT1)
@@ -135,7 +135,7 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 
 }
 
-func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
+func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -183,13 +183,13 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyLicenseMaster(client, &cr)
+	_, err = ApplyLicenseManager(client, &cr)
 	if err != nil {
-		t.Errorf("ApplyLicenseMaster should be successful")
+		t.Errorf("ApplyLicenseManager should be successful")
 	}
 }
 
-func TestLicenseMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

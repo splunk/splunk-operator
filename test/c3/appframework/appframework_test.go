@@ -156,8 +156,8 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, 10, true)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
-			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -175,7 +175,7 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList = testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
@@ -203,8 +203,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
-			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify Apps are installed
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
@@ -231,7 +231,7 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -261,7 +261,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify Apps are updated
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
@@ -379,7 +379,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -397,7 +397,7 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList = testenv.GetAppFileList(appListV2, 2)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
@@ -424,8 +424,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
-			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify Apps are installed
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
@@ -476,7 +476,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
-			testenvInstance.Log.Info("Checking for New Indexer On Cluster Master", "Indexer Name", indexerName)
+			testenvInstance.Log.Info("Checking for New Indexer On Cluster Manager", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
 
 			// Ensure SHC go to Ready phase
@@ -501,7 +501,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
 			// Verify apps install status and version
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
@@ -525,8 +525,8 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -554,7 +554,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer for app", " version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify apps are installed cluster-wide
 			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", " version", appVersion)
@@ -595,7 +595,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -608,7 +608,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
@@ -644,7 +644,7 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -747,7 +747,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy SHC with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -835,7 +835,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -849,7 +849,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps with local scope are downloaded by init-container
 			appVersion := "V1"
 			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
-			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			appFileList = testenv.GetAppFileList(appListLocal, 1)
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container for apps", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
@@ -874,7 +874,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Verify apps with local scope are installed locally on CM and on SHC Deployer
-			localPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			localPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info("Verify Apps are installed Locally on CM and Deployer by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
@@ -914,7 +914,7 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -973,7 +973,7 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -1051,7 +1051,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -1064,8 +1064,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			masterPodNames := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appFileList, initContDownloadLocation)
+			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appFileList, initContDownloadLocation)
 
 			// Get instance of current SHC CR with latest config
 			shcName := deployment.GetName() + "-shc"
@@ -1085,7 +1085,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify Apps are NOT copied to /etc/apps on CM and Deployer")
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), masterPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Get indexers and SH pod names
 			podNames := []string{}

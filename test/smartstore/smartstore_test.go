@@ -163,7 +163,7 @@ var _ = Describe("Smartstore test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)

@@ -64,10 +64,10 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -96,13 +96,13 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterMasterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
