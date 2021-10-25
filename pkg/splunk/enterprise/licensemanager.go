@@ -29,17 +29,17 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
-// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
-func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
+// ApplyLicenseManager reconciles the state for the Splunk Enterprise license manager.
+func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// validate and updates defaults for CR
-	err := validateLicenseMasterSpec(cr)
+	err := validateLicenseManagerSpec(cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -71,7 +71,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
@@ -93,13 +93,13 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	}
 
 	// create or update statefulset
-	statefulSet, err := getLicenseMasterStatefulSet(client, cr)
+	statefulSet, err := getLicenseManagerStatefulSet(client, cr)
 	if err != nil {
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(client, statefulSet, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+	err = validateMonitoringConsoleRef(client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
@@ -120,7 +120,7 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
 			if err != nil {
 				return result, err
 			}
@@ -143,8 +143,8 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 	return result, nil
 }
 
-// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
+// getLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+func getLicenseManagerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
@@ -156,8 +156,8 @@ func getLicenseMasterStatefulSet(client splcommon.ControllerClient, cr *enterpri
 	return ss, err
 }
 
-// validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseMasterSpec(cr *enterpriseApi.LicenseMaster) error {
+// validateLicenseManagerSpec checks validity and makes default updates to a LicenseManagerSpec, and returns error if something is wrong.
+func validateLicenseManagerSpec(cr *enterpriseApi.LicenseManager) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)

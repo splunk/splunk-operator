@@ -188,6 +188,28 @@ func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSpl
 	}
 }
 
+// getLicenseManagerURL returns URL of license manager
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  "SPLUNK_LICENSE_MANAGER_URL",
+				Value: licenseMasterURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_LICENSE_MANAGER_URL",
+			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
+		},
+	}
+}
+
 // getSearchHeadExtraEnv returns extra environment variables used by search head clusters
 func getSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
 
