@@ -63,7 +63,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 	}()
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseNewManager)
 	if err != nil {
 		return result, err
 	}
@@ -87,7 +87,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 	}
 
 	// create or update a service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, false))
+	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseNewManager, false))
 	if err != nil {
 		return result, err
 	}
@@ -145,7 +145,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 
 // getLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseManagerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, 1, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseNewManager, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
 	}

@@ -283,6 +283,7 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 		}
 	}
 	out.LicenseMasterRef = in.LicenseMasterRef
+	out.LicenseManagerRef = in.LicenseManagerRef
 	out.ClusterMasterRef = in.ClusterMasterRef
 	out.MonitoringConsoleRef = in.MonitoringConsoleRef
 	if in.ExtraEnv != nil {

@@ -666,6 +666,15 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Name:  "SPLUNK_LICENSE_MANAGER_URL",
 			Value: licenseManagerURL,
 		})
+	} else if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_LICENSE_MANAGER_URL",
+			Value: licenseManagerURL,
+		})
 	}
 
 	// append URL for cluster manager, if configured
@@ -693,6 +702,15 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
 			if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
 				licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+			}
+			env = append(env, corev1.EnvVar{
+				Name:  "SPLUNK_LICENSE_MANAGER_URL",
+				Value: licenseManagerURL,
+			})
+		} else if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+			licenseManagerURL := GetSplunkServiceName(SplunkLicenseNewManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+			if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
+				licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
 			}
 			env = append(env, corev1.EnvVar{
 				Name:  "SPLUNK_LICENSE_MANAGER_URL",
