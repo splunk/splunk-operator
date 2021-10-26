@@ -16,12 +16,15 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	recClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
@@ -38,8 +41,18 @@ func ApplyLicenseMaster(client splcommon.ControllerClient, cr *enterpriseApi.Lic
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyLicenseMaster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	NewManager, err := getLicenseMasterList(client, cr)
+	if NewManager && cr.ObjectMeta.DeletionTimestamp == nil {
+		// Needs Logic to remove/delete current CR
+		deleteCR(client, cr)
+		return reconcile.Result{}, err
+	} else {
+		println("No License Manager, continue deployment")
+	}
+
 	// validate and updates defaults for CR
-	err := validateLicenseMasterSpec(cr)
+	err = validateLicenseMasterSpec(cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -167,4 +180,34 @@ func validateLicenseMasterSpec(cr *enterpriseApi.LicenseMaster) error {
 	}
 
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+}
+
+func deleteCR(c splcommon.ControllerClient, cr splcommon.MetaObject) bool {
+	// currentTime := metav1.NewTime(time.Now())
+	// cr.SetDeletionTimestamp(&currentTime)
+	// _, err := ApplyLicenseMaster(c, cr.(*enterpriseApi.LicenseMaster))
+	return true
+}
+
+// helper function to get the list of LicenseMaster types in the current namespace
+func getLicenseMasterList(c splcommon.ControllerClient, cr splcommon.MetaObject) (bool, error) {
+	scopedLog := log.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	podList := &corev1.PodList{}
+	opts := []recClient.ListOption{
+		recClient.InNamespace(cr.GetNamespace()),
+	}
+
+	err := c.List(context.TODO(), podList, opts...)
+	if err != nil {
+		scopedLog.Error(err, "LicenseManager types not found in namespace", "namespace", cr.GetNamespace())
+		return false, err
+	}
+
+	for i := 0; i < len(podList.Items); i++ {
+		if strings.Contains(podList.Items[i].Name, "license-manager") {
+			return true, errors.New("Found a License Manager already deployed")
+		}
+	}
+	return false, err
 }

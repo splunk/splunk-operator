@@ -123,7 +123,7 @@ func (r splunkReconciler) Reconcile(request reconcile.Request) (reconcile.Result
 	// log what happens next
 	if err != nil {
 		scopedLog.Error(err, "Reconciliation requeued", "RequeueAfter", result.RequeueAfter)
-		return result, nil
+		return result, err
 	}
 	if result.Requeue {
 		scopedLog.Info("Reconciliation requeued", "RequeueAfter", result.RequeueAfter)
