@@ -14,6 +14,14 @@
 
 package enterprise
 
+import (
+	"sync"
+
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	appsv1 "k8s.io/api/apps/v1"
+)
+
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
 type InstanceType string
 
@@ -39,6 +47,64 @@ const (
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
 )
+
+const (
+	// Max retries for each phase of the App install pipeline
+	pipelinePhaseMaxRetryCount = 3
+
+	// Max. time the app framework scheduler waits before trying to yield
+	maxRunTimeBeforeAttemptingYield = 90
+)
+
+// PipelineWorker represents execution context used to run an app pkg worker thread
+type PipelineWorker struct {
+	//  to the AppSource Spec entry
+	appSrcName string
+
+	// Reference to the App Framework Config
+	afwConfig *enterpriseApi.AppFrameworkSpec
+
+	// Reference to the App context from the CR status
+	appDeployInfo *enterpriseApi.AppDeploymentInfo
+
+	// Used for pod copy and install
+	targetPodName string
+
+	// runtime client
+	client *splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
+
+	// isActive indicates if a worker is assigned
+	isActive bool
+
+	// waiter reference to inform the caller
+	waiter *sync.WaitGroup
+}
+
+// PipelinePhase represents one phase in the overall installation pipeline
+type PipelinePhase struct {
+	mutex        sync.Mutex
+	q            []*PipelineWorker
+	msgChannel   chan *PipelineWorker
+	workerWaiter sync.WaitGroup
+}
+
+// AppInstallPipeline defines the pipeline for the installation activity
+type AppInstallPipeline struct {
+	// Pipeline Phases: Download, Pod Copy and Install
+	pplnPhases map[enterpriseApi.AppPhaseType]*PipelinePhase
+
+	// Used by the scheduler to wait for all the Phases to complete
+	phaseWaiter sync.WaitGroup
+
+	// Used by yield logic
+	sigTerm chan struct{}
+}
 
 // ToString returns a string for a given InstanceType
 func (instanceType InstanceType) ToString() string {
