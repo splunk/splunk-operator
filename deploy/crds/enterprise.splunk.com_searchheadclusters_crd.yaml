@@ -2664,15 +2664,6 @@ spec:
                               Size:
                                 format: int64
                                 type: integer
-                              appInstallStatus:
-                                description: AppInstallStatus represents the current
-                                  install state of the app
-                                properties:
-                                  appDownloadState:
-                                    description: AppDownloadState represents the download
-                                      status of app
-                                    type: integer
-                                type: object
                               appName:
                                 type: string
                               auxPhaseInfo:

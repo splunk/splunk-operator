@@ -71,24 +71,6 @@ const (
 	DeployStatusError
 )
 
-// AppDownloadState represents the download status of app
-type AppDownloadState uint8
-
-// Values to represent the Pod App download status
-const (
-	// Indicates that download of app has not started yet
-	DownloadNotStarted AppDownloadState = iota + 1
-
-	// Download of the app on splunk operator pod is in progress
-	DownloadInProgress
-
-	// Download of app is complete on the Splunk operator pod
-	DownloadComplete
-
-	// Failed to download the App on the Splunk Operator pod
-	DownloadError
-)
-
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
@@ -301,11 +283,6 @@ type AppFrameworkSpec struct {
 	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
-// AppInstallStatus represents the current install state of the app
-type AppInstallStatus struct {
-	AppDownloadState AppDownloadState `json:"appDownloadState,omitempty"`
-}
-
 // AppDeploymentInfo represents a single App deployment information
 type AppDeploymentInfo struct {
 	AppName          string              `json:"appName"`
@@ -314,7 +291,6 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
-	AppInstallStatus AppInstallStatus    `json:"appInstallStatus"`
 
 	// App phase info to track download, copy and install
 	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
@@ -439,7 +415,7 @@ const (
 	// AppPkgInstallInProgress  indicates in progress
 	AppPkgInstallInProgress = 302
 	// AppPkgInstallComplete indicates complete
-	AppPkgInstallComplete = 302
+	AppPkgInstallComplete = 303
 	// AppPkgInstallError indicates error after retries
 	AppPkgInstallError = 399
 )

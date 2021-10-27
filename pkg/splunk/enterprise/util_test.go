@@ -17,7 +17,6 @@ package enterprise
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -878,206 +877,77 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 }
 
-func newTestRemoteObject(appName, objectHash string, size int64) splclient.RemoteObject {
-	return splclient.RemoteObject{
-		Etag:         &objectHash,
-		Key:          &appName,
-		LastModified: nil,
-		Size:         &(size),
-		StorageClass: nil,
-	}
-}
-
-func newTestAppDeployInfo(appName, objectHash string, size int64) enterpriseApi.AppDeploymentInfo {
-	return enterpriseApi.AppDeploymentInfo{
-		AppName:          appName,
-		LastModifiedTime: "1633975734",
-		ObjectHash:       objectHash,
-		Size:             uint64(size),
-		RepoState:        enterpriseApi.RepoStateActive,
-		DeployStatus:     enterpriseApi.DeployStatusInProgress,
-		AppInstallStatus: enterpriseApi.AppInstallStatus{
-			AppDownloadState: enterpriseApi.DownloadNotStarted,
-		},
-	}
-}
-
-func createOrTruncateAppFileLocally(appFileName string, size int64) error {
-
-	appFile, err := os.Create(appFileName)
-	if err != nil {
-		return fmt.Errorf("failed to create app file %s", appFile.Name())
-	}
-
-	if err := appFile.Truncate(size); err != nil {
-		return fmt.Errorf("failed to truncate app file %s", appFile.Name())
-	}
-
-	appFile.Close()
-
-	return nil
-}
-
-func areAppsDownloadedSuccessfully(appDeployInfoList []enterpriseApi.AppDeploymentInfo) (bool, error) {
-	for _, appInfo := range appDeployInfoList {
-		if appInfo.AppInstallStatus.AppDownloadState != enterpriseApi.DownloadComplete {
-			err := fmt.Errorf("App:%s is not downloaded yet", appInfo.AppName)
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-func TestHandleAppInstall(t *testing.T) {
-	cr := enterpriseApi.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standalone",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Standalone",
-		},
-		Spec: enterpriseApi.StandaloneSpec{
-			Replicas: 1,
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				AppsRepoPollInterval:      60,
-				MaxConcurrentAppDownloads: 5,
-
-				VolList: []enterpriseApi.VolumeSpec{
-					{
-						Name:      "test_volume",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Provider:  "aws",
-					},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{
-						Name:     "appSrc1",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "test_volume",
-							Scope:   "local",
-						},
-					},
-					{
-						Name:     "appSrc2",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "test_volume",
-							Scope:   "local",
-						},
-					},
-					{
-						Name:     "appSrc3",
-						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "test_volume",
-							Scope:   "local",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	testApps := []string{"app1.tgz", "app2.tgz", "app3.tgz", "app4.tgz"}
-	testHashes := []string{"abcd1111", "efgh2222", "ijkl3333", "wxyz4444"}
-	testSizes := []int64{10, 20, 30, 40}
-
-	client := spltest.NewMockClient()
-
-	var appDeployContext enterpriseApi.AppDeploymentContext
-	remoteObjListMap := make(map[string]splclient.S3Response)
-
-	var appFrameworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
-	appDeployContext.AppFrameworkConfig = appFrameworkConf
-
-	appDeployContext.AppsStatusMaxConcurrentAppDownloads = 5
-	var err error
-	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
-	appDeployStatus := appDeployContext.AppsSrcDeployStatus
-
-	// fill in the appDeployInfo with dummy values
-	for _, appSrc := range appFrameworkConf.AppSources {
-
-		appInfo := appDeployStatus[appSrc.Name]
-		var appDeployInfo enterpriseApi.AppDeploymentInfo
-		var S3Response splclient.S3Response
-
-		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.Namespace, cr.Kind, cr.Name, appSrc.Scope, appSrc.Name) + "/"
-		// create the app download directory locally
-		err = createAppDownloadDir(localPath)
-		if err != nil {
-			t.Errorf("Unable to create the download directory")
-		}
-		defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-		for idx := 0; idx < len(appNames); idx++ {
-			appName := appSrc.Name + "_" + testApps[idx]
-			// create app deploy info list for all the apps
-			appDeployInfo = newTestAppDeployInfo(appName, testHashes[idx], testSizes[idx])
-			appInfo.AppDeploymentInfoList = append(appInfo.AppDeploymentInfoList, appDeployInfo)
-
-			// create the S3Response
-			object := newTestRemoteObject(appName, testHashes[idx], testSizes[idx])
-			S3Response.Objects = append(S3Response.Objects, &object)
-
-			// create the dummy app packages locally
-			appFileName := appName + "_" + objectHashes[idx]
-			appLoc := filepath.Join(localPath, appFileName)
-			err := createOrTruncateAppFileLocally(appLoc, sizes[idx])
-			if err != nil {
-				t.Errorf("Unable to create the app files locally")
-			}
-			defer os.Remove(appLoc)
-		}
-		appDeployStatus[appSrc.Name] = appInfo
-		remoteObjListMap[appSrc.Name] = S3Response
-	}
-
-	// Test-1: Empty remoteObjectList Map should return an error
-	err = handleAppInstall(client, &cr, &appDeployContext, remoteObjListMap, &appFrameworkConf)
-	if err != nil {
-		t.Errorf("handleAppInstall should not have returned with error")
-	}
-
-	// also check the download state of all the apps, they should be in DownloadComplete state
-	for appSrc, appSrcInfo := range appDeployContext.AppsSrcDeployStatus {
-		if ok, err := areAppsDownloadedSuccessfully(appSrcInfo.AppDeploymentInfoList); !ok {
-			t.Errorf("all the apps for app source:%s should have been in DownloadComplete state. err=%v", appSrc, err)
-		}
-	}
-}
-
-func TestAppDownloadStateAsStr(t *testing.T) {
+func TestAppPhaseStatusAsStr(t *testing.T) {
 	var status string
-	status = appDownloadStateAsStr(enterpriseApi.DownloadNotStarted)
-	if status != "Download Not Started" {
-		t.Errorf("Got wrong status. Expected status=Download Not Started, Got = %s", status)
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadPending)
+	if status != "Download Pending" {
+		t.Errorf("Got wrong status. Expected status=Download Pending, Got = %s", status)
 	}
 
-	status = appDownloadStateAsStr(enterpriseApi.DownloadInProgress)
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadInProgress)
 	if status != "Download In Progress" {
 		t.Errorf("Got wrong status. Expected status=\"Download In Progress\", Got = %s", status)
 	}
 
-	status = appDownloadStateAsStr(enterpriseApi.DownloadComplete)
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadComplete)
 	if status != "Download Complete" {
 		t.Errorf("Got wrong status. Expected status=\"Download Complete\", Got = %s", status)
 	}
 
-	status = appDownloadStateAsStr(enterpriseApi.DownloadError)
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadError)
 	if status != "Download Error" {
 		t.Errorf("Got wrong status. Expected status=\"Download Error\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyPending)
+	if status != "Pod Copy Pending" {
+		t.Errorf("Got wrong status. Expected status=Pod Copy Pending, Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyInProgress)
+	if status != "Pod Copy In Progress" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy In Progress\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyComplete)
+	if status != "Pod Copy Complete" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy Complete\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyError)
+	if status != "Pod Copy Error" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy Error\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallPending)
+	if status != "Install Pending" {
+		t.Errorf("Got wrong status. Expected status=Install Pending, Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallInProgress)
+	if status != "Install In Progress" {
+		t.Errorf("Got wrong status. Expected status=\"Install In Progress\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallComplete)
+	if status != "Install Complete" {
+		t.Errorf("Got wrong status. Expected status=\"Install Complete\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallError)
+	if status != "Install Error" {
+		t.Errorf("Got wrong status. Expected status=\"Install Error\", Got = %s", status)
 	}
 }
 
 func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
-	_, err := getAvailableDiskSpace()
-	if err == nil {
-		t.Errorf("getAvailableDiskSpace should have returned error as we have not mounted the download volume.")
+	//add the directory to download apps
+	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	size, _ := getAvailableDiskSpace()
+	if size == 0 {
+		t.Errorf("getAvailableDiskSpace should have returned a non-zero size.")
 	}
 }
 

@@ -61,6 +61,9 @@ type PipelineWorker struct {
 	// Reference to the App Framework Config
 	afwConfig *enterpriseApi.AppFrameworkSpec
 
+	// Refernce to app deploy context
+	afwDeployContext *enterpriseApi.AppDeploymentContext
+
 	// Reference to the App context from the CR status
 	appDeployInfo *enterpriseApi.AppDeploymentInfo
 
@@ -81,6 +84,9 @@ type PipelineWorker struct {
 
 	// waiter reference to inform the caller
 	waiter *sync.WaitGroup
+
+	// mutex to protect shared data
+	workerMutex sync.Mutex
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
@@ -101,6 +107,9 @@ type AppInstallPipeline struct {
 
 	// Used by yield logic
 	sigTerm chan bool
+
+	// represents the available disk space on operator pod
+	availableDiskSpace uint64
 }
 
 // ToString returns a string for a given InstanceType
