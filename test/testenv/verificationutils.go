@@ -677,21 +677,18 @@ func VerifyAppsDownloadedOnContainer(deployment *Deployment, testenvInstance *Te
 	}
 }
 
-// VerifyAppListDownloadStatus verify app download status for the given list of apps
-func VerifyAppListDownloadStatus(deployment *Deployment, testenvInstance *TestEnv, appDeploymentInfo []enterpriseApi.AppDeploymentInfo, appList []string) {
-	for _, appDeploymentInfo := range appDeploymentInfo {
-		testenvInstance.Log.Info("Check App Download Status", "App Name", appDeploymentInfo.AppName)
-		if CheckStringInSlice(appList, appDeploymentInfo.AppName) {
-			VerifyAppDownloadStatus(deployment, testenvInstance, appDeploymentInfo, appDeploymentInfo.AppName)
-		}
+// VerifyAppListDownloadStatusStandalone verify app download status for the given list of apps and given CR
+func VerifyAppListDownloadStatusStandalone(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		testenvInstance.Log.Info("Check App Download Status", "App Name", appName)
+		gomega.Eventually(func() int {
+			appDeploymentInfo, err := GetAppDeploymentInfoStandalone(deployment, testenvInstance, name, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "Failed to get app deployment info")
+				return 0
+			}
+			testenvInstance.Log.Info("App State found", "App Name", appName, "App State", appDeploymentInfo)
+			return int(appDeploymentInfo.AppInstallStatus.AppDownloadState)
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(3))
 	}
-}
-
-// VerifyAppDownloadStatus verify app download status for a given app
-func VerifyAppDownloadStatus(deployment *Deployment, testenvInstance *TestEnv, appDeploymentInfo enterpriseApi.AppDeploymentInfo, appName string) {
-	gomega.Eventually(func() int {
-		appDownloadState := int(appDeploymentInfo.AppInstallStatus.AppDownloadState)
-		testenvInstance.Log.Info("App State found", "App Name", appDeploymentInfo.AppName, "App State", appDownloadState)
-		return int(appDownloadState)
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(3))
 }

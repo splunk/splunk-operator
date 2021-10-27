@@ -106,20 +106,18 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
+			// Verify App Download State on CR
+			appFileList := testenv.GetAppFileListPhase3(appListV1)
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps download on Operator Pod
 			kind := standalone.Kind
 			opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			appFileList := testenv.GetAppFileListPhase3(appListV1)
+
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
-			// Verify App Download State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -156,15 +154,12 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
+			// Verify App Downlaod State on CR
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps are downloaded on Splunk Operator Pod
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
-			// Verify App Downlaod State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -231,15 +226,12 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
+			// Verify App Downlaod State on CR
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps are downloaded on Splunk Operator Pod
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
-			// Verify App Downlaod State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -281,15 +273,12 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
+			// Verify App Downlaod State on CR
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps are downloaded on Splunk Operator Pod
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, customAppFileList, opLocalAppPathStandalone)
-
-			// Verify App Downlaod State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -363,6 +352,9 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
+			// Verify App Downlaod State on CR
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps download on Operator Pod
 			kind := standalone.Kind
 			opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
@@ -370,12 +362,6 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
-			// Verify App Downlaod State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Ensure Standalone goes to Ready phase
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -430,11 +416,9 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
-			// Verify App Downlaod State on CR
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			// Verify App Download State on CR
 			appFileList := testenv.GetAppFileListPhase3(appListV1)
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Verify Apps download on Operator Pod
 			kind := standalone.Kind
@@ -502,15 +486,12 @@ var _ = Describe("s1appfw test", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
+			// Verify App Downlaod State on CR
+			testenv.VerifyAppListDownloadStatusStandalone(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
 			// Verify Apps are downloaded on Splunk Operator Pod
 			testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
-			// Verify App Downlaod State on CR
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-			testenv.VerifyAppListDownloadStatus(deployment, testenvInstance, standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
