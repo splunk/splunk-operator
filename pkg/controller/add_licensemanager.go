@@ -29,32 +29,32 @@ import (
 )
 
 func init() {
-	SplunkControllersToAdd = append(SplunkControllersToAdd, LicenseMasterController{})
+	SplunkControllersToAdd = append(SplunkControllersToAdd, LicenseManagerController{})
 }
 
-// blank assignment to verify that LicenseMasterController implements SplunkController
-var _ splctrl.SplunkController = &LicenseMasterController{}
+// blank assignment to verify that LicenseManagerController implements SplunkController
+var _ splctrl.SplunkController = &LicenseManagerController{}
 
-// LicenseMasterController is used to manage LicenseMaster custom resources
-type LicenseMasterController struct{}
+// LicenseManagerController is used to manage LicenseManager custom resources
+type LicenseManagerController struct{}
 
 // GetInstance returns an instance of the custom resource managed by the controller
-func (ctrl LicenseMasterController) GetInstance() splcommon.MetaObject {
-	return &enterpriseApi.LicenseMaster{
+func (ctrl LicenseManagerController) GetInstance() splcommon.MetaObject {
+	return &enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: enterpriseApi.APIVersion,
-			Kind:       "LicenseMaster",
+			Kind:       "LicenseManager",
 		},
 	}
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl LicenseMasterController) GetWatchTypes() []runtime.Object {
+func (ctrl LicenseManagerController) GetWatchTypes() []runtime.Object {
 	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (ctrl LicenseMasterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
-	instance := cr.(*enterpriseApi.LicenseMaster)
-	return enterprise.ApplyLicenseMaster(client, instance)
+func (ctrl LicenseManagerController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
+	instance := cr.(*enterpriseApi.LicenseManager)
+	return enterprise.ApplyLicenseManager(client, instance)
 }

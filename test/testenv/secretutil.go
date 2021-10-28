@@ -122,7 +122,7 @@ func DecryptSplunkEncodedSecret(deployment *Deployment, podName string, ns strin
 // GetKeysToMatch retuns slice of secrets in server conf based on pod name
 func GetKeysToMatch(podName string) []string {
 	var keysToMatch []string
-	if strings.Contains(podName, "standalone") || strings.Contains(podName, splcommon.LicenseManager) || strings.Contains(podName, "monitoring-console") {
+	if strings.Contains(podName, "standalone") || strings.Contains(podName, splcommon.LicenseManager) || strings.Contains(podName, "license-manager") || strings.Contains(podName, "monitoring-console") {
 		keysToMatch = []string{"pass4SymmKey"}
 	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, splcommon.ClusterManager) {
 		keysToMatch = []string{"pass4SymmKey", "idxc_secret"}

@@ -37,6 +37,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "standalone"
 	case "LicenseMaster":
 		component = splcommon.LicenseManager
+	case "LicenseManager":
+		component = "license-manager"
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
@@ -161,6 +163,8 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 		component = "standalone"
 	case "LicenseMaster":
 		component = splcommon.LicenseManager
+	case "LicenseManager":
+		component = "license-manager"
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
