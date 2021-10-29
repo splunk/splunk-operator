@@ -168,7 +168,7 @@ func ClusterManagerReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+"instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+" instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase

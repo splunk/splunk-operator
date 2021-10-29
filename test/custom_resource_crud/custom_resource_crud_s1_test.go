@@ -49,10 +49,11 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("crcrud, integration: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("crcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
+			mcRef := deployment.GetName()
+			standalone, err := deployment.DeployStandalone(deployment.GetName(), mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Verify Standalone goes to ready state
