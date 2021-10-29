@@ -473,7 +473,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	XContext("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps, scale up IDXC and SHC, install app on new pods", func() {
 
 			/* Test Steps
