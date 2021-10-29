@@ -318,9 +318,9 @@ const (
 	BundlePushComplete
 )
 
-// BundlePushTracker used to track the bundle push
+// BundlePushTracker used to track the bundle push status
 type BundlePushTracker struct {
-	// Bundle push stage(1=Pending, 2=InProgress, 3=Complete)
+	// Represents the current stage. Internal to the App framework
 	BudlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
 }
 
@@ -349,7 +349,7 @@ type AppDeploymentContext struct {
 	// Represents the Status field for maximum number of apps that can be downloaded at same time
 	AppsStatusMaxConcurrentAppDownloads uint64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
 
-	// Tracks the bundle push status for the cluster scoped apps
+	// Internal to the App framework. Used in case of CM(IDXC) and deployer(SHC)
 	BundlePushStatus BundlePushTracker `json:"bundlePushStatus,omitempty"`
 }
 
@@ -368,22 +368,15 @@ const (
 
 	// PhaseInstall identifies install phase for local scoped apps
 	PhaseInstall = "install"
-
-	// PhaseInstallCluster identifies install phase for cluster scoped apps
-	// sgontla: **** actually, we don't need this phase, as the cluster scoped apps are handled by podCopy pipline manager
-	//PhaseInstallCluster = "installcluster"
-
-	// PhaseInspect identifies the inspect phase
-	PhaseInspect = "inspect"
 )
 
-// PhaseInfo defines the pipeline phase and status
+// PhaseInfo defines the status to track the App framework installation phase
 type PhaseInfo struct {
-	// Phase  type
+	// Phase type
 	Phase AppPhaseType `json:"phase,omitempty"`
-	// Status for the phase
+	// Status of the phase
 	Status AppPhaseStatusType `json:"status,omitempty"`
-	// RetryCount defines the number of tries completed so far
+	// RetryCount defines the number of retries completed so far
 	RetryCount int32 `json:"retryCount,omitempty"`
 }
 

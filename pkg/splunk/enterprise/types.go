@@ -51,6 +51,9 @@ const (
 const (
 	// Max retries for each phase of the App install pipeline
 	pipelinePhaseMaxRetryCount = 3
+
+	// Max. time the app framework scheduler waits before trying to yield
+	maxRunTimeBeforeAttemptingYield = 90
 )
 
 // PipelineWorker represents execution context used to run an app pkg worker thread
@@ -106,7 +109,7 @@ type AppInstallPipeline struct {
 	phaseWaiter sync.WaitGroup
 
 	// Used by yield logic
-	sigTerm chan bool
+	sigTerm chan struct{}
 
 	// represents the available disk space on operator pod
 	availableDiskSpace uint64

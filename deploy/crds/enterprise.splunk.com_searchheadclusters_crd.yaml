@@ -2672,19 +2672,19 @@ spec:
                                   mapped to its ordinal value. Ignored, once the DeployStatus
                                   is marked as Complete
                                 items:
-                                  description: PhaseInfo defines the pipeline phase
-                                    and status
+                                  description: PhaseInfo defines the status to track
+                                    the App framework installation phase
                                   properties:
                                     phase:
-                                      description: Phase  type
+                                      description: Phase type
                                       type: string
                                     retryCount:
                                       description: RetryCount defines the number of
-                                        tries completed so far
+                                        retries completed so far
                                       format: int32
                                       type: integer
                                     status:
-                                      description: Status for the phase
+                                      description: Status of the phase
                                       format: int32
                                       type: integer
                                   type: object
@@ -2702,15 +2702,15 @@ spec:
                                   and install
                                 properties:
                                   phase:
-                                    description: Phase  type
+                                    description: Phase type
                                     type: string
                                   retryCount:
                                     description: RetryCount defines the number of
-                                      tries completed so far
+                                      retries completed so far
                                     format: int32
                                     type: integer
                                   status:
-                                    description: Status for the phase
+                                    description: Status of the phase
                                     format: int32
                                     type: integer
                                 type: object
@@ -2736,11 +2736,12 @@ spec:
                     format: int64
                     type: integer
                   bundlePushStatus:
-                    description: Tracks the bundle push status for the cluster scoped
-                      apps
+                    description: Internal to the App framework. Used in case of CM(IDXC)
+                      and deployer(SHC)
                     properties:
                       bundlePushStage:
-                        description: Bundle push stage(1=Pending, 2=InProgress, 3=Complete)
+                        description: Represents the current stage. Internal to the
+                          App framework
                         type: integer
                     type: object
                   isDeploymentInProgress:
