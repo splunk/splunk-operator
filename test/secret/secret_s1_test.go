@@ -19,7 +19,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -43,8 +46,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 		}
 	})
 
-	Context("Standalone deployment (S1) with LM", func() {
-		It("secret, integration: Secret update on a standalone instance", func() {
+	Context("Standalone deployment (S1) with LM and MC", func() {
+		It("secret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
 
 			/* Test Scenario
 			1. Update Secrets Data
@@ -61,7 +64,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
+			mcName := deployment.GetName()
+			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
@@ -70,8 +74,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -96,8 +104,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
@@ -123,8 +131,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with LM", func() {
-		It("secret: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+	Context("Standalone deployment (S1) with LM amd MC", func() {
+		It("secret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
 
 			/* Test Scenario
 			1. Delete Secret Object
@@ -141,7 +149,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
+			mcName := deployment.GetName()
+			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
@@ -150,8 +159,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -172,8 +185,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
@@ -199,7 +212,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("secret, smoke: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("secret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
 
 			/* Test Scenario
 			1. Delete Secret Passing Empty Data Map to secret Object
@@ -208,15 +221,31 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
 			5. Verify New Secrets via api access (password)*/
 
-			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
+			// Create standalone Deployment with MonitoringConsoleRef
+			mcName := deployment.GetName()
+			standaloneSpec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), standaloneSpec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance with MonitoringConsoleRef")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -234,8 +263,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)

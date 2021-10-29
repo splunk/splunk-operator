@@ -44,7 +44,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("secret, smoke: secret update on indexers and search head cluster", func() {
+		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
 
 			/* Test Scenario
 			1. Update Secrets Data
@@ -60,7 +60,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true)
+			mcRef := deployment.GetName()
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
@@ -75,10 +76,15 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
+			testenvInstance.Log.Info("Checkin RF SF before secret change")
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Get Current Secrets Struct
@@ -110,10 +116,11 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
+			testenvInstance.Log.Info("Checkin RF SF after secret change")
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
