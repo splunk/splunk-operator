@@ -327,10 +327,10 @@ func (pplnWorker *PipelineWorker) Download(s3ClientMgr *S3ClientManager, activeW
 		// increment the retry count and mark this app as download pending
 		updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
 		return
-	} else {
-		// download is successfull, update the state and reset the retry count
-		updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
 	}
+
+	// download is successfull, update the state and reset the retry count
+	updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
 
 	scopedLog.Info("Finished downloading app")
 }
