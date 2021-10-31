@@ -311,7 +311,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator() (string, err
 }
 
 // Download API will do the actual work of downloading apps from remote storage
-func (pplnWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, activeWorkers *uint64, localPath string) {
+func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, activeWorkers *uint64, localPath string) {
 
 	defer func() {
 		// decrement the number of active workers
@@ -319,21 +319,21 @@ func (pplnWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr
 		*activeWorkers--
 		pplnPhase.mutex.Unlock()
 
-		pplnWorker.isActive = false
+		downloadWorker.isActive = false
 
 		// decrement the waiter count
-		pplnWorker.waiter.Done()
+		downloadWorker.waiter.Done()
 	}()
 
-	splunkCR := pplnWorker.cr
-	appSrcName := pplnWorker.appSrcName
-	scopedLog := log.WithName("PipelineWorker.Download()").WithValues("name", splunkCR.GetName(), "namespace", splunkCR.GetNamespace(), "App name", pplnWorker.appDeployInfo.AppName, "objectHash", pplnWorker.appDeployInfo.ObjectHash)
+	splunkCR := downloadWorker.cr
+	appSrcName := downloadWorker.appSrcName
+	scopedLog := log.WithName("PipelineWorker.Download()").WithValues("name", splunkCR.GetName(), "namespace", splunkCR.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "objectHash", downloadWorker.appDeployInfo.ObjectHash)
 
-	appDeployInfo := pplnWorker.appDeployInfo
+	appDeployInfo := downloadWorker.appDeployInfo
 	appName := appDeployInfo.AppName
 
 	localFile := getLocalAppFileName(localPath, appName, appDeployInfo.ObjectHash)
-	remoteFile, err := getRemoteObjectKey(splunkCR, pplnWorker.afwConfig, appSrcName, appName)
+	remoteFile, err := getRemoteObjectKey(splunkCR, downloadWorker.afwConfig, appSrcName, appName)
 	if err != nil {
 		scopedLog.Error(err, "unable to get remote object key", "appName", appName)
 		// increment the retry count and mark this app as download pending
