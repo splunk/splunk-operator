@@ -64,9 +64,6 @@ type PipelineWorker struct {
 	// Reference to the App Framework Config
 	afwConfig *enterpriseApi.AppFrameworkSpec
 
-	// Refernce to app deploy context
-	afwDeployContext *enterpriseApi.AppDeploymentContext
-
 	// Reference to the App context from the CR status
 	appDeployInfo *enterpriseApi.AppDeploymentInfo
 
@@ -113,6 +110,12 @@ type AppInstallPipeline struct {
 
 	// represents the available disk space on operator pod
 	availableDiskSpace uint64
+
+	// Refernce to app deploy context
+	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// mutex to synchronize shared variables across phases
+	pplnMutex sync.Mutex
 }
 
 // ToString returns a string for a given InstanceType

@@ -34,27 +34,26 @@ var afwPipeline *AppInstallPipeline
 
 // createPipelineWorker creates a pipeline worker for an app package
 func createPipelineWorker(appDeployInfo *enterpriseApi.AppDeploymentInfo, appSrcName string, podName string,
-	appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext,
-	client *splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) *PipelineWorker {
+	appFrameworkConfig *enterpriseApi.AppFrameworkSpec, client *splcommon.ControllerClient,
+	cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) *PipelineWorker {
 	return &PipelineWorker{
-		appDeployInfo:    appDeployInfo,
-		appSrcName:       appSrcName,
-		targetPodName:    podName,
-		afwConfig:        appFrameworkConfig,
-		afwDeployContext: appDeployContext,
-		client:           client,
-		cr:               cr,
-		sts:              statefulSet,
+		appDeployInfo: appDeployInfo,
+		appSrcName:    appSrcName,
+		targetPodName: podName,
+		afwConfig:     appFrameworkConfig,
+		client:        client,
+		cr:            cr,
+		sts:           statefulSet,
 	}
 }
 
 // createAndAddAWorker used to add a worker to the pipeline on reconcile re-entry
 func (ppln *AppInstallPipeline) createAndAddPipelineWorker(phase enterpriseApi.AppPhaseType, appDeployInfo *enterpriseApi.AppDeploymentInfo,
-	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext,
+	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec,
 	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) {
 
 	scopedLog := log.WithName("createAndAddPipelineWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	worker := createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, appDeployContext, &client, cr, statefulSet)
+	worker := createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, &client, cr, statefulSet)
 
 	if worker != nil {
 		scopedLog.Info("Created new worker", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase)
@@ -291,14 +290,36 @@ func updatePplnWorkerPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, p
 	appDeployInfo.PhaseInfo.Status = statusType
 }
 
+func (downloadWorker *PipelineWorker) createDownloadDirOnOperator() (string, error) {
+	scopedLog := log.WithName("createDownloadDirOnOperator").WithValues("appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
+	scope := getAppSrcScope(downloadWorker.afwConfig, downloadWorker.appSrcName)
+
+	kind := downloadWorker.cr.GetObjectKind().GroupVersionKind().Kind
+
+	// This is how the path to download apps looks like -
+	// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/<CR_Name>/<scope>/<appSrc_Name>/
+	// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
+	// in default namespace, then it will be downloaded at the path -
+	// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
+	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
+	// create the sub-directories on the volume for downloading scoped apps
+	err := createAppDownloadDir(localPath)
+	if err != nil {
+		scopedLog.Error(err, "unable to create app download directory on operator")
+	}
+	return localPath, err
+}
+
 // Download API will do the actual work of downloading apps from remote storage
-func (pplnWorker *PipelineWorker) Download(s3ClientMgr *S3ClientManager, activeWorkers *uint64, localPath string) {
+func (pplnWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, activeWorkers *uint64, localPath string) {
 
 	defer func() {
 		// decrement the number of active workers
-		pplnWorker.workerMutex.Lock()
+		pplnPhase.mutex.Lock()
 		*activeWorkers--
-		pplnWorker.workerMutex.Unlock()
+		pplnPhase.mutex.Unlock()
+
+		pplnWorker.isActive = false
 
 		// decrement the waiter count
 		pplnWorker.waiter.Done()
@@ -336,7 +357,7 @@ func (pplnWorker *PipelineWorker) Download(s3ClientMgr *S3ClientManager, activeW
 }
 
 // scheduleDownloads schedules the download workers to download app/s
-func (ppln *AppInstallPipeline) scheduleDownloads(pplnPhase *PipelinePhase, maxWorkers uint64, downloadPhaseWaiter *sync.WaitGroup) {
+func (ppln *AppInstallPipeline) scheduleDownloads(pplnPhase *PipelinePhase, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
 	var activeWorkers uint64
 
 	scopedLog := log.WithName("scheduleDownloads")
@@ -361,42 +382,34 @@ downloadWork:
 				// do not redownload the app if it is already downloaded
 				if isAppAlreadyDownloaded(downloadWorker) {
 					scopedLog.Info("app is already downloaded on operator pod, hence skipping it.", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
+					// update the state to be download complete
+					updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
 					continue
 				}
 
+				ppln.pplnMutex.Lock()
 				// do not proceed if we dont have enough disk space to download this app
 				if int64(ppln.availableDiskSpace-downloadWorker.appDeployInfo.Size) <= 0 {
-					// put this worker back in the channel to be picked up later
-					pplnPhase.msgChannel <- downloadWorker
+					// setting isActive to false here so that downloadPhaseManager can take care of it.
+					downloadWorker.isActive = false
+					ppln.pplnMutex.Unlock()
 					continue
 				}
-				// increment the number of active workers
-				activeWorkers++
+
+				// update the available disk space
+				ppln.availableDiskSpace = ppln.availableDiskSpace - downloadWorker.appDeployInfo.Size
+				ppln.pplnMutex.Unlock()
 
 				// increment the count in worker waitgroup
 				downloadWorker.waiter.Add(1)
 
-				// update the available disk space
-				ppln.availableDiskSpace = ppln.availableDiskSpace - downloadWorker.appDeployInfo.Size
-
 				// update the download state of app to be DownloadInProgress
 				updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, enterpriseApi.PhaseDownload, downloadWorker.appDeployInfo.PhaseInfo.RetryCount, enterpriseApi.AppPkgDownloadInProgress)
-
-				scope := getAppSrcScope(downloadWorker.afwConfig, downloadWorker.appSrcName)
-
-				kind := downloadWorker.cr.GetObjectKind().GroupVersionKind().Kind
-
-				// This is how the path to download apps looks like -
-				// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/<CR_Name>/<scope>/<appSrc_Name>/
-				// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
-				// in default namespace, then it will be downloaded at the path -
-				// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
-				localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
 
 				appDeployInfo := downloadWorker.appDeployInfo
 
 				// create the sub-directories on the volume for downloading scoped apps
-				err := createAppDownloadDir(localPath)
+				localPath, err := downloadWorker.createDownloadDirOnOperator()
 				if err != nil {
 					// increment the retry count and mark this app as download pending
 					updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
@@ -405,8 +418,12 @@ downloadWork:
 
 				// get the S3ClientMgr instance
 				s3ClientMgr, _ := getS3ClientMgr(*downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+
+				// increment the number of active workers
+				activeWorkers++
+
 				// start the actual download
-				go downloadWorker.Download(s3ClientMgr, &activeWorkers, localPath)
+				go downloadWorker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, localPath)
 
 			default:
 			}
@@ -418,22 +435,22 @@ downloadWork:
 	pplnPhase.workerWaiter.Wait()
 
 	// we are done processing download jobs
-	downloadPhaseWaiter.Done()
+	scheduleDownloadsWaiter.Done()
 }
 
 //downloadPhaseManager creates download phase manager for the install pipeline
-func (ppln *AppInstallPipeline) downloadPhaseManager(appDeployContext *enterpriseApi.AppDeploymentContext) {
+func (ppln *AppInstallPipeline) downloadPhaseManager() {
 	scopedLog := log.WithName("downloadPhaseManager")
 	scopedLog.Info("Starting Download phase manager")
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
-	maxWorkers := appDeployContext.AppsStatusMaxConcurrentAppDownloads
+	maxWorkers := ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads
 
-	downloadPhaseWaiter := new(sync.WaitGroup)
+	scheduleDownloadsWaiter := new(sync.WaitGroup)
 
-	downloadPhaseWaiter.Add(1)
+	scheduleDownloadsWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go ppln.scheduleDownloads(pplnPhase, maxWorkers, downloadPhaseWaiter)
+	go ppln.scheduleDownloads(pplnPhase, maxWorkers, scheduleDownloadsWaiter)
 
 downloadPhase:
 	for {
@@ -468,7 +485,7 @@ downloadPhase:
 	close(pplnPhase.msgChannel)
 	// First wait for my all download workers to finish
 	scopedLog.Info("Wating for the download workers to finish")
-	downloadPhaseWaiter.Wait()
+	scheduleDownloadsWaiter.Wait()
 
 	scopedLog.Info("All the download workers finished")
 	// Signal that the download phase is complete
@@ -634,7 +651,7 @@ func initPipelinePhase(phase enterpriseApi.AppPhaseType) {
 
 // initAppInstallPipeline creates the AFW scheduler pipeline
 // TBD: Do we need to make it singleton? For now leave it till we have the clarity on
-func initAppInstallPipeline() *AppInstallPipeline {
+func initAppInstallPipeline(appDeployContext *enterpriseApi.AppDeploymentContext) *AppInstallPipeline {
 	if afwPipeline != nil {
 		return afwPipeline
 	}
@@ -642,6 +659,7 @@ func initAppInstallPipeline() *AppInstallPipeline {
 	afwPipeline = &AppInstallPipeline{}
 	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 3)
 	afwPipeline.sigTerm = make(chan struct{})
+	afwPipeline.appDeployContext = appDeployContext
 
 	// Allocate the Download phase
 	initPipelinePhase(enterpriseApi.PhaseDownload)
@@ -687,7 +705,7 @@ func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.C
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	afwPipeline = initAppInstallPipeline()
+	afwPipeline = initAppInstallPipeline(appDeployContext)
 
 	var clusterScopedApps []*enterpriseApi.AppDeploymentInfo
 
@@ -702,7 +720,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 
 	// Start the download phase manager
 	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.downloadPhaseManager(appDeployContext)
+	go afwPipeline.downloadPhaseManager()
 
 	// Start the pod copy phase manager
 	afwPipeline.phaseWaiter.Add(1)
@@ -757,7 +775,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 					podName = getApplicablePodNameForWorker(cr, 0)
 				}
 				sts := afwGetReleventStatefulsetByKind(cr, client)
-				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfo, appSrcName, podName, appFrameworkConfig, appDeployContext, client, cr, sts)
+				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfo, appSrcName, podName, appFrameworkConfig, client, cr, sts)
 			}
 		}
 	}

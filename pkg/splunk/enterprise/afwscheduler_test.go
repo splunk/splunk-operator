@@ -96,27 +96,26 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	var client splcommon.ControllerClient
 	var statefulSet *appsv1.StatefulSet = &appsv1.StatefulSet{}
 	worker := &PipelineWorker{
-		appDeployInfo:    appDeployInfo,
-		appSrcName:       appSrcName,
-		targetPodName:    podName,
-		afwConfig:        appFrameworkConfig,
-		afwDeployContext: &appFrameworkContext,
-		client:           &client,
-		cr:               &cr,
-		sts:              statefulSet,
+		appDeployInfo: appDeployInfo,
+		appSrcName:    appSrcName,
+		targetPodName: podName,
+		afwConfig:     appFrameworkConfig,
+		client:        &client,
+		cr:            &cr,
+		sts:           statefulSet,
 	}
 
-	if !reflect.DeepEqual(worker, createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, &appFrameworkContext, &client, &cr, statefulSet)) {
+	if !reflect.DeepEqual(worker, createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, &client, &cr, statefulSet)) {
 		t.Errorf("Expected and Returned objects are not the same")
 	}
 
 	// Test for createAndAddPipelineWorker
-	afwPpln := initAppInstallPipeline()
+	afwPpln := initAppInstallPipeline(&appFrameworkContext)
 	defer func() {
 		afwPipeline = nil
 	}()
 
-	afwPpln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, &appFrameworkContext, client, &cr, statefulSet)
+	afwPpln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)
 	if len(afwPpln.pplnPhases[enterpriseApi.PhaseDownload].q) != 1 {
 		t.Errorf("Unable to add a worker to the pipeline phase")
 	}
@@ -176,6 +175,7 @@ func TestGetApplicablePodNameForWorker(t *testing.T) {
 }
 
 func TestInitAppInstallPipeline(t *testing.T) {
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	afwPipeline = &AppInstallPipeline{}
 	defer func() {
 		afwPipeline = nil
@@ -185,7 +185,7 @@ func TestInitAppInstallPipeline(t *testing.T) {
 
 	// Should not modify the pipeline, if it is already exists
 
-	retPtr := initAppInstallPipeline()
+	retPtr := initAppInstallPipeline(appDeployContext)
 
 	if retPtr != tmpPtr {
 		t.Errorf("When the Pipeline is existing, should not overwrite it")
@@ -193,7 +193,7 @@ func TestInitAppInstallPipeline(t *testing.T) {
 
 	// if the pipeline doesn't exist, new pipeline should be created
 	afwPipeline = nil
-	retPtr = initAppInstallPipeline()
+	retPtr = initAppInstallPipeline(appDeployContext)
 	if retPtr == nil {
 		t.Errorf("Failed to create a new pipeline")
 	}
@@ -203,8 +203,9 @@ func TestInitAppInstallPipeline(t *testing.T) {
 }
 
 func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	afwPipeline = nil
-	ppln := initAppInstallPipeline()
+	ppln := initAppInstallPipeline(appDeployContext)
 	defer func() {
 		afwPipeline = nil
 	}()
@@ -284,7 +285,8 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 }
 
 func TestTransitionWorkerPhase(t *testing.T) {
-	ppln := initAppInstallPipeline()
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+	ppln := initAppInstallPipeline(appDeployContext)
 	defer func() {
 		afwPipeline = nil
 	}()
@@ -429,14 +431,14 @@ func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 }
 
 func TestPhaseManagersTermination(t *testing.T) {
-	ppln := initAppInstallPipeline()
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+	ppln := initAppInstallPipeline(appDeployContext)
 	defer func() {
 		afwPipeline = nil
 	}()
-	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{}
 
 	ppln.phaseWaiter.Add(1)
-	go ppln.downloadPhaseManager(appDeployContext)
+	go ppln.downloadPhaseManager()
 
 	ppln.phaseWaiter.Add(1)
 	go ppln.podCopyPhaseManager()
@@ -455,6 +457,10 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	defer func() {
 		afwPipeline = nil
 	}()
+
+	appDeployContext := &enterpriseApi.AppDeploymentContext{
+		AppsStatusMaxConcurrentAppDownloads: 1,
+	}
 
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.ClusterMaster{
@@ -497,17 +503,13 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 
 	// test  all the pipeline phases are able to send the worker to the downstreams
 	afwPipeline = nil
-	ppln := initAppInstallPipeline()
+	ppln := initAppInstallPipeline(appDeployContext)
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
-	appDeployContext := &enterpriseApi.AppDeploymentContext{
-		AppsStatusMaxConcurrentAppDownloads: 1,
-	}
-
 	// Start the download phase manager
 	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.downloadPhaseManager(appDeployContext)
+	go afwPipeline.downloadPhaseManager()
 	// drain the download phase channel
 	var worker *PipelineWorker
 	var i int
@@ -576,7 +578,8 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 }
 
 func TestIsPipelineEmpty(t *testing.T) {
-	ppln := initAppInstallPipeline()
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+	ppln := initAppInstallPipeline(appDeployContext)
 	defer func() {
 		afwPipeline = nil
 	}()
@@ -998,6 +1001,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 
 		s3ClientMgr.initFn = initFunc
 
+		pplnPhase := &PipelinePhase{}
 		worker := &PipelineWorker{
 			appSrcName:    appSrc.Name,
 			cr:            &cr,
@@ -1008,7 +1012,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		}
 		activeWorkers++
 		worker.waiter.Add(1)
-		go worker.Download(s3ClientMgr, &activeWorkers, localPath)
+		go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, localPath)
 		worker.waiter.Wait()
 	}
 
@@ -1096,9 +1100,11 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		waiter:        new(sync.WaitGroup),
 	}
 
+	pplnPhase := &PipelinePhase{}
+
 	activeWorkers++
 	worker.waiter.Add(1)
-	go worker.Download(s3ClientMgr, &activeWorkers, "")
+	go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, "")
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1139,7 +1145,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	s3ClientMgr.initFn = initFunc
 
 	worker.waiter.Add(1)
-	go worker.Download(s3ClientMgr, &activeWorkers, "")
+	go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, "")
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
@@ -1150,8 +1156,9 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 
 func TestScheduleDownloads(t *testing.T) {
 	var ppln *AppInstallPipeline
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln = nil
-	ppln = initAppInstallPipeline()
+	ppln = initAppInstallPipeline(appDeployContext)
 	ppln.availableDiskSpace = 100
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
@@ -1234,7 +1241,6 @@ func TestScheduleDownloads(t *testing.T) {
 		}
 	}
 
-	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	client := spltest.NewMockClient()
 
 	// create the local directory
@@ -1257,7 +1263,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	// create pipeline workers
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
-		ppln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfoList[index], appSrc.Name, "", &cr.Spec.AppFrameworkConfig, appDeployContext, client, &cr, sts)
+		ppln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfoList[index], appSrc.Name, "", &cr.Spec.AppFrameworkConfig, client, &cr, sts)
 	}
 
 	maxWorkers := 3
@@ -1282,6 +1288,60 @@ func TestScheduleDownloads(t *testing.T) {
 	go ppln.scheduleDownloads(pplnPhase, uint64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
+}
+
+func TestCreateDownloadDirOnOperator(t *testing.T) {
+	standalone := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   "local",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	worker := &PipelineWorker{
+		appSrcName: "appSrc1",
+		cr:         &standalone,
+		afwConfig:  &standalone.Spec.AppFrameworkConfig,
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "testApp1",
+		},
+	}
+
+	localPath, err := worker.createDownloadDirOnOperator()
+	defer os.Remove(localPath)
+	if err != nil {
+		t.Errorf("we should have created the download directory=%s, err=%v", localPath, err)
+	}
 }
 
 // TODO: gaurav/subba, commenting this UT for now.

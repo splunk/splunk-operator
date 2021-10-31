@@ -1140,17 +1140,12 @@ func isAppAlreadyDownloaded(downloadWorker *PipelineWorker) bool {
 	localAppFileName := getLocalAppFileName(localPath, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.ObjectHash)
 
 	// check if the app is present on operator pod
-	file, err := os.Open(localAppFileName)
+	_, err := os.Stat(localAppFileName)
 
 	if os.IsNotExist(err) {
 		scopedLog.Info("App not present on operator pod")
 		return false
 	}
-
-	// update the state to be download complete
-	updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
-
-	defer file.Close()
 	return true
 }
 
