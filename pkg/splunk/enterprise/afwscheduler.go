@@ -280,12 +280,11 @@ func getPhaseInfoByPhaseType(worker *PipelineWorker, phaseType enterpriseApi.App
 	return &worker.appDeployInfo.PhaseInfo
 }
 
-// updatePplnWorkerPhaseInfo updates the in-memory PhaseInfo
-func updatePplnWorkerPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, phaseType enterpriseApi.AppPhaseType, retryCount int32, statusType enterpriseApi.AppPhaseStatusType) {
+// updatePplnWorkerPhaseInfo updates the in-memory PhaseInfo(specifically status and retryCount)
+func updatePplnWorkerPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, retryCount int32, statusType enterpriseApi.AppPhaseStatusType) {
 	scopedLog := log.WithName("updatePplnWorkerPhaseInfo").WithValues("appName", appDeployInfo.AppName)
 
 	scopedLog.Info("changing the status", "old status", appPhaseStatusAsStr(appDeployInfo.PhaseInfo.Status), "new status", appPhaseStatusAsStr(statusType))
-	appDeployInfo.PhaseInfo.Phase = phaseType
 	appDeployInfo.PhaseInfo.RetryCount = retryCount
 	appDeployInfo.PhaseInfo.Status = statusType
 }
@@ -337,7 +336,7 @@ func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3Clien
 	if err != nil {
 		scopedLog.Error(err, "unable to get remote object key", "appName", appName)
 		// increment the retry count and mark this app as download pending
-		updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
 		return
 	}
 
@@ -346,12 +345,12 @@ func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3Clien
 	if err != nil {
 		scopedLog.Error(err, "unable to download app", "appName", appName)
 		// increment the retry count and mark this app as download pending
-		updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
 		return
 	}
 
 	// download is successfull, update the state and reset the retry count
-	updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
+	updatePplnWorkerPhaseInfo(appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 
 	scopedLog.Info("Finished downloading app")
 }
@@ -383,7 +382,7 @@ downloadWork:
 				if isAppAlreadyDownloaded(downloadWorker) {
 					scopedLog.Info("app is already downloaded on operator pod, hence skipping it.", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
 					// update the state to be download complete
-					updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, enterpriseApi.PhaseDownload, 0, enterpriseApi.AppPkgDownloadComplete)
+					updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 					continue
 				}
 
@@ -404,7 +403,7 @@ downloadWork:
 				downloadWorker.waiter.Add(1)
 
 				// update the download state of app to be DownloadInProgress
-				updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, enterpriseApi.PhaseDownload, downloadWorker.appDeployInfo.PhaseInfo.RetryCount, enterpriseApi.AppPkgDownloadInProgress)
+				updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.RetryCount, enterpriseApi.AppPkgDownloadInProgress)
 
 				appDeployInfo := downloadWorker.appDeployInfo
 
@@ -412,7 +411,7 @@ downloadWork:
 				localPath, err := downloadWorker.createDownloadDirOnOperator()
 				if err != nil {
 					// increment the retry count and mark this app as download pending
-					updatePplnWorkerPhaseInfo(appDeployInfo, enterpriseApi.PhaseDownload, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+					updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
 					continue
 				}
 
@@ -466,10 +465,13 @@ downloadPhase:
 				phaseInfo := getPhaseInfoByPhaseType(downloadWorker, enterpriseApi.PhaseDownload)
 				if checkIfWorkerIsEligibleForRun(downloadWorker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 					downloadWorker.waiter = &pplnPhase.workerWaiter
-					pplnPhase.msgChannel <- downloadWorker
-
-					scopedLog.Info("Download worker got a run slot", "name", downloadWorker.cr.GetName(), "namespace", downloadWorker.cr.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "digest", downloadWorker.appDeployInfo.ObjectHash)
-					downloadWorker.isActive = true
+					select {
+					case pplnPhase.msgChannel <- downloadWorker:
+						scopedLog.Info("Download worker got a run slot", "name", downloadWorker.cr.GetName(), "namespace", downloadWorker.cr.GetNamespace(), "App name", downloadWorker.appDeployInfo.AppName, "digest", downloadWorker.appDeployInfo.ObjectHash)
+						downloadWorker.isActive = true
+					default:
+						downloadWorker.waiter = nil
+					}
 				} else if downloadWorker.appDeployInfo.PhaseInfo.Status == enterpriseApi.AppPkgDownloadComplete {
 					ppln.TransitionWorkerPhase(downloadWorker, enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 				} else if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
@@ -645,7 +647,7 @@ func checkIfBundlePushNeeded(clusterScopedApps []*enterpriseApi.AppDeploymentInf
 func initPipelinePhase(phase enterpriseApi.AppPhaseType) {
 	afwPipeline.pplnPhases[phase] = &PipelinePhase{
 		q:          []*PipelineWorker{},
-		msgChannel: make(chan *PipelineWorker),
+		msgChannel: make(chan *PipelineWorker, 1),
 	}
 }
 
