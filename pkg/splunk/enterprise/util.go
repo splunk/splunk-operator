@@ -17,7 +17,6 @@ package enterprise
 import (
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -281,30 +280,36 @@ func getRemoteObjectFromS3Response(appName string, s3Response splclient.S3Respon
 	return nil
 }
 
-// appDownloadStateAsStr converts the state enum to corresponding string
-func appDownloadStateAsStr(state enterpriseApi.AppDownloadState) string {
-	switch state {
-	case enterpriseApi.DownloadNotStarted:
-		return "Download Not Started"
-	case enterpriseApi.DownloadInProgress:
+// appPhaseStatusAsStr converts the state enum to corresponding string
+func appPhaseStatusAsStr(status enterpriseApi.AppPhaseStatusType) string {
+	switch status {
+	case enterpriseApi.AppPkgDownloadPending:
+		return "Download Pending"
+	case enterpriseApi.AppPkgDownloadInProgress:
 		return "Download In Progress"
-	case enterpriseApi.DownloadComplete:
+	case enterpriseApi.AppPkgDownloadComplete:
 		return "Download Complete"
-	default:
+	case enterpriseApi.AppPkgDownloadError:
 		return "Download Error"
+	case enterpriseApi.AppPkgPodCopyPending:
+		return "Pod Copy Pending"
+	case enterpriseApi.AppPkgPodCopyInProgress:
+		return "Pod Copy In Progress"
+	case enterpriseApi.AppPkgPodCopyComplete:
+		return "Pod Copy Complete"
+	case enterpriseApi.AppPkgPodCopyError:
+		return "Pod Copy Error"
+	case enterpriseApi.AppPkgInstallPending:
+		return "Install Pending"
+	case enterpriseApi.AppPkgInstallInProgress:
+		return "Install In Progress"
+	case enterpriseApi.AppPkgInstallComplete:
+		return "Install Complete"
+	case enterpriseApi.AppPkgInstallError:
+		return "Install Error"
+	default:
+		return "Invalid Status"
 	}
-}
-
-// setAppDownloadState sets tha app download state for an app
-func setAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo, state enterpriseApi.AppDownloadState) {
-	scopedLog := log.WithName("setAppDownloadState").WithValues("app name", appInfo.AppName)
-	scopedLog.Info("Setting the download state for app", "old download state", appDownloadStateAsStr(appInfo.AppInstallStatus.AppDownloadState), "new download state", appDownloadStateAsStr(state))
-	appInfo.AppInstallStatus.AppDownloadState = state
-}
-
-// getAppDownloadState returns the current app download state of the app
-func getAppDownloadState(appInfo *enterpriseApi.AppDeploymentInfo) enterpriseApi.AppDownloadState {
-	return appInfo.AppInstallStatus.AppDownloadState
 }
 
 // createAppDownloadDir creates the app download directory on the operator pod
@@ -338,117 +343,63 @@ func getAvailableDiskSpace() (uint64, error) {
 	return availDiskSpace, err
 }
 
-// handleAppInstallPerAppSrc kicks off the app install work for all apps in an app source
-func handleAppInstallPerAppSrc(client splcommon.ControllerClient, cr splcommon.MetaObject, numOfWorkers uint64,
-	appSrc string, appDeployInfo *enterpriseApi.AppSrcDeployInfo, s3Response splclient.S3Response, s3ClientMgr S3ClientManager, localPath, scope string) error {
-	var err error
+// getRemoteObjectKey gets the remote object key
+func getRemoteObjectKey(cr splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appSrcName, appName string) (string, error) {
+	var remoteObjectKey string
+	var vol enterpriseApi.VolumeSpec
 
-	scopedLog := log.WithName("handleAppInstallPerAppSrc").WithValues("cr", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("getRemoteObjectKey").WithValues("crName", cr.GetName(), "namespace", cr.GetNamespace(), "appSrcName", appSrcName, "appName", appName)
 
-	// get the current available disk space for downloading apps on operator pod
-	availableDiskSpace, err := getAvailableDiskSpace()
+	appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
 	if err != nil {
-		return err
+		scopedLog.Error(err, "unable to get appSrcSpc")
+		return remoteObjectKey, err
 	}
 
-	// initialize the workpool
-	workPool := NewAppInstallWorkerPool(numOfWorkers,
-		appDeployInfo.AppDeploymentInfoList, s3ClientMgr, s3Response,
-		availableDiskSpace, localPath, scope)
+	vol, err = splclient.GetAppSrcVolume(*appSrc, appFrameworkConfig)
+	if err != nil {
+		scopedLog.Error(err, "unable to get volume spec")
+		return remoteObjectKey, err
+	}
 
-	// kick-off the actual work
-	scopedLog.Info("Starting the work to install apps..")
-	workPool.Start()
+	volumePath := vol.Path
+	index := strings.Index(volumePath, "/")
+	volumePath = volumePath[index+1:]
+	location := appSrc.Location
 
-	return err
+	remoteObjectKey = volumePath + location + appName
+
+	return remoteObjectKey, nil
 }
 
-// handleAppInstall is responsible for installing apps on the splunk pod.This includes following -
-// 1. download of apps from remote storage to operator pod.
-// 2. copy of apps from operator pod to splunk pod.
-// 3. untar the app in correct location on splunk pod.
-// 4. And finally, installing app on the splunk pod.
-// This is how the directory structure will look like on operator pod -
-// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/
-// |--<crname>
-//       |--<cluster>
-//       |   |--appSrc_1
-//       |   |   |--app1.tgz_<hash>
-//       |   |
-//       |   |--appSrc_2
-//       |       |--app2.spl_<hash>
-//       |
-//       |--local
-//       |   |--appSrc_3
-//       |       |--app3.spl_<hash>
-//       |
-//       |--clusterWithPreConfig
-//          |--appSrc_4
-//              |--app4.tgz_<hash>
-//
-func handleAppInstall(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
-	var err error
-
-	scopedLog := log.WithName("handleAppInstall").WithValues("cr", cr.GetName(), "namespace", cr.GetNamespace())
-
-	var scope string
-	for appSrcName, appDeployInfo := range appDeployContext.AppsSrcDeployStatus {
-		scopedLog.Info("Installing apps for app source", "appSource", appSrcName)
-
-		scope = getAppSrcScope(appFrameworkConfig, appSrcName)
-
-		kind := cr.GetObjectKind().GroupVersionKind().Kind
-		// This is how the path to download apps looks like -
-		// /opt/splunk/appframework/downloadedApps/<namespace>/<CR_Kind>/<CR_Name>/<scope>/<appSrc_Name>/
-		// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
-		// in default namespace, then it will be downloaded at the path -
-		// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
-		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), kind, cr.GetName(), scope, appSrcName) + "/"
-
-		// create the sub-directories on the volume for downloading scoped apps
-		err = createAppDownloadDir(localPath)
-		if err != nil {
-			return err
-		}
-
-		//TODO: gaurav, handle below two conditions more gracefully in future,
-		// and continue with installation of apps in other app sources.
-		// Get the app source spec to get the volume configuration
-		var vol enterpriseApi.VolumeSpec
-		appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
-		if err != nil {
-			return err
-		}
-
-		vol, err = splclient.GetAppSrcVolume(*appSrc, appFrameworkConfig)
-		if err != nil {
-			return err
-		}
-
-		s3ClientWrapper := splclient.S3Clients[vol.Provider]
-		initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
-		s3ClientMgr := S3ClientManager{
-			client:          client,
-			cr:              cr,
-			appFrameworkRef: appFrameworkConfig,
-			vol:             &vol,
-			location:        appSrc.Location,
-			initFn:          initFunc,
-			getS3Client:     GetRemoteStorageClient,
-		}
-
-		numOfWorkers := math.Min(float64(appDeployContext.AppsStatusMaxConcurrentAppDownloads), float64(len(appDeployInfo.AppDeploymentInfoList)))
-
-		// handle the app install for each app source.
-		err = handleAppInstallPerAppSrc(client, cr, uint64(numOfWorkers),
-			appSrcName, &appDeployInfo, remoteObjListingMap[appSrcName], s3ClientMgr, localPath, scope)
-		if err != nil {
-			scopedLog.Error(err, "Unable to install apps for app source", "appSource", appSrcName)
-		}
+// getS3ClientMgr gets the S3ClientMgr instance to download apps
+func getS3ClientMgr(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appSrcName string) (*S3ClientManager, error) {
+	scopedLog := log.WithName("getS3ClientMgr").WithValues("crName", cr.GetName(), "namespace", cr.GetNamespace(), "appSrcName", appSrcName)
+	var vol enterpriseApi.VolumeSpec
+	appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
+	if err != nil {
+		scopedLog.Error(err, "unable to get appSrcSpc")
+		return nil, err
 	}
 
-	return err
+	vol, err = splclient.GetAppSrcVolume(*appSrc, appFrameworkConfig)
+	if err != nil {
+		scopedLog.Error(err, "unable to get volume spec")
+		return nil, err
+	}
+
+	s3ClientWrapper := splclient.S3Clients[vol.Provider]
+	initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
+	s3ClientMgr := &S3ClientManager{
+		client:          client,
+		cr:              cr,
+		appFrameworkRef: appFrameworkConfig,
+		vol:             &vol,
+		location:        appSrc.Location,
+		initFn:          initFunc,
+		getS3Client:     GetRemoteStorageClient,
+	}
+	return s3ClientMgr, nil
 }
 
 // ApplyAppListingConfigMap creates the configMap  with two entries:
@@ -874,6 +825,10 @@ func setStateAndStatusForAppDeployInfoList(appDeployList []enterpriseApi.AppDepl
 	return modified, appDeployList
 }
 
+func isAppRepoStateDeleted(appDeployInfo enterpriseApi.AppDeploymentInfo) bool {
+	return appDeployInfo.RepoState == enterpriseApi.RepoStateDeleted
+}
+
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaObject,
@@ -927,7 +882,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		if appSrcExistsLocally {
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
-				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
+				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 				}
@@ -995,7 +950,8 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 					scopedLog.Info("App change detected.  Marking for an update.", "appName", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
-					appList[idx].AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
+					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
+					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
@@ -1017,7 +973,8 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			appDeployInfo.ObjectHash = *remoteObj.Etag
 			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
 			appDeployInfo.DeployStatus = enterpriseApi.DeployStatusPending
-			appDeployInfo.AppInstallStatus.AppDownloadState = enterpriseApi.DownloadNotStarted
+			appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseDownload
+			appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
 
 			// Add it to a seperate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
@@ -1172,6 +1129,26 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 	}
 }
 
+// isAppAlreadyDownloaded checks if the app is already present on the operator pod
+func isAppAlreadyDownloaded(downloadWorker *PipelineWorker) bool {
+	scopedLog := log.WithName("isAppAlreadyDownloaded").WithValues("app name", downloadWorker.appDeployInfo.AppName)
+
+	scope := getAppSrcScope(downloadWorker.afwConfig, downloadWorker.appSrcName)
+	kind := downloadWorker.cr.GetObjectKind().GroupVersionKind().Kind
+
+	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
+	localAppFileName := getLocalAppFileName(localPath, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.ObjectHash)
+
+	// check if the app is present on operator pod
+	_, err := os.Stat(localAppFileName)
+
+	if os.IsNotExist(err) {
+		scopedLog.Info("App not present on operator pod")
+		return false
+	}
+	return true
+}
+
 // SetLastAppInfoCheckTime sets the last check time to current time
 func SetLastAppInfoCheckTime(appInfoStatus *enterpriseApi.AppDeploymentContext) {
 	scopedLog := log.WithName("SetLastAppInfoCheckTime")
@@ -1295,19 +1272,6 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus, appsModified)
 			if err != nil {
 				return err
-			}
-
-			// TODO: gaurav, this will eventually go outside this if condition,
-			// so that we can continue installation work across reconciles.
-			// As of now, we will only return from this function when the download of apps is complete
-			// in the current reconcile. We have to implement a yield logic to break from the
-			// installations in the current reconcile and continue in the next reconcile.
-			// Handle the app install only if apps have been modified/added.
-			if appsModified {
-				err = handleAppInstall(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
-				if err != nil {
-					return err
-				}
 			}
 
 			appStatusContext.AppFrameworkConfig = *appFrameworkConf

@@ -71,24 +71,6 @@ const (
 	DeployStatusError
 )
 
-// AppDownloadState represents the download status of app
-type AppDownloadState uint8
-
-// Values to represent the Pod App download status
-const (
-	// Indicates that download of app has not started yet
-	DownloadNotStarted AppDownloadState = iota + 1
-
-	// Download of the app on splunk operator pod is in progress
-	DownloadInProgress
-
-	// Download of app is complete on the Splunk operator pod
-	DownloadComplete
-
-	// Failed to download the App on the Splunk Operator pod
-	DownloadError
-)
-
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	splcommon.Spec `json:",inline"`
@@ -301,11 +283,6 @@ type AppFrameworkSpec struct {
 	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
-// AppInstallStatus represents the current install state of the app
-type AppInstallStatus struct {
-	AppDownloadState AppDownloadState `json:"appDownloadState,omitempty"`
-}
-
 // AppDeploymentInfo represents a single App deployment information
 type AppDeploymentInfo struct {
 	AppName          string              `json:"appName"`
@@ -314,12 +291,37 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
-	AppInstallStatus AppInstallStatus    `json:"appInstallStatus"`
+
+	// App phase info to track download, copy and install
+	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
+
+	// Used to track the copy and install status for each replica member.
+	// Each Pod's phase info is mapped to its ordinal value.
+	// Ignored, once the DeployStatus is marked as Complete
+	AuxPhaseInfo []PhaseInfo `json:"auxPhaseInfo,omitempty"`
 }
 
 // AppSrcDeployInfo represents deployment info for list of Apps
 type AppSrcDeployInfo struct {
 	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
+}
+
+//BundlePushStageType represents the bundle push status
+type BundlePushStageType int
+
+const (
+	// BundlePushPending waiting for all the apps to be copied to the Pod
+	BundlePushPending BundlePushStageType = iota + 1
+	// BundlePushInProgress indicates bundle push to complete
+	BundlePushInProgress
+	// BundlePushComplete bundle push completed
+	BundlePushComplete
+)
+
+// BundlePushTracker used to track the bundle push status
+type BundlePushTracker struct {
+	// Represents the current stage. Internal to the App framework
+	BudlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
 }
 
 // AppDeploymentContext for storing the Apps deployment information
@@ -346,4 +348,67 @@ type AppDeploymentContext struct {
 
 	// Represents the Status field for maximum number of apps that can be downloaded at same time
 	AppsStatusMaxConcurrentAppDownloads uint64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
+
+	// Internal to the App framework. Used in case of CM(IDXC) and deployer(SHC)
+	BundlePushStatus BundlePushTracker `json:"bundlePushStatus,omitempty"`
 }
+
+// AppPhaseStatusType defines the Phase status
+type AppPhaseStatusType uint32
+
+// AppPhaseType defines the App Phase
+type AppPhaseType string
+
+const (
+	// PhaseDownload identifies download phase
+	PhaseDownload AppPhaseType = "download"
+
+	// PhasePodCopy identifies pod copy phase
+	PhasePodCopy = "podCopy"
+
+	// PhaseInstall identifies install phase for local scoped apps
+	PhaseInstall = "install"
+)
+
+// PhaseInfo defines the status to track the App framework installation phase
+type PhaseInfo struct {
+	// Phase type
+	Phase AppPhaseType `json:"phase,omitempty"`
+	// Status of the phase
+	Status AppPhaseStatusType `json:"status,omitempty"`
+	// RetryCount defines the number of retries completed so far
+	RetryCount int32 `json:"retryCount,omitempty"`
+}
+
+const (
+	// AppPkgDownloadPending indicates pending
+	AppPkgDownloadPending AppPhaseStatusType = 101
+	// AppPkgDownloadInProgress indicates in progress
+	AppPkgDownloadInProgress = 102
+	// AppPkgDownloadComplete indicates complete
+	AppPkgDownloadComplete = 103
+	// AppPkgDownloadError indicates error after retries
+	AppPkgDownloadError = 199
+)
+
+const (
+	// AppPkgPodCopyPending indicates pending
+	AppPkgPodCopyPending AppPhaseStatusType = 201
+	// AppPkgPodCopyInProgress indicates in progress
+	AppPkgPodCopyInProgress = 202
+	// AppPkgPodCopyComplete indicates complete
+	AppPkgPodCopyComplete = 203
+	// AppPkgPodCopyError indicates error after retries
+	AppPkgPodCopyError = 299
+)
+
+const (
+	// AppPkgInstallPending indicates pending
+	AppPkgInstallPending AppPhaseStatusType = 301
+	// AppPkgInstallInProgress  indicates in progress
+	AppPkgInstallInProgress = 302
+	// AppPkgInstallComplete indicates complete
+	AppPkgInstallComplete = 303
+	// AppPkgInstallError indicates error after retries
+	AppPkgInstallError = 399
+)
