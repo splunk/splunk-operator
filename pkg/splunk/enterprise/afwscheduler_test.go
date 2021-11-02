@@ -437,6 +437,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 		afwPipeline = nil
 	}()
 
+	ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads = 1
 	ppln.phaseWaiter.Add(1)
 	go ppln.downloadPhaseManager()
 
@@ -968,7 +969,6 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 
 	splclient.RegisterS3Client("aws")
 
-	var activeWorkers uint64
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
 		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.Namespace, cr.Kind, cr.Name, appSrc.Scope, appSrc.Name) + "/"
@@ -1010,9 +1010,10 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 			appDeployInfo: appDeployInfoList[index],
 			waiter:        new(sync.WaitGroup),
 		}
-		activeWorkers++
+		var downloadWorkersRunPool = make(chan struct{}, 1)
+		downloadWorkersRunPool <- struct{}{}
 		worker.waiter.Add(1)
-		go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, localPath)
+		go worker.Download(pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
 		worker.waiter.Wait()
 	}
 
@@ -1086,8 +1087,6 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		}
 	}
 
-	var activeWorkers uint64
-
 	s3ClientMgr := &S3ClientManager{}
 
 	// Test1. Invalid appSrcName
@@ -1101,10 +1100,10 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	}
 
 	pplnPhase := &PipelinePhase{}
-
-	activeWorkers++
+	var downloadWorkersRunPool = make(chan struct{}, 1)
+	downloadWorkersRunPool <- struct{}{}
 	worker.waiter.Add(1)
-	go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, "")
+	go worker.Download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1145,7 +1144,8 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	s3ClientMgr.initFn = initFunc
 
 	worker.waiter.Add(1)
-	go worker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, "")
+	downloadWorkersRunPool <- struct{}{}
+	go worker.Download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
@@ -1271,7 +1271,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	downloadPhaseWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go ppln.scheduleDownloads(pplnPhase, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.scheduleDownloads(ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
 	for _, downloadWorker := range pplnPhase.q {
@@ -1285,7 +1285,7 @@ func TestScheduleDownloads(t *testing.T) {
 	downloadPhaseWaiter.Add(1)
 	close(ppln.sigTerm)
 	// schedule the download threads to do actual download work
-	go ppln.scheduleDownloads(pplnPhase, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.scheduleDownloads(ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
 }
