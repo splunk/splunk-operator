@@ -38,13 +38,6 @@ var _ = Describe("m4appfw test", func() {
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
-		// Upload V1 apps to S3
-		s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
-		appFileList := testenv.GetAppFileList(appListV1, 1)
-		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-		uploadedApps = append(uploadedApps, uploadedFiles...)
-
 	})
 
 	AfterEach(func() {
@@ -121,7 +114,13 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Create App framework Spec for M4
+			// Upload V1 apps to S3
+			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -281,11 +280,6 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify apps are copied and downgraded on MC and on SH and Indexers pods
 			*/
-
-			// Delete pre-installed apps on S3
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
-			testenvInstance.Log.Info("Testing downgrade scenario")
 
 			// Upload newer version of apps to S3
 			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
@@ -539,6 +533,12 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Upload V1 apps to S3
+			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
 			// Create App framework Spec for M4
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
@@ -744,6 +744,13 @@ var _ = Describe("m4appfw test", func() {
 	Context("Clustered deployment (M4 - clustered indexer, search head cluster)", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA and have apps installed locally on CM and SHC Deployer", func() {
 
+			// Upload V1 apps to S3
+			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
 			// Create App framework Spec
 			// volumeSpec: Volume name, Endpoint, Path and SecretRef
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -771,7 +778,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			indexersPerSite := 1
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster")
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, "", "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -786,7 +793,6 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify Apps are downloaded by init container local install on CM and Deployer for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
@@ -811,7 +817,7 @@ var _ = Describe("m4appfw test", func() {
 			//Upload new Versioned Apps to S3
 			appFileList = testenv.GetAppFileList(appListV2, 2)
 			appVersion = "V2"
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			testenvInstance.Log.Info("Uploading apps S3 for", "version", appVersion)

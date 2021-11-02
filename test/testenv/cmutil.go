@@ -207,8 +207,12 @@ func RollHotBuckets(deployment *Deployment) bool {
 type ClusterMasterInfoEndpointResponse struct {
 	Entry []struct {
 		Content struct {
-			RollingRestartFlag bool              `json:"rolling_restart_flag"`
-			ActiveBundle       map[string]string `json:"active_bundle"`
+			RollingRestartFlag bool `json:"rolling_restart_flag"`
+			ActiveBundle       struct {
+				BundlePath string `json:"bundle_path"`
+				Checksum   string `json:"checksum"`
+				Timestamp  int    `json:"timestamp"`
+			} `json:"active_bundle"`
 		} `json:"content"`
 	} `json:"entry"`
 }
@@ -281,7 +285,7 @@ func GetClusterManagerBundleHash(deployment *Deployment) string {
 	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 	restResponse := ClusterMasterInfoResponse(deployment, podName)
 
-	bundleHash := restResponse.Entry[0].Content.ActiveBundle["checksum"]
+	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
 	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
 	return bundleHash
 }
