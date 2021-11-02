@@ -153,8 +153,8 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 					return result, err
 				}
 			}
-			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 || (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
-				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster masnager spec")
+			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
+				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster manager spec")
 			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
