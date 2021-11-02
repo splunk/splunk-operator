@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -50,7 +52,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 // GetPodAppStatus Get the app install status and version number
 func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-	if clusterWideInstall && (strings.Contains(podName, "-cluster-master-") || strings.Contains(podName, "-deployer-")) {
+	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, splcommon.TestDeployerDashed)) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil
 	}
@@ -70,11 +72,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 	//For cluster-wide install the apps are extracted to different locations
 	if clusterWideInstall {
 		if strings.Contains(podName, "-indexer-") {
-			path = "etc/slave-apps"
-		} else if strings.Contains(podName, "cluster-master") {
-			path = "etc/master-apps"
-		} else if strings.Contains(podName, "-deployer-") {
-			path = "etc/shcluster/apps"
+			path = splcommon.PeerAppsLoc
+		} else if strings.Contains(podName, splcommon.ClusterManager) {
+			path = splcommon.ManagerAppsLoc
+		} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+			path = splcommon.SHClusterAppsLoc
 		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)

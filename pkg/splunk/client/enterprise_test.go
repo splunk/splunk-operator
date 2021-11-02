@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -176,7 +178,7 @@ func TestSetSearchHeadDetention(t *testing.T) {
 
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/default/apply", body)
+	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerApplyBundle, body)
 
 	test := func(c SplunkClient) error {
 		return c.BundlePush(true)
@@ -227,14 +229,14 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 }
 
 func TestGetClusterMasterInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetInfo, nil)
 	wantInfo := ClusterMasterInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           "splunk-s1-cluster-master-0",
+		Label:           fmt.Sprintf(splcommon.TestClusterManagerID, "s1", "0"),
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -248,7 +250,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		StartTime: 1583948636,
 	}
 	test := func(c SplunkClient) error {
-		gotInfo, err := c.GetClusterMasterInfo()
+		gotInfo, err := c.GetClusterManagerInfo()
 		if err != nil {
 			return err
 		}
@@ -257,26 +259,26 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{},"origin":"https://localhost:8089/services/cluster/master/info","updated":"2020-03-18T01:04:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"master","id":"https://localhost:8089/services/cluster/master/info/master","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/master/info/master","list":"/services/cluster/master/info/master"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"apply_bundle_status":{"invalid_bundle":{"bundle_path":"","bundle_validation_errors_on_master":[],"checksum":"","timestamp":0},"reload_bundle_issued":false,"status":"None"},"backup_and_restore_primaries":false,"controlled_rolling_restart_flag":false,"eai:acl":null,"indexing_ready_flag":true,"initialized_flag":true,"label":"splunk-s1-cluster-master-0","last_check_restart_bundle_result":false,"last_dry_run_bundle":{"bundle_path":"","checksum":"","timestamp":0},"last_validated_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/0af7c0e95f313f7be3b0cb1d878df9a1-1583948640.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","is_valid_bundle":true,"timestamp":1583948640},"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"maintenance_mode":false,"multisite":false,"previous_active_bundle":{"bundle_path":"","checksum":"","timestamp":0},"primaries_backup_status":"No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.","quiet_period_flag":false,"rolling_restart_flag":false,"rolling_restart_or_upgrade":false,"service_ready_flag":true,"start_time":1583948636,"summary_replication":"false"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body := splcommon.TestGetCMInfo
 	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
 	test = func(c SplunkClient) error {
-		_, err := c.GetClusterMasterInfo()
+		_, err := c.GetClusterManagerInfo()
 		if err == nil {
-			t.Errorf("GetClusterMasterInfo returned nil; want error")
+			t.Errorf("GetClusterManagerInfo returned nil; want error")
 		}
 		return nil
 	}
-	body = `{"links":{},"origin":"https://localhost:8089/services/cluster/master/info","updated":"2020-03-18T01:04:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body = splcommon.TestGetCMInfoEmpty
 	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
 
 	// test error code
-	splunkClientTester(t, "TestGetClusterMasterInfo", 500, "", wantRequest, test)
+	splunkClientTester(t, "TestGetClusterManagerInfo", 500, "", wantRequest, test)
 }
 
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/slave/info?count=0&output_mode=json", nil)
+	wantRequest, _ := http.NewRequest("GET", splcommon.URLPeerInfo, nil)
 	wantMemberStatus := "Up"
 	test := func(c SplunkClient) error {
 		info, err := c.GetIndexerClusterPeerInfo()
@@ -288,7 +290,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{},"origin":"https://localhost:8089/services/cluster/slave/info","updated":"2020-03-18T01:28:18+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"slave","id":"https://localhost:8089/services/cluster/slave/info/slave","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/slave/info/slave","list":"/services/cluster/slave/info/slave"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870244},"base_generation_id":26,"eai:acl":null,"is_registered":true,"last_dry_run_bundle":{"bundle_path":"","checksum":"","timestamp":0},"last_heartbeat_attempt":0,"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/87c8c24e7fabc3ff9683c26652cb5890-1583870244.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870244},"maintenance_mode":false,"registered_summary_state":3,"restart_state":"NoRestart","site":"default","status":"Up"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body := splcommon.TestGetIndexerClusterPeerInfo
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
@@ -299,15 +301,15 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body = `{"links":{},"origin":"https://localhost:8089/services/cluster/slave/info","updated":"2020-03-18T01:28:18+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body = splcommon.TestGetIndexerClusterPeerInfoEmpty
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 200, body, wantRequest, test)
 
 	// test error code
 	splunkClientTester(t, "TestGetIndexerClusterPeerInfo", 500, "", wantRequest, test)
 }
 
-func TestGetClusterMasterPeers(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+func TestGetClusterManagerPeers(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetPeers, nil)
 	var wantPeers = []struct {
 		ID     string
 		Label  string
@@ -316,7 +318,7 @@ func TestGetClusterMasterPeers(t *testing.T) {
 		{ID: "D39B1729-E2C5-4273-B9B2-534DA7C2F866", Label: "splunk-s1-indexer-0", Status: "Up"},
 	}
 	test := func(c SplunkClient) error {
-		peers, err := c.GetClusterMasterPeers()
+		peers, err := c.GetClusterManagerPeers()
 		if err != nil {
 			return err
 		}
@@ -340,22 +342,22 @@ func TestGetClusterMasterPeers(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{"create":"/services/cluster/master/peers/_new"},"origin":"https://localhost:8089/services/cluster/master/peers","updated":"2020-03-18T01:08:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","id":"https://localhost:8089/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","list":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866","edit":"/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle_id":"14310A4AABD23E85BBD4559C4A3B59F8","apply_bundle_status":{"invalid_bundle":{"bundle_validation_errors":[],"invalid_bundle_id":""},"reasons_for_restart":[],"restart_required_for_apply_bundle":false,"status":"None"},"base_generation_id":26,"bucket_count":73,"bucket_count_by_index":{"_audit":24,"_internal":45,"_telemetry":4},"buckets_rf_by_origin_site":{"default":73},"buckets_sf_by_origin_site":{"default":73},"delayed_buckets_to_discard":[],"eai:acl":null,"fixup_set":[],"heartbeat_started":true,"host_port_pair":"10.36.0.6:8089","indexing_disk_space":210707374080,"is_searchable":true,"is_valid_bundle":true,"label":"splunk-s1-indexer-0","last_dry_run_bundle":"","last_heartbeat":1584493732,"last_validated_bundle":"14310A4AABD23E85BBD4559C4A3B59F8","latest_bundle_id":"14310A4AABD23E85BBD4559C4A3B59F8","peer_registered_summaries":true,"pending_builds":[],"pending_job_count":0,"primary_count":73,"primary_count_remote":0,"register_search_address":"10.36.0.6:8089","replication_count":0,"replication_port":9887,"replication_use_ssl":false,"restart_required_for_applying_dry_run_bundle":false,"search_state_counter":{"PendingSearchable":0,"Searchable":73,"SearchablePendingMask":0,"Unsearchable":0},"site":"default","splunk_version":"8.0.2","status":"Up","status_counter":{"Complete":69,"NonStreamingTarget":0,"StreamingSource":4,"StreamingTarget":0},"summary_replication_count":0}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
-	splunkClientTester(t, "TestGetClusterMasterPeers", 200, body, wantRequest, test)
+	body := splcommon.TestGetCMPeers
+	splunkClientTester(t, "TestGetClusterManagerPeers", 200, body, wantRequest, test)
 
 	// test error response
 	test = func(c SplunkClient) error {
-		_, err := c.GetClusterMasterPeers()
+		_, err := c.GetClusterManagerPeers()
 		if err == nil {
-			t.Errorf("GetClusterMasterPeers returned nil; want error")
+			t.Errorf("GetClusterManagerPeers returned nil; want error")
 		}
 		return nil
 	}
-	splunkClientTester(t, "TestGetClusterMasterPeers", 503, "", wantRequest, test)
+	splunkClientTester(t, "TestGetClusterManagerPeers", 503, "", wantRequest, test)
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/master/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerRemovePeers+"?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
@@ -363,7 +365,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/slave/control/control/decommission?enforce_counts=1", nil)
+	wantRequest, _ := http.NewRequest("POST", splcommon.URLPeerDecommission+"?enforce_counts=1", nil)
 	test := func(c SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
@@ -374,7 +376,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 	request1, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
 	request2, _ := http.NewRequest("GET", "https://localhost:8089/services/search/distributed/peers?count=0&output_mode=json", nil)
 	request3, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_indexer/edit", nil)
-	request4, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit", nil)
+	request4, _ := http.NewRequest("POST", splcommon.LocalURLLicenseManagerEdit, nil)
 	request5, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/dmc_indexerclustergroup_idxc_label/edit", nil)
 	request6, _ := http.NewRequest("GET", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", nil)
 	request7, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", nil)
@@ -385,7 +387,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 	wantRequests = []*http.Request(append(wantRequests, request1, request2, request3, request4, request5, request6, request7, request8, request9, request10))
 	body := []string{
 		`{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`,
-		`{"links":{"create":"/services/search/distributed/peers/_new","_reload":"/services/search/distributed/peers/_reload"},"origin":"https://localhost:8089/services/search/distributed/peers","updated":"2020-09-22T21:43:33+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"splunk-example-cluster-master-service:8089","id":"https://localhost:8089/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","list":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","_reload":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/_reload","edit":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","remove":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","disable":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/disable","quarantine":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/quarantine"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"build":"a1a6394cc5ae","bundle_isIndexing":["15065687072217053252 - false","16923722576385601869 - false","8527338655074501134 - false","5466829646820181037 - false","12887664000706842849 - false"],"bundle_versions":["15065687072217053252","16923722576385601869","8527338655074501134","5466829646820181037","12887664000706842849"],"cluster_label":["idxc_label"],"cpu_arch":"x86_64","disabled":false,"eai:acl":null,"enableRFSMonitoring":false,"guid":"19F5CA13-A561-4D1B-9341-A7BFC3E92F06","host":"splunk-example-cluster-master-0","host_fqdn":"splunk-example-cluster-master-0","isForwarding":true,"is_https":true,"licenseSignature":"c2bf3f573bbaf36ae13f326762945905","numberOfCores":"1","numberOfVirtualCores":"2","os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","peerName":"splunk-example-cluster-master-0","peerType":"configured","physicalMemoryMB":"7764","remote_session":"2bOC3nPGg_s2UREElAhLcKFXxuMNgwasCQPJG^tlXJ5LMzX1aCC8zwgWN2dCtUD2TyQ1szY0sdQhOwJyK_Igj6JUfEmcVGrsd3BtBvFOb0R_6F9kYRzHKz3","replicationStatus":"Successful","rtsearch_enabled":true,"search_groups":["dmc_group_cluster_master","dmc_group_license_master","dmc_indexerclustergroup_idxc_label"],"searchable_indexes":["_audit","_internal","_introspection","_metrics","_metrics_rollup","_telemetry","_thefishbucket","history","main","summary"],"server_roles":["license_master","cluster_master","search_head"],"shcluster_label":"","startup_time":1600810341,"status":"Up","status_details":[],"version":"8.0.5"}}],"paging":{"total":4,"perPage":30,"offset":0},"messages":[]}`,
+		splcommon.TestMCApplyChanges,
 		"",
 		"",
 		"",
@@ -415,7 +417,7 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
 }
 func TestUpdateDMCGroups(t *testing.T) {
@@ -454,7 +456,7 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{"create":"/services/search/distributed/peers/_new","_reload":"/services/search/distributed/peers/_reload"},"origin":"https://localhost:8089/services/search/distributed/peers","updated":"2020-09-22T21:43:33+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"splunk-example-cluster-master-service:8089","id":"https://localhost:8089/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","list":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","_reload":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/_reload","edit":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","remove":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089","disable":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/disable","quarantine":"/services/search/distributed/peers/splunk-example-cluster-master-service%3A8089/quarantine"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"build":"a1a6394cc5ae","bundle_isIndexing":["15065687072217053252 - false","16923722576385601869 - false","8527338655074501134 - false","5466829646820181037 - false","12887664000706842849 - false"],"bundle_versions":["15065687072217053252","16923722576385601869","8527338655074501134","5466829646820181037","12887664000706842849"],"cluster_label":["idxc_label"],"cpu_arch":"x86_64","disabled":false,"eai:acl":null,"enableRFSMonitoring":false,"guid":"19F5CA13-A561-4D1B-9341-A7BFC3E92F06","host":"splunk-example-cluster-master-0","host_fqdn":"splunk-example-cluster-master-0","isForwarding":true,"is_https":true,"licenseSignature":"c2bf3f573bbaf36ae13f326762945905","numberOfCores":"1","numberOfVirtualCores":"2","os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","peerName":"splunk-example-cluster-master-0","peerType":"configured","physicalMemoryMB":"7764","remote_session":"2bOC3nPGg_s2UREElAhLcKFXxuMNgwasCQPJG^tlXJ5LMzX1aCC8zwgWN2dCtUD2TyQ1szY0sdQhOwJyK_Igj6JUfEmcVGrsd3BtBvFOb0R_6F9kYRzHKz3","replicationStatus":"Successful","rtsearch_enabled":true,"search_groups":["dmc_group_cluster_master","dmc_group_license_master","dmc_indexerclustergroup_idxc_label"],"searchable_indexes":["_audit","_internal","_introspection","_metrics","_metrics_rollup","_telemetry","_thefishbucket","history","main","summary"],"server_roles":["license_master","cluster_master","search_head"],"shcluster_label":"","startup_time":1600810341,"status":"Up","status_details":[],"version":"8.0.5"}}],"paging":{"total":4,"perPage":30,"offset":0},"messages":[]}`
+	body := splcommon.TestGetMCAssetTable
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
 }
 
@@ -499,7 +501,7 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		EaiAppName:  "splunk_monitoring_console",
 		EaiUserName: "nobody",
 	}
-	wantconfiguredPeers := "&member=splunk-example-cluster-master-service:8089&"
+	wantconfiguredPeers := "&member=" + splcommon.TestExampleClusterManagerMgmtPort + "&"
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -534,7 +536,7 @@ func TestGetClusterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := `{"links":{},"origin":"https://localhost:8089/services/server/info","updated":"2020-09-24T06:38:53+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"server-info","id":"https://localhost:8089/services/server/info/server-info","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/info/server-info","list":"/services/server/info/server-info"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"fields":{"required":[],"optional":[],"wildcard":[]},"content":{"activeLicenseGroup":"Trial","activeLicenseSubgroup":"Production","build":"a1a6394cc5ae","cluster_label":["idxc_label"],"cpu_arch":"x86_64","eai:acl":null,"fips_mode":false,"guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","health_info":"green","health_version":1,"host":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_fqdn":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","host_resolved":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","isForwarding":true,"isFree":false,"isTrial":true,"kvStoreStatus":"ready","licenseKeys":["5C52DA5145AD67B8188604C49962D12F2C3B2CF1B82A6878E46F68CA2812807B"],"licenseSignature":"139bf73ec92c84121c79a9b8307a6724","licenseState":"OK","license_labels":["Splunk Enterprise   Splunk Analytics for Hadoop Download Trial"],"master_guid":"0F93F33C-4BDA-4A74-AD9F-3FCE26C6AFF0","master_uri":"self","max_users":4294967295,"mode":"normal","numberOfCores":1,"numberOfVirtualCores":2,"os_build":"#1 SMP Thu Sep 3 19:04:44 UTC 2020","os_name":"Linux","os_name_extended":"Linux","os_version":"4.14.193-149.317.amzn2.x86_64","physicalMemoryMB":7764,"product_type":"enterprise","rtsearch_enabled":true,"serverName":"splunk-default-monitoring-console-86bc9b7c8c-d96x2","server_roles":["license_master","cluster_search_head","search_head"],"startup_time":1600928786,"staticAssetId":"CFE3D41EE2CCD1465E8C8453F83E4ECFFF540780B4490E84458DD4A3694CE4D1","version":"8.0.5"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetClusterInfo", 200, body, wantRequest, test)
 }
 

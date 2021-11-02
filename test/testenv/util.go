@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -106,7 +106,7 @@ func newStandaloneWithGivenSpec(name, ns string, spec enterpriseApi.StandaloneSp
 	return &new
 }
 
-func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
+func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
 	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
@@ -144,7 +144,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.Lice
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -162,7 +162,7 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -173,7 +173,7 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
+func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -192,7 +192,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -203,7 +203,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
 	new := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -232,7 +232,7 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
 	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -253,7 +253,7 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, 
 					Name: clusterMasterRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -431,7 +431,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 }
 
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
-func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseApi.Standalone {
+func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterpriseApi.Standalone {
 
 	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -449,7 +449,7 @@ func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseA
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -492,6 +492,50 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 		Spec: spec,
 	}
 	return &new
+}
+
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
+func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: LicenseMasterRef,
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	return &mcSpec
+}
+
+// newMonitoringConsoleSpecWithGivenSpec returns MC Spec with given name, namespace and Spec
+func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpriseApi.MonitoringConsoleSpec) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &mcSpec
 }
 
 // DumpGetPods prints and returns list of pods in the namespace
@@ -624,8 +668,8 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseAp
 	return &new
 }
 
-// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
-func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
+// newLicenseManagerWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
+func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
 	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",

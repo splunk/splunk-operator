@@ -2912,6 +2912,16 @@ spec:
     storage: true
     subresources:
       status: {}
+  - name: v2
+    served: true
+    storage: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+        properties:
+          apiVersion:
+            type: string
   - name: v1
     served: true
     storage: false

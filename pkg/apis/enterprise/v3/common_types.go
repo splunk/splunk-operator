@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v2
+package v3
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +22,7 @@ import (
 
 const (
 	// APIVersion is a string representation of this API
-	APIVersion = "enterprise.splunk.com/v2"
+	APIVersion = "enterprise.splunk.com/v3"
 )
 
 // default all fields to being optional
@@ -122,6 +122,9 @@ type CommonSplunkSpec struct {
 
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
+
+	// MonitoringConsoleRef refers to a Splunk Enterprise monitoring console managed by the operator within Kubernetes
+	MonitoringConsoleRef corev1.ObjectReference `json:"monitoringConsoleRef"`
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`

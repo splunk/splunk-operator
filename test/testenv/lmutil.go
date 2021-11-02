@@ -16,12 +16,13 @@ package testenv
 
 import (
 	"encoding/json"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"strings"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-type licenserLocalSlaveResponse struct {
+type licenserLocalPeerResponse struct {
 	Entry []struct {
 		Name    string `json:"name"`
 		ID      string `json:"id"`
@@ -35,9 +36,9 @@ type licenserLocalSlaveResponse struct {
 	} `json:"entry"`
 }
 
-// CheckLicenseMasterConfigured checks if lm is configured on given pod
-func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/licenser/localslave?output_mode=json"
+// CheckLicenseManagerConfigured checks if lm is configured on given pod
+func CheckLicenseManagerConfigured(deployment *Deployment, podName string) bool {
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLLicensePeerJSONOutput
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 	if err != nil {
@@ -45,13 +46,13 @@ func CheckLicenseMasterConfigured(deployment *Deployment, podName string) bool {
 		return false
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := licenserLocalSlaveResponse{}
+	restResponse := licenserLocalPeerResponse{}
 	err = json.Unmarshal([]byte(stdout), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse health status")
 		return false
 	}
-	licenseMaster := restResponse.Entry[0].Content.MasterURI
-	logf.Log.Info("License Master configuration on POD", "POD", podName, "License Master", licenseMaster)
-	return strings.Contains(licenseMaster, "license-master-service:8089")
+	licenseManager := restResponse.Entry[0].Content.MasterURI
+	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
+	return strings.Contains(licenseManager, splcommon.TestLicenseManagerMgmtPort)
 }
