@@ -283,7 +283,7 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			// Upload newer version of apps to S3
-      appVersion := "V2"
+			appVersion := "V2"
 			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
