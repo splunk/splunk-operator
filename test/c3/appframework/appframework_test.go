@@ -452,7 +452,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Single Site Indexer Cluster with SHC (C3) with App Framework", func() {
+	Context("Single Site Indexer Cluster with SHC (C3) with App Framework", func() {
 		It("smoke, c3, appframework: can deploy a C3 SVA with App Framework enabled, install apps,scale up IDXC and SHC, install app on new pods, scale down", func() {
 
 			/* Test Steps
@@ -706,6 +706,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")

@@ -111,8 +111,8 @@ var _ = Describe("s1appfw test", func() {
 
 			// Upload V1 apps to S3
 			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-			appFileList := testenv.GetAppFileList(appListV1, 1)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			appFileList = testenv.GetAppFileList(appListV1, 1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -186,7 +186,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
 
 			// Upload Apps to S3 for MC
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			s3TestDirMC = "s1appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList = testenv.GetAppFileList(appListV1, 1)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
