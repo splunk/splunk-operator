@@ -84,6 +84,9 @@ type PipelineWorker struct {
 
 	// waiter reference to inform the caller
 	waiter *sync.WaitGroup
+
+	// mutex to protect shared data
+	workerMutex sync.Mutex
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
@@ -104,6 +107,15 @@ type AppInstallPipeline struct {
 
 	// Used by yield logic
 	sigTerm chan struct{}
+
+	// represents the available disk space on operator pod
+	availableDiskSpace uint64
+
+	// Refernce to app deploy context
+	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// mutex to synchronize shared variables across phases
+	pplnMutex sync.Mutex
 }
 
 // ToString returns a string for a given InstanceType
