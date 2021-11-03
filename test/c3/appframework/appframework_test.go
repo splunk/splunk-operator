@@ -275,6 +275,7 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			// Upload newer version of apps to S3
+			appVersion := "V2"
 			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
@@ -377,6 +378,8 @@ var _ = Describe("c3appfw test", func() {
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			// Saving current V2 bundle hash for future comparison
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -648,9 +651,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
-			// Saving current V2 bundle hash to future comparision with new config bundle hash
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
-
 
 			// Verify apps are copied to location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
@@ -901,7 +901,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 SVA
 			// Deploy the Cluster manager
 			testenvInstance.Log.Info("Deploy Cluster manager in single site configuration")
-			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "", "")
+			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the Indexer cluster
