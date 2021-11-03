@@ -43,8 +43,8 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 		}
 	})
 
-	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
-		It("secret, integration: secret update on multisite indexers and search head cluster", func() {
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+		It("secret, integration, m4: secret update on multisite indexers and search head cluster", func() {
 
 			/* Test Scenario
 			1. Update Secrets Data
@@ -61,7 +61,8 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			siteCount := 3
-			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
+			mcName := deployment.GetName()
+			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
@@ -79,8 +80,16 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Verify RF SF is met
+			testenvInstance.Log.Info("Checkin RF SF before secret change")
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
@@ -118,8 +127,12 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Verify RF SF is met
+			testenvInstance.Log.Info("Checkin RF SF after secret change")
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)

@@ -49,7 +49,7 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("licensemanager, integration: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -58,7 +58,8 @@ var _ = Describe("Licensemanager test", func() {
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			mcRef := deployment.GetName()
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -70,8 +71,12 @@ var _ = Describe("Licensemanager test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -91,6 +96,10 @@ var _ = Describe("Licensemanager test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+
+			// Verify LM Configured on Monitoring Console
+			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
 		})
 	})
 

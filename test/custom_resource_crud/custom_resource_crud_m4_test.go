@@ -50,11 +50,12 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("crcrud, integration : can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
+		It("crcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
+			mcRef := deployment.GetName()
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
+			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -69,8 +70,12 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -101,6 +106,12 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Verify Indexers go to ready state
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Verify CPU limits after updating the CR
 			for i := 1; i <= siteCount; i++ {

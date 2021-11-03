@@ -49,14 +49,22 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("crcrud, integration: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("crcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
+			mcRef := deployment.GetName()
+			standalone, err := deployment.DeployStandalone(deployment.GetName(), mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Verify Standalone goes to ready state
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify CPU limits before updating the CR
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -74,6 +82,9 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 
 			// Verify Standalone goes to ready state
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify CPU limits after updating the CR
 			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), standalonePodName, newCPULimits)

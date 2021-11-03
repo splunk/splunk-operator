@@ -709,7 +709,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create Single site Cluster and SHC, with App Framework enabled on SHC Deployer
 			// Deploy the CM
 			testenvInstance.Log.Info("Deploy Cluster manager in single site configuration")
-			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "")
+			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the indexer cluster
