@@ -76,7 +76,6 @@ Based on Splunk Enterprise [Reference Hardware documentation](https://docs.splun
 | ---------- | ------- | ------- |
 | _Each Standalone Pod: 12 Physical CPU Cores or 24 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Search Head Pod: 16 Physical CPU Cores or 32 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Indexer Pod: 12 Physical CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM._ |
 
-Splunk Operator does not support ___vCPU licensing___.
 
 #### _Using Kubernetes Quality of Service Classes_
 
