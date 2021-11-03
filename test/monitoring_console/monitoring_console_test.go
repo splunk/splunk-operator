@@ -382,7 +382,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	// TO BE READDED WHEN CSPL-1379 fixed
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("monitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps

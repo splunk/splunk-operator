@@ -36,14 +36,6 @@ var _ = Describe("c3appfw test", func() {
 		var err error
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Upload V1 apps to S3
-		s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
-		appFileList := testenv.GetAppFileList(appListV1, 1)
-		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-		uploadedApps = append(uploadedApps, uploadedFiles...)
-
 	})
 
 	AfterEach(func() {
@@ -121,7 +113,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Create App framework Spec for C3
+			// Upload V1 apps to S3
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -276,12 +274,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify apps are copied, installed and downgraded on MC and also on SH and Indexers pods
 			*/
 
-			// Delete pre-installed apps on S3
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
-
-			// Upload newer versions of apps (V2) to S3 for MC and C3
-			appVersion := "V2"
+			// Upload newer version of apps to S3
 			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
@@ -384,9 +377,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Saving current V2 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
@@ -658,6 +648,9 @@ var _ = Describe("c3appfw test", func() {
 			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
+			// Saving current V2 bundle hash to future comparision with new config bundle hash
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
 
 			// Verify apps are copied to location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
@@ -751,7 +744,16 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify apps are copied, installed and upgraded on CM and Deployer
 			*/
 
-			// Create App framework Spec for C3
+			// Upload V1 apps to S3
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec
+			// volumeSpec: Volume name, Endpoint, Path and SecretRef
+
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -769,8 +771,8 @@ var _ = Describe("c3appfw test", func() {
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
-			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster with SHC")
-			err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, 10, false)
+			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, 10, false)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -788,7 +790,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are downloaded by init-container
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList := testenv.GetAppFileList(appListV1, 1)
 			appVersion := "V1"
 			testenvInstance.Log.Info("Verify apps are downloaded by init container", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
@@ -815,7 +816,7 @@ var _ = Describe("c3appfw test", func() {
 			appVersion = "V2"
 			testenvInstance.Log.Info("Uploading apps S3 for", "version", appVersion)
 			appFileList = testenv.GetAppFileList(appListV2, 2)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -864,10 +865,8 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify ES app is installed on Deployer and on Search Heads
 			*/
 
-			// Delete apps on S3
-			testenvInstance.Log.Info("Delete existing apps on S3 before starting upload of ES App")
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
+			// Create local directory for file download
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 
 			// Upload ES app to S3
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
@@ -902,7 +901,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 SVA
 			// Deploy the Cluster manager
 			testenvInstance.Log.Info("Deploy Cluster manager in single site configuration")
-			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "")
+			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the Indexer cluster
@@ -955,7 +954,10 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verfiy ES app is installed locally on deployer pod")
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, true, "disabled", false, false)
 
-			// Verify ES is installed on SHs
+			// Verify bundle push status
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(shSpec.Replicas))
+
+			// Verify apps are installed on SHs
 			testenvInstance.Log.Info("Verfiy ES app is installed on Search Heads")
 			podNames := []string{}
 			for i := 0; i < int(shSpec.Replicas); i++ {
@@ -985,9 +987,8 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify apps with cluster scope are upgraded cluster-wide on indexers and Search Heads
 			*/
 
-			// Delete apps on S3 for new apps to split them across both cluster and local
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
+			// Create directory for file download
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 
 			// Split Applist into 2 lists for local and cluster install
 			appListLocal := appListV1[len(appListV1)/2:]
@@ -1346,17 +1347,24 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify apps are copied, installed on SH and Indexers pods
 			*/
+      
+			// Create directory for app file download
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 
 			// Creating a bigger list of apps to be installed than the default one
-			appList := append(appListV1, "splunk_app_db_connect", "splunk_app_aws", "Splunk_TA_microsoft-cloudservices", "Splunk_ML_Toolkit", "Splunk_Security_Essentials")
+			appList := []string{"splunk_app_db_connect", "splunk_app_aws", "Splunk_TA_microsoft-cloudservices", "Splunk_ML_Toolkit", "Splunk_Security_Essentials"}
 			appFileList := testenv.GetAppFileList(appList, 1)
 
-			// Download apps from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(appList, 1))
+			// Download App from S3
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload apps to S3
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(appList, 1), downloadDirV1)
+			// Create consolidated list of app files
+			appList = append(appListV1, appList...)
+			appFileList = testenv.GetAppFileList(appList, 1)
+
+			// Upload app to S3
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 

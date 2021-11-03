@@ -37,14 +37,6 @@ var _ = Describe("s1appfw test", func() {
 		var err error
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-
-		// Upload V1 apps to S3
-		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-		appFileList := testenv.GetAppFileList(appListV1, 1)
-		uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-		Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-		uploadedApps = append(uploadedApps, uploadedFiles...)
-
 	})
 
 	AfterEach(func() {
@@ -117,10 +109,14 @@ var _ = Describe("s1appfw test", func() {
 			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			// Upload V1 apps to S3
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+			appFileList := testenv.GetAppFileList(appListV1, 1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
+			// Create App framework Spec for Standalone
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -188,6 +184,11 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+
+			// Upload Apps to S3 for MC
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			appFileList = testenv.GetAppFileList(appListV1, 1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -582,12 +583,9 @@ var _ = Describe("s1appfw test", func() {
 	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframework: can deploy a Standalone and have ES app installed", func() {
 
-			//Delete apps on S3 for new Apps
-			testenvInstance.Log.Info("Delete Apps on S3 before upload ES")
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
+			// Create local app Directory
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
-			// ES is a huge file, we configure it here rather than in BeforeSuite/BeforeEach to save time for other tests
 			// Upload ES app to S3
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp, 1)
@@ -649,11 +647,14 @@ var _ = Describe("s1appfw test", func() {
 	Context("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframework: can deploy a standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
 
+			// Create local app Directory
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+
 			// Creating a bigger list of apps to be installed than the default one
 			appList := append(appListV1, testenv.RestartNeededApps...)
 
 			// Download apps from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(appList, 1))
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(testenv.RestartNeededApps, 1))
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Upload apps to S3
