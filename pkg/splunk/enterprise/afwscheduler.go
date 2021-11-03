@@ -310,16 +310,12 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator() (string, err
 }
 
 // Download API will do the actual work of downloading apps from remote storage
-func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, activeWorkers *uint64, localPath string) {
+func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
 
 	defer func() {
-		// decrement the number of active workers
-		pplnPhase.mutex.Lock()
-		*activeWorkers--
-		pplnPhase.mutex.Unlock()
-
 		downloadWorker.isActive = false
 
+		<-downloadWorkersRunPool
 		// decrement the waiter count
 		downloadWorker.waiter.Done()
 	}()
@@ -356,21 +352,19 @@ func (downloadWorker *PipelineWorker) Download(pplnPhase *PipelinePhase, s3Clien
 }
 
 // scheduleDownloads schedules the download workers to download app/s
-func (ppln *AppInstallPipeline) scheduleDownloads(pplnPhase *PipelinePhase, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
-	var activeWorkers uint64
+func (pplnPhase *PipelinePhase) scheduleDownloads(ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
 
 	scopedLog := log.WithName("scheduleDownloads")
 
+	// derive a counting semaphore from the channel to represent worker run pool
+	var downloadWorkersRunPool = make(chan struct{}, maxWorkers)
+
 downloadWork:
 	for {
-		if activeWorkers <= maxWorkers {
+		select {
+		// get an idle worker
+		case downloadWorkersRunPool <- struct{}{}:
 			select {
-			case _, channelOpen := <-ppln.sigTerm:
-				if !channelOpen {
-					scopedLog.Info("Received the termination request from the scheduler")
-					break downloadWork
-				}
-
 			case downloadWorker, ok := <-pplnPhase.msgChannel:
 				// if channel is closed, then just break from here as we have nothing to read
 				if !ok {
@@ -383,6 +377,7 @@ downloadWork:
 					scopedLog.Info("app is already downloaded on operator pod, hence skipping it.", "appSrcName", downloadWorker.appSrcName, "appName", downloadWorker.appDeployInfo.AppName)
 					// update the state to be download complete
 					updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
+					<-downloadWorkersRunPool
 					continue
 				}
 
@@ -392,6 +387,7 @@ downloadWork:
 					// setting isActive to false here so that downloadPhaseManager can take care of it.
 					downloadWorker.isActive = false
 					ppln.pplnMutex.Unlock()
+					<-downloadWorkersRunPool
 					continue
 				}
 
@@ -412,21 +408,25 @@ downloadWork:
 				if err != nil {
 					// increment the retry count and mark this app as download pending
 					updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+					<-downloadWorkersRunPool
 					continue
 				}
 
 				// get the S3ClientMgr instance
 				s3ClientMgr, _ := getS3ClientMgr(*downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
 
-				// increment the number of active workers
-				activeWorkers++
-
 				// start the actual download
-				go downloadWorker.Download(pplnPhase, *s3ClientMgr, &activeWorkers, localPath)
+				go downloadWorker.Download(pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
 
 			default:
+				<-downloadWorkersRunPool
 			}
+		default:
+			// All the workers are busy, check after one second
+			scopedLog.Info("All the workers are busy, we will check again after one second")
+			time.Sleep(1 * time.Second)
 		}
+
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -437,19 +437,43 @@ downloadWork:
 	scheduleDownloadsWaiter.Done()
 }
 
+// shutdownPhaseManager does the following things as part of the cleanup phase:
+// 1. close the msg channel
+// 2. wait for the handler to finish all its work
+// 3. mark the phase as done/complete
+func (ppln *AppInstallPipeline) shutdownPhaseManager(phaseManager string, pplnPhase *PipelinePhase, perPhaseWaiter *sync.WaitGroup) {
+	scopedLog := log.WithName(phaseManager)
+
+	// close the msgChannel
+	close(pplnPhase.msgChannel)
+
+	// wait for the handler code to finish its work
+	scopedLog.Info("Waiting for the workers to finish")
+	perPhaseWaiter.Wait()
+
+	// mark the phase as done/complete
+	scopedLog.Info("All the workers finished")
+	ppln.phaseWaiter.Done()
+}
+
 //downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager() {
 	scopedLog := log.WithName("downloadPhaseManager")
 	scopedLog.Info("Starting Download phase manager")
+
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
 	maxWorkers := ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads
 
 	scheduleDownloadsWaiter := new(sync.WaitGroup)
 
+	defer func() {
+		ppln.shutdownPhaseManager("downloadPhaseManager", pplnPhase, scheduleDownloadsWaiter)
+	}()
+
 	scheduleDownloadsWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go ppln.scheduleDownloads(pplnPhase, maxWorkers, scheduleDownloadsWaiter)
+	go pplnPhase.scheduleDownloads(ppln, maxWorkers, scheduleDownloadsWaiter)
 
 downloadPhase:
 	for {
@@ -483,15 +507,6 @@ downloadPhase:
 
 		time.Sleep(200 * time.Millisecond)
 	}
-
-	close(pplnPhase.msgChannel)
-	// First wait for my all download workers to finish
-	scopedLog.Info("Wating for the download workers to finish")
-	scheduleDownloadsWaiter.Wait()
-
-	scopedLog.Info("All the download workers finished")
-	// Signal that the download phase is complete
-	ppln.phaseWaiter.Done()
 }
 
 // podCopyPhaseManager creates pod copy phase manager for the install pipeline
@@ -713,6 +728,13 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 
 	afwEntryTime := time.Now().Unix()
 
+	// ToDo: sgontla: for now, just make the UT happy, until we get the glue logic
+	// check if this needs to be pure singleton for the entire reconcile span, considering CSPL-1169. CC: @Gaurav
+	// Finally delete the pipeline
+	defer func() {
+		afwPipeline = nil
+	}()
+
 	// get the current available disk space for downloading apps on operator pod
 	availableDiskSpace, err := getAvailableDiskSpace()
 	if err != nil {
@@ -811,12 +833,6 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 		}
 	}(afwEntryTime)
 
-	// ToDo: sgontla: for now, just make the UT happy, until we get the glue logic
-	// check if this needs to be pure singleton for the entire reconcile span, considering CSPL-1169. CC: @Gaurav
-	// Finally delete the pipeline
-	defer func() {
-		afwPipeline = nil
-	}()
 	scopedLog.Info("Waiting for the phase managers to finish")
 
 	// Wait for all the pipeline managers to finish
