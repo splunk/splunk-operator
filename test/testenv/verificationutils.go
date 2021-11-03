@@ -664,15 +664,46 @@ func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns str
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container
-func VerifyAppsDownloadedByInitContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
+// VerifyAppsDownloadedOnContainer verify that apps are downloaded by init container
+func VerifyAppsDownloadedOnContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
 	for _, podName := range pods {
 		appList, err := GetDirsOrFilesInPath(deployment, podName, path, false)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
 			found := CheckStringInSlice(appList, app)
-			testenvInstance.Log.Info("Check App directory downloaded by init container", "Pod Name", podName, "App Name", app, "Status", found)
+			testenvInstance.Log.Info("Check App files present on the pod", "Pod Name", podName, "App Name", app, "directory", path, "Status", found)
 			gomega.Expect(found).Should(gomega.Equal(true))
+		}
+	}
+}
+
+// VerifyAppListPhaseStandalone verify given app Phase has completed for the given list of apps for standalone
+func VerifyAppListPhaseStandalone(deployment *Deployment, testenvInstance *TestEnv, name string, appSourceName string, phase enterpriseApi.AppPhaseType, appList []string) {
+	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
+		for _, appName := range appList {
+			testenvInstance.Log.Info("Check App Download Status", "App Name", appName, "Expected Phase", phase)
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfoStandalone(deployment, testenvInstance, name, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return phase
+				}
+				testenvInstance.Log.Info("App State found", "App Name", appName, "App State", appDeploymentInfo, "Expected Phase", phase, "Actual Phase", appDeploymentInfo.PhaseInfo.Phase)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
+		}
+	} else {
+		for _, appName := range appList {
+			testenvInstance.Log.Info("Check App Download Status", "App Name", appName)
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfoStandalone(deployment, testenvInstance, name, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return enterpriseApi.PhaseDownload
+				}
+				testenvInstance.Log.Info("App State found", "App Name", appName, "App State", appDeploymentInfo, "Expected Phase", phase, "Actual Phase", appDeploymentInfo.PhaseInfo.Phase)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 		}
 	}
 }
