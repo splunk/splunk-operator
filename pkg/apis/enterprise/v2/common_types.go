@@ -398,6 +398,8 @@ const (
 	AppPkgPodCopyInProgress = 202
 	// AppPkgPodCopyComplete indicates complete
 	AppPkgPodCopyComplete = 203
+	// AppPkgMissingFromOperator indicates the downloaded app package is missing
+	AppPkgMissingFromOperator = 298
 	// AppPkgPodCopyError indicates error after retries
 	AppPkgPodCopyError = 299
 )

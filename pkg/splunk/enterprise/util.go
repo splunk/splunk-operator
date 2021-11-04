@@ -536,6 +536,11 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	return appListingConfigMap, configMapDataChanged, nil
 }
 
+// getAppPackageLocalPath returns the Operator volume path for a given app package
+func getAppPackageLocalPath(cr splcommon.MetaObject, scope string, appSrcName string) string {
+	return filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), cr.GroupVersionKind().Kind, cr.GetName(), scope, appSrcName) + "/"
+}
+
 // ApplySmartstoreConfigMap creates the configMap with Smartstore config in INI format
 func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
 	smartstore *enterpriseApi.SmartStoreSpec) (*corev1.ConfigMap, bool, error) {

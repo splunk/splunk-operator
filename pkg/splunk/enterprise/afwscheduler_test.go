@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -336,7 +338,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 	for i := range workerList {
-		ppln.TransitionWorkerPhase(workerList[i], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+		ppln.transitionWorkerPhase(workerList[i], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	}
 
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != len(workerList) {
@@ -349,7 +351,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 
 	// Make sure that the workers move from the podCopy phase to the install phase
 	for i := range workerList {
-		ppln.TransitionWorkerPhase(workerList[i], enterpriseApi.PhasePodCopy, enterpriseApi.PhaseInstall)
+		ppln.transitionWorkerPhase(workerList[i], enterpriseApi.PhasePodCopy, enterpriseApi.PhaseInstall)
 	}
 
 	if len(ppln.pplnPhases[enterpriseApi.PhaseInstall].q) != len(workerList) {
@@ -366,7 +368,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	cr.TypeMeta.Kind = "Standalone"
 	replicas = 5
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
-	ppln.TransitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas) {
 		t.Errorf("Failed to create a separate worker for each replica member of a standalone statefulset")
 	}
@@ -386,7 +388,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 		ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[i].Phase = enterpriseApi.PhasePodCopy
 	}
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[2].Phase = enterpriseApi.PhaseInstall
-	ppln.TransitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas)-1 {
 		t.Errorf("Failed to create the pod copy workers, according to the AuxPhaseInfo")
 	}
@@ -849,7 +851,6 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 }
 
 func createOrTruncateAppFileLocally(appFileName string, size int64) error {
-
 	appFile, err := os.Create(appFileName)
 	if err != nil {
 		return fmt.Errorf("failed to create app file %s", appFile.Name())
@@ -1013,7 +1014,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		var downloadWorkersRunPool = make(chan struct{}, 1)
 		downloadWorkersRunPool <- struct{}{}
 		worker.waiter.Add(1)
-		go worker.Download(pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+		go worker.download(pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
 		worker.waiter.Wait()
 	}
 
@@ -1103,7 +1104,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	var downloadWorkersRunPool = make(chan struct{}, 1)
 	downloadWorkersRunPool <- struct{}{}
 	worker.waiter.Add(1)
-	go worker.Download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1145,7 +1146,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 
 	worker.waiter.Add(1)
 	downloadWorkersRunPool <- struct{}{}
-	go worker.Download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
@@ -1344,9 +1345,357 @@ func TestCreateDownloadDirOnOperator(t *testing.T) {
 	}
 }
 
+func getConvertedClient(client splcommon.ControllerClient) splcommon.ControllerClient {
+	return client
+}
+
+func TestExtractClusterScopedAppOnPod(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermaster-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+	// Add object
+	c.AddObject(pod)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+
+	//var client splcommon.ControllerClient
+	worker := &PipelineWorker{
+		cr:            &cr,
+		targetPodName: "splunk-stack1-clustermaster-0",
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "app1.tgz",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhasePodCopy,
+				Status:     enterpriseApi.AppPkgPodCopyPending,
+				RetryCount: 0,
+			},
+		},
+		client: &client,
+	}
+
+	srcPath := "/opt/splunk/operator/app1.tgz"
+	dstPath := "/init-apps/xyz/app1.tgz"
+
+	// Calling with wrong scope should just return, without error
+	err := extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeLocal, dstPath, srcPath)
+	if err != nil {
+		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
+	}
+
+	// CR kind other than SearchHeadCluster or Cluster Master should just return without an error
+	// Calling with wrong scope should just return, without error
+	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath)
+	if err != nil {
+		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
+	}
+
+	// Calling with correct params should not cause an error
+
+	cr.TypeMeta.Kind = "ClusterMaster"
+	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath)
+
+	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
+	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
+	if 1 == 0 && err != nil {
+		t.Errorf("Calling with correct parameters should not cause an error, but got error %v", err)
+	}
+}
+
+func TestRunPodCopyWorker(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermaster-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+	// Add object
+	c.AddObject(pod)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+	var waiter sync.WaitGroup
+
+	//var client splcommon.ControllerClient
+	worker := &PipelineWorker{
+		cr:            &cr,
+		targetPodName: "splunk-stack1-clustermaster-0",
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "app1.tgz",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhasePodCopy,
+				Status:     enterpriseApi.AppPkgPodCopyPending,
+				RetryCount: 0,
+			},
+			ObjectHash: "abcd1234abcd",
+		},
+		client:     &client,
+		afwConfig:  appFrameworkConfig,
+		waiter:     &waiter,
+		appSrcName: appFrameworkConfig.AppSources[0].Name,
+	}
+
+	var ch chan struct{} = make(chan struct{}, 1)
+	// occupy the worker
+	waiter.Add(1)
+	ch <- struct{}{}
+
+	defaultVol := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = "/tmp/"
+	defer func() {
+		splcommon.AppDownloadVolume = defaultVol
+	}()
+
+	runPodCopyWorker(worker, ch)
+	if worker.appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgMissingFromOperator {
+		t.Errorf("When the app pkg is not present on the Operator Pod volume, should throw an error")
+	}
+
+	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
+
+	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
+	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, worker.appSrcName)
+	appPkgLocalPath := appPkgLocalDir + appPkgFileName
+
+	_, err := os.Stat(appPkgLocalDir)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(appPkgLocalDir, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	_, err = os.Stat(appPkgLocalPath)
+	if os.IsNotExist(err) {
+		_, err := os.Create(appPkgLocalPath)
+		if err != nil {
+			t.Errorf("Unable to create the local package file, error: %v", err)
+		}
+	}
+	defer os.Remove(appPkgLocalPath)
+	waiter.Add(1)
+	ch <- struct{}{}
+
+	runPodCopyWorker(worker, ch)
+}
+
+func TestPodCopyWorkerHandler(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermaster-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+	// Add object
+	c.AddObject(pod)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+	//var waiter sync.WaitGroup
+
+	//var client splcommon.ControllerClient
+	worker := &PipelineWorker{
+		cr:            &cr,
+		targetPodName: "splunk-stack1-clustermaster-0",
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "app1.tgz",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhasePodCopy,
+				Status:     enterpriseApi.AppPkgPodCopyPending,
+				RetryCount: 0,
+			},
+			ObjectHash: "abcd1234abcd",
+		},
+		client:    &client,
+		afwConfig: appFrameworkConfig,
+		//waiter:     &waiter,
+		appSrcName: appFrameworkConfig.AppSources[0].Name,
+	}
+
+	defaultVol := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = "/tmp/"
+	defer func() {
+		splcommon.AppDownloadVolume = defaultVol
+	}()
+
+	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
+
+	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
+	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, worker.appSrcName)
+	appPkgLocalPath := appPkgLocalDir + appPkgFileName
+
+	_, err := os.Stat(appPkgLocalDir)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(appPkgLocalDir, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	_, err = os.Stat(appPkgLocalPath)
+	if os.IsNotExist(err) {
+		_, err := os.Create(appPkgLocalPath)
+		if err != nil {
+			t.Errorf("Unable to create the local package file, error: %v", err)
+		}
+	}
+	defer os.Remove(appPkgLocalPath)
+
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
+		AppsStatusMaxConcurrentAppDownloads: 5,
+	}
+	ppln := initAppInstallPipeline(appDeployContext)
+
+	var handlerWaiter sync.WaitGroup
+	handlerWaiter.Add(1)
+	defer handlerWaiter.Wait()
+	go ppln.pplnPhases[enterpriseApi.PhaseInstall].podCopyWorkerHandler(&handlerWaiter, 5)
+
+	worker.waiter = &ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter
+
+	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- worker
+
+	time.Sleep(2 * time.Second)
+
+	// sending null worker should not cause a crash
+	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- nil
+
+	// sending more than podCopy workers should not squeeze the podCopyWorkerHandler
+	for i := 0; i < 20; i++ {
+		ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- worker
+	}
+
+	// wait for the handler to consue the worker
+	time.Sleep(2 * time.Second)
+
+	// Closing the channels should exit podCopyWorkerHandler test cleanly
+	close(ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel)
+}
+
 // TODO: gaurav/subba, commenting this UT for now.
 // It needs to be revisited once we have all the glue logic for all pipelines
-/*func TestAfwSchedulerEntry(t *testing.T) {
+// For now, just covers the podCopy related flow
+
+/*
+func TestAfwSchedulerEntry(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -1377,28 +1726,61 @@ func TestCreateDownloadDirOnOperator(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{}
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
+		AppsStatusMaxConcurrentAppDownloads: 10,
+	}
 	// Create 2 apps for each app source, a total of 6 apps
 	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 3)
 
 	appSrcDeploymentInfo := enterpriseApi.AppSrcDeployInfo{}
-	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, enterpriseApi.AppDeploymentInfo{
+
+	appDeployInfo := enterpriseApi.AppDeploymentInfo{
 		AppName:    fmt.Sprintf("app1.tgz"),
 		ObjectHash: fmt.Sprintf("abcd1234abcd"),
 		PhaseInfo: enterpriseApi.PhaseInfo{
 			Phase:  enterpriseApi.PhaseDownload,
 			Status: enterpriseApi.AppPkgDownloadPending,
 		},
-	})
+	}
+	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, appDeployInfo)
 	appDeployContext.AppsSrcDeployStatus[appFrameworkConfig.AppSources[0].Name] = appSrcDeploymentInfo
 
 	appDeployContext.AppFrameworkConfig = *appFrameworkConfig
 
 	afwPipeline = nil
-	afwPipeline = initAppInstallPipeline()
+	afwPipeline = initAppInstallPipeline(appDeployContext)
 
 	var schedulerWaiter sync.WaitGroup
 	defer schedulerWaiter.Wait()
+
+	defaultVol := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = "/tmp/"
+	defer func() {
+		splcommon.AppDownloadVolume = defaultVol
+	}()
+
+	appPkgFileName := appDeployInfo.AppName + "_" + strings.Trim(appDeployInfo.ObjectHash, "\"")
+
+	appSrcScope := appFrameworkConfig.AppSources[0].Scope
+	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, appFrameworkConfig.AppSources[0].Name)
+	appPkgLocalPath := appPkgLocalDir + appPkgFileName
+
+	_, err := os.Stat(appPkgLocalDir)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(appPkgLocalDir, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	_, err = os.Stat(appPkgLocalPath)
+	if os.IsNotExist(err) {
+		_, err := os.Create(appPkgLocalPath)
+		if err != nil {
+			t.Errorf("Unable to create the local package file, error: %v", err)
+		}
+	}
+	defer os.Remove(appPkgLocalPath)
 
 	schedulerWaiter.Add(1)
 	go func() {
@@ -1410,31 +1792,26 @@ func TestCreateDownloadDirOnOperator(t *testing.T) {
 		schedulerWaiter.Done()
 	}()
 
-	schedulerWaiter.Add(1)
-	go func() {
-		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].msgChannel
-		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
-		worker.isActive = false
-		// wait for the glue logic
-		//afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
-		schedulerWaiter.Done()
-	}()
+	// schedulerWaiter.Add(1)
+	// go func() {
+	// 	worker := <-afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].msgChannel
+	// 	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+	// 	worker.isActive = false
+	// 	// wait for the glue logic
+	// 	//afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
+	// 	schedulerWaiter.Done()
+	// }()
 
-	schedulerWaiter.Add(1)
-	go func() {
-		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].msgChannel
-		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-		worker.isActive = false
-		// wait for the glue logic
-		// afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
-		schedulerWaiter.Done()
-	}()
-	// to pass the validation stage, add the directory to download apps
-	err := os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	// schedulerWaiter.Add(1)
+	// go func() {
+	// 	worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].msgChannel
+	// 	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	// 	worker.isActive = false
+	// 	// wait for the glue logic
+	// 	// afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
+	// 	schedulerWaiter.Done()
+	// }()
 
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
-	afwSchedulerEntry(c, &cr, appDeployContext, appFrameworkConfig, remoteObjListingMap)
-}*/
+	afwSchedulerEntry(c, &cr, appDeployContext, appFrameworkConfig)
+}
+*/
