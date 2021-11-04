@@ -104,6 +104,15 @@ type AppInstallPipeline struct {
 
 	// Used by yield logic
 	sigTerm chan struct{}
+
+	// represents the available disk space on operator pod
+	availableDiskSpace uint64
+
+	// mutex to synchronize shared variables across phases
+	pplnMutex sync.Mutex
+
+	// Refernce to app deploy context
+	appDeployContext *enterpriseApi.AppDeploymentContext
 }
 
 // ToString returns a string for a given InstanceType

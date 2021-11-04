@@ -556,6 +556,25 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// GetOperatorPodName returns name of operator pod in the namespace
+func GetOperatorPodName(ns string) string {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	var splunkPods string
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return splunkPods
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk-op") {
+			splunkPods = strings.Fields(line)[0]
+			return splunkPods
+		}
+	}
+	return splunkPods
+}
+
 // DumpGetPvcs prints and returns list of pvcs in the namespace
 func DumpGetPvcs(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
@@ -718,8 +737,9 @@ func CompareStringSlices(stringOne []string, stringTwo []string) bool {
 
 // CheckStringInSlice check if string is present in a slice
 func CheckStringInSlice(stringSlice []string, compString string) bool {
+	logf.Log.Info("Checking for string in slice", "String", compString, "String Slice", stringSlice)
 	for _, item := range stringSlice {
-		if item == compString {
+		if strings.Contains(item, compString) {
 			return true
 		}
 	}

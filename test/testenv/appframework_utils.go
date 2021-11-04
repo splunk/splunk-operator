@@ -31,6 +31,26 @@ var AppInfo = map[string]map[string]string{
 	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "V2filename": "splunk-enterprise-security_641.spl", "V1filename": "splunk-enterprise-security_640.spl"},
 }
 
+//AppInfoPhase3 Installation info on Apps
+var AppInfoPhase3 = map[string]map[string]string{
+	"Splunk_SA_CIM":                     {"V1": "4.18.1", "V2": "4.19.0", "filename": "splunk-common-information-model-cim.tgz"},
+	"TA-LDAP":                           {"V1": "4.0.0", "V2": "4.0.0", "filename": "add-on-for-ldap.tgz"},
+	"DA-ESS-ContentUpdate":              {"V1": "3.20.0", "V2": "3.21.0", "filename": "splunk-es-content-update.tgz"},
+	"Splunk_TA_paloalto":                {"V1": "6.6.0", "V2": "7.0.0", "filename": "palo-alto-networks-add-on-for-splunk.tgz"},
+	"TA-MS-AAD":                         {"V1": "3.0.0", "V2": "3.1.1", "filename": "microsoft-azure-add-on-for-splunk.tgz"},
+	"Splunk_TA_nix":                     {"V1": "8.3.0", "V2": "8.3.1", "filename": "splunk-add-on-for-unix-and-linux.tgz"},
+	"splunk_app_microsoft_exchange":     {"V1": "4.0.1", "V2": "4.0.2", "filename": "splunk-app-for-microsoft-exchange.tgz"},
+	"splunk_app_aws":                    {"V1": "6.0.1", "V2": "6.0.2", "filename": "splunk-app-for-aws.tgz"},
+	"Splunk_ML_Toolkit":                 {"V1": "5.2.0", "V2": "5.2.1", "filename": "splunk-machine-learning-toolkit.tgz"},
+	"Splunk_TA_microsoft-cloudservices": {"V1": "4.1.2", "V2": "4.1.3", "filename": "splunk-add-on-for-microsoft-cloud-services.tgz"},
+	"splunk_app_stream":                 {"V1": "7.3.0", "V2": "7.4.0", "filename": "splunk-app-for-stream.tgz"},
+	"Splunk_TA_stream_wire_data":        {"V1": "7.3.0", "V2": "7.4.0", "filename": "splunk-add-on-for-stream-wire-data.tgz"},
+	"Splunk_TA_stream":                  {"V1": "7.3.0", "V2": "7.4.0", "filename": "splunk-add-on-for-stream-forwarders.tgz"},
+	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "filename": "splunk-db-connect.tgz"},
+	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "filename": "splunk-security-essentials.tgz"},
+	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "filename": "splunk-enterprise-security.spl"},
+}
+
 //BasicApps Apps that require no restart to be installed
 var BasicApps = []string{"Splunk_SA_CIM", "DA-ESS-ContentUpdate", "Splunk_TA_paloalto", "TA-MS-AAD"}
 
@@ -39,6 +59,12 @@ var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange
 
 //NewAppsAddedBetweenPolls Apps to be installed as poll after
 var NewAppsAddedBetweenPolls = []string{"TA-LDAP"}
+
+// AppLocationV1 Location of apps on S3 for V1 Apps
+var AppLocationV1 = "appframework/v1apps/"
+
+// AppLocationV2 Location of apps on S3 for V2 Apps
+var AppLocationV2 = "appframework/v2apps/"
 
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
 func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterpriseApi.AppSourceDefaultSpec) enterpriseApi.AppSourceSpec {
@@ -136,6 +162,15 @@ func GetAppFileList(appList []string, version int) []string {
 	return appFileList
 }
 
+// GetAppFileListPhase3 Get App file list for  app Names
+func GetAppFileListPhase3(appList []string) []string {
+	appFileList := make([]string, 0, len(appList))
+	for _, app := range appList {
+		appFileList = append(appFileList, AppInfoPhase3[app]["filename"])
+	}
+	return appFileList
+}
+
 // GetAppframeworkManualUpdateConfigMap gets config map for given manual update configmap
 func GetAppframeworkManualUpdateConfigMap(deployment *Deployment, ns string) (*corev1.ConfigMap, error) {
 	ConfigMapName := fmt.Sprintf(AppframeworkManualUpdateConfigMap, ns)
@@ -147,4 +182,26 @@ func GetAppframeworkManualUpdateConfigMap(deployment *Deployment, ns string) (*c
 	}
 	logf.Log.Info("Config Map contents", "CONFIG MAP NAME", ConfigMapName, "Data", ConfigMap.Data)
 	return ConfigMap, err
+}
+
+// GetAppDeploymentInfoStandalone returns AppDeploymentInfo for given standalone, appSourceName and appName
+func GetAppDeploymentInfoStandalone(deployment *Deployment, testenvInstance *TestEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	standalone := &enterpriseApi.Standalone{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(name, standalone)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking for app in AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
+		if strings.Contains(appName, appDeploymentInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "App Info List", appInfoList)
+	return appDeploymentInfo, err
 }
