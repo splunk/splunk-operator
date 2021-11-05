@@ -37,7 +37,7 @@ const (
 
 var (
 	testenvInstance  *testenv.TestEnv
-	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
+	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(4)
 	appListV1        []string
 	appListV2        []string
 	testDataS3Bucket = os.Getenv("TEST_BUCKET")

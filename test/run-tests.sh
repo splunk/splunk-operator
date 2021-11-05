@@ -118,8 +118,13 @@ if [[ -z "${TEST_TO_SKIP}" ]]; then
   echo "TEST_TO_SKIP not set. Changing to default"
   export TEST_TO_SKIP="${SKIP_REGEX}"
 fi
-echo "Skipping following test :: ${TEST_TO_SKIP}"
 
+if [[ -z "${DEBUG}" ]]; then
+  echo "DEBUG not set. Changing to default"
+  export DEBUG="${DEBUG_RUN}"
+fi
+
+echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 ginkgo -v -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
