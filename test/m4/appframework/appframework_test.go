@@ -35,7 +35,7 @@ var _ = Describe("m4appfw test", func() {
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(4))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 	})
