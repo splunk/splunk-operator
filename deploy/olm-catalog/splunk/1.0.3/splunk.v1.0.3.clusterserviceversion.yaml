@@ -4,7 +4,7 @@ metadata:
   annotations:
     alm-examples: |-
       [{
-        "apiVersion": "enterprise.splunk.com/v2",
+        "apiVersion": "enterprise.splunk.com/v3",
         "kind": "IndexerCluster",
         "metadata": {
           "name": "example",
@@ -15,7 +15,7 @@ metadata:
         }
       },
       {
-        "apiVersion": "enterprise.splunk.com/v2",
+        "apiVersion": "enterprise.splunk.com/v3",
         "kind": "LicenseMaster",
         "metadata": {
           "name": "example",
@@ -24,7 +24,7 @@ metadata:
         "spec": {}
       },
       {
-        "apiVersion": "enterprise.splunk.com/v2",
+        "apiVersion": "enterprise.splunk.com/v3",
         "kind": "SearchHeadCluster",
         "metadata": {
           "name": "example",
@@ -35,7 +35,7 @@ metadata:
         }
       },
       {
-        "apiVersion": "enterprise.splunk.com/v2",
+        "apiVersion": "enterprise.splunk.com/v3",
         "kind": "Standalone",
         "metadata": {
           "name": "example",
@@ -50,10 +50,10 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: ClusterMaster is the Schema for the clustermasters API
+    - description: ClusterMaster is the Schema for the clustermanagers API
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
-      version: v2
+      version: v3
       resources:
       - kind: StatefulSets
         version: apps/v1
@@ -68,7 +68,25 @@ spec:
       - kind: Secrets
         version: v1
       displayName: IndexerCluster
-    - displayName: LicenseMaster
+    - description: ClusterMaster is the Schema for the clustermasters API
+      displayName: LicenseMaster
+      kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
+      resources:
+      - kind: StatefulSets
+        version: apps/v1
+      - kind: Deployments
+        version: apps/v1
+      - kind: Pods
+        version: v1
+      - kind: Services
+        version: v1
+      - kind: ConfigMaps
+        version: v1
+      - kind: Secrets
+        version: v1
+      version: v2
+    - displayName: SearchHeadCluster
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       resources:
@@ -118,23 +136,34 @@ spec:
       - kind: Secrets
         version: v1
       version: v1alpha3
+      displayName: Standalone
     - displayName: Standalone
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       resources:
       - kind: StatefulSets
+        name: ""
         version: apps/v1
       - kind: Deployments
+        name: ""
         version: apps/v1
       - kind: Pods
+        name: ""
         version: v1
       - kind: Services
+        name: ""
         version: v1
       - kind: ConfigMaps
+        name: ""
         version: v1
       - kind: Secrets
+        name: ""
         version: v1
       version: v1alpha2
+    - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v3
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
@@ -154,6 +183,10 @@ spec:
     - description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
+      version: v3
+    - description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
+      kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
       version: v2
     - kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
@@ -167,6 +200,15 @@ spec:
     - kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
       version: v1alpha2
+    - description: MonitoringConsole is the Schema for the monitoringconsole API
+      kind: MonitoringConsole
+      name: monitoringconsoles.enterprise.splunk.com
+      version: v3
+    - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
+      kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v3
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
       kind: SearchHeadCluster
@@ -184,6 +226,10 @@ spec:
     - kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v1alpha2
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v3
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       kind: Standalone
       name: standalones.enterprise.splunk.com

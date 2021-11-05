@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemaster
+package licensemanager
 
 import (
 	"fmt"
@@ -21,13 +21,13 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("Licensemaster test", func() {
+var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 	var s3TestDir string
@@ -49,7 +49,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("licensemaster, integration: Splunk Operator can configure License Master with Indexers and Search Heads in C3 SVA", func() {
+		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -58,11 +58,12 @@ var _ = Describe("Licensemaster test", func() {
 			// Create License Config Map
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			mcRef := deployment.GetName()
+			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -70,8 +71,12 @@ var _ = Describe("Licensemaster test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -91,11 +96,15 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+
+			// Verify LM Configured on Monitoring Console
+			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("licensemaster: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
+		It("licensemanager: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
 
 			var (
 				appListV1        []string
@@ -176,18 +185,18 @@ var _ = Describe("Licensemaster test", func() {
 			}
 
 			// Deploy the LM with App Framework
-			_, err = deployment.DeployLicenseMasterWithGivenSpec(deployment.GetName(), spec)
+			_, err = deployment.DeployLicenseManagerWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy LM with App framework")
 
 			// Wait for LM to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			podName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
+			podName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
 
 			// Verify apps are installed on LM
-			lmPodName := []string{fmt.Sprintf(testenv.LicenseMasterPod, deployment.GetName(), 0)}
+			lmPodName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV1, false, "enabled", false, false)
 
 			// Delete files uploaded to S3
@@ -211,7 +220,7 @@ var _ = Describe("Licensemaster test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Wait for LM to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)

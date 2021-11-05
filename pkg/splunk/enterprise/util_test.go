@@ -22,11 +22,12 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -95,7 +96,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
 
-func TestGetLicenseMasterURL(t *testing.T) {
+func TestGetLicenseManagerURL(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -104,32 +105,32 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service",
+			Value: splcommon.TestStack1LicenseManagerService,
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
 	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service.test.svc.cluster.local",
+			Value: splcommon.TestStack1LicenseManagerClusterLocal,
 		},
 	}
 
 	result = splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 }
 
@@ -301,15 +302,15 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterMasterSpec(&cr); err != nil {
-				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
+			if err := validateClusterManagerSpec(&cr); err != nil {
+				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
-			return getClusterMasterStatefulSet(client, &cr)
+			return getClusterManagerStatefulSet(client, &cr)
 		}
-		configTester(t, "getClusterMasterStatefulSet", f, want)
+		configTester(t, "getClusterManagerStatefulSet", f, want)
 	}
 
-	testStsWithAppListVolMounts(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-example-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"},"annotations":{"appListingRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-example-cluster-master-secret-v1","defaultMode":420}},{"name":"mnt-app-listing","configMap":{"name":"splunk-example-clustermaster-app-list","items":[{"key":"app-list-cluster-with-pre-config.yaml","path":"app-list-cluster-with-pre-config.yaml","mode":420},{"key":"app-list-cluster.yaml","path":"app-list-cluster.yaml","mode":420},{"key":"app-list-local.yaml","path":"app-list-local.yaml","mode":420},{"key":"appsUpdateToken","path":"appsUpdateToken","mode":420}],"defaultMode":420}},{"name":"init-apps","emptyDir":{}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/app-listing/app-list-local.yaml,/mnt/app-listing/app-list-cluster.yaml,/mnt/app-listing/app-list-cluster-with-pre-config.yaml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-app-listing","mountPath":"/mnt/app-listing/"},{"name":"init-apps","mountPath":"/init-apps/"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":1800,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-example-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-example-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+	testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)
 
 	// Test to ensure that the Applisting config map is empty after the apps are installed successfully
 	markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
@@ -1124,6 +1125,114 @@ refCount: 1`)
 	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck != true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned true.")
+	}
+}
+
+func TestValidateMonitoringConsoleRef(t *testing.T) {
+	currentCM := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	revised := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "abc",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	//create configmap
+	_, err := splctrl.ApplyConfigMap(client, &currentCM)
+	if err != nil {
+		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
+	}
+
+	// Create statefulset
+	err = splutil.CreateResource(client, current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	var serviceURLs []corev1.EnvVar
+	serviceURLs = []corev1.EnvVar{
+		{
+			Name:  "A",
+			Value: "a",
+		},
+	}
+
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
+	}
+
+	revised = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
 }
 

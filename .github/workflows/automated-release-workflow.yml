@@ -73,6 +73,13 @@ jobs:
       run: |
         build/package.sh
         docker images
+
+    - name: Update Operator Image name in Release Folder
+      uses: jacobtomlinson/gha-find-replace@master
+      with:
+        find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
+        replace: "splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}"
+        include: "release-${{ env.SHORT_SHA }}/**"
   
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v2

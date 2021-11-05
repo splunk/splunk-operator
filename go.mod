@@ -47,7 +47,15 @@ replace (
 replace (
 	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
 
+	github.com/evanphx/json-patch => github.com/evanphx/json-patch/v5 v5.5.0 //CVE-2018-14632
+
+	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2 //CVE-2021-3121
+
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad // Required until https://github.com/operator-framework/operator-lifecycle-manager/pull/1241 is resolved
+
+	github.com/smartystreets/goconvey => github.com/smartystreets/goconvey v1.6.6 //CVE-2017-18214
+
+	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20201216223049-8b5274cf687f //CVE-2020-29652
 
 	golang.org/x/net => golang.org/x/net v0.0.0-20210614182718-04defd469f4e // CVE-2021-33194 and CVE-2021-31525
 

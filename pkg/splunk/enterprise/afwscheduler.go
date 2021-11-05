@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -848,11 +848,11 @@ func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.C
 	case "Standalone":
 		instanceID = SplunkStandalone
 	case "LicenseMaster":
-		instanceID = SplunkLicenseMaster
+		instanceID = SplunkLicenseManager
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
-		instanceID = SplunkClusterMaster
+		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
 	default:

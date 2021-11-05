@@ -19,7 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -53,14 +53,15 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("crcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			mcRef := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -68,8 +69,12 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -130,6 +135,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
@@ -139,14 +147,15 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud, integration: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("crcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			mcRef := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -154,8 +163,12 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -170,25 +183,34 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, true, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "cluster-master", 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
-			deployment.GetInstance(deployment.GetName()+"-shc", shc)
+			err = deployment.GetInstance(deployment.GetName()+"-shc", shc)
+			Expect(err).To(Succeed(), "Unable to GET SHC instance", "SHC Name", shc)
 			err = deployment.DeleteCR(shc)
 			Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
 
 			// Delete the Indexer Cluster
 			idxc := &enterpriseApi.IndexerCluster{}
-			deployment.GetInstance(deployment.GetName()+"-idxc", idxc)
+			err = deployment.GetInstance(deployment.GetName()+"-idxc", idxc)
+			Expect(err).To(Succeed(), "Unable to GET IDXC instance", "IDXC Name", idxc)
 			err = deployment.DeleteCR(idxc)
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 			// Delete the Cluster Manager
 			cm := &enterpriseApi.ClusterMaster{}
-			deployment.GetInstance(deployment.GetName(), cm)
+			err = deployment.GetInstance(deployment.GetName(), cm)
+			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
 			err = deployment.DeleteCR(cm)
-			Expect(err).To(Succeed(), "Unable to delete CM instance", "CM Name", cm)
+			Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manger Name", cm)
+
+			// Delete Monitoring Console
+			err = deployment.GetInstance(mcRef, mc)
+			Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
+			err = deployment.DeleteCR(mc)
+			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
 			// Verify Search Heads PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-search-head", 3, false, verificationTimeout)
@@ -200,7 +222,10 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, false, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "cluster-master", 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, false, verificationTimeout)
+
+			// Verify Monitoring Console PVCs (etc and var) have been deleted
+			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "monitoring-console", 1, false, verificationTimeout)
 		})
 	})
 })

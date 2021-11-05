@@ -21,7 +21,7 @@ import (
 
 	"github.com/splunk/splunk-operator/test/testenv"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -47,27 +47,24 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("smoke, basic: can deploy a standalone instance", func() {
+		It("smoke, basic, s1: can deploy a standalone instance", func() {
 
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
+			standalone, err := deployment.DeployStandalone(deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, basic: can deploy indexers and search head cluster", func() {
+		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
 
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/)
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
@@ -75,23 +72,20 @@ var _ = Describe("Smoke test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 		})
 	})
 
-	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
-		It("smoke, basic: can deploy indexers and search head cluster", func() {
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
+			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -101,9 +95,6 @@ var _ = Describe("Smoke test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -114,11 +105,11 @@ var _ = Describe("Smoke test", func() {
 		It("smoke, basic: can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
-			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount)
+			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -126,16 +117,13 @@ var _ = Describe("Smoke test", func() {
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 		})
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
-		It("smoke, basic: can deploy a standalone instance attached to a service account", func() {
+		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
 			// Create Service Account
 			serviceAccountName := "smoke-service-account"
 			testenvInstance.CreateServiceAccount(serviceAccountName)
@@ -151,14 +139,11 @@ var _ = Describe("Smoke test", func() {
 			}
 
 			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandalonewithGivenSpec(deployment.GetName(), standaloneSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), standaloneSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)

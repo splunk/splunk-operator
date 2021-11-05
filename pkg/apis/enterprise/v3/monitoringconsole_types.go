@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v2
+package v3
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // default all fields to being optional
@@ -28,51 +27,56 @@ import (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
-type LicenseMasterSpec struct {
+// MonitoringConsoleSpec defines the desired state of MonitoringConsole
+type MonitoringConsoleSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// LicenseMasterStatus defines the observed state of a Splunk Enterprise license manager.
-type LicenseMasterStatus struct {
-	// current phase of the license manager
+// MonitoringConsoleStatus defines the observed state of MonitoringConsole
+type MonitoringConsoleStatus struct {
+	// current phase of the monitoring console
 	Phase splcommon.Phase `json:"phase"`
 
-	// App Framework Context
-	AppContext AppDeploymentContext `json:"appContext"`
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
+
+	// Bundle push status tracker
+	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+
+	// Resource Revision tracker
+	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework status
+	AppContext AppDeploymentContext `json:"appContext,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise license manager.
+// MonitoringConsole is the Schema for the monitoringconsole API
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of monitoring console"
+// +kubebuilder:resource:path=monitoringconsoles,scope=Namespaced,shortName=mc
 // +kubebuilder:storageversion
-type LicenseMaster struct {
+type MonitoringConsole struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LicenseMasterSpec   `json:"spec,omitempty"`
-	Status LicenseMasterStatus `json:"status,omitempty"`
+	Spec   MonitoringConsoleSpec   `json:"spec,omitempty"`
+	Status MonitoringConsoleStatus `json:"status,omitempty"`
 }
-
-// blank assignment to verify that LicenseMaster implements splcommon.MetaObject
-var _ splcommon.MetaObject = &LicenseMaster{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMasterList contains a list of LicenseMaster
-type LicenseMasterList struct {
+// MonitoringConsoleList contains a list of MonitoringConsole
+type MonitoringConsoleList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LicenseMaster `json:"items"`
+	Items           []MonitoringConsole `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&LicenseMaster{}, &LicenseMasterList{})
+	SchemeBuilder.Register(&MonitoringConsole{}, &MonitoringConsoleList{})
 }

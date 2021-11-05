@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -52,17 +52,14 @@ var _ = Describe("Scaling test", func() {
 	Context("Standalone deployment (S1)", func() {
 		It("scaling_test: Can Scale Up and Scale Down Standalone CR", func() {
 
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
+			standalone, err := deployment.DeployStandalone(deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
 			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName())
+			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
 			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Scale Standalone instance
@@ -83,9 +80,6 @@ var _ = Describe("Scaling test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
 
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
 			// Scale Down Standalone
 			testenvInstance.Log.Info("Scaling Down Standalone CR")
 			scaledReplicaCount = scaledReplicaCount - 1
@@ -103,9 +97,6 @@ var _ = Describe("Scaling test", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
@@ -114,20 +105,17 @@ var _ = Describe("Scaling test", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), defaultIndexerReplicas, true)
+			err := deployment.DeploySingleSiteCluster(deployment.GetName(), defaultIndexerReplicas, true, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
@@ -184,9 +172,6 @@ var _ = Describe("Scaling test", func() {
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify New SearchHead is added to Cluster Manager
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
@@ -267,11 +252,11 @@ var _ = Describe("Scaling test", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), defaultIndexerReplicas, siteCount)
+			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), defaultIndexerReplicas, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -281,9 +266,6 @@ var _ = Describe("Scaling test", func() {
 
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Ingest data on Indexers
 			for i := 1; i <= siteCount; i++ {
@@ -324,9 +306,6 @@ var _ = Describe("Scaling test", func() {
 			indexerName := podName
 			testenvInstance.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Wait for RF SF is Met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)

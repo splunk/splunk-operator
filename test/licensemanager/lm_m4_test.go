@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemaster
+package licensemanager
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemaster test", func() {
+var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 
@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("licensemaster: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
+		It("licensemanager, integration, m4: Splunk Operator can configure license manager with indexers and search head in M4 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -53,11 +53,12 @@ var _ = Describe("Licensemaster test", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			siteCount := 3
-			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount)
+			mcRef := deployment.GetName()
+			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterMasterReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(deployment, testenvInstance, siteCount)
@@ -68,8 +69,12 @@ var _ = Describe("Licensemaster test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
@@ -89,6 +94,10 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+
+			// Verify LM Configured on Monitoring Console
+			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
 		})
 	})
 
