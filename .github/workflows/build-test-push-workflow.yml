@@ -5,10 +5,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
-        go-version: '1.13.6'
+        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: Install golint
       run: |
         go version
@@ -22,10 +25,13 @@ jobs:
     needs: check-formating
     steps:
       - uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@v0.2.7
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.13.6'
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install golint
         run: |
           go version
@@ -89,6 +95,9 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Configure AWS credentials
@@ -170,7 +179,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.13.6'
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
           go version
