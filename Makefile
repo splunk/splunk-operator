@@ -47,6 +47,10 @@ test:
 	@echo Running unit tests for splunk-operator
 	@go test -v -covermode=count -coverprofile=coverage.out --timeout=300s github.com/splunk/splunk-operator/pkg/splunk/common github.com/splunk/splunk-operator/pkg/splunk/enterprise github.com/splunk/splunk-operator/pkg/splunk/controller github.com/splunk/splunk-operator/pkg/splunk/client github.com/splunk/splunk-operator/pkg/splunk/util
 
+lang:
+	@echo Running bias language linter
+	@build/bias_language_linter.sh
+
 stop_clair_scanner:
 	@docker stop clair_db || true
 	@docker rm clair_db || true

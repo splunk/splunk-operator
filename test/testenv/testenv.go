@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os"
 	"time"
 
@@ -37,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 )
 
 const (
@@ -68,8 +69,8 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// LicenseMasterPod Template String for standalone pod
-	LicenseMasterPod = "splunk-%s-license-master-%d"
+	// LicenseManagerPod Template String for standalone pod
+	LicenseManagerPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
@@ -80,11 +81,11 @@ const (
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
-	// MonitoringConsolePod Monitoring Console Statefulset Template
+	// MonitoringConsolePod Monitoring Console Pod Template String
 	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
 
-	// ClusterMasterPod ClusterMaster Pod Template String
-	ClusterMasterPod = "splunk-%s-cluster-master-0"
+	// ClusterManagerPod ClusterMaster Pod Template String
+	ClusterManagerPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
 
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
@@ -94,6 +95,12 @@ const (
 
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
+
+	// ClusterMasterServiceName Cluster Manager Service Template String
+	ClusterMasterServiceName = splcommon.TestClusterManager + "-service"
+
+	// DeployerServiceName Cluster Manager Service Template String
+	DeployerServiceName = "splunk-%s-shc-deployer-service"
 )
 
 var (

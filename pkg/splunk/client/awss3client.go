@@ -185,8 +185,8 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 	}
 
 	if resp.Contents == nil {
-		err = fmt.Errorf("Empty objects list in the bucket: %s", awsclient.BucketName)
-		return s3Resp, err
+		scopedLog.Info("Empty objects list in bucket. No apps to install", "bucketName", awsclient.BucketName)
+		return s3Resp, nil
 	}
 
 	tmp, err := json.Marshal(resp.Contents)
