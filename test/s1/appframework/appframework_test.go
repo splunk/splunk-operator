@@ -240,7 +240,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframework: can deploy a standalone instance with App Framework enabled, install apps and downgrade them", func() {
 
 			/* Test Steps
@@ -412,7 +412,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
@@ -436,7 +436,7 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			// Upload apps to S3 for Monitoring Console
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileListPhase3(appListV1)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
