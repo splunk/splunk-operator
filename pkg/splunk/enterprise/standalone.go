@@ -22,10 +22,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
@@ -38,7 +39,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-
 	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -97,10 +97,11 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		//update monitoring console configMap after custom resource deletion is requested
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
-		if err != nil {
-			return result, err
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
+			if err != nil {
+				return result, err
+			}
 		}
 
 		// If this is the last of its kind getting deleted,
@@ -171,6 +172,12 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		return result, err
 	}
 
+	//make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return result, err
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
@@ -181,6 +188,18 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
+		//upgrade fron automated MC to MC CRD
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
+			if err != nil {
+				return result, err
+			}
+		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
@@ -189,12 +208,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 				return result, nil
 			}
 		}
-
-		err = ApplyMonitoringConsole(client, cr, cr.Spec.CommonSplunkSpec, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
-		if err != nil {
-			return result, err
-		}
-
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)

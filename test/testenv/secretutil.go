@@ -16,6 +16,7 @@ package testenv
 
 import (
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os/exec"
 	"strings"
 
@@ -121,11 +122,11 @@ func DecryptSplunkEncodedSecret(deployment *Deployment, podName string, ns strin
 // GetKeysToMatch retuns slice of secrets in server conf based on pod name
 func GetKeysToMatch(podName string) []string {
 	var keysToMatch []string
-	if strings.Contains(podName, "standalone") || strings.Contains(podName, "license-master") || strings.Contains(podName, "monitoring-console") {
+	if strings.Contains(podName, "standalone") || strings.Contains(podName, splcommon.LicenseManager) || strings.Contains(podName, "monitoring-console") {
 		keysToMatch = []string{"pass4SymmKey"}
-	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, "cluster-master") {
+	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, splcommon.ClusterManager) {
 		keysToMatch = []string{"pass4SymmKey", "idxc_secret"}
-	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, "-deployer-") {
+	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, splcommon.TestDeployerDashed) {
 		keysToMatch = []string{"pass4SymmKey", "shc_secret"}
 	}
 	return keysToMatch

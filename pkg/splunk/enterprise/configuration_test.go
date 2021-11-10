@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -200,7 +200,7 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 }
 
-func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T) {
+func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -223,9 +223,9 @@ func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterMaster(client, &cr)
+	_, err := ApplyClusterManager(client, &cr)
 	if err == nil {
-		t.Errorf("ApplyClusterMaster should fail on invalid smartstore config")
+		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
 }
 
@@ -261,7 +261,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	}
 }
 
-func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
+func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -288,10 +288,10 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterMasterSpec(&cr)
+	err := validateClusterManagerSpec(&cr)
 
 	if err != nil {
-		t.Errorf("Smartstore configuration should not fail on ClusterMaster CR: %v", err)
+		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
 	}
 }
 
@@ -1048,7 +1048,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	}
 
 	// Missing secret object should return an error
-	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if err == nil {
 		t.Errorf("Missing secret object should return an error. keyChangedFlag: %t", keysChanged)
 	} else if keysChanged {
@@ -1067,7 +1067,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_ = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	_ = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1078,21 +1078,22 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	resourceVersion := "3434"
 	secret.SetResourceVersion(resourceVersion)
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
 
 	// No change on the secret object should return false
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
 	}
 
 	// Empty volume list should return false
 	cr.Spec.SmartStore.VolList = nil
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if keysChanged {
 		t.Errorf("Empty volume should not report a key change")
 	}
@@ -1256,20 +1257,20 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
+	livenessProbe := getLivenessProbe(cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
+	livenessProbe = getLivenessProbe(cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 20)
+	livenessProbe = getLivenessProbe(cr, SplunkClusterManager, spec, 20)
 	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
@@ -1285,20 +1286,20 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
+	readinessProbe := getReadinessProbe(cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
+	readinessProbe = getReadinessProbe(cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 20)
+	readinessProbe = getReadinessProbe(cr, SplunkClusterManager, spec, 20)
 	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Readiness probe initial delay value")
 	}

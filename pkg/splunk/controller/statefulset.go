@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -283,6 +284,37 @@ func GetStatefulSetByName(c splcommon.ControllerClient, namespacedName types.Nam
 	}
 
 	return &statefulset, nil
+}
+
+// DeleteReferencesToAutomatedMCIfExists deletes the automated MC sts. This is when customer migrates from automated MC to MC CRD
+// Check if MC CR is not the owner of the MC statefulset then delete that Statefulset
+func DeleteReferencesToAutomatedMCIfExists(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+	statefulset, err := GetStatefulSetByName(client, namespacedName)
+	if err != nil {
+		// if MC Sts doesn't exist return nil, may have been deleted by other CR
+		return nil
+	}
+	//2. Retrieve all the owners of the MC statefulset
+	currentOwnersRef := statefulset.GetOwnerReferences()
+	//3. if Multiple owners OR if current CR is the owner of the MC statefulset then delete the MC statefulset
+	if len(currentOwnersRef) > 1 || (len(currentOwnersRef) == 1 && isCurrentCROwner(cr, currentOwnersRef)) {
+		err := splutil.DeleteResource(client, statefulset)
+		if err != nil {
+			return err
+		}
+	}
+	//delete corresponding mc configmap
+	configmap, err := GetConfigMap(client, namespacedName)
+	if err != nil {
+		return err
+	}
+	err = splutil.DeleteResource(client, configmap)
+	return err
+}
+
+//isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
+func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
+	return reflect.DeepEqual(currentOwners[0], splcommon.AsOwner(cr, false))
 }
 
 // IsStatefulSetScalingUp checks if we are currently scaling up

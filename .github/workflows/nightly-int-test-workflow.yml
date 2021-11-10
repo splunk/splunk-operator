@@ -6,7 +6,7 @@ jobs:
   int-tests:
     strategy:
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling]
+        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -37,7 +37,9 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
           fi
       - name: Checkcout code
-        uses: actions/checkout@v2   
+        uses: actions/checkout@v2  
+        with:
+          ref: develop
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@v0.2.7
@@ -56,7 +58,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.13.6'
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
           go version
@@ -125,6 +127,9 @@ jobs:
       TAG: edge
     steps:
     - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Configure AWS credentials

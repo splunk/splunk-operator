@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -28,13 +29,14 @@ import (
 	"syscall"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -161,7 +163,7 @@ func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Commo
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 }
@@ -176,24 +178,24 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
-// getLicenseMasterURL returns URL of license manager
-func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+// getLicenseManagerURL returns URL of license manager
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
 		}
 		return []corev1.EnvVar{
 			{
 				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseMasterURL,
+				Value: licenseManagerURL,
 			},
 		}
 	}
 	return []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
+			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
 		},
 	}
 }
@@ -1529,3 +1531,50 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
 func cpMakeTar(srcPath, destPath string, writer io.Writer) error
+
+//validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
+func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
+	var err error
+	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
+	var current appsv1.StatefulSet
+
+	err = c.Get(context.TODO(), namespacedName, &current)
+	if err == nil {
+		currEnv := current.Spec.Template.Spec.Containers[0].Env
+		revEnv := revised.Spec.Template.Spec.Containers[0].Env
+
+		var cEnv, rEnv corev1.EnvVar
+
+		for _, cEnvTemp := range currEnv {
+			if cEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
+				cEnv.Value = cEnvTemp.Value
+			}
+		}
+
+		for _, rEnvTemp := range revEnv {
+			if rEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
+				rEnv.Value = rEnvTemp.Value
+			}
+		}
+
+		if cEnv.Value != "" && rEnv.Value != "" && cEnv.Value != rEnv.Value {
+			//1. if revised Spec has different mcRef defined
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
+			if err != nil {
+				return err
+			}
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), rEnv.Value, serviceURLs, true)
+			if err != nil {
+				return err
+			}
+		} else if cEnv.Value != "" && rEnv.Value == "" {
+			//2. if revised Spec doesn't have mcRef defined
+			_, err = ApplyMonitoringConsoleEnvConfigMap(c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	//if the sts doesn't exists no need for any change
+	return nil
+}

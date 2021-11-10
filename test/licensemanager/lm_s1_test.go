@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemaster
+package licensemanager
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemaster test", func() {
+var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 
@@ -43,7 +43,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemaster: Splunk Operator can configure License Master with Standalone in S1 SVA", func() {
+		It("licensemanager, integration, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -53,21 +53,30 @@ var _ = Describe("Licensemaster test", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName())
+			mcRef := deployment.GetName()
+			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseMasterReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify MC Pod is Ready
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
+			// Deploy Monitoring Console
+			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
+
+			// Verify LM Configured on Monitoring Console
+			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
+			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
 		})
 	})
 })

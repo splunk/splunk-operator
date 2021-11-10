@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -122,10 +122,6 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
-	if instanceType == SplunkMonitoringConsole {
-		service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetNamespace(), isHeadless)
-		instanceIdentifier = cr.GetNamespace()
-	}
 	if instanceType == SplunkIndexer {
 		if len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
@@ -466,8 +462,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	// ToDo: Exclude MC, once it's own CR is available
-	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead && instanceType != SplunkMonitoringConsole {
+	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
@@ -480,7 +475,7 @@ func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Meta
 func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
+	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
@@ -508,7 +503,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 
 	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
-	if spec.Volumes != nil && instanceType != SplunkMonitoringConsole {
+	if spec.Volumes != nil {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
 			for v := range spec.Volumes {
@@ -533,7 +528,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
-	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+	if spec.Defaults != "" {
 		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -614,7 +609,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		// Always sort the slice, so that map entries are ordered, to avoid pod resets
 		sort.Strings(appListingFiles)
 
-		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster {
+		if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
 		}
 	}
@@ -624,12 +619,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
-	// Check for apps defaults and add it to only the standalone or deployer/cm instances
-	if spec.DefaultsURLApps != "" &&
-		(instanceType == SplunkDeployer ||
-			instanceType == SplunkStandalone ||
-			instanceType == SplunkClusterMaster ||
-			instanceType == SplunkLicenseMaster) {
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
 	}
 	if spec.DefaultsURL != "" {
@@ -666,62 +657,68 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Value: spec.LicenseURL,
 		})
 	}
-	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+	if instanceType != SplunkLicenseManager && spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: licenseManagerURL,
 		})
 	}
 
 	// append URL for cluster manager, if configured
-	var clusterMasterURL string
-	if instanceType == SplunkClusterMaster {
+	var clusterManagerURL string
+	if instanceType == SplunkClusterManager {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
-		clusterMasterURL = "localhost"
+		clusterManagerURL = "localhost"
 	} else if spec.ClusterMasterRef.Name != "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
 		//Check if CM is connected to a LicenseMaster
 		namespacedName := types.NamespacedName{
 			Namespace: cr.GetNamespace(),
 			Name:      spec.ClusterMasterRef.Name,
 		}
-		masterIdxCluster := &enterpriseApi.ClusterMaster{}
-		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
+		managerIdxCluster := &enterpriseApi.ClusterMaster{}
+		err := client.Get(context.TODO(), namespacedName, managerIdxCluster)
 		if err != nil {
 			scopedLog.Error(err, "Unable to get ClusterMaster")
 		}
 
-		if masterIdxCluster.Spec.LicenseMasterRef.Name != "" {
-			licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, masterIdxCluster.Spec.LicenseMasterRef.Name, false)
-			if masterIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-				licenseMasterURL = splcommon.GetServiceFQDN(masterIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+			licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+			if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+				licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
 			}
 			env = append(env, corev1.EnvVar{
 				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseMasterURL,
+				Value: licenseManagerURL,
 			})
 		}
 	}
 
-	if clusterMasterURL != "" {
+	if clusterManagerURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: clusterMasterURL,
+			Value: clusterManagerURL,
+		})
+	}
+
+	// append REF for monitoring console if configured
+	if spec.MonitoringConsoleRef.Name != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+			Value: spec.MonitoringConsoleRef.Name,
 		})
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	// Exclude MC as it derives the Spec from multiple CRs
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		extraEnv = append(extraEnv, spec.ExtraEnv...)
+	for _, envVar := range spec.ExtraEnv {
+		extraEnv = append(extraEnv, envVar)
 	}
 
 	// append any extra variables
@@ -729,10 +726,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
-		//Used pre-defined resource values for MC
-		if instanceType != SplunkMonitoringConsole {
-			podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
-		}
+		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
@@ -746,17 +740,12 @@ func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *
 
 	livenessDelay := int32(livenessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the Liveness initial delay from the CR
-		if spec.LivenessInitialDelaySeconds != 0 {
-			livenessDelay = spec.LivenessInitialDelaySeconds
-		} else {
-			livenessDelay += additionalDelay
-		}
+	// If configured, always use the Liveness initial delay from the CR
+	if spec.LivenessInitialDelaySeconds != 0 {
+		livenessDelay = spec.LivenessInitialDelaySeconds
+	} else {
+		livenessDelay += additionalDelay
 	}
-
 	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
 
 	livenessCommand := []string{
@@ -773,15 +762,11 @@ func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec 
 
 	readinessDelay := int32(readinessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the readiness initial delay from the CR
-		if spec.ReadinessInitialDelaySeconds != 0 {
-			readinessDelay = spec.ReadinessInitialDelaySeconds
-		} else {
-			readinessDelay += additionalDelay
-		}
+	// If configured, always use the readiness initial delay from the CR
+	if spec.ReadinessInitialDelaySeconds != 0 {
+		readinessDelay = spec.ReadinessInitialDelaySeconds
+	} else {
+		readinessDelay += additionalDelay
 	}
 
 	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)

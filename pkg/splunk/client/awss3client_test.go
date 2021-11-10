@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -285,9 +285,12 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
 	awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	_, err = awsClient.GetAppsList()
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error since we have empty objects in the response")
+	s3Resp, err := awsClient.GetAppsList()
+	if err != nil {
+		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
+	}
+	if len(s3Resp.Objects) != 0 {
+		t.Errorf("GetAppsList should return an empty list in response")
 	}
 
 }
