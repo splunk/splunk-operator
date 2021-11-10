@@ -142,6 +142,7 @@ type TestEnv struct {
 	kubeClient         client.Client
 	Log                logr.Logger
 	cleanupFuncs       []cleanupFunc
+	debug              string
 }
 
 func init() {
@@ -194,6 +195,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		licenseCMName:      envName,
 		licenseFilePath:    licenseFilePath,
 		s3IndexSecret:      "splunk-s3-index-" + envName,
+		debug:              os.Getenv("DEBUG"),
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
@@ -294,7 +296,7 @@ func (testenv *TestEnv) setup() error {
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
 
-	if testenv.SkipTeardown {
+	if testenv.SkipTeardown && testenv.debug == "True" {
 		testenv.Log.Info("testenv teardown is skipped!\n")
 		return nil
 	}
