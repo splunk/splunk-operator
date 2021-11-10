@@ -58,7 +58,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.13.6'
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
           go version
@@ -128,6 +128,9 @@ jobs:
       TAG: int
     steps:
     - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@v0.2.7
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Configure AWS credentials
