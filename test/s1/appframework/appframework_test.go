@@ -454,7 +454,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Upload apps to S3 for Standalone
-			s3TestDir := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
