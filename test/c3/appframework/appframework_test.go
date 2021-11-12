@@ -190,9 +190,16 @@ var _ = Describe("c3appfw test", func() {
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are installed on MC and C3(cluster-wide)
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// Verify apps are installed on C3
+			testenvInstance.Log.Info("Verify apps are installed on C3 Indexers and SHs", "version", appVersion)
+			var C3PodsNames []string
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC
+			testenvInstance.Log.Info("Verify apps are installed on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
 
 			// Delete apps on S3
 			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
@@ -246,9 +253,13 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify V2 apps are NOT copied to /etc/apps on CM and Deployer", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
-			// Verify apps are updated on MC and C3(cluster-wide)
-			testenvInstance.Log.Info("Verify V2 apps are updated on the MC and C3 pods", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			// Verify apps are updated on C3(cluster-wide)
+			testenvInstance.Log.Info("Verify V2 apps are updated on the C3 pods", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV2, true, "enabled", true, true)
+
+			// Verify apps are updated on MC
+			testenvInstance.Log.Info("Verify V2 apps are updated on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, true)
 		})
 	})
 
@@ -272,13 +283,13 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify apps are copied, installed and downgraded on MC and also on SH and Indexers pods
 			*/
 
-			// Upload newer version of apps to S3
-			appVersion := "V2"
-			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
+			// Upload V2 apps to S3 for C3
 			appFileList := testenv.GetAppFileList(appListV2, 2)
+			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for C3")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
+			// Upload V2 apps to S3 for MC
 			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for MC")
@@ -356,11 +367,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify apps are downloaded by init-container on CM, Deployer and MC
+			appVersion := "V2"
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListV2, 2)
 			testenvInstance.Log.Info("Verify apps are downloaded by init container for C3", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
 			testenvInstance.Log.Info("Verify apps are downloaded by init container for MC", "POD", mcPodName, "version", appVersion)
@@ -389,9 +400,16 @@ var _ = Describe("c3appfw test", func() {
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
 
-			// Verify apps are installed on MC and C3(cluster-wide)
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			// Verify apps are installed on C3
+			testenvInstance.Log.Info("Verify V2 apps are installed on C3 Indexers and SHs", "version", appVersion)
+			var C3PodsNames []string
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV2, true, "enabled", true, true)
+
+			// Verify apps are installed on MC
+			testenvInstance.Log.Info("Verify V2 apps are installed on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, true)
 
 			// Delete apps on S3
 			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
@@ -444,9 +462,14 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", " version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are downgraded on C3 (cluster-wide)
-			testenvInstance.Log.Info("Verify apps are downgraded on the pods by running Splunk CLI commands for app", " version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// Verify apps are downgraded on C3(cluster-wide)
+			testenvInstance.Log.Info("Verify apps are downgraded on the C3 pods", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are updated on MC
+			testenvInstance.Log.Info("Verify apps are downgraded on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
+
 		})
 	})
 
@@ -590,9 +613,16 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are installed on MC and C3(cluster-wide)
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// Verify apps are installed on C3
+			testenvInstance.Log.Info("Verify apps are installed on C3 Indexers and SHs", "version", appVersion)
+			var C3PodsNames []string
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+			C3PodsNames = append(C3PodsNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC
+			testenvInstance.Log.Info("Verify apps are installed on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
 
 			// Scale up SHC
 			defaultSHReplicas := shc.Spec.Replicas
@@ -656,9 +686,16 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are installed cluster-wide
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// Verify apps are installed on C3
+			testenvInstance.Log.Info("Verify apps are installed on C3 Indexers and SHs after scaling up", "version", appVersion)
+			C3PodsNamesScaleUp := append(C3PodsNames, indexerName)
+			shName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
+			C3PodsNamesScaleUp = append(C3PodsNamesScaleUp, shName)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNamesScaleUp, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC
+			testenvInstance.Log.Info("Verify apps are still installed on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
 
 			// Get instance of current SHC CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
@@ -718,9 +755,13 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer after scaling down of indexers and SH", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are installed cluster-wide
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands after scaling down of indexers and SH", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			// Verify apps are installed on C3
+			testenvInstance.Log.Info("Verify apps are installed on C3 Indexers and SHs after scaling down", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), C3PodsNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC
+			testenvInstance.Log.Info("Verify apps are still installed on MC", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
 
 		})
 	})
