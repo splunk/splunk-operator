@@ -300,21 +300,22 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	testStsWithAppListVolMounts := func(want string) {
-		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(&cr); err != nil {
-				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
-			}
-			return getClusterManagerStatefulSet(client, &cr)
-		}
-		configTester(t, "getClusterManagerStatefulSet", f, want)
-	}
+	// ToDo: sgontla: phase-2 cleanup
+	// testStsWithAppListVolMounts := func(want string) {
+	// 	f := func() (interface{}, error) {
+	// 		if err := validateClusterManagerSpec(&cr); err != nil {
+	// 			t.Errorf("validateClusterManagerSpec() returned error: %v", err)
+	// 		}
+	// 		return getClusterManagerStatefulSet(client, &cr)
+	// 	}
+	// 	configTester(t, "getClusterManagerStatefulSet", f, want)
+	// }
 
-	testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)
+	// testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)
 
-	// Test to ensure that the Applisting config map is empty after the apps are installed successfully
-	markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"appsUpdateToken":"1601945361"}}`)
+	// // Test to ensure that the Applisting config map is empty after the apps are installed successfully
+	// markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+	// testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"appsUpdateToken":"1601945361"}}`)
 
 }
 
@@ -1442,5 +1443,109 @@ func TestCopyFileToPod(t *testing.T) {
 	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
 	if err != nil && 1 == 0 {
 		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
+	}
+}
+
+func TestCheckIfFileExistsOnPod(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							MountPath: "/mnt/splunk-secrets",
+							Name:      "mnt-splunk-secrets",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "test-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+	// Add object
+	c.AddObject(pod)
+
+	filePathOnPod := "/init-apps/splunkFwdApps/testApp.tgz"
+
+	fileExists := checkIfFileExistsOnPod(c, "testNameSpace", pod.GetName(), filePathOnPod)
+	if fileExists {
+		t.Errorf("When the file doesn't exist, should return false")
+	}
+}
+
+func TestGetAppPackageLocalPath(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   "local",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var worker *PipelineWorker = &PipelineWorker{
+		cr:         &cr,
+		appSrcName: cr.Spec.AppFrameworkConfig.AppSources[0].Name,
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName:    "testApp.spl",
+			ObjectHash: "bcda23232a89",
+		},
+		afwConfig: &cr.Spec.AppFrameworkConfig,
+	}
+
+	expectedAppPkgLocalPath := "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
+	calculatedAppPkgLocalPath := getAppPackageLocalPath(worker)
+
+	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
+		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
 	}
 }
