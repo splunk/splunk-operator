@@ -710,7 +710,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
 			// Verify App Downlaod State on CR
-			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			// testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify Apps download on Operator Pod
 			// kind := standalone.Kind
@@ -803,7 +803,14 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("appframework Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+		It("s1, smoke, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+
+			// Upload V1 versions of apps (V1) to S3
+			s3TestDir := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			appFileList := testenv.GetAppFileListPhase3(appListV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
@@ -842,8 +849,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
 
 			// Verify App Download State on CR
-			appFileList := testenv.GetAppFileListPhase3(appListV1)
-			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			// testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify Apps download on Operator Pod
 			// kind := standalone.Kind
@@ -877,13 +883,9 @@ var _ = Describe("s1appfw test", func() {
 			//Upload new Versioned Apps to S3
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileListPhase3(appListV2)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			standalone.Spec.AppFrameworkConfig.AppsRepoPollInterval = int64(0)
-			err = deployment.UpdateCR(standalone)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
@@ -898,7 +900,7 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Get config map for triggering manual update")
 			config, err := testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
-			testenvInstance.Log.Info("config map data for", "Standalone", config.Data["Standalone"])
+			testenvInstance.Log.Info("Config map data for", "Standalone", config.Data["Standalone"])
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
@@ -909,7 +911,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify App Downlaod State on CR
-			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			// testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify Apps are downloaded on Splunk Operator Pod
 			// testenvInstance.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
@@ -923,9 +925,11 @@ var _ = Describe("s1appfw test", func() {
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
 			Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
 
+			// Verify apps downloaded by init container
+
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info("Verify Apps are copied to correct location on standalone(/etc/apps/) for app", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV1, true, true)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appListV2, true, true)
 
 			//Verify Apps are updated
 			testenvInstance.Log.Info("Verify Apps are installed Locally on standalone by running Splunk CLI commands for app", "version", appVersion)
