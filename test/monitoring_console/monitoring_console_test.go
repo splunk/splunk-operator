@@ -381,7 +381,6 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	// TO BE READDED WHEN CSPL-1379 fixed
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("monitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
@@ -390,12 +389,12 @@ var _ = Describe("Monitoring Console test", func() {
 				2. Deploy Monitoring Console
 				3. Wait for Monitoring Console status to go back to READY
 				4. Verify SH are configured in MC Config Map
-				5. Verify SH are configured in peer strings on MC Pod
-				6. Verify Monitoring Console Pod has peers in Peer string on MC Pod
+				5. VerifyMonitoring Console Pod has Search Heads in Peer strings
+				6. Verify Monitoring Console Pod has peers(indexers) in Peer string
 				7. Scale SH Cluster
-				8. Scale Indexer Count on One Site
+				8. Scale Indexer Count
 				9. Add a standalone
-				10. Verify Standalone is configured in MC Config Map
+				10. Verify Standalone is configured in MC Config Map and Peer String
 				11. Verify SH are configured in MC Config Map and Peers String
 				12. Verify Indexers are configured in Peer String
 			*/
@@ -500,8 +499,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			// Wait for MC to go to PENDING Phase
+			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
@@ -652,9 +651,10 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after Cluster Manager Reconfig")
 			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
-			// Check Monitoring console One is NOT configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
+			// Check Monitoring console One is Not configured with all Indexer in Name Space
+			// CSPL-619
+			// testenvInstance.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Manager Reconfig")
+			// testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
 
 			// Check Monitoring Console One is still configured with Search Head in namespace
 			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console One Config Map after Cluster Manager Reconfig")
