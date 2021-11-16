@@ -113,6 +113,58 @@ type AppInstallPipeline struct {
 
 	// Refernce to app deploy context
 	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// reference to PlayBookImpl to run a specific playbook
+	playBookContext PlayBookImpl
+}
+
+// PodExecClient is an interface which is used to implement
+// individual clients to run pod exec commands
+// NOTE: This client will be helpful in UTs since we can create
+// our own mock client and pass it to the tests to work correctly.
+type PodExecClient interface {
+	runPodExecCommand() (string, string, error)
+}
+
+// blank assignment to implement PodExecClient
+var _ PodExecClient = &IdxcPodExecClient{}
+
+// IdxcPodExecClient implements PodExecClient
+type IdxcPodExecClient struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	targetPodName string
+	adminPwd      []byte
+	command       string
+}
+
+// PlayBookImpl is an interface to implement individual playbooks
+type PlayBookImpl interface {
+	runPlayBook() error
+	isBundlePushComplete() bool
+}
+
+// blank assignment to implement PlayBookImpl
+var _ PlayBookImpl = &IdxcPlayBookContext{}
+
+// TODO: gaurav - implement SHC playbook
+//var _ PlayBookImpl = &SHCPlayBookContext{}
+
+// IdxcPlayBookContext is used to implement playbook to push bundle to indexer cluster peers
+type IdxcPlayBookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
+	podExecClient PodExecClient
+}
+
+// SHCPlayBookContext is used to implement playbook to push bundle to indexer cluster peers
+type SHCPlayBookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
 }
 
 // ToString returns a string for a given InstanceType

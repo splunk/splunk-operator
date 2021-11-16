@@ -70,6 +70,12 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
+	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes"
+
+	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:%s"
+
+	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
+
 	// command for init container on a standalone
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
 

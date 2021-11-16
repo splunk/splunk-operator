@@ -120,7 +120,8 @@ spec:
       - kind: Secrets
         version: v1
       version: v1beta1
-    - kind: ClusterMaster
+    - displayName: Standalone
+      kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       resources:
       - kind: StatefulSets
@@ -136,7 +137,6 @@ spec:
       - kind: Secrets
         version: v1
       version: v1alpha3
-      displayName: Standalone
     - displayName: Standalone
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com

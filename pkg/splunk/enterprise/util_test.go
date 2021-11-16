@@ -1444,3 +1444,62 @@ func TestCopyFileToPod(t *testing.T) {
 		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
 	}
 }
+
+func TestGetListOfClusterScopedApps(t *testing.T) {
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "testVol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "appSrc1",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "testVol",
+					Scope:   enterpriseApi.ScopeCluster,
+				},
+			},
+		},
+	}
+
+	testApps := []string{"app1.tgz", "app2.tgz", "app3.tgz"}
+	testHashes := []string{"abcd1111", "efgh2222", "ijkl3333"}
+	testSizes := []int64{10, 20, 30}
+
+	appDeployInfoList := make([]enterpriseApi.AppDeploymentInfo, 3)
+	for index := range testApps {
+		appDeployInfoList[index] = enterpriseApi.AppDeploymentInfo{
+			AppName: testApps[index],
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhaseDownload,
+				Status:     enterpriseApi.AppPkgDownloadPending,
+				RetryCount: 0,
+			},
+			ObjectHash: testHashes[index],
+			Size:       uint64(testSizes[index]),
+		}
+	}
+
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
+		AppFrameworkConfig:                  *appFrameworkConfig,
+		AppsStatusMaxConcurrentAppDownloads: 10,
+	}
+
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo
+	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
+
+	clusterScopedApps := getListOfClusterScopedApps(appDeployContext)
+
+	if len(clusterScopedApps) != 3 {
+		t.Errorf("expected %d number of cluster scoped apps, got %d", 3, len(clusterScopedApps))
+	}
+}

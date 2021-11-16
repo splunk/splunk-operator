@@ -1690,6 +1690,118 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	close(ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel)
 }
 
+var _ PodExecClient = &MockPodExecClient{}
+
+// MockPodExecClient to mock the PodExecClient
+type MockPodExecClient struct {
+	stdOut string
+	stdErr string
+}
+
+func (mockPodExecClient *MockPodExecClient) runPodExecCommand() (string, string, error) {
+	return mockPodExecClient.stdOut, mockPodExecClient.stdErr, nil
+}
+
+func TestIDXCRunPlayBook(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
+		AppsStatusMaxConcurrentAppDownloads: 10,
+	}
+
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	testApps := []string{"app1.tgz"}
+	testHashes := []string{"abcd1111"}
+	testSizes := []int64{10}
+
+	appDeployInfoList := make([]enterpriseApi.AppDeploymentInfo, 1)
+	for index := range testApps {
+		appDeployInfoList[index] = enterpriseApi.AppDeploymentInfo{
+			AppName: testApps[index],
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhasePodCopy,
+				Status:     enterpriseApi.AppPkgPodCopyComplete,
+				RetryCount: 0,
+			},
+			ObjectHash: testHashes[index],
+			Size:       uint64(testSizes[index]),
+		}
+	}
+
+	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo
+	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
+
+	afwPipeline := initAppInstallPipeline(appDeployContext)
+	// get the target pod name
+	targetPodName := getApplicablePodNameForWorker(&cr, 0)
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind)
+
+	err := afwPipeline.playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error, since we dont have a namespaced scoped secret yet")
+	}
+
+	// Create namespace scoped secret
+	_, err = splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind)
+
+	// now replace the pod exec client with our mock client
+	var mockPodExecClient *MockPodExecClient = &MockPodExecClient{
+		stdOut: "",
+		stdErr: "OK\n",
+	}
+	playbookContext := afwPipeline.playBookContext.(*IdxcPlayBookContext)
+	playbookContext.podExecClient = mockPodExecClient
+
+	err = afwPipeline.playBookContext.runPlayBook()
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
+		t.Errorf("runPlayBook() should not have returned error")
+	}
+
+	// now test the error scenario where we did not get OK in stdErr
+	afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage = enterpriseApi.BundlePushPending
+	mockPodExecClient.stdErr = ""
+	err = afwPipeline.playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error since we did not get desired output")
+	}
+
+	afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage = enterpriseApi.BundlePushInProgress
+	// invalid scenario, where stdOut!="cluster_status=None"
+	if afwPipeline.playBookContext.isBundlePushComplete() {
+		t.Errorf("isBundlePushComplete() should have returned error since we did not get desried stdOut.")
+	}
+
+	// invalid scenario, where stdErr != ""
+	mockPodExecClient.stdErr = "error"
+	if afwPipeline.playBookContext.isBundlePushComplete() {
+		t.Errorf("isBundlePushComplete() should have returned false since we did not get desried stdOut.")
+	}
+
+	// valid scenario where bundle push is complete
+	mockPodExecClient.stdErr = ""
+	mockPodExecClient.stdOut = "cluster_status=None"
+	if !afwPipeline.playBookContext.isBundlePushComplete() {
+		t.Errorf("isBundlePushComplete() should not have returned false.")
+	}
+}
+
 // TODO: gaurav/subba, commenting this UT for now.
 // It needs to be revisited once we have all the glue logic for all pipelines
 // For now, just covers the podCopy related flow
