@@ -23,8 +23,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	corev1 "k8s.io/api/core/v1"
 
-	gomega "github.com/onsi/gomega"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -114,25 +112,6 @@ func DeleteMCPod(ns string) {
 	} else {
 		logf.Log.Info("Monitoring Console Stateful Set deleted", "Statefulset", mcSts, "stdout", output)
 	}
-}
-
-// MCPodReady waits for MC pod to be in ready state
-func MCPodReady(ns string, deployment *Deployment) {
-	// Monitoring Console Pod is in Ready State
-	gomega.Eventually(func() bool {
-		logf.Log.Info("Checking status of Monitoring Console Pod")
-		check := CheckMCPodReady(ns)
-		DumpGetPods(ns)
-		return check
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
-
-	// Verify MC Pod Stays in ready state
-	gomega.Consistently(func() bool {
-		logf.Log.Info("Checking status of Monitoring Console Pod")
-		check := CheckMCPodReady(ns)
-		DumpGetPods(ns)
-		return check
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
 
 // CheckPodNameOnMC Check given pod is configured on Monitoring console pod

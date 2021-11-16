@@ -50,17 +50,13 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("scaling_test: Can Scale Up and Scale Down Standalone CR", func() {
+		It("scaling_test, integration: Can Scale Up and Scale Down Standalone CR", func() {
 
 			standalone, err := deployment.DeployStandalone(deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Check Monitoring console is configured with all standalone instances in namespace
-			peerList := testenv.GetConfiguredPeers(testenvInstance.GetName(), deployment.GetName())
-			testenvInstance.Log.Info("Peer List", "instance", peerList)
 
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Up Standalone CR")
@@ -97,14 +93,11 @@ var _ = Describe("Scaling test", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
-
-			// Wait for Monitoring Console Pod to be in READY status
-			testenv.MCPodReady(testenvInstance.GetName(), deployment)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("scaling_test: SHC and IDXC can be scaled up and data is searchable", func() {
+		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3

@@ -66,9 +66,6 @@ var _ = Describe("DeleteCR test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
-
 			// Verify no SH in disconnected status is present on CM
 			testenv.VerifyNoDisconnectedSHPresentOnCM(deployment, testenvInstance)
 
