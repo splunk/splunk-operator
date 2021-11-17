@@ -1401,7 +1401,7 @@ var _ = Describe("c3appfw test", func() {
 			podNames = append(podNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
 
 			// Verify apps are installed on indexers and SH
-			testenvInstance.Log.Info("Verify apps are installed on the Indexers and Searc Heads")
+			testenvInstance.Log.Info("Verify apps are installed on the Indexers and Search Heads")
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, true)
 		})
 	})
