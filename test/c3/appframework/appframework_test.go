@@ -1397,18 +1397,11 @@ var _ = Describe("c3appfw test", func() {
 
 			// Get indexers and SH pod names
 			podNames := []string{}
-			for i := 0; i < int(indexerReplicas); i++ {
-				sh := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				podNames = append(podNames, string(sh))
-			}
-
-			for i := 0; i < int(shReplicas); i++ {
-				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				podNames = append(podNames, string(sh))
-			}
+			podNames = append(podNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+			podNames = append(podNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
 
 			// Verify apps are installed on indexers and SH
-			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands")
+			testenvInstance.Log.Info("Verify apps are installed on the Indexers and Searc Heads")
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, true)
 		})
 	})
