@@ -400,7 +400,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			testenvInstance.Log.Info("Verify apps are copied to correct location for MC", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, true)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
@@ -412,7 +412,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are installed on MC
 			testenvInstance.Log.Info("Verify V2 apps are installed on MC", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, true)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 
 			// Delete apps on S3
 			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
@@ -475,7 +475,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are downgraded on MC
 			testenvInstance.Log.Info("Verify apps are downgraded on MC", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 		})
 	})
@@ -1361,6 +1361,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create Single site Cluster and SHC, with App Framework enabled on CM and SHC Deployer
 			testenvInstance.Log.Info("Create Single site Indexer Cluster and SHC with App framework")
 			indexerReplicas := 3
+			shReplicas := 3
 			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpec, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
@@ -1380,13 +1381,6 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appFileList, initContDownloadLocation)
-
-			// Get instance of current SHC CR with latest config
-			shcName := deployment.GetName() + "-shc"
-			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
-			shReplicas := int(shc.Spec.Replicas)
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
