@@ -577,6 +577,8 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 
 	appListingConfigMap := getAppListingConfigMap(client, cr, instanceType)
+	//ToDo: sgontla: For now disable the phase-2 App Framework
+	appListingConfigMap = nil
 	if appListingConfigMap != nil {
 		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)

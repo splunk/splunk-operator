@@ -115,6 +115,13 @@ type AppInstallPipeline struct {
 	appDeployContext *enterpriseApi.AppDeploymentContext
 }
 
+type localScopeInstallContext struct {
+	worker *PipelineWorker
+
+	// semaphore to track only one app install at any time for a given replicaset pod
+	sem chan struct{}
+}
+
 // ToString returns a string for a given InstanceType
 func (instanceType InstanceType) ToString() string {
 	return string(instanceType)
