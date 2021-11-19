@@ -1790,7 +1790,7 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-
+	afwPipeline = nil
 	afwPipeline := initAppInstallPipeline(appDeployContext)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
@@ -1798,7 +1798,6 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 	podExecClient := getPodExecClient(c, &cr, applyIdxcBundleCmdStr, targetPodName)
 	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
-
 	err := afwPipeline.playBookContext.runPlayBook()
 	if err == nil {
 		t.Errorf("runPlayBook() should have returned error, since we dont have a namespaced scoped secret yet")
@@ -1819,7 +1818,7 @@ func TestIDXCRunPlayBook(t *testing.T) {
 
 	err = afwPipeline.playBookContext.runPlayBook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
-		t.Errorf("runPlayBook() should not have returned error")
+		t.Errorf("runPlayBook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
 	}
 
 	// now test the error scenario where we did not get OK in stdErr
