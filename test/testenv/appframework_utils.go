@@ -2,8 +2,9 @@ package testenv
 
 import (
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"strings"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -132,4 +133,30 @@ func GetAppFileList(appList []string, version int) []string {
 		appFileList = append(appFileList, AppInfo[app][fileKey])
 	}
 	return appFileList
+}
+
+// GenerateAppFrameworkSpec Generate Appframework spec
+func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: volumeName,
+		Scope:   scope,
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(pollInterval),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	return appFrameworkSpec
 }
