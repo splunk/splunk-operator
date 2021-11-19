@@ -55,7 +55,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
-		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
+		It("smoke, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -74,8 +74,8 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			// Upload older version of apps (V1) to S3 for MC
-			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
+			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps for MC to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -114,7 +114,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Upload V1 apps to S3
+			// Upload V1 apps to S3 for M4 SVA
 			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
@@ -140,7 +140,8 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with SHC")
 			siteCount := 3
 			indexersPerSite := 1
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, mcName, "")
+			shReplicas := 3
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster and SHC with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -161,24 +162,18 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container on CM, Deployer and MC
+			// Verify apps are downloaded by init-container on CM, Deployer
 			appVersion := "V1"
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListV1, 1)
+			initContDownloadLocation := "/init-apps/" + appSourceName
 			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps downloaded by init-container on Monitoring Console
+			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container on MC for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
-
-			// Get instance of current SHC CR with latest config
-			shcName := deployment.GetName() + "-shc"
-			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
-			shReplicas := int(shc.Spec.Replicas)
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
@@ -187,19 +182,30 @@ var _ = Describe("m4appfw test", func() {
 			// Saving current V1 bundle hash for future comparison
 			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
-			// Verify apps are copied to location
-			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info("Verify apps are copied to correct location based on Pod KIND for app", "version", appVersion)
+			// Add SHC and Indexer Pods to all Pod Names
+			allPodNames := podNames
+			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
+			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+
+			// Verify Apps are copied to correct location for M4 SVA
+			testenvInstance.Log.Info("Verify apps are copied to correct location for M4 SVA", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
-			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			// Verify Apps are copied to correct location for MC
+			testenvInstance.Log.Info("Verify apps are copied to correct location for Monitoring Console", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
 
-			// Verify apps are installed on MC and M4(cluster-wide)
+			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
+			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
+
+			// Verify apps are installed on M4(cluster-wide)
 			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC (local install)
+			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 			// Delete apps on S3
 			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
@@ -207,13 +213,15 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = nil
 			testenvInstance.Log.Info("Testing upgrade scenario")
 
-			// Upload newer version of apps to S3 for M4 and MC
+			// Upload newer version of apps to S3 for M4 SVA
 			appFileList = testenv.GetAppFileList(appListV2, 2)
 			appVersion = "V2"
 			testenvInstance.Log.Info("Uploading apps S3 for", "version", appVersion)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload newer version of apps for M4 to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload new version of apps for Monitoring Console
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload newer version of apps for MC to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -239,9 +247,11 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container
+			// Verify apps are downloaded by init-container for M4 SVA
 			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for M4 for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps downloaded by init-container for Monitoring Console
 			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for MC for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
@@ -249,17 +259,25 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
-			// Verify apps are copied to location
+			// Verify apps are copied to location for M4 SVA
 			testenvInstance.Log.Info("Verify apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
-			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
-			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
+			// Verify apps are copied to location for Monitoring Console
+			testenvInstance.Log.Info("Verify apps are copied to correct location for Monitoring Console", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
-			// Verify apps are updated on MC and M4(cluster-wide)
-			testenvInstance.Log.Info("Verify apps are updated on the MC and M4 pods for app", "version", appVersion)
+			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
+			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
+
+			// Verify apps are installed on M4(cluster-wide)
+			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
+			// Verify apps are installed on MC (local install)
+			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -282,12 +300,14 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify apps are copied and downgraded on MC and on SH and Indexers pods
 			*/
 
-			// Upload newer version of apps to S3
+			// Upload V2 version of apps to S3 for M4 SVA
 			appVersion := "V2"
 			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), "Unable to upload newer version of apps for M4 to S3 test directory")
+
+			// Upload V2 verison of apps to S3 for Monitoring Console
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
@@ -347,8 +367,9 @@ var _ = Describe("m4appfw test", func() {
 			// Deploy M4 CRD
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with SHC")
 			siteCount := 3
+			shReplicas := 3
 			indexersPerSite := 1
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, mcName, "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster and SHC with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -369,23 +390,17 @@ var _ = Describe("m4appfw test", func() {
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container on CM, Deployer and MC
+			// Verify apps are downloaded by init-container on CM, Deployer
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListV2, 2)
 			testenvInstance.Log.Info("Verify apps are downloaded by init container for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+
+			// Verify apps are downloaded by init-container on Monitoring Console
+			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info("Verify apps are downloaded by init container on MC pod for apps", "POD", mcPodName, "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
-
-			// Get instance of current SHC CR with latest config
-			shcName := deployment.GetName() + "-shc"
-			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
-			shReplicas := int(shc.Spec.Replicas)
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
@@ -395,31 +410,43 @@ var _ = Describe("m4appfw test", func() {
 			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Verify apps are copied to location
-			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
+			// Add SHC and Indexer Pods to all Pod Names
+			allPodNames := podNames
+			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
+			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 			testenvInstance.Log.Info("Verify apps are copied to correct location based on Pod KIND for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
+			// Verify Apps are copied to correct location for MC
+			testenvInstance.Log.Info("Verify apps are copied to correct location for Monitoring Console", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
+
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
-			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
 
-			// Verify apps are installed on MC and M4(cluster-wide)
+			// Verify apps are installed on (cluster-wide)
 			testenvInstance.Log.Info("Verify newer version of apps are installed on the pods", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+
+			// Verify apps are installed on MC (local install)
+			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 
 			// Delete apps on S3
 			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload older version of apps (V1) to S3 for M4 and MC
+			// Upload older version of apps (V1) to S3 for M4
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1, 1)
 			testenvInstance.Log.Info("Uploading apps S3 for", "version", appVersion)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload older version of apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload older version of apps (V1) to S3 for Monitoring Console
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload older version of apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -455,89 +482,56 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
-			// Verify apps are copied to location
+			// Verify apps are copied to correct location for M4 SVA
 			testenvInstance.Log.Info("Verify apps are copied to correct location based on Pod KIND for app", " version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
+			// Verify apps are copied to correct location for Monitoring Console
+			testenvInstance.Log.Info("Verify apps are copied to correct location for Monitoring Console", "version", appVersion)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
+
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", " version", appVersion)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
 
-			// Verify apps are downgraded on MC and M4(cluster-wide)
+			// Verify apps are downgraded on M4(cluster-wide)
 			testenvInstance.Log.Info("Verify apps are downgraded on the pods by running Splunk CLI commands for app", " version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+
+			// Verify apps are installed on MC (local install)
+			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 		})
 	})
 
-	XContext("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps, scale up IDXC and SHC, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Create 2 App Sources for MC and M4 SVA (CM and SHC Deployer)
-			   * Prepare and deploy MC CRD with app config and wait for pod to be ready
+			   * Create App Sources for M4 SVA (CM and SHC Deployer)
 			   * Prepare and deploy M4 CRD with app config and wait for pods to be ready
 			   ############### VERIFICATION ##############
 			   * Verify bundle push is sucessful
 			   * Verify apps are copied and installed on MC and also on SH and Indexers pods
 			   ############### SCALING UP ################
 			   * Scale up indexers and SHC
-			   * Wait for MC and M4 to be ready
+			   * Wait for M4 to be ready
 			   ############### VERIFICATION ##############
 			   * Verify bundle push is sucessful
 			   * Verify apps are copied and installed on new SH and Indexers pods
 			   ############### SCALING DOWN ################
 			   * Scale down indexers and SHC
-			   * Wait for MC and M4 to be ready
+			   * Wait for M4 to be ready
 			   ############### VERIFICATION ##############
 			   * Verify bundle push is sucessful
 			   * Verify apps are still copied and installed on all SH and Indexers pods
 			*/
 
-			// Upload apps to S3 for MC
-			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			appFileList := testenv.GetAppFileList(appListV1, 1)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App framework Spec for MC
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
-						ImagePullPolicy: "IfNotPresent",
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy MC CRD
-			testenvInstance.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify MC is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
-
 			// Upload V1 apps to S3
+			appFileList := testenv.GetAppFileList(appListV1, 1)
 			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -561,7 +555,8 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with SHC")
 			siteCount := 3
 			indexersPerSite := 1
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, mcName, "")
+			shReplicas := 3
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -579,27 +574,12 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
-			// Verify MC is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
-
-			// Verify apps are downloaded by init-container on CM, Deployer and MC
+			// Verify apps are downloaded by init-container on CM, Deployer
 			appVersion := "V1"
 			initContDownloadLocation := "/init-apps/" + appSourceName
-			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListV1, 1)
-			testenvInstance.Log.Info("Verify apps are downloaded by init container for apps", "version", appVersion)
+			testenvInstance.Log.Info("Verify apps are downloaded by init container on Cluster Master and Deployer for apps", "version", appVersion)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
-			testenvInstance.Log.Info("Verify apps are downloaded by init container on MC for apps", "POD", mcPodName, "version", appVersion)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
-
-			// Get instance of current SHC CR with latest config
-			shcName := deployment.GetName() + "-shc"
-			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
-			shReplicas := int(shc.Spec.Replicas)
-			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
@@ -615,12 +595,13 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on CM and Deployer for app", "version", appVersion, "App List", appFileList)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
-			// Verify apps are installed on MC and M4(cluster-wide)
+			// Verify apps are installed on M4(cluster-wide)
 			testenvInstance.Log.Info("Verify apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// Get instance of current SHC CR with latest config
-			shc = &enterpriseApi.SearchHeadCluster{}
+			shc := &enterpriseApi.SearchHeadCluster{}
+			shcName := deployment.GetName() + "-shc"
 			err = deployment.GetInstance(shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
@@ -741,7 +722,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (M4 - clustered indexer, search head cluster)", func() {
+	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework)", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA and have apps installed locally on CM and SHC Deployer", func() {
 
 			/* Test Steps
@@ -785,7 +766,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			indexersPerSite := 1
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster")
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, 10, "", "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the CM goes to Ready phase
@@ -849,13 +830,13 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are copied to /etc/apps on CM and Deployer for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
-			// Verify apps are installed locally on CM and on SHC Deployer
-			testenvInstance.Log.Info("Verify apps are installed locally on CM and Deployer for app", "version", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
-
 			// Verify apps are not copied in the apps folder on CM and /etc/shcluster/ on Deployer (therefore not installed on peers and on SH)
 			testenvInstance.Log.Info("Verify apps are not copied to "+splcommon.ManagerAppsLoc+" on CM and "+splcommon.SHCluster+" on Deployer for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
+
+			// Verify apps are installed locally on CM and on SHC Deployer
+			testenvInstance.Log.Info("Verify apps are installed locally on CM and Deployer for app", "version", appVersion)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 		})
 	})
 })

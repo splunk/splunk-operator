@@ -615,43 +615,41 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 // VerifyAppInstalled verify that app of specific version is installed. Method assumes that app is installed in all CR's in namespace
 func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
 	for _, podName := range pods {
-		if !strings.Contains(podName, "monitoring-console") {
-			for _, appName := range apps {
-				status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
-				logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
-				gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
-				comparison := strings.EqualFold(status, statusCheck)
-				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
-				var check bool
-				if clusterWideInstall {
-					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						check = true
-						testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
-						gomega.Expect(comparison).Should(gomega.Equal(check))
-					}
-				} else {
-					// For local install check pods individually
-					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						check = false
-					} else {
-						check = true
-					}
+		for _, appName := range apps {
+			status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
+			logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
+			gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
+			comparison := strings.EqualFold(status, statusCheck)
+			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
+			var check bool
+			if clusterWideInstall {
+				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+					check = true
 					testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
 					gomega.Expect(comparison).Should(gomega.Equal(check))
 				}
+			} else {
+				// For local install check pods individually
+				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+					check = false
+				} else {
+					check = true
+				}
+				testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
+				gomega.Expect(comparison).Should(gomega.Equal(check))
+			}
 
-				if versionCheck {
-					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-					if !(clusterWideInstall && (strings.Contains(podName, splcommon.TestDeployerDashed) || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
-						var expectedVersion string
-						if checkupdated {
-							expectedVersion = AppInfo[appName]["V2"]
-						} else {
-							expectedVersion = AppInfo[appName]["V1"]
-						}
-						testenvInstance.Log.Info("Verify app Version", "Pod Name", podName, "App Name", appName, "Expected Version", expectedVersion, "Version Installed", versionInstalled, "Updated", checkupdated)
-						gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
+			if versionCheck {
+				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
+				if !(clusterWideInstall && (strings.Contains(podName, splcommon.TestDeployerDashed) || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+					var expectedVersion string
+					if checkupdated {
+						expectedVersion = AppInfo[appName]["V2"]
+					} else {
+						expectedVersion = AppInfo[appName]["V1"]
 					}
+					testenvInstance.Log.Info("Verify app Version", "Pod Name", podName, "App Name", appName, "Expected Version", expectedVersion, "Version Installed", versionInstalled, "Updated", checkupdated)
+					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
 				}
 			}
 		}

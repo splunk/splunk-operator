@@ -72,7 +72,7 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
-	if d.testenv.SkipTeardown {
+	if d.testenv.SkipTeardown && d.testenv.debug == "True" {
 		d.testenv.Log.Info("deployment teardown is skipped!\n")
 		return nil
 	}
@@ -615,16 +615,7 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(name string, spec enterpr
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec, delaySeconds int, mc bool) error {
-
-	licenseMaster := ""
-
-	var mcName string
-	if mc {
-		mcName = d.GetName()
-	} else {
-		mcName = ""
-	}
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -633,8 +624,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 		if err != nil {
 			return err
 		}
-
-		licenseMaster = name
 	}
 
 	// Deploy the cluster manager
@@ -650,10 +639,8 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			// LivenessInitialDelaySeconds:  int32(delaySeconds),
-			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
 	if err != nil {
@@ -681,11 +668,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			// LivenessInitialDelaySeconds:  int32(delaySeconds),
-			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
@@ -698,7 +683,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, delaySeconds int, mcName string, licenseMaster string) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -739,8 +724,6 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 				Name: mcName,
 			},
 			Defaults: defaults,
-			// LivenessInitialDelaySeconds:  int32(delaySeconds),
-			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
