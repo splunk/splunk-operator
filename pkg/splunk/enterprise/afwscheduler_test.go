@@ -123,7 +123,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 }
 
-func TestGetApplicablePodNameForWorker(t *testing.T) {
+func TestgetApplicablePodNameForAppFramework(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -142,37 +142,37 @@ func TestGetApplicablePodNameForWorker(t *testing.T) {
 	podID := 0
 
 	expectedPodName := "splunk-stack1-cluster-master-0"
-	returnedPodName := getApplicablePodNameForWorker(&cr, podID)
+	returnedPodName := getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "Standalone"
 	expectedPodName = "splunk-stack1-standalone-0"
-	returnedPodName = getApplicablePodNameForWorker(&cr, podID)
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "LicenseMaster"
 	expectedPodName = "splunk-stack1-license-master-0"
-	returnedPodName = getApplicablePodNameForWorker(&cr, podID)
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "SearchHeadCluster"
 	expectedPodName = "splunk-stack1-deployer-0"
-	returnedPodName = getApplicablePodNameForWorker(&cr, podID)
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "MonitoringConsole"
 	expectedPodName = "splunk-stack1-monitoring-console-0"
-	returnedPodName = getApplicablePodNameForWorker(&cr, podID)
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
-		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForWorker(&cr, 0))
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForAppFramework(&cr, 0))
 	}
 }
 
@@ -1690,7 +1690,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	close(ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel)
 }
 
-var _ PodExecClient = &MockPodExecClient{}
+var _ PodExecClientImpl = &MockPodExecClient{}
 
 // MockPodExecClient to mock the PodExecClient
 type MockPodExecClient struct {
@@ -1741,12 +1741,15 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
+	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
+
 	afwPipeline := initAppInstallPipeline(appDeployContext)
 	// get the target pod name
-	targetPodName := getApplicablePodNameForWorker(&cr, 0)
+	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
 
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
-	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind)
+	podExecClient := getPodExecClient(c, &cr, applyIdxcBundleCmdStr, targetPodName)
+	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
 
 	err := afwPipeline.playBookContext.runPlayBook()
 	if err == nil {
@@ -1759,15 +1762,12 @@ func TestIDXCRunPlayBook(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind)
-
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *MockPodExecClient = &MockPodExecClient{
 		stdOut: "",
 		stdErr: "OK\n",
 	}
-	playbookContext := afwPipeline.playBookContext.(*IdxcPlayBookContext)
-	playbookContext.podExecClient = mockPodExecClient
+	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
 	err = afwPipeline.playBookContext.runPlayBook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
@@ -1775,14 +1775,14 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	}
 
 	// now test the error scenario where we did not get OK in stdErr
-	afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage = enterpriseApi.BundlePushPending
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecClient.stdErr = ""
 	err = afwPipeline.playBookContext.runPlayBook()
 	if err == nil {
 		t.Errorf("runPlayBook() should have returned error since we did not get desired output")
 	}
 
-	afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage = enterpriseApi.BundlePushInProgress
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	// invalid scenario, where stdOut!="cluster_status=None"
 	if afwPipeline.playBookContext.isBundlePushComplete() {
 		t.Errorf("isBundlePushComplete() should have returned error since we did not get desried stdOut.")

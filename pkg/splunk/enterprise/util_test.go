@@ -1445,7 +1445,7 @@ func TestCopyFileToPod(t *testing.T) {
 	}
 }
 
-func TestGetListOfClusterScopedApps(t *testing.T) {
+func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
 			{
@@ -1497,9 +1497,22 @@ func TestGetListOfClusterScopedApps(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
-	clusterScopedApps := getListOfClusterScopedApps(appDeployContext)
+	setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
 
-	if len(clusterScopedApps) != 3 {
-		t.Errorf("expected %d number of cluster scoped apps, got %d", 3, len(clusterScopedApps))
+	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
+		for i := range deployInfoList {
+			appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
+			if err != nil {
+				// Error, should never happen
+				t.Errorf("Unable to find App src. App src name%s, appName: %s", appSrcName, deployInfoList[i].AppName)
+			}
+
+			if appSrc.Scope == enterpriseApi.ScopeCluster &&
+				(deployInfoList[i].PhaseInfo.Phase != enterpriseApi.PhaseInstall || deployInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete) {
+				t.Errorf("wrong install state for app: %s. Got(Phase=%s, PhaseStatus=%s), wanted(Phase=%s, PhaseStatus=%s)",
+					deployInfoList[i].AppName, deployInfoList[i].PhaseInfo.Phase, appPhaseStatusAsStr(deployInfoList[i].PhaseInfo.Status), enterpriseApi.PhaseInstall, appPhaseStatusAsStr(enterpriseApi.AppPkgInstallComplete))
+			}
+		}
 	}
 }

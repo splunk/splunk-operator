@@ -184,7 +184,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			afwSchedulerEntry(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			//markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 			if cr.Status.AppContext.IsDeploymentInProgress {
 				cr.Status.AppContext.IsDeploymentInProgress = false

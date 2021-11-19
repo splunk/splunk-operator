@@ -313,10 +313,8 @@ type AppSrcDeployInfo struct {
 type BundlePushStageType int
 
 const (
-	// BundlePushNotStarted indicates the initial state of bundle push
-	BundlePushNotStarted BundlePushStageType = iota + 1
 	// BundlePushPending waiting for all the apps to be copied to the Pod
-	BundlePushPending
+	BundlePushPending BundlePushStageType = iota + 1
 	// BundlePushInProgress indicates bundle push in progress
 	BundlePushInProgress
 	// BundlePushComplete bundle push completed
@@ -326,7 +324,7 @@ const (
 // BundlePushTracker used to track the bundle push status
 type BundlePushTracker struct {
 	// Represents the current stage. Internal to the App framework
-	BudlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
+	BundlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
 
 	// RetryCount defines the number of retries completed so far
 	RetryCount int32 `json:"retryCount,omitempty"`

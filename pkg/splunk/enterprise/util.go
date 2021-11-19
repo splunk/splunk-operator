@@ -317,8 +317,6 @@ func appPhaseStatusAsStr(status enterpriseApi.AppPhaseStatusType) string {
 // bundlePushStateAsStr converts the bundle push state enum to corresponding string
 func bundlePushStateAsStr(state enterpriseApi.BundlePushStageType) string {
 	switch state {
-	case enterpriseApi.BundlePushNotStarted:
-		return "Bundle Push Not Started"
 	case enterpriseApi.BundlePushPending:
 		return "Bundle Push Pending"
 	case enterpriseApi.BundlePushInProgress:
@@ -334,19 +332,13 @@ func bundlePushStateAsStr(state enterpriseApi.BundlePushStageType) string {
 func setBundlePushState(afwPipeline *AppInstallPipeline, state enterpriseApi.BundlePushStageType) {
 	scopedLog := log.WithName("setBundlePushState")
 
-	afwPipeline.pplnMutex.Lock()
-	scopedLog.Info("Setting the bundle push state", "old state", bundlePushStateAsStr(afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage), "new state", bundlePushStateAsStr(state))
-	afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage = state
-	afwPipeline.pplnMutex.Unlock()
+	scopedLog.Info("Setting the bundle push state", "old state", bundlePushStateAsStr(afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage), "new state", bundlePushStateAsStr(state))
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = state
 }
 
 // getBundlePushState returns the current bundle push state
 func getBundlePushState(afwPipeline *AppInstallPipeline) enterpriseApi.BundlePushStageType {
-	var state enterpriseApi.BundlePushStageType
-	afwPipeline.pplnMutex.Lock()
-	state = afwPipeline.appDeployContext.BundlePushStatus.BudlePushStage
-	afwPipeline.pplnMutex.Unlock()
-	return state
+	return afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage
 }
 
 // createAppDownloadDir creates the app download directory on the operator pod
@@ -931,14 +923,13 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			}
 		}
 
-		scope := getAppSrcScope(appFrameworkConfig, appSrc)
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
 		appsModified = AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects)
-
+		scope := getAppSrcScope(appFrameworkConfig, appSrc)
 		// if some apps were modified or added, and we have cluster scoped apps,
-		// then initialize the bundle push state
+		// then set the bundle push state to Pending
 		if appsModified && scope == enterpriseApi.ScopeCluster {
-			appDeployContext.BundlePushStatus.BudlePushStage = enterpriseApi.BundlePushNotStarted
+			appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 		}
 
 		// Finally update the Map entry with latest info
@@ -1619,11 +1610,10 @@ func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.
 	return nil
 }
 
-// getListOfClusterScopedApps returns the list of cluster scoped apps
-func getListOfClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext) []*enterpriseApi.AppDeploymentInfo {
-	scopedLog := log.WithName("getListOfClusterScopedApps")
+// setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
+func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext, status enterpriseApi.AppPhaseStatusType) {
+	scopedLog := log.WithName("setInstallStateForClusterScopedApps")
 
-	var clusterScopedApps []*enterpriseApi.AppDeploymentInfo
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
@@ -1634,32 +1624,16 @@ func getListOfClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentCon
 				continue
 			}
 
-			if appSrc.Scope == enterpriseApi.ScopeCluster && deployInfoList[i].DeployStatus != enterpriseApi.DeployStatusComplete {
-				clusterScopedApps = append(clusterScopedApps, &deployInfoList[i])
+			if appSrc.Scope == enterpriseApi.ScopeCluster {
+				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
+				deployInfoList[i].PhaseInfo.Status = status
 			}
 		}
 	}
-
-	return clusterScopedApps
 }
 
-// areAllAppsCopiedToPod checks whether all the apps are copied to the target pod or not
-func areAllAppsCopiedToPod(appsList []*enterpriseApi.AppDeploymentInfo) bool {
-
-	if len(appsList) == 0 {
-		return false
-	}
-
-	for _, app := range appsList {
-		if app.PhaseInfo.Status != enterpriseApi.AppPkgPodCopyComplete {
-			return false
-		}
-	}
-	return true
-}
-
-// getAdminPasswrdFromSecret retrieves the admin password from secret object
-func getAdminPasswrdFromSecret(client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
+// getAdminPasswordFromSecret retrieves the admin password from secret object
+func getAdminPasswordFromSecret(client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
 	// get the admin password from the namespace scoped secret
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(client, cr, defaultSecretObjName)
