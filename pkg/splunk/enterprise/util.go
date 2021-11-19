@@ -565,9 +565,24 @@ func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 	return appListingConfigMap, configMapDataChanged, nil
 }
 
-// getAppPackageLocalPath returns the Operator volume path for a given app package
-func getAppPackageLocalPath(cr splcommon.MetaObject, scope string, appSrcName string) string {
+// getAppPackageLocalDir returns the Operator volume directory for a given app package
+func getAppPackageLocalDir(cr splcommon.MetaObject, scope string, appSrcName string) string {
 	return filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), cr.GroupVersionKind().Kind, cr.GetName(), scope, appSrcName) + "/"
+}
+
+// getAppPackageName returns the app package name
+func getAppPackageName(worker *PipelineWorker) string {
+	return worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
+}
+
+// getAppPackageLocalPath returns the app package path on Operator pod
+func getAppPackageLocalPath(worker *PipelineWorker) string {
+	if worker == nil {
+		return ""
+	}
+	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
+
+	return getAppPackageLocalDir(worker.cr, appSrcScope, worker.appSrcName) + getAppPackageName(worker)
 }
 
 // ApplySmartstoreConfigMap creates the configMap with Smartstore config in INI format
@@ -987,6 +1002,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
 					scopedLog.Info("App change detected.  Marking for an update.", "appName", appName)
 					appList[idx].ObjectHash = *remoteObj.Etag
+					appList[idx].IsUpdate = true
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
 					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
@@ -1485,6 +1501,27 @@ func extractFieldFromConfigMapData(fieldRegex, data string) string {
 		result = pattern.FindStringSubmatch(data)[1]
 	}
 	return result
+}
+
+// checkIfFileExistsOnPod confirms if the given file path exits on a given Pod
+func checkIfFileExistsOnPod(c splcommon.ControllerClient, namespace string, podName string, filePath string) bool {
+	scopedLog := log.WithName("checkIfFileExistsOnPod").WithValues("podName", podName, "namespace", namespace).WithValues("filePath", filePath)
+	// Make sure the destination directory is existing
+	fPath := path.Clean(filePath)
+	command := fmt.Sprintf("test -f %s; echo -n $?", fPath)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+
+	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
+
+	if stdErr != "" || err != nil {
+		scopedLog.Error(err, "error in checking the file availability on the Pod", "stdErr", stdErr, "stdOut", stdOut, "filePath", fPath)
+		return false
+	}
+
+	fileTestResult, _ := strconv.Atoi(stdOut)
+	return fileTestResult == 0
 }
 
 // CopyFileToPod copies a file from Operator Pod to any given Pod of a custom resource

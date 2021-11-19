@@ -474,6 +474,32 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   "local",
+						},
+					},
+				},
+			},
+		},
 	}
 
 	var replicas int32 = 1
@@ -487,12 +513,32 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 		},
 	}
 
+	// Create client and add object
+	c := spltest.NewMockClient()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermaster-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Add object
+	c.AddObject(pod)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+
 	capacity := 1
 	var workerList []*PipelineWorker = make([]*PipelineWorker, capacity)
 	for i := range workerList {
 		workerList[i] = &PipelineWorker{
-			sts: sts,
-			cr:  &cr,
+			appSrcName:    cr.Spec.AppFrameworkConfig.AppSources[0].Name,
+			targetPodName: "splunk-stack1-clustermaster-0",
+			sts:           sts,
+			cr:            &cr,
 			appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 				AppName: fmt.Sprintf("app%d.tgz", i),
 				PhaseInfo: enterpriseApi.PhaseInfo{
@@ -501,6 +547,8 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 					RetryCount: 2,
 				},
 			},
+			afwConfig: &cr.Spec.AppFrameworkConfig,
+			client:    &client,
 		}
 	}
 
@@ -1525,7 +1573,7 @@ func TestRunPodCopyWorker(t *testing.T) {
 	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
 
 	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
-	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, worker.appSrcName)
+	appPkgLocalDir := getAppPackageLocalDir(&cr, appSrcScope, worker.appSrcName)
 	appPkgLocalPath := appPkgLocalDir + appPkgFileName
 
 	_, err := os.Stat(appPkgLocalDir)
@@ -1639,7 +1687,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
 
 	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
-	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, worker.appSrcName)
+	appPkgLocalDir := getAppPackageLocalDir(&cr, appSrcScope, worker.appSrcName)
 	appPkgLocalPath := appPkgLocalDir + appPkgFileName
 
 	_, err := os.Stat(appPkgLocalDir)
@@ -1802,10 +1850,191 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	}
 }
 
+func TestRunLocalScopedPlaybook(t *testing.T) {
+
+	// Test for each phase can send the worker to down stream
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   "local",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var replicas int32 = 1
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermaster-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Add object
+	c.AddObject(pod)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+
+	var waiter sync.WaitGroup
+	waiter.Add(1)
+	var localInstallCtxt *localScopeInstallContext = &localScopeInstallContext{
+		worker: &PipelineWorker{
+			appSrcName:    cr.Spec.AppFrameworkConfig.AppSources[0].Name,
+			targetPodName: "splunk-stack1-clustermaster-0",
+			sts:           sts,
+			cr:            &cr,
+			appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+				AppName:    "app1.tgz",
+				ObjectHash: "abcdef12345abcdef",
+				PhaseInfo: enterpriseApi.PhaseInfo{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+			},
+			afwConfig: &cr.Spec.AppFrameworkConfig,
+			client:    &client,
+			waiter:    &waiter,
+		},
+	}
+
+	stdOut, stdErr, err := localInstallCtxt.runPlaybook()
+	if err == nil {
+		t.Errorf("Failed to detect missingApp pkg: stdOut: %s, stdErr: %s, err: %s", stdOut, stdErr, err.Error())
+	}
+}
+
+func TestFreeAppPkgStorageFromOperator(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	afwPipeline = &AppInstallPipeline{
+		// 8 GB
+		availableDiskSpace: 8 * 1024 * 1024 * 1024,
+	}
+
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+	cr.Spec.AppFrameworkConfig = *appFrameworkConfig
+
+	var worker *PipelineWorker = &PipelineWorker{
+		cr:         &cr,
+		appSrcName: cr.Spec.AppFrameworkConfig.AppSources[0].Name,
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName:    "testApp.spl",
+			ObjectHash: "bcda23232a89",
+			Size:       1000,
+		},
+		afwConfig: &cr.Spec.AppFrameworkConfig,
+	}
+
+	defaultVol := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = "/tmp/"
+	defer func() {
+		splcommon.AppDownloadVolume = defaultVol
+	}()
+
+	appSrcScope := appFrameworkConfig.AppSources[0].Scope
+
+	appPkgLocalDir := getAppPackageLocalDir(worker.cr, appSrcScope, worker.appSrcName)
+
+	appPkgLocalPath := filepath.Join(appPkgLocalDir, getAppPackageName(worker))
+
+	_, err := os.Stat(appPkgLocalDir)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(appPkgLocalDir, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	_, err = os.Stat(appPkgLocalPath)
+	if os.IsNotExist(err) {
+		_, err := os.Create(appPkgLocalPath)
+		if err != nil {
+			t.Errorf("Unable to create the local package file, error: %v", err)
+		}
+	}
+	defer os.Remove(appPkgLocalPath)
+
+	diskSpaceBeforeRemoval := afwPipeline.availableDiskSpace
+	deleteAppPkgFromOperator(worker)
+
+	if afwPipeline.availableDiskSpace != diskSpaceBeforeRemoval+worker.appDeployInfo.Size {
+		t.Errorf("Unable to clean up the app package on Operator pod")
+	}
+}
+
 // TODO: gaurav/subba, commenting this UT for now.
 // It needs to be revisited once we have all the glue logic for all pipelines
 // For now, just covers the podCopy related flow
-
 /*
 func TestAfwSchedulerEntry(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{

@@ -291,6 +291,7 @@ type AppDeploymentInfo struct {
 	AppName          string              `json:"appName"`
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
+	IsUpdate         bool                `json:"isUpdate"`
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
@@ -417,6 +418,8 @@ const (
 	AppPkgInstallInProgress = 302
 	// AppPkgInstallComplete indicates complete
 	AppPkgInstallComplete = 303
+	// AppPkgMissingOnPodError indicates app pkg is not available on Pod for install
+	AppPkgMissingOnPodError = 398
 	// AppPkgInstallError indicates error after retries
 	AppPkgInstallError = 399
 )
