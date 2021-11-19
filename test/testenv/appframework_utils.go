@@ -2,8 +2,9 @@ package testenv
 
 import (
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"strings"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -78,11 +79,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)
-	logf.Log.Info("Check Version for app", "AppName", appname, "config", filePath)
+	logf.Log.Info("Check app version", "App", appname, "Conf file", filePath)
 
 	confline, err := GetConfLineFromPod(podName, filePath, ns, "version", "launcher", true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get Version from pod", "Pod Name", podName)
+		logf.Log.Error(err, "Failed to get version from pod", "Pod Name", podName)
 		return "", err
 	}
 	version := strings.TrimSpace(strings.Split(confline, "=")[1])
@@ -99,7 +100,7 @@ func GetPodAppInstallStatus(deployment *Deployment, podName string, ns string, a
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
@@ -113,10 +114,10 @@ func GetPodAppbtoolStatus(deployment *Deployment, podName string, ns string, app
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	if len(stdout) > 0 {
-		if strings.Contains(strings.Split(stdout, "\n")[0], "Application is disabled") {
+		if strings.Contains(strings.Split(stdout, "\n")[0], "App is disabled") {
 			return "DISABLED", nil
 		}
 		return "ENABLED", nil
@@ -132,4 +133,30 @@ func GetAppFileList(appList []string, version int) []string {
 		appFileList = append(appFileList, AppInfo[app][fileKey])
 	}
 	return appFileList
+}
+
+// GenerateAppFrameworkSpec Generate Appframework spec
+func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: volumeName,
+		Scope:   scope,
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(pollInterval),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	return appFrameworkSpec
 }

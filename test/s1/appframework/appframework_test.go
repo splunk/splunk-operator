@@ -54,28 +54,33 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframework: can deploy a standalone instance with App Framework enabled, install apps and upgrade them", func() {
+		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
-				################## SETUP ####################
-				* Upload older versions of apps (V1) to S3
-				* Create 2 app sources for Monitoring Console and Standalone
-			    * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			    * Prepare and deploy Standalone with app framework and wait for the pod to be ready
-				############## VERIFICATION #################
-				* Verify apps are copied and installed on Monitoring Console and on Standalone
-				############### UPGRADE APPS ################
-				* Upload newer versions of apps (V2) on S3
-			    * Wait for Monitoring Console and Standalone pods to be ready
-				############## VERIFICATIONS ################
-				* Verify apps are copied, installed and upgraded on Monitoring Console and on standalone
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
+			   * Upload V1 apps to S3 for Standalone
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############ INITIAL VERIFICATION ###########
+			   * Verify V1 apps are copied and installed on Monitoring Console and on Standalone
+			   ############## UPGRADE APPS #################
+			   * Upload V2 apps on S3
+			   * Wait for Monitoring Console and Standalone pods to be ready
+			   ############ UPGRADE VERIFICATION ###########
+			   * Verify V2 apps are copied, installed and upgraded on Monitoring Console and on Standalone
 			*/
 
-			// Upload older versions of apps (V1) to S3
+			//################## SETUP ####################
+			// Upload V1 apps to S3 for Monitoring Console
+			appVersion := "V1"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
@@ -107,19 +112,19 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
 			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Upload V1 apps to S3
+			// Upload V1 apps to S3 for Standalone
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-			appFileList = testenv.GetAppFileList(appListV1, 1)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Standalone
+			// Create App framework spec for Standalone
 			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -148,8 +153,9 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -157,102 +163,101 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container on Standalone Pod and MC
-			appVersion := "V1"
+			//############ INITIAL VERIFICATION ###########
+			// Verify V1 apps are downloaded on Standalone and Monitoring Console
 			initContDownloadLocationStandalonePod := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container for Standalone", "POD", standalonePodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container for Monitoring Console", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
-			podNames := []string{standalonePodName, mcPodName}
-
 			// Verify V1 apps are copied to location
-			testenvInstance.Log.Info("Verify V1 apps are copied to correct location on Pod for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
+			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify V1 apps are installed
-			testenvInstance.Log.Info("Verify V1 apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
+			//############## UPGRADE APPS #################
 			// Delete apps on S3
-			testenvInstance.Log.Info("Delete apps on S3 for", "Version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload newer version of apps (V2) to S3 for Standalone and Monitoring Console
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			// Upload V2 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V2"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			appFileList = testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
 
-			// Wait for Standalone to be in UPDATING status
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
-
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify V2 apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for apps", "POD", standalonePodName, "version", appVersion)
+			//############ UPGRADE VERIFICATION ###########
+			// Verify V2 apps are downloaded
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for apps", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify V2 apps are copied to location
-			testenvInstance.Log.Info("Verify V2 apps are copied to correct location on Pod for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
 			// Verify V2 apps are installed
-			testenvInstance.Log.Info("Verify apps are updated on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframework: can deploy a standalone instance with App Framework enabled, install apps and downgrade them", func() {
+		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
-				################## SETUP ####################
-				* Upload newer versions of apps (V2) to S3
-				* Create 2 app sources for Monitoring Console and Standalone
-			    * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			    * Prepare and deploy Standalone with app framework and wait for the pod to be ready
-				############## VERIFICATION #################
-				* Verify apps are copied and installed on Monitoring Console and on Standalone
-				############# DOWNGRADE APPS ################
-				* Upload older versions of apps (V1) on S3
-			    * Wait for Monitoring Console and Standalone pods to be ready
-				############## VERIFICATION #################
-				* Verify apps are copied, installed and downgraded on Monitoring Console and also on standalone
+			   ################## SETUP ####################
+			   * Upload V2 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
+			   * Upload V2 apps to S3 for Standalone
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############ INITIAL VERIFICATION ###########
+			   * Verify apps are copied and installed on Monitoring Console and on Standalone
+			   ############# DOWNGRADE APPS ################
+			   * Upload V1 apps on S3
+			   * Wait for Monitoring Console and Standalone pods to be ready
+			   ########## DOWNGRADE VERIFICATION ###########
+			   * Verify apps are copied, installed and downgraded on Monitoring Console and on Standalone
 			*/
 
-			// Delete pre-installed apps on S3
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
-			uploadedApps = nil
-
-			// Upload newer versions of apps (V2) to S3 for MC
+			//################## SETUP ####################
+			// Upload V2 apps to S3
 			appVersion := "V2"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV2, 2)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for S1")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for Monitoring Console")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
@@ -284,7 +289,7 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
 			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
@@ -318,8 +323,9 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -327,46 +333,46 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container on Standalone and Monitoring Console
+			//############ INITIAL VERIFICATION ###########
+			// Verify V2 apps are downloaded on Standalone Pod and Monitoring Console
 			initContDownloadLocationStandalonePod := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			appFileList = testenv.GetAppFileList(appListV2, 2)
-			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for Standalone", "POD", standalonePodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify V2 apps are downloaded by init container for Monitoring Console", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
-			podNames := []string{standalonePodName, mcPodName}
-
 			// Verify V2 apps are copied to location
-			testenvInstance.Log.Info("Verify V2 apps are copied to correct location on Pod for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
+			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
 			// Verify V2 apps are installed
-			testenvInstance.Log.Info("Verify V2 apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 
+			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
+			testenvInstance.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload older version of apps (V1) to S3 for Standalone and Monitoring Console
+			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V1"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1, 1)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
 			time.Sleep(2 * time.Minute)
-
-			// Wait for Standalone to be in UPDATING status
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -374,18 +380,19 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container for apps", "POD", standalonePodName, "version", appVersion)
+			//########## DOWNGRADE VERIFICATION ###########
+			// Verify apps are downloaded
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify V1 apps are downloaded by init container for apps", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Monitoring Console pod %s ", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify apps are copied to location
-			testenvInstance.Log.Info("Verify V1 apps are copied to correct location on Pod for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are downgraded
-			testenvInstance.Log.Info("Verify V1 apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 		})
 	})
@@ -399,25 +406,32 @@ var _ = Describe("s1appfw test", func() {
 			   * Create 2 app sources for Monitoring Console and Standalone
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
 			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
-			    ################# VERIFICATION ###############
+			   ########## INITIAL VERIFICATION #############
 			   * Verify apps are copied and installed on Monitoring Console and Standalone
-			   ################## SCALING UP ################
+			   ############### SCALING UP ##################
 			   * Scale up Standalone
 			   * Wait for Monitoring Console and  Standalone to be ready
-			   ################# VERIFICATION ###############
+			   ########### SCALING UP VERIFICATION #########
 			   * Verify apps are copied and installed on new Standalone pod
-			   ################ SCALING DOWN ################
+			   ############## SCALING DOWN #################
 			   * Scale down Standalone
 			   * Wait for Monitoring Console and Standalone to be ready
-			    ################# VERIFICATION ###############
+			   ########### SCALING DOWN VERIFICATION #######
 			   * Verify apps are still copied and installed on Standalone
 			*/
 
-			// Upload apps to S3 for Monitoring Console
+			//################## SETUP ####################
+			// Upload V1 apps to S3 for Standalone and Monitoring Console
+			appVersion := "V1"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
@@ -446,9 +460,10 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Monitoring Console
+			testenvInstance.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
 			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
@@ -488,6 +503,7 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
@@ -497,30 +513,30 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Verify apps are downloaded by init-container on Standalone Pod and Monitoring Console
-			appVersion := "V1"
+			//########## INITIAL VERIFICATION #############
+			// Verify apps are downloaded on Standalone and Monitoring Console
 			initContDownloadLocationStandalonePod := "/init-apps/" + appSourceName
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			appFileList = testenv.GetAppFileList(appListV1, 1)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for Standalone", "POD", standalonePodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for Monitoring Console", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
-			podNames := []string{standalonePodName, mcPodName}
-
 			// Verify apps are copied to location
-			testenvInstance.Log.Info("Verify Apps are copied to correct location on Pod for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
+			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, true)
 
 			// Verify apps are installed
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
+			//############### SCALING UP ##################
 			// Scale up Standalone instance
-			testenvInstance.Log.Info("Scaling Up Standalone CR")
+			testenvInstance.Log.Info("Scale up Standalone")
 			scaledReplicaCount := 2
 			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
@@ -543,32 +559,34 @@ var _ = Describe("s1appfw test", func() {
 			podNames = append(podNames, fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1))
 			standalonePods := []string{standalonePodName, fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 1)}
 
-			// Verify apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container on Standalone after scaling up", "POD", standalonePods, "version", appVersion)
+			//########### SCALING UP VERIFICATION #########
+			// Verify apps are downloaded
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded after scaling up on Standalone pods %s", appVersion, standalonePods))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), standalonePods, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container on Monitoring Console after scaling up", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded after scaling up on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify apps are copied to location
-			testenvInstance.Log.Info("Verify Apps are copied to correct location on all Pods after scaling up", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on all pods after scaling up", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed
-			testenvInstance.Log.Info("Verify Apps are installed on the pods after scaling up", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on all pods after scaling up", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
+			//############## SCALING DOWN #################
 			// Scale down Standalone instance
-			testenvInstance.Log.Info("Scaling down Standalone CR")
+			testenvInstance.Log.Info("Scale down Standalone")
 			scaledReplicaCount = 1
 			standalone = &enterpriseApi.Standalone{}
 			err = deployment.GetInstance(deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
+			Expect(err).To(Succeed(), "Failed to get instance of Standalone after scaling down")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 			err = deployment.UpdateCR(standalone)
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
-			// Ensure standalone is scaling down
+			// Ensure Standalone is scaling down
 			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseScalingDown)
 
 			// Wait for Standalone to be in READY status
@@ -579,18 +597,19 @@ var _ = Describe("s1appfw test", func() {
 
 			podNames = testenv.DumpGetPods(testenvInstance.GetName())
 
-			// Verify apps are downloaded by init-container
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for Standalone after scaling down ", "POD", standalonePodName, "version", appVersion)
+			//########### SCALING DOWN VERIFICATION #######
+			// Verify apps are downloaded
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded after scaling down for Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, initContDownloadLocationStandalonePod)
-			testenvInstance.Log.Info("Verify Apps are downloaded by init container for Monitoring Console after scaling down ", "POD", mcPodName, "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded after scaling down for Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify apps are copied to location
-			testenvInstance.Log.Info("Verify Apps are copied to correct location on all Pods after scaling down ", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on all Pods after scaling down ", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify apps are installed
-			testenvInstance.Log.Info("Verify Apps are installed on the pods after scaling down ", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are still installed on the pods after scaling down", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
 		})
@@ -599,16 +618,29 @@ var _ = Describe("s1appfw test", func() {
 	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframework: can deploy a Standalone and have ES app installed", func() {
 
-			// Upload ES app to S3
-			esApp := []string{"SplunkEnterpriseSecuritySuite"}
-			appFileList := testenv.GetAppFileList(esApp, 1)
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload ES app to S3
+			   * Create App Source for Standalone
+			   * Prepare and deploy Standalone and wait for the pod to be ready
+			   ################## VERIFICATION #############
+			   * Verify ES app is installed on Standalone
+			*/
+
+			//################## SETUP ####################
 
 			// Download ES App from S3
+			testenvInstance.Log.Info("Download ES app from S3")
+			esApp := []string{"SplunkEnterpriseSecuritySuite"}
+			appFileList := testenv.GetAppFileList(esApp, 1)
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-			Expect(err).To(Succeed(), "Unable to download ES app file")
+			Expect(err).To(Succeed(), "Unable to download ES app")
+
+			// Create local directory for file download
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
 			// Upload ES app to S3
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+			testenvInstance.Log.Info("Upload ES app on S3")
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -629,8 +661,6 @@ var _ = Describe("s1appfw test", func() {
 				VolList:              volumeSpec,
 				AppSources:           appSourceSpec,
 			}
-
-			// Create Standalone spec with App Framework enabled and some extra config to have ES installed correctly
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -641,37 +671,58 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
+			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
 			// Ensure Standalone goes to Ready phase
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify apps are downloaded by init-container
+			//################## VERIFICATION #############
+			// Verify ES app is downloaded
+			testenvInstance.Log.Info("Verify ES app is downloaded on Standalone")
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
-			// Verify apps are installed locally
+			// Verify ES app is installed
+			testenvInstance.Log.Info("Verify ES app is installed on Standalone")
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), standalonePod, esApp, false, "enabled", false, false)
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframework: can deploy a standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Create app source for Standalone
+			   * Add more apps than usual on S3 for this test
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############### VERIFICATION ################
+			   * Verify apps are copied, installed on Standalone
+			*/
+
+			//################## SETUP ####################
+			// Create local app Directory
+			//s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
 			// Creating a bigger list of apps to be installed than the default one
 			appList := append(appListV1, testenv.RestartNeededApps...)
 			appFileList := testenv.GetAppFileList(appList, 1)
 
 			// Download apps from S3
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(testenv.RestartNeededApps, 1))
+			testenvInstance.Log.Info("Download bigger amount of apps from S3 for this test")
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, testenv.GetAppFileList(appList, 1))
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Upload apps to S3
+			testenvInstance.Log.Info("Upload bigger amount of apps to S3 for this test")
 			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			//uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, testenv.GetAppFileList(appList, 1), downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -704,22 +755,27 @@ var _ = Describe("s1appfw test", func() {
 				AppFrameworkConfig: appFrameworkSpec,
 			}
 
-			// Create Standalone Deployment with App Framework
+			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with App framework")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
-			// Verify apps are downloaded by init-container
+			//############### VERIFICATION ################
+			// Verify apps are downloaded
+			testenvInstance.Log.Info("Verify apps are downloaded for Standalone")
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
 
-			// Verify apps are copied to location
+			// Verify apps are copied to correct location
+			testenvInstance.Log.Info("Verify apps are copied to correct location on Standalone")
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appList, true, false)
 
 			// Verify apps are installed
+			testenvInstance.Log.Info("Verify apps are installed on Standalone")
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appList, true, "enabled", false, false)
 		})
 	})
