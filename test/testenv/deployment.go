@@ -615,16 +615,9 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(name string, spec enterpr
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec, delaySeconds int, mc bool) error {
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec, mcName string) error {
 
 	licenseMaster := ""
-
-	var mcName string
-	if mc {
-		mcName = d.GetName()
-	} else {
-		mcName = ""
-	}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -650,8 +643,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			// LivenessInitialDelaySeconds:  int32(delaySeconds),
-			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		AppFrameworkConfig: appFrameworkSpec,
 	}
@@ -681,8 +672,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			// LivenessInitialDelaySeconds:  int32(delaySeconds),
-			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpec,
