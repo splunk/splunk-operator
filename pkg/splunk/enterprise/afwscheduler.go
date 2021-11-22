@@ -981,28 +981,8 @@ func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.C
 	return sts
 }
 
-// getPodExecClient returns the client object used to execute pod exec commands
-func getPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject, cmdStr string, targetPodName string) *PodExecClient {
-	scopedLog := log.WithName("getPodExecClient").WithValues("crName", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// get the admin password from the namespace scoped secret
-	adminPwd, err := getAdminPasswordFromSecret(client, cr)
-	if err != nil {
-		scopedLog.Error(err, "unable to get admin password")
-		return nil
-	}
-
-	return &PodExecClient{
-		client:        client,
-		cr:            cr,
-		targetPodName: targetPodName,
-		adminPwd:      adminPwd,
-		command:       fmt.Sprintf(cmdStr, adminPwd),
-	}
-}
-
 // getIdxcPlayBookContext returns the idxc playbook context
-func getIdxcPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, podExecClient PodExecClientImpl) *IdxcPlayBookContext {
+func getIdxcPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, podExecClient splutil.PodExecClientImpl) *IdxcPlayBookContext {
 	return &IdxcPlayBookContext{
 		client:        client,
 		cr:            cr,
@@ -1023,7 +1003,7 @@ func getSHCPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaO
 }
 
 // getPlayBookContext returns the context for running playbook
-func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient PodExecClientImpl) PlayBookImpl {
+func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlayBookImpl {
 
 	switch kind {
 	case "ClusterMaster":
@@ -1036,25 +1016,11 @@ func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObje
 	}
 }
 
-// runPodExecCommand runs the commands related to idxc bundle push
-func (podExecClient *PodExecClient) runPodExecCommand() (string, string, error) {
-	if podExecClient == nil {
-		err := fmt.Errorf("podExecClient is nil")
-		return "", "", err
-	}
-
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(podExecClient.command),
-	}
-
-	return splutil.PodExecCommand(podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
-}
-
 // isBundlePushComplete checks the status of bundle push
-func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete() bool {
+func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete(cmd string) bool {
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", idxcPlayBookContext.cr.GetName(), "namespace", idxcPlayBookContext.cr.GetNamespace())
 
-	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.runPodExecCommand()
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
 		return false
@@ -1070,6 +1036,16 @@ func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete() bool {
 	return true
 }
 
+// triggerBundlePush triggers the bundle push for indexer cluster
+func (idxcPlayBookContext *IdxcPlayBookContext) triggerBundlePush(bundlePushCmd string) error {
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(bundlePushCmd)
+	if err != nil || stdErr != "OK\n" {
+		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
+		return err
+	}
+	return nil
+}
+
 // RunPlayBook will implement the following logic(and set the bundle push state accordingly)  -
 // 1. If the bundle push is not in progress, run the logic to push the bundle from CM to indexer peers
 // 2. OR else, if the bundle push is already in progress, check the status of bundle push
@@ -1083,13 +1059,8 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 	// if the bundle push is already in progress, check the status
 	case enterpriseApi.BundlePushInProgress:
 		scopedLog.Info("checking the status of bundle push")
-
-		podExecClient := idxcPlayBookContext.podExecClient.(*PodExecClient)
-		// change the command string to run the show cluster-bundle-status command for idxc
-		podExecClient.command = fmt.Sprintf(idxcShowClusterBundleStatusStr, podExecClient.adminPwd)
-
 		// check if the bundle push is complete
-		if idxcPlayBookContext.isBundlePushComplete() {
+		if idxcPlayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 			// set the bundle push status to complete
 			setBundlePushState(afwPipeline, enterpriseApi.BundlePushComplete)
 
@@ -1102,17 +1073,18 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
 		scopedLog.Info("running command to apply cluster bundle")
-		stdOut, stdErr, err := idxcPlayBookContext.podExecClient.runPodExecCommand()
-		if err != nil || stdErr != "OK\n" {
-			err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
+		err := idxcPlayBookContext.triggerBundlePush(applyIdxcBundleCmdStr)
+		if err != nil {
 			scopedLog.Error(err, "failed to apply cluster bundle")
 			return err
 		}
+
 		// set the state to bundle push in progress
 		setBundlePushState(afwPipeline, enterpriseApi.BundlePushInProgress)
 
 	default:
-		scopedLog.Info("Bundle push state", "state", appDeployContext.BundlePushStatus.BundlePushStage)
+		err := fmt.Errorf("invalid Bundle push state=%s", bundlePushStateAsStr(appDeployContext.BundlePushStatus.BundlePushStage))
+		return err
 	}
 
 	return nil
@@ -1227,14 +1199,13 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 			} else {
 				if bundlePushState != enterpriseApi.BundlePushComplete && checkIfBundlePushNeeded(clusterScopedApps) {
 					// Trigger the bundle push playbook: CSPL-1332, CSPL-1333
-					if afwPipeline.playBookContext == nil {
-						podExecClient := getPodExecClient(client, cr, applyIdxcBundleCmdStr, targetPodName)
-						kind := cr.GetObjectKind().GroupVersionKind().Kind
-						afwPipeline.playBookContext = getPlayBookContext(client, cr, afwPipeline, targetPodName, kind, podExecClient)
-					}
+
+					podExecClient := splutil.GetPodExecClient(client, cr, targetPodName)
+					kind := cr.GetObjectKind().GroupVersionKind().Kind
+					playBookContext := getPlayBookContext(client, cr, afwPipeline, targetPodName, kind, podExecClient)
 
 					// run the playbook to issue bundle push command on the pod
-					err = afwPipeline.playBookContext.runPlayBook()
+					err = playBookContext.runPlayBook()
 					if err != nil {
 						// If the error is due to a bundle which is already present, don't do anything.
 						// In the next reconcile we will mark it as bundle push complete

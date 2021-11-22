@@ -1651,17 +1651,21 @@ func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.
 func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext, status enterpriseApi.AppPhaseStatusType) {
 	scopedLog := log.WithName("setInstallStateForClusterScopedApps")
 
+	var isClusterScoped bool
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
+		if err != nil {
+			// Error, should never happen
+			scopedLog.Error(err, "Unable to find App src", "App src name", appSrcName)
+			continue
+		}
+		if appSrc.Scope == enterpriseApi.ScopeCluster {
+			isClusterScoped = true
+		}
+
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
-			appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
-			if err != nil {
-				// Error, should never happen
-				scopedLog.Error(err, "Unable to find App src", "App src name", appSrcName, "App name", deployInfoList[i].AppName)
-				continue
-			}
-
-			if appSrc.Scope == enterpriseApi.ScopeCluster {
+			if isClusterScoped {
 				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
 				deployInfoList[i].PhaseInfo.Status = status
 			}

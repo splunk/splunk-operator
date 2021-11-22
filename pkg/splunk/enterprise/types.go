@@ -19,6 +19,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -113,35 +114,11 @@ type AppInstallPipeline struct {
 
 	// Refernce to app deploy context
 	appDeployContext *enterpriseApi.AppDeploymentContext
-
-	// reference to PlayBookImpl to run a specific playbook
-	playBookContext PlayBookImpl
-}
-
-// PodExecClientImpl is an interface which is used to implement
-// PodExecClient to run pod exec commands
-// NOTE: This client will be helpful in UTs since we can create
-// our own mock client and pass it to the tests to work correctly.
-type PodExecClientImpl interface {
-	runPodExecCommand() (string, string, error)
-}
-
-// blank assignment to implement PodExecClientImpl
-var _ PodExecClientImpl = &PodExecClient{}
-
-// PodExecClient implements PodExecClientImpl
-type PodExecClient struct {
-	client        splcommon.ControllerClient
-	cr            splcommon.MetaObject
-	targetPodName string
-	adminPwd      []byte
-	command       string
 }
 
 // PlayBookImpl is an interface to implement individual playbooks
 type PlayBookImpl interface {
 	runPlayBook() error
-	isBundlePushComplete() bool
 }
 
 // blank assignment to implement PlayBookImpl
@@ -156,7 +133,7 @@ type IdxcPlayBookContext struct {
 	cr            splcommon.MetaObject
 	afwPipeline   *AppInstallPipeline
 	targetPodName string
-	podExecClient PodExecClientImpl
+	podExecClient splutil.PodExecClientImpl
 }
 
 // SHCPlayBookContext is used to implement playbook to push bundle to SHC members

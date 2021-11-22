@@ -1738,7 +1738,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	close(ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel)
 }
 
-var _ PodExecClientImpl = &MockPodExecClient{}
+var _ splutil.PodExecClientImpl = &MockPodExecClient{}
 
 // MockPodExecClient to mock the PodExecClient
 type MockPodExecClient struct {
@@ -1746,7 +1746,7 @@ type MockPodExecClient struct {
 	stdErr string
 }
 
-func (mockPodExecClient *MockPodExecClient) runPodExecCommand() (string, string, error) {
+func (mockPodExecClient *MockPodExecClient) RunPodExecCommand(cmd string) (string, string, error) {
 	return mockPodExecClient.stdOut, mockPodExecClient.stdErr, nil
 }
 
@@ -1796,17 +1796,11 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
 
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
-	podExecClient := getPodExecClient(c, &cr, applyIdxcBundleCmdStr, targetPodName)
-	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
-	err := afwPipeline.playBookContext.runPlayBook()
+	podExecClient := splutil.GetPodExecClient(c, &cr, targetPodName)
+	playBookContext := getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
+	err := playBookContext.runPlayBook()
 	if err == nil {
-		t.Errorf("runPlayBook() should have returned error, since we dont have a namespaced scoped secret yet")
-	}
-
-	// Create namespace scoped secret
-	_, err = splutil.ApplyNamespaceScopedSecretObject(c, "test")
-	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("runPlayBook() should have returned error, since we dont get the required output")
 	}
 
 	// now replace the pod exec client with our mock client
@@ -1814,9 +1808,9 @@ func TestIDXCRunPlayBook(t *testing.T) {
 		stdOut: "",
 		stdErr: "OK\n",
 	}
-	afwPipeline.playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
+	playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
-	err = afwPipeline.playBookContext.runPlayBook()
+	err = playBookContext.runPlayBook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlayBook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
 	}
@@ -1824,27 +1818,28 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	// now test the error scenario where we did not get OK in stdErr
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecClient.stdErr = ""
-	err = afwPipeline.playBookContext.runPlayBook()
+	err = playBookContext.runPlayBook()
 	if err == nil {
 		t.Errorf("runPlayBook() should have returned error since we did not get desired output")
 	}
 
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
+	idxcplayBookContext := playBookContext.(*IdxcPlayBookContext)
 	// invalid scenario, where stdOut!="cluster_status=None"
-	if afwPipeline.playBookContext.isBundlePushComplete() {
+	if idxcplayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 		t.Errorf("isBundlePushComplete() should have returned error since we did not get desried stdOut.")
 	}
 
 	// invalid scenario, where stdErr != ""
 	mockPodExecClient.stdErr = "error"
-	if afwPipeline.playBookContext.isBundlePushComplete() {
+	if idxcplayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 		t.Errorf("isBundlePushComplete() should have returned false since we did not get desried stdOut.")
 	}
 
 	// valid scenario where bundle push is complete
 	mockPodExecClient.stdErr = ""
 	mockPodExecClient.stdOut = "cluster_status=None"
-	if !afwPipeline.playBookContext.isBundlePushComplete() {
+	if !idxcplayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 		t.Errorf("isBundlePushComplete() should not have returned false.")
 	}
 }
