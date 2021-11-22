@@ -615,9 +615,7 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(name string, spec enterpr
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpec enterpriseApi.AppFrameworkSpec, mcName string) error {
-
-	licenseMaster := ""
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -626,8 +624,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 		if err != nil {
 			return err
 		}
-
-		licenseMaster = name
 	}
 
 	// Deploy the cluster manager
@@ -644,7 +640,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 				Name: mcName,
 			},
 		},
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
 	if err != nil {
@@ -674,7 +670,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 			},
 		},
 		Replicas:           3,
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
