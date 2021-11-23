@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+//  http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -66,7 +66,7 @@ func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitor
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for Monitoring Console STATUS to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -78,14 +78,14 @@ func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitor
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
-// StandaloneReady verify Standlone is in ReadyStatus and does not flip-flop
+// StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func StandaloneReady(deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestEnv) {
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(deploymentName, standalone)
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for standalone STATUS to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Standalone phase to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -106,7 +106,7 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for search head cluster STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Search head cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -116,7 +116,7 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for Deployer STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.DeployerPhase)
+		testenvInstance.Log.Info("Waiting for Deployer phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.DeployerPhase)
 		DumpGetPods(testenvInstance.GetName())
 		return shc.Status.DeployerPhase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -126,7 +126,7 @@ func SearchHeadClusterReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for search head cluster STATUS to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -147,7 +147,7 @@ func SingleSiteIndexersReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for indexer instance's status to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return idc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -168,7 +168,7 @@ func ClusterManagerReady(deployment *Deployment, testenvInstance *TestEnv) {
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+" instance status to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
@@ -195,7 +195,7 @@ func IndexersReady(deployment *Deployment, testenvInstance *TestEnv, siteCount i
 			if err != nil {
 				return splcommon.PhaseError
 			}
-			testenvInstance.Log.Info("Waiting for indexer site instance status to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+			testenvInstance.Log.Info("Waiting for indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 			DumpGetPods(testenvInstance.GetName())
 			return idc.Status.Phase
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
@@ -222,10 +222,10 @@ func IndexerClusterMultisiteStatus(deployment *Deployment, testenvInstance *Test
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
 		if err != nil {
-			testenvInstance.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+			testenvInstance.Log.Error(err, "Failed to execute command", "on pod", podName, "command", command)
 			return map[string][]string{}
 		}
-		testenvInstance.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		testenvInstance.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 		siteIndexerResponse := ClusterMasterSitesResponse{}
 		json.Unmarshal([]byte(stdout), &siteIndexerResponse)
 		siteIndexerStatus := map[string][]string{}
@@ -252,7 +252,7 @@ func VerifyRFSFMet(deployment *Deployment, testenvInstance *TestEnv) {
 func VerifyNoDisconnectedSHPresentOnCM(deployment *Deployment, testenvInstance *TestEnv) {
 	gomega.Consistently(func() bool {
 		shStatus := CheckSearchHeadRemoved(deployment)
-		testenvInstance.Log.Info("Verifying no SH in DISCONNECTED state present on CM", "Status", shStatus)
+		testenvInstance.Log.Info("Verifying no Search Head in DISCONNECTED state present on Cluster Manager", "Status", shStatus)
 		return shStatus
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
 }
@@ -261,7 +261,7 @@ func VerifyNoDisconnectedSHPresentOnCM(deployment *Deployment, testenvInstance *
 func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
 	gomega.Eventually(func() bool {
 		shcStatus := SHCInNamespace(testenvInstance.GetName())
-		testenvInstance.Log.Info("Verifying no SHC is present in namespace", "Status", shcStatus)
+		testenvInstance.Log.Info("Verifying no Search Head Cluster is present in namespace", "Status", shcStatus)
 		return shcStatus
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
 }
@@ -310,7 +310,7 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 		restResponse := PodDetailsStruct{}
 		err = json.Unmarshal([]byte(output), &restResponse)
 		if err != nil {
-			logf.Log.Error(err, "Failed to parse cluster searchheads")
+			logf.Log.Error(err, "Failed to parse cluster Search heads")
 			return false
 		}
 		logf.Log.Info("Service Account on Pod", "FOUND", restResponse.Spec.ServiceAccount, "EXPECTED", serviceAccount)
@@ -419,7 +419,7 @@ func VerifyStandalonePhase(deployment *Deployment, testenvInstance *TestEnv, crN
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for standalone status", "instance", standalone.ObjectMeta.Name, "Expected", phase, " Actual Phase", standalone.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Standalone status", "instance", standalone.ObjectMeta.Name, "Expected", phase, " Actual Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
@@ -433,7 +433,7 @@ func VerifyMonitoringConsolePhase(deployment *Deployment, testenvInstance *TestE
 		if err != nil {
 			return splcommon.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for monitoring console CR status", "instance", mc.ObjectMeta.Name, "Expected", phase, " Actual Phase", mc.Status.Phase)
+		testenvInstance.Log.Info("Waiting for Monitoring Console CR status", "instance", mc.ObjectMeta.Name, "Expected", phase, " Actual Phase", mc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		return mc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
@@ -617,7 +617,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 	for _, podName := range pods {
 		for _, appName := range apps {
 			status, versionInstalled, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
-			logf.Log.Info("App info returned for app", "App-name", appName, "status", status, "versionInstalled", versionInstalled, "error", err)
+			logf.Log.Info("App details", "App", appName, "Status", status, "Version", versionInstalled, "Error", err)
 			gomega.Expect(err).To(gomega.Succeed(), "Unable to get app status on pod ")
 			comparison := strings.EqualFold(status, statusCheck)
 			//Check the app is installed on specific pods and un-installed on others for cluster-wide install
@@ -625,7 +625,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 			if clusterWideInstall {
 				if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
 					check = true
-					testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
+					testenvInstance.Log.Info("App Install Check", "Pod", podName, "App", appName, "Expected", check, "Found", comparison, "Scope:cluster", clusterWideInstall)
 					gomega.Expect(comparison).Should(gomega.Equal(check))
 				}
 			} else {
@@ -635,7 +635,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 				} else {
 					check = true
 				}
-				testenvInstance.Log.Info("App Install Check", "Pod Name", podName, "App Name", appName, "Expected", check, "Found", comparison, "Cluster Install Scope", clusterWideInstall)
+				testenvInstance.Log.Info("App Install Check", "Pod", podName, "App", appName, "Expected", check, "Found", comparison, "Scope:cluster", clusterWideInstall)
 				gomega.Expect(comparison).Should(gomega.Equal(check))
 			}
 
@@ -648,7 +648,7 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 					} else {
 						expectedVersion = AppInfo[appName]["V1"]
 					}
-					testenvInstance.Log.Info("Verify app Version", "Pod Name", podName, "App Name", appName, "Expected Version", expectedVersion, "Version Installed", versionInstalled, "Updated", checkupdated)
+					testenvInstance.Log.Info("Verify app", "On pod", podName, "App name", appName, "Expected version", expectedVersion, "Version installed", versionInstalled, "Updated", checkupdated)
 					gomega.Expect(versionInstalled).Should(gomega.Equal(expectedVersion))
 				}
 			}
@@ -670,7 +670,6 @@ func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns strin
 				path = splcommon.PeerAppsLoc
 			}
 		}
-		testenvInstance.Log.Info("Verifying App in Directory", "Directory Name", path, "Pod Name", podName)
 		VerifyAppsInFolder(deployment, testenvInstance, ns, podName, apps, path, checkAppDirectory)
 	}
 }
@@ -684,7 +683,7 @@ func VerifyAppsInFolder(deployment *Deployment, testenvInstance *TestEnv, ns str
 		for _, app := range apps {
 			folderName := app + "/"
 			found := CheckStringInSlice(appList, folderName)
-			logf.Log.Info("Check App in Directory", "Pod Name", podName, "App-name", folderName, "Path", path, "status", found)
+			logf.Log.Info("App check", "On pod", podName, "check app", folderName, "is in path", path, "Status", found)
 			if found != checkAppDirectory {
 				return false
 			}
