@@ -356,7 +356,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V2 version of apps to S3 for Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
+			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -774,7 +774,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ####################
 			// Upload V1 apps to S3 for M4
 			appVersion := "V1"
-			s3TestDir = "c3appfw-" + testenv.RandomDNSName(4)
+			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
