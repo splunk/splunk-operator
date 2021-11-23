@@ -888,8 +888,17 @@ func isAppInstallationCompleteOnStandaloneReplicas(auxPhaseInfo []enterpriseApi.
 	return true
 }
 
+// isClusterScoped checks whether current cr is a SHC or a CM
+func isClusterScoped(kind string) bool {
+	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+}
+
 // checkIfBundlePushNeeded confirms if the bundle push is needed or not
-func checkIfBundlePushNeeded(clusterScopedApps []*enterpriseApi.AppDeploymentInfo) bool {
+func checkIfBundlePushNeeded(bundlePushState enterpriseApi.BundlePushStageType, kind string, clusterScopedApps []*enterpriseApi.AppDeploymentInfo) bool {
+	if !isClusterScoped(kind) || bundlePushState == enterpriseApi.BundlePushComplete {
+		return false
+	}
+
 	for _, appDeployInfo := range clusterScopedApps {
 		if appDeployInfo.PhaseInfo.Phase != enterpriseApi.PhasePodCopy || appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgPodCopyComplete {
 			return false
@@ -897,6 +906,14 @@ func checkIfBundlePushNeeded(clusterScopedApps []*enterpriseApi.AppDeploymentInf
 	}
 
 	return true
+}
+
+// checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
+func checkIfBundlePushIsDone(kind string, bundlePushState enterpriseApi.BundlePushStageType) bool {
+	if !isClusterScoped(kind) || bundlePushState == enterpriseApi.BundlePushComplete {
+		return true
+	}
+	return false
 }
 
 // initPipelinePhase initializes a given pipeline phase
@@ -1187,9 +1204,10 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	// Wait for the yield function to finish
 	afwPipeline.phaseWaiter.Add(1)
 	go func(afwEntryTime int64) {
+		kind := cr.GetObjectKind().GroupVersionKind().Kind
 		for {
 			bundlePushState := getBundlePushState(afwPipeline)
-			if afwEntryTime+maxRunTimeBeforeAttemptingYield < time.Now().Unix() || (afwPipeline.isPipelineEmpty() && bundlePushState == enterpriseApi.BundlePushComplete) {
+			if afwEntryTime+maxRunTimeBeforeAttemptingYield < time.Now().Unix() || (afwPipeline.isPipelineEmpty() && checkIfBundlePushIsDone(kind, bundlePushState)) {
 				scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-afwEntryTime)
 
 				// Trigger termination by closing the channel
@@ -1197,13 +1215,19 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 				afwPipeline.phaseWaiter.Done()
 				break
 			} else {
-				if bundlePushState != enterpriseApi.BundlePushComplete && checkIfBundlePushNeeded(clusterScopedApps) {
+				if checkIfBundlePushNeeded(bundlePushState, kind, clusterScopedApps) {
 					// Trigger the bundle push playbook: CSPL-1332, CSPL-1333
 
 					podExecClient := splutil.GetPodExecClient(client, cr, targetPodName)
-					kind := cr.GetObjectKind().GroupVersionKind().Kind
-					playBookContext := getPlayBookContext(client, cr, afwPipeline, targetPodName, kind, podExecClient)
 
+					playBookContext := getPlayBookContext(client, cr, afwPipeline, targetPodName, kind, podExecClient)
+					if playBookContext == nil {
+						err = fmt.Errorf("playBookContext is nil")
+						scopedLog.Error(err, "invalid playBookContext")
+						// sleep for one second
+						time.Sleep(1 * time.Second)
+						continue
+					}
 					// run the playbook to issue bundle push command on the pod
 					err = playBookContext.runPlayBook()
 					if err != nil {

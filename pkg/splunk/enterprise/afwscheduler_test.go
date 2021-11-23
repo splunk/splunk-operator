@@ -696,7 +696,7 @@ func TestCheckIfBundlePushNeeded(t *testing.T) {
 		clusterScopedApps[i] = &enterpriseApi.AppDeploymentInfo{}
 	}
 
-	if checkIfBundlePushNeeded(clusterScopedApps) {
+	if checkIfBundlePushNeeded(enterpriseApi.BundlePushComplete, "Standlaone", clusterScopedApps) {
 		t.Errorf("Expected bundle push not required, but got bundle push required")
 	}
 
@@ -705,10 +705,20 @@ func TestCheckIfBundlePushNeeded(t *testing.T) {
 		clusterScopedApps[i].PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
 	}
 
-	if !checkIfBundlePushNeeded(clusterScopedApps) {
+	if !checkIfBundlePushNeeded(enterpriseApi.BundlePushPending, "ClusterMaster", clusterScopedApps) {
 		t.Errorf("Expected bundle push required, but got bundle push not required")
 	}
 
+}
+
+func TestCheckIfBundlePushIsDone(t *testing.T) {
+	if !checkIfBundlePushIsDone("Standalone", enterpriseApi.BundlePushPending) {
+		t.Errorf("checkIfBundlePushIsDone should have returned true")
+	}
+
+	if checkIfBundlePushIsDone("ClusterMaster", enterpriseApi.BundlePushPending) {
+		t.Errorf("checkIfBundlePushIsDone should have returned false")
+	}
 }
 
 func TestNeedToUseAuxPhaseInfo(t *testing.T) {
