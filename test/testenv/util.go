@@ -622,7 +622,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 			}
 			continue
 		} else if strings.HasPrefix(line, configName) {
-			logf.Log.Info("Configuration found.", "Config", configName, "Line", line)
+			logf.Log.Info(fmt.Sprintf("Configuration %s found at line %s", configName, line))
 			config = line
 			break
 		}
@@ -641,7 +641,7 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
 }
 

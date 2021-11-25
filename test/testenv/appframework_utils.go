@@ -106,11 +106,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 		}
 	}
 	filePath := fmt.Sprintf("/opt/splunk/%s/%s/default/app.conf", path, appname)
-	logf.Log.Info("Check Version for app", "AppName", appname, "config", filePath)
+	logf.Log.Info("Check app version", "App", appname, "Conf file", filePath)
 
 	confline, err := GetConfLineFromPod(podName, filePath, ns, "version", "launcher", true)
 	if err != nil {
-		logf.Log.Error(err, "Failed to get Version from pod", "Pod Name", podName)
+		logf.Log.Error(err, "Failed to get version from pod", "Pod Name", podName)
 		return "", err
 	}
 	version := strings.TrimSpace(strings.Split(confline, "=")[1])
@@ -127,7 +127,7 @@ func GetPodAppInstallStatus(deployment *Deployment, podName string, ns string, a
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
@@ -141,10 +141,10 @@ func GetPodAppbtoolStatus(deployment *Deployment, podName string, ns string, app
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	if len(stdout) > 0 {
-		if strings.Contains(strings.Split(stdout, "\n")[0], "Application is disabled") {
+		if strings.Contains(strings.Split(stdout, "\n")[0], "App is disabled") {
 			return "DISABLED", nil
 		}
 		return "ENABLED", nil
