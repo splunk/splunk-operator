@@ -195,10 +195,10 @@ func GetFilesInPathOnS3(bucket string, path string) []string {
 // DownloadFilesFromS3 download given list of files from S3 to the given directory
 func DownloadFilesFromS3(testDataS3Bucket string, s3AppDir string, downloadDir string, appList []string) error {
 	for _, key := range appList {
-		logf.Log.Info("Downloading app from S3", "App Name", key)
+		logf.Log.Info("Downloading file from S3", "File name", key)
 		_, err := DownloadFileFromS3(testDataS3Bucket, key, s3AppDir, downloadDir)
 		if err != nil {
-			logf.Log.Error(err, "Unable to downlaod file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "File Name", key)
 			return err
 		}
 	}
@@ -209,19 +209,19 @@ func DownloadFilesFromS3(testDataS3Bucket string, s3AppDir string, downloadDir s
 func UploadFilesToS3(testS3Bucket string, s3TestDir string, applist []string, downloadDir string) ([]string, error) {
 	var uploadedFiles []string
 	for _, key := range applist {
-		logf.Log.Info("Uploading app to s3", "App Name", key)
+		logf.Log.Info("Uploading file to S3", "File name", key)
 		fileLocation := filepath.Join(downloadDir, key)
 		fileBody, err := os.Open(fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to open app file", "App Name", key)
+			logf.Log.Error(err, "Unable to open file", "File name", key)
 			return nil, err
 		}
 		fileName, err := UploadFileToS3(testS3Bucket, key, s3TestDir, fileBody)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File Name", key)
+			logf.Log.Error(err, "Unable to upload file", "File name", key)
 			return nil, err
 		}
-		logf.Log.Info("App upload to test S3", "App Name", fileName)
+		logf.Log.Info("File upload to test S3", "File name", fileName)
 		uploadedFiles = append(uploadedFiles, fileName)
 	}
 	return uploadedFiles, nil
