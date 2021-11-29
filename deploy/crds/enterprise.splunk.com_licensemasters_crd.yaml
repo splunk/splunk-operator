@@ -2753,6 +2753,11 @@ spec:
                         description: Represents the current stage. Internal to the
                           App framework
                         type: integer
+                      retryCount:
+                        description: RetryCount defines the number of retries completed
+                          so far
+                        format: int32
+                        type: integer
                     type: object
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment

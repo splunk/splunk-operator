@@ -314,6 +314,33 @@ func appPhaseStatusAsStr(status enterpriseApi.AppPhaseStatusType) string {
 	}
 }
 
+// bundlePushStateAsStr converts the bundle push state enum to corresponding string
+func bundlePushStateAsStr(state enterpriseApi.BundlePushStageType) string {
+	switch state {
+	case enterpriseApi.BundlePushPending:
+		return "Bundle Push Pending"
+	case enterpriseApi.BundlePushInProgress:
+		return "Bundle Push In Progress"
+	case enterpriseApi.BundlePushComplete:
+		return "Bundle Push Complete"
+	default:
+		return "Invalid bundle push state"
+	}
+}
+
+// setBundlePushState sets the bundle push state to the new state
+func setBundlePushState(afwPipeline *AppInstallPipeline, state enterpriseApi.BundlePushStageType) {
+	scopedLog := log.WithName("setBundlePushState")
+
+	scopedLog.Info("Setting the bundle push state", "old state", bundlePushStateAsStr(afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage), "new state", bundlePushStateAsStr(state))
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = state
+}
+
+// getBundlePushState returns the current bundle push state
+func getBundlePushState(afwPipeline *AppInstallPipeline) enterpriseApi.BundlePushStageType {
+	return afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage
+}
+
 // createAppDownloadDir creates the app download directory on the operator pod
 func createAppDownloadDir(path string) error {
 	scopedLog := log.WithName("createAppDownloadDir").WithValues("path", path)
@@ -912,8 +939,12 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
-		if AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects) {
-			appsModified = true
+		appsModified = AddOrUpdateAppSrcDeploymentInfoList(&appSrcDeploymentInfo, s3Response.Objects)
+		scope := getAppSrcScope(appFrameworkConfig, appSrc)
+		// if some apps were modified or added, and we have cluster scoped apps,
+		// then set the bundle push state to Pending
+		if appsModified && scope == enterpriseApi.ScopeCluster {
+			appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 		}
 
 		// Finally update the Map entry with latest info
@@ -1285,7 +1316,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			}
 
 			// Only handle the app repo changes if we were able to successfully get the apps list
-			appsModified, err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
+			_, err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
 			if err != nil {
 				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
 				return err
@@ -1614,4 +1645,47 @@ func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.
 	}
 	//if the sts doesn't exists no need for any change
 	return nil
+}
+
+// setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
+func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext, status enterpriseApi.AppPhaseStatusType) {
+	scopedLog := log.WithName("setInstallStateForClusterScopedApps")
+
+	var isClusterScoped bool
+	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
+		if err != nil {
+			// Error, should never happen
+			scopedLog.Error(err, "Unable to find App src", "App src name", appSrcName)
+			continue
+		}
+		if appSrc.Scope == enterpriseApi.ScopeCluster {
+			isClusterScoped = true
+		}
+
+		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
+		for i := range deployInfoList {
+			if isClusterScoped {
+				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
+				deployInfoList[i].PhaseInfo.Status = status
+			}
+		}
+	}
+}
+
+// getAdminPasswordFromSecret retrieves the admin password from secret object
+func getAdminPasswordFromSecret(client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
+	// get the admin password from the namespace scoped secret
+	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	defaultSecret, err := splutil.GetSecretByName(client, cr, defaultSecretObjName)
+	if err != nil {
+		return nil, fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
+	}
+
+	//Get the admin password from the secret object
+	adminPwd, foundSecret := defaultSecret.Data["password"]
+	if !foundSecret {
+		return nil, fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
+	}
+	return adminPwd, nil
 }

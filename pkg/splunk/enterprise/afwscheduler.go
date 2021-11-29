@@ -64,8 +64,8 @@ func (ppln *AppInstallPipeline) createAndAddPipelineWorker(phase enterpriseApi.A
 	}
 }
 
-// getApplicablePodNameForWorker gets the Pod name relevant for the CR under work
-func getApplicablePodNameForWorker(cr splcommon.MetaObject, ordinalIdx int) string {
+// getApplicablePodNameForAppFramework gets the Pod name relevant for the CR under work
+func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int) string {
 	var podType string
 
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
@@ -202,7 +202,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 					// Create a new copy worker
 					copyWorkers[podID] = &PipelineWorker{}
 					*copyWorkers[podID] = *worker
-					copyWorkers[podID].targetPodName = getApplicablePodNameForWorker(worker.cr, podID)
+					copyWorkers[podID].targetPodName = getApplicablePodNameForAppFramework(worker.cr, podID)
 
 					setContextForNewPhase(copyWorkers[podID], &appDeployInfo.AuxPhaseInfo[podID], enterpriseApi.PhasePodCopy)
 					scopedLog.Info("Created a new fan-out pod copy worker", "pod name", worker.targetPodName)
@@ -214,7 +214,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 
 					newWorker := &PipelineWorker{}
 					*newWorker = *worker
-					newWorker.targetPodName = getApplicablePodNameForWorker(worker.cr, podID)
+					newWorker.targetPodName = getApplicablePodNameForAppFramework(worker.cr, podID)
 
 					if phaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
 						if phaseInfo.Phase == enterpriseApi.PhaseInstall && phaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
@@ -888,8 +888,17 @@ func isAppInstallationCompleteOnStandaloneReplicas(auxPhaseInfo []enterpriseApi.
 	return true
 }
 
+// isClusterScoped checks whether current cr is a SHC or a CM
+func isClusterScoped(kind string) bool {
+	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+}
+
 // checkIfBundlePushNeeded confirms if the bundle push is needed or not
-func checkIfBundlePushNeeded(clusterScopedApps []*enterpriseApi.AppDeploymentInfo) bool {
+func checkIfBundlePushNeeded(bundlePushState enterpriseApi.BundlePushStageType, kind string, clusterScopedApps []*enterpriseApi.AppDeploymentInfo) bool {
+	if !isClusterScoped(kind) || bundlePushState == enterpriseApi.BundlePushComplete {
+		return false
+	}
+
 	for _, appDeployInfo := range clusterScopedApps {
 		if appDeployInfo.PhaseInfo.Phase != enterpriseApi.PhasePodCopy || appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgPodCopyComplete {
 			return false
@@ -897,6 +906,14 @@ func checkIfBundlePushNeeded(clusterScopedApps []*enterpriseApi.AppDeploymentInf
 	}
 
 	return true
+}
+
+// checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
+func checkIfBundlePushIsDone(kind string, bundlePushState enterpriseApi.BundlePushStageType) bool {
+	if !isClusterScoped(kind) || bundlePushState == enterpriseApi.BundlePushComplete {
+		return true
+	}
+	return false
 }
 
 // initPipelinePhase initializes a given pipeline phase
@@ -981,6 +998,115 @@ func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.C
 	return sts
 }
 
+// getIdxcPlayBookContext returns the idxc playbook context
+func getIdxcPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, podExecClient splutil.PodExecClientImpl) *IdxcPlayBookContext {
+	return &IdxcPlayBookContext{
+		client:        client,
+		cr:            cr,
+		afwPipeline:   afwPipeline,
+		targetPodName: podName,
+		podExecClient: podExecClient,
+	}
+}
+
+// getSHCPlayBookContext returns the shc playbook context
+func getSHCPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string) *SHCPlayBookContext {
+	return &SHCPlayBookContext{
+		client:        client,
+		cr:            cr,
+		afwPipeline:   afwPipeline,
+		targetPodName: podName,
+	}
+}
+
+// getPlayBookContext returns the context for running playbook
+func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlayBookImpl {
+
+	switch kind {
+	case "ClusterMaster":
+		return getIdxcPlayBookContext(client, cr, afwPipeline, podName, podExecClient)
+	// TODO: gaurav - implement SHC playbook
+	//case "SearchHeadCluster":
+	//	return getSHCPlayBookContext(client, cr, afwPipeline, podName)
+	default:
+		return nil
+	}
+}
+
+// isBundlePushComplete checks the status of bundle push
+func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete(cmd string) bool {
+	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", idxcPlayBookContext.cr.GetName(), "namespace", idxcPlayBookContext.cr.GetNamespace())
+
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
+	if err != nil || stdErr != "" {
+		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
+		return false
+	}
+
+	if !strings.Contains(stdOut, "cluster_status=None") {
+		scopedLog.Info("Bundle push is still in progress")
+		return false
+	}
+
+	// bundle push is complete
+	scopedLog.Info("Bundle push is complete")
+	return true
+}
+
+// triggerBundlePush triggers the bundle push for indexer cluster
+func (idxcPlayBookContext *IdxcPlayBookContext) triggerBundlePush(bundlePushCmd string) error {
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(bundlePushCmd)
+	if err != nil || stdErr != "OK\n" {
+		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
+		return err
+	}
+	return nil
+}
+
+// RunPlayBook will implement the following logic(and set the bundle push state accordingly)  -
+// 1. If the bundle push is not in progress, run the logic to push the bundle from CM to indexer peers
+// 2. OR else, if the bundle push is already in progress, check the status of bundle push
+func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
+
+	scopedLog := log.WithName("RunPlayBook").WithValues("crName", idxcPlayBookContext.cr.GetName(), "namespace", idxcPlayBookContext.cr.GetNamespace())
+
+	appDeployContext := idxcPlayBookContext.afwPipeline.appDeployContext
+
+	switch appDeployContext.BundlePushStatus.BundlePushStage {
+	// if the bundle push is already in progress, check the status
+	case enterpriseApi.BundlePushInProgress:
+		scopedLog.Info("checking the status of bundle push")
+		// check if the bundle push is complete
+		if idxcPlayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
+			// set the bundle push status to complete
+			setBundlePushState(afwPipeline, enterpriseApi.BundlePushComplete)
+
+			// set the state to install complete for all the cluster scoped apps
+			setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
+		} else {
+			scopedLog.Info("bundle push is still in progress, will check back again in next reconcile..")
+		}
+
+	case enterpriseApi.BundlePushPending:
+		// run the command to apply cluster bundle
+		scopedLog.Info("running command to apply cluster bundle")
+		err := idxcPlayBookContext.triggerBundlePush(applyIdxcBundleCmdStr)
+		if err != nil {
+			scopedLog.Error(err, "failed to apply cluster bundle")
+			return err
+		}
+
+		// set the state to bundle push in progress
+		setBundlePushState(afwPipeline, enterpriseApi.BundlePushInProgress)
+
+	default:
+		err := fmt.Errorf("invalid Bundle push state=%s", bundlePushStateAsStr(appDeployContext.BundlePushStatus.BundlePushStage))
+		return err
+	}
+
+	return nil
+}
+
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1031,8 +1157,8 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 				continue
 			}
 
-			// Track the cluster scoped apps to track the bundle push
-			if appSrc.Scope == enterpriseApi.ScopeCluster && deployInfoList[i].DeployStatus != enterpriseApi.DeployStatusComplete {
+			// Track the cluster scoped apps to track the bundle push, but only track the apps which have not been installed yet.
+			if appSrc.Scope == enterpriseApi.ScopeCluster && deployInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
 				clusterScopedApps = append(clusterScopedApps, &deployInfoList[i])
 			}
 
@@ -1060,7 +1186,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 				// ToDo: sgontla: bring in a better alternative to strengthen this piece of code
 				sts := afwGetReleventStatefulsetByKind(cr, client)
 				if *sts.Spec.Replicas == 1 || cr.GroupVersionKind().Kind != "Standalone" {
-					podName = getApplicablePodNameForWorker(cr, 0)
+					podName = getApplicablePodNameForAppFramework(cr, 0)
 				}
 				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfoList[i], appSrcName, podName, appFrameworkConfig, client, cr, sts)
 			}
@@ -1073,11 +1199,15 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	}
 	scopedLog.Info("List of cluster scoped apps(appName:digest) for this reconcile entry", "apps", clusterAppsList)
 
+	targetPodName := getApplicablePodNameForAppFramework(cr, 0)
+
 	// Wait for the yield function to finish
 	afwPipeline.phaseWaiter.Add(1)
 	go func(afwEntryTime int64) {
+		kind := cr.GetObjectKind().GroupVersionKind().Kind
 		for {
-			if afwEntryTime+maxRunTimeBeforeAttemptingYield < time.Now().Unix() || afwPipeline.isPipelineEmpty() {
+			bundlePushState := getBundlePushState(afwPipeline)
+			if afwEntryTime+maxRunTimeBeforeAttemptingYield < time.Now().Unix() || (afwPipeline.isPipelineEmpty() && checkIfBundlePushIsDone(kind, bundlePushState)) {
 				scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-afwEntryTime)
 
 				// Trigger termination by closing the channel
@@ -1085,9 +1215,36 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 				afwPipeline.phaseWaiter.Done()
 				break
 			} else {
-				if len(clusterScopedApps) > 0 && appDeployContext.BundlePushStatus.BudlePushStage < enterpriseApi.BundlePushPending {
-					if checkIfBundlePushNeeded(clusterScopedApps) {
-						// Trigger the bundle push playbook: CSPL-1332, CSPL-1333
+				if checkIfBundlePushNeeded(bundlePushState, kind, clusterScopedApps) {
+					// Trigger the bundle push playbook: CSPL-1332, CSPL-1333
+
+					podExecClient := splutil.GetPodExecClient(client, cr, targetPodName)
+
+					playBookContext := getPlayBookContext(client, cr, afwPipeline, targetPodName, kind, podExecClient)
+					if playBookContext == nil {
+						err = fmt.Errorf("playBookContext is nil")
+						scopedLog.Error(err, "invalid playBookContext")
+						// sleep for one second
+						time.Sleep(1 * time.Second)
+						continue
+					}
+					// run the playbook to issue bundle push command on the pod
+					err = playBookContext.runPlayBook()
+					if err != nil {
+						// If the error is due to a bundle which is already present, don't do anything.
+						// In the next reconcile we will mark it as bundle push complete
+						if strings.Contains(err.Error(), idxcBundleAlreadyPresentStr) {
+							// sleep for one second
+							time.Sleep(1 * time.Second)
+							continue
+						}
+						// increment the retry count if we failed to push the bundle due to any reason
+						appDeployContext.BundlePushStatus.RetryCount++
+					}
+
+					if appDeployContext.BundlePushStatus.RetryCount >= pipelinePhaseMaxRetryCount {
+						err := fmt.Errorf("tried to apply bundle push %d number of times, but it failed", appDeployContext.BundlePushStatus.RetryCount)
+						scopedLog.Error(err, "Apply bundle push failed for a few times now...")
 					}
 				}
 				// sleep for one second
