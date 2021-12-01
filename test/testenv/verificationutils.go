@@ -811,6 +811,37 @@ func VerifyAppListPhaseClusterMaster(deployment *Deployment, testenvInstance *Te
 	}
 }
 
+// VerifyAppListPhaseSearchHeadCluster verify given app Phase has completed for the given list of apps for given SearchHeadCluster
+func VerifyAppListPhaseSearchHeadCluster(deployment *Deployment, testenvInstance *TestEnv, name string, appSourceName string, phase enterpriseApi.AppPhaseType, appList []string) {
+	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
+		for _, appName := range appList {
+			testenvInstance.Log.Info("Check Search Head Cluster App Status", "App Name", appName, "Expected Phase", phase)
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfoClusterMaster(deployment, testenvInstance, name, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return phase
+				}
+				testenvInstance.Log.Info("App State found", "App Name", appName, "App State", appDeploymentInfo, "Expected Phase", phase, "Actual Phase", appDeploymentInfo.PhaseInfo.Phase)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
+		}
+	} else {
+		for _, appName := range appList {
+			testenvInstance.Log.Info("Check Search Head Cluster App Status", "App Name", appName)
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfoClusterMaster(deployment, testenvInstance, name, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return enterpriseApi.PhaseDownload
+				}
+				testenvInstance.Log.Info("App State found", "App Name", appName, "App State", appDeploymentInfo, "Expected Phase", phase, "Actual Phase", appDeploymentInfo.PhaseInfo.Phase)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+		}
+	}
+}
+
 // VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
 func VerifyPodsInMCConfigMap(deployment *Deployment, testenvInstance *TestEnv, pods []string, key string, mcName string, expected bool) {
 	// Get contents of MC config map
