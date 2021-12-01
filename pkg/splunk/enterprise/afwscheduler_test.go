@@ -1825,6 +1825,20 @@ func TestIDXCRunPlayBook(t *testing.T) {
 		t.Errorf("runPlayBook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
 	}
 
+	// test the case where bundle push is still in progress
+	mockPodExecClient.stdErr = ""
+	err = playBookContext.runPlayBook()
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
+		t.Errorf("runPlayBook() should have not returned error since we did not get desired output")
+	}
+
+	// test the case where bundle push is complete
+	mockPodExecClient.stdOut = "cluster_status=None"
+	err = playBookContext.runPlayBook()
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
+		t.Errorf("runPlayBook() should have not returned error since we did not get desired output")
+	}
+
 	// now test the error scenario where we did not get OK in stdErr
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecClient.stdErr = ""
@@ -1833,6 +1847,14 @@ func TestIDXCRunPlayBook(t *testing.T) {
 		t.Errorf("runPlayBook() should have returned error since we did not get desired output")
 	}
 
+	// now test the error scenario where we passed invalid bundle push state
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushComplete
+	err = playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error since we passed invalud bundle push state")
+	}
+
+	mockPodExecClient.stdOut = ""
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	idxcplayBookContext := playBookContext.(*IdxcPlayBookContext)
 	// invalid scenario, where stdOut!="cluster_status=None"
@@ -1851,6 +1873,92 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	mockPodExecClient.stdOut = "cluster_status=None"
 	if !idxcplayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 		t.Errorf("isBundlePushComplete() should not have returned false.")
+	}
+}
+
+func TestSHCRunPlayBook(t *testing.T) {
+	cr := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
+		AppsStatusMaxConcurrentAppDownloads: 10,
+	}
+
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	testApps := []string{"app1.tgz"}
+	testHashes := []string{"abcd1111"}
+	testSizes := []int64{10}
+
+	appDeployInfoList := make([]enterpriseApi.AppDeploymentInfo, 1)
+	for index := range testApps {
+		appDeployInfoList[index] = enterpriseApi.AppDeploymentInfo{
+			AppName: testApps[index],
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhasePodCopy,
+				Status:     enterpriseApi.AppPkgPodCopyComplete,
+				RetryCount: 0,
+			},
+			ObjectHash: testHashes[index],
+			Size:       uint64(testSizes[index]),
+		}
+	}
+
+	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo
+	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
+
+	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
+	afwPipeline = nil
+	afwPipeline := initAppInstallPipeline(appDeployContext)
+	// get the target pod name
+	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+	podExecClient := splutil.GetPodExecClient(c, &cr, targetPodName)
+
+	// just for the sake of code coverage, pass invalid kind to get nil context
+	playBookContext := getPlayBookContext(c, &cr, afwPipeline, targetPodName, "InvalidKind", podExecClient)
+	if playBookContext != nil {
+		t.Errorf("playBookContext should be nil here since we passed invalid kind")
+	}
+
+	playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
+	err := playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error, since we dont get the required output")
+	}
+
+	// now replace the pod exec client with our mock client
+	var mockPodExecClient *MockPodExecClient = &MockPodExecClient{}
+
+	playBookContext = getPlayBookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
+
+	err = playBookContext.runPlayBook()
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
+		t.Errorf("runPlayBook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+	}
+
+	// now test the error scenario where we did not get OK in stdErr
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
+	mockPodExecClient.stdErr = "dummy error"
+	err = playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error since we did not get desired output")
+	}
+
+	// now test the error scenario where we passed invalid bundle push state
+	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
+	err = playBookContext.runPlayBook()
+	if err == nil {
+		t.Errorf("runPlayBook() should have returned error since we passed invalid bundle push state")
 	}
 }
 
