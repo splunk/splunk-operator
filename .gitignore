@@ -93,3 +93,5 @@ deploy/olm-certified
 *junit.xml
 # Bias Language Linter
 .biaslanguage/
+bin/
+pkg/splunk/enterprise/app1.tgz_

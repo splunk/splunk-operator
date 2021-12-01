@@ -24,7 +24,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -33,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -137,7 +136,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ns string, name string
 }
 
 // GetInstance retrieves the standalone, indexer, searchhead, licensemaster instance
-func (d *Deployment) GetInstance(name string, instance runtime.Object) error {
+func (d *Deployment) GetInstance(name string, instance client.Object) error {
 	key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 
 	err := d.testenv.GetKubeClient().Get(context.TODO(), key, instance)
@@ -156,7 +155,8 @@ func (d *Deployment) PodExecCommand(podName string, cmd []string, stdin string, 
 	if err != nil {
 		return "", "", err
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	//FIXME
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}
@@ -259,7 +259,7 @@ func (d *Deployment) DeploySearchHeadCluster(name, clusterMasterRef, licenseMast
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
-func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, error) {
+func (d *Deployment) deployCR(name string, cr client.Object) (client.Object, error) {
 
 	err := d.testenv.GetKubeClient().Create(context.TODO(), cr)
 	if err != nil {
@@ -310,14 +310,14 @@ func (d *Deployment) deployCR(name string, cr runtime.Object) (runtime.Object, e
 }
 
 // UpdateCR method to update existing CR spec
-func (d *Deployment) UpdateCR(cr runtime.Object) error {
+func (d *Deployment) UpdateCR(cr client.Object) error {
 
 	err := d.testenv.GetKubeClient().Update(context.TODO(), cr)
 	return err
 }
 
 // DeleteCR deletes the given CR
-func (d *Deployment) DeleteCR(cr runtime.Object) error {
+func (d *Deployment) DeleteCR(cr client.Object) error {
 
 	err := d.testenv.GetKubeClient().Delete(context.TODO(), cr)
 	return err

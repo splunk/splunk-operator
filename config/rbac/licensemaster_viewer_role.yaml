@@ -1,0 +1,20 @@
+# permissions for end users to view licensemasters.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: licensemaster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemasters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemasters/status
+  verbs:
+  - get

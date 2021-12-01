@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 

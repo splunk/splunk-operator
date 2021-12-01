@@ -163,7 +163,7 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 			return "", "", err
 		}
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}

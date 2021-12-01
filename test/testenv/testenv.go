@@ -18,14 +18,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os"
 	"time"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -35,10 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 const (
@@ -146,7 +147,7 @@ type TestEnv struct {
 }
 
 func init() {
-	l := zap.LoggerTo(ginkgo.GinkgoWriter)
+	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true))
 	l.WithName("testenv")
 	logf.SetLogger(l)
 

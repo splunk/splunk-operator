@@ -17,9 +17,9 @@ package controller
 import (
 	"context"
 	"errors"
-	"net/http"
-	"testing"
-
+	"github.com/go-logr/logr"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -28,23 +28,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"testing"
 )
 
 // MockControllerState manages state for testing the splunk.controller library
 type MockControllerState struct {
 	instance        splcommon.MetaObject
-	watchTypes      []runtime.Object
+	watchTypes      []client.Object
 	reconcileCalls  int
 	reconcileError  error
 	reconcileResult reconcile.Result
@@ -64,7 +64,7 @@ func (ctrl MockController) GetInstance() splcommon.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl MockController) GetWatchTypes() []runtime.Object {
+func (ctrl MockController) GetWatchTypes() []client.Object {
 	return ctrl.state.watchTypes
 }
 
@@ -92,7 +92,7 @@ func newMockController() MockController {
 				Kind:       "ConfigMap",
 			},
 		},
-		watchTypes: []runtime.Object{&corev1.ConfigMap{
+		watchTypes: []client.Object{&corev1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
@@ -109,7 +109,7 @@ var _ client.FieldIndexer = &MockFieldIndexer{}
 type MockFieldIndexer struct{}
 
 // IndexField for MockFieldIndexer just returns nil
-func (idx MockFieldIndexer) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func (idx MockFieldIndexer) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	return nil
 }
 
@@ -122,6 +122,11 @@ type MockManager struct{}
 // Add for MockManager just returns nil
 func (mgr MockManager) Add(r manager.Runnable) error {
 	return mgr.SetFields(r)
+}
+
+// GetControllerOptions returns controller global configuration options.
+func (mgr MockManager) GetControllerOptions() v1alpha1.ControllerConfigurationSpec {
+	return v1alpha1.ControllerConfigurationSpec{}
 }
 
 func (mgr MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
@@ -151,13 +156,18 @@ func (mgr MockManager) AddReadyzCheck(name string, check healthz.Checker) error 
 }
 
 // Start for MockManager just returns nil
-func (mgr MockManager) Start(<-chan struct{}) error {
+func (mgr MockManager) Start(ctx context.Context) error {
 	return nil
 }
 
 // GetConfig returns an initialized Config
 func (mgr MockManager) GetConfig() *rest.Config {
 	return &rest.Config{}
+}
+
+// GetLogger returns this manager's logger.
+func (mgr MockManager) GetLogger() logr.Logger {
+	return log
 }
 
 // GetScheme returns an initialized Scheme
@@ -238,7 +248,7 @@ func TestReconcile(t *testing.T) {
 			splctrl: ctrl,
 		}
 
-		result, err := reconciler.Reconcile(request)
+		result, err := reconciler.Reconcile(context.Background(), request)
 		if wantError == nil && err != nil || wantError != nil && err == nil || (wantError != nil && err != nil && err.Error() != wantError.Error()) {
 			t.Errorf("TestReconcile(%s): Returned %v; want %v", testname, err, wantError)
 		}

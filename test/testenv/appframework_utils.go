@@ -6,7 +6,7 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 

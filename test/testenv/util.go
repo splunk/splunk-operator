@@ -26,14 +26,14 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -43,9 +43,10 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	l := zap.LoggerTo(ginkgo.GinkgoWriter)
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
+	/*l := zap.LoggerTo(ginkgo.GinkgoWriter)
 	l.WithName("util")
-	logf.SetLogger(l)
+	logf.SetLogger(l) */
 }
 
 // RandomDNSName returns a random string that is a valid DNS name

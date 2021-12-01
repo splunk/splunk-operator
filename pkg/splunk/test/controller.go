@@ -21,11 +21,14 @@ import (
 	"reflect"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	//"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -33,17 +36,18 @@ import (
 
 func init() {
 	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, enterpriseObjCopier)
+	MockObjectListCopiers = append(MockObjectListCopiers, coreObjectListCopier, enterpriseObjListCopier)
 }
 
-// MockObjectCopiers is a slice of MockObjectCopier methods that MockClient uses to copy runtime.Objects
+// MockObjectCopiers is a slice of MockObjectCopier methods that MockClient uses to copy client.Objects
 var MockObjectCopiers []MockObjectCopier
 
-// MockObjectCopier is a method used to perform the typed copy of a runtime.Object from src to dst.
-// It returns true if the runtime.Object was copied, or false if the type is unknown.
-type MockObjectCopier func(dst, src *runtime.Object) bool
+// MockObjectCopier is a method used to perform the typed copy of a client.Object from src to dst.
+// It returns true if the client.Object was copied, or false if the type is unknown.
+type MockObjectCopier func(dst, src *client.Object) bool
 
-// enterpriseObjCopier is used to copy enterprise runtime.Objects
-func enterpriseObjCopier(dst, src *runtime.Object) bool {
+// enterpriseObjCopier is used to copy enterprise client.Objects
+func enterpriseObjCopier(dst, src *client.Object) bool {
 	dstP := *dst
 	srcP := *src
 	switch srcP.(type) {
@@ -53,32 +57,28 @@ func enterpriseObjCopier(dst, src *runtime.Object) bool {
 		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
 	case *enterpriseApi.LicenseMaster:
 		*dstP.(*enterpriseApi.LicenseMaster) = *srcP.(*enterpriseApi.LicenseMaster)
-	case *enterpriseApi.SearchHeadCluster:
-		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
 	case *enterpriseApi.Standalone:
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
+	case *enterpriseApi.SearchHeadCluster:
+		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
 	default:
 		return false
 	}
 	return true
 }
 
-// coreObjectCopier is used to copy corev1 runtime.Objects
-func coreObjectCopier(dst, src *runtime.Object) bool {
+// coreObjectCopier is used to copy corev1 client.Objects
+func coreObjectCopier(dst, src *client.Object) bool {
 	dstP := *dst
 	srcP := *src
-	if reflect.TypeOf(dstP).String() == reflect.TypeOf((*src).(runtime.Object)).String() {
+	if reflect.TypeOf(dstP).String() == reflect.TypeOf(*src).String() {
 		switch (srcP).(type) {
 		case *corev1.ConfigMap:
 			*dstP.(*corev1.ConfigMap) = *srcP.(*corev1.ConfigMap)
 		case *corev1.Secret:
 			*dstP.(*corev1.Secret) = *srcP.(*corev1.Secret)
-		case *corev1.SecretList:
-			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
 		case *corev1.PersistentVolumeClaim:
 			*dstP.(*corev1.PersistentVolumeClaim) = *srcP.(*corev1.PersistentVolumeClaim)
-		case *corev1.PersistentVolumeClaimList:
-			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
 		case *corev1.Service:
 			*dstP.(*corev1.Service) = *srcP.(*corev1.Service)
 		case *corev1.Pod:
@@ -92,8 +92,53 @@ func coreObjectCopier(dst, src *runtime.Object) bool {
 	return true
 }
 
-// appsObjectCopier is used to copy appsv1 runtime.Objects
-func appsObjectCopier(dst, src *runtime.Object) bool {
+// MockObjectListCopiers is a slice of MockObjectListCopier methods that MockClient uses to copy client.ObjectList
+var MockObjectListCopiers []MockObjectListCopier
+
+// MockObjectListCopier is a method used to perform the typed copy of a client.ObjectList from src to dst.
+// It returns true if the client.ObjectList was copied, or false if the type is unknown.
+type MockObjectListCopier func(dst, src *client.ObjectList) bool
+
+// enterpriseObjListCopier is used to copy enterprise client.Objects
+func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
+	dstP := *dst
+	srcP := *src
+	switch srcP.(type) {
+	case *enterpriseApi.IndexerClusterList:
+		*dstP.(*enterpriseApi.IndexerClusterList) = *srcP.(*enterpriseApi.IndexerClusterList)
+	case *enterpriseApi.LicenseMasterList:
+		*dstP.(*enterpriseApi.LicenseMasterList) = *srcP.(*enterpriseApi.LicenseMasterList)
+	case *enterpriseApi.SearchHeadClusterList:
+		*dstP.(*enterpriseApi.SearchHeadClusterList) = *srcP.(*enterpriseApi.SearchHeadClusterList)
+	case *enterpriseApi.ClusterMasterList:
+		*dstP.(*enterpriseApi.ClusterMasterList) = *srcP.(*enterpriseApi.ClusterMasterList)
+	case *enterpriseApi.StandaloneList:
+		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
+	default:
+		return false
+	}
+	return true
+}
+
+// coreObjectListCopier is used to copy corev1 client.ObjectList
+func coreObjectListCopier(dst, src *client.ObjectList) bool {
+	dstP := *dst
+	srcP := *src
+	if reflect.TypeOf(dstP).String() == reflect.TypeOf(*src).String() {
+		switch (srcP).(type) {
+		case *corev1.PersistentVolumeClaimList:
+			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
+		case *corev1.SecretList:
+			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// appsObjectCopier is used to copy appsv1 client.Objects
+func appsObjectCopier(dst, src *client.Object) bool {
 	srcP := *src
 	dstP := *dst
 	switch srcP.(type) {
@@ -107,16 +152,30 @@ func appsObjectCopier(dst, src *runtime.Object) bool {
 	return true
 }
 
-// copyMockObject uses the global MockObjectCopiers to perform the typed copy of a runtime.Object from src to dst
-func copyMockObject(dst, src *runtime.Object) {
+// copyMockObject uses the global MockObjectCopiers to perform the typed copy of a client.Object from src to dst
+func copyMockObject(dst, src *client.Object) {
 	for n := range MockObjectCopiers {
 		if MockObjectCopiers[n](dst, src) {
 			return
 		}
 	}
-	srcP := *src
+	//FIXME
+	//srcP := *src
 	// default if no types match
-	*dst = srcP.DeepCopyObject()
+	//*dst = srcP.DeepCopyObject()
+}
+
+// copyMockObjectList uses the global MockObjectCopiers to perform the typed copy of a client.Object from src to dst
+func copyMockObjectList(dst, src *client.ObjectList) {
+	for n := range MockObjectCopiers {
+		if MockObjectListCopiers[n](dst, src) {
+			return
+		}
+	}
+	//FIXME
+	//srcP := *src
+	// default if no types match
+	//*dst = srcP.DeepCopyObject()
 }
 
 // MockFuncCall is used to record a function call to MockClient methods
@@ -124,7 +183,8 @@ type MockFuncCall struct {
 	CTX      context.Context
 	Key      client.ObjectKey
 	ListOpts []client.ListOption
-	Obj      runtime.Object
+	Obj      client.Object
+	ObjList  client.ObjectList
 	MetaName string
 }
 
@@ -138,7 +198,7 @@ type MockStatusWriter struct {
 }
 
 // Update returns status writer's Err field
-func (c MockStatusWriter) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+func (c MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	c.Calls = append(c.Calls, MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -147,7 +207,7 @@ func (c MockStatusWriter) Update(ctx context.Context, obj runtime.Object, opts .
 }
 
 // Patch returns status writer's Err field
-func (c MockStatusWriter) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	c.Calls = append(c.Calls, MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -164,7 +224,7 @@ type MockClient struct {
 	StatusWriter MockStatusWriter
 
 	// ListObj is used to assign obj parameter for List() calls
-	ListObj runtime.Object
+	ListObj client.ObjectList
 
 	// State is used to maintain a simple state of objects in the cluster, where key = <type>-<namespace>-<name>
 	State map[string]interface{}
@@ -176,8 +236,22 @@ type MockClient struct {
 	NotFoundError error
 }
 
+//RESTMapper wrapper for REST Client
+//FIXME
+func (c MockClient) RESTMapper() meta.RESTMapper {
+	ne := &meta.DefaultRESTMapper{}
+	return ne
+}
+
+//Scheme Wrapper for Scheme client object
+//FIXME
+func (c MockClient) Scheme() *runtime.Scheme {
+	sc := &runtime.Scheme{}
+	return sc
+}
+
 // Get returns mock client's Err field
-func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	c.Calls["Get"] = append(c.Calls["Get"], MockFuncCall{
 		CTX: ctx,
 		Key: key,
@@ -186,7 +260,7 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 	getObj := c.State[getStateKeyWithKey(key, obj)]
 
 	if getObj != nil {
-		srcObj := getObj.(runtime.Object)
+		srcObj := getObj.(client.Object)
 		copyMockObject(&obj, &srcObj)
 		return nil
 	}
@@ -194,23 +268,23 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.O
 }
 
 // List returns mock client's Err field
-func (c MockClient) List(ctx context.Context, obj runtime.Object, opts ...client.ListOption) error {
+func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
 	c.Calls["List"] = append(c.Calls["List"], MockFuncCall{
 		CTX:      ctx,
 		ListOpts: opts,
-		Obj:      obj,
+		ObjList:  obj,
 	})
 	listObj := c.ListObj
 	if listObj != nil {
-		srcObj := listObj.(runtime.Object)
-		copyMockObject(&obj, &srcObj)
+		srcObj := listObj
+		copyMockObjectList(&obj, &srcObj)
 		return nil
 	}
 	return c.NotFoundError
 }
 
 // Create returns mock client's Err field
-func (c MockClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
+func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	c.Calls["Create"] = append(c.Calls["Create"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -220,7 +294,7 @@ func (c MockClient) Create(ctx context.Context, obj runtime.Object, opts ...clie
 }
 
 // Delete returns mock client's Err field
-func (c MockClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOption) error {
+func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	c.Calls["Delete"] = append(c.Calls["Delete"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -230,7 +304,7 @@ func (c MockClient) Delete(ctx context.Context, obj runtime.Object, opts ...clie
 }
 
 // Update returns mock client's Err field
-func (c MockClient) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+func (c MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	c.Calls["Update"] = append(c.Calls["Update"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -240,7 +314,7 @@ func (c MockClient) Update(ctx context.Context, obj runtime.Object, opts ...clie
 }
 
 // Patch returns mock client's Err field
-func (c MockClient) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c MockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	c.Calls["Patch"] = append(c.Calls["Patch"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -249,7 +323,7 @@ func (c MockClient) Patch(ctx context.Context, obj runtime.Object, patch client.
 }
 
 // DeleteAllOf returns mock client's Err field
-func (c MockClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
+func (c MockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	c.Calls["DeleteAllOf"] = append(c.Calls["DeleteAllOf"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -273,12 +347,12 @@ func (c *MockClient) ResetState() {
 }
 
 // AddObject adds an object to the MockClient's state
-func (c *MockClient) AddObject(obj runtime.Object) {
+func (c *MockClient) AddObject(obj client.Object) {
 	c.State[getStateKey(obj)] = obj
 }
 
 // AddObjects adds multiple objects to the MockClient's state
-func (c *MockClient) AddObjects(objects []runtime.Object) {
+func (c *MockClient) AddObjects(objects []client.Object) {
 	for _, obj := range objects {
 		c.State[getStateKey(obj)] = obj
 	}
@@ -301,7 +375,12 @@ func (c *MockClient) CheckCalls(t *testing.T, testname string, wantCalls map[str
 		//t.Fatalf("%s: MockClient %s() calls = %d; want %d, got: %s \n want: %s", testname, methodName, len(gotFuncCalls), len(wantFuncCalls), gotFuncCalls, wantFuncCalls)
 		if len(gotFuncCalls) != len(wantFuncCalls) {
 			//t.Fatalf("%s: MockClient %s() calls = %d; want %d", testname, methodName, len(gotFuncCalls), len(wantFuncCalls))
-			t.Fatalf("%s: MockClient %s() calls = %d; want %d, got: %s \n want: %s", testname, methodName, len(gotFuncCalls), len(wantFuncCalls), gotFuncCalls, wantFuncCalls)
+			//FIXME VIVEK
+			test := []string{}
+			for _, call := range gotFuncCalls {
+				test = append(test, call.Key.String())
+			}
+			t.Fatalf("%s: MockClient %s() calls = %d; want %d, got: %s \n want: %s", testname, methodName, len(gotFuncCalls), len(wantFuncCalls), test, wantFuncCalls)
 		}
 
 		for n := range wantFuncCalls {
@@ -345,7 +424,7 @@ func NewMockClient() *MockClient {
 }
 
 // getStateKeyFromObject returns a lookup key for the MockClient's state map
-func getStateKey(obj runtime.Object) string {
+func getStateKey(obj client.Object) string {
 	key := client.ObjectKey{
 		Name:      obj.(splcommon.MetaObject).GetName(),
 		Namespace: obj.(splcommon.MetaObject).GetNamespace(),
@@ -354,7 +433,7 @@ func getStateKey(obj runtime.Object) string {
 }
 
 // getStateKey returns a lookup key for the MockClient's state map
-func getStateKeyWithKey(key client.ObjectKey, obj runtime.Object) string {
+func getStateKeyWithKey(key client.ObjectKey, obj client.Object) string {
 	kind := reflect.TypeOf(obj).String()
 	return fmt.Sprintf("%s-%s-%s", kind, key.Namespace, key.Name)
 }
@@ -378,7 +457,7 @@ func ReconcileTester(t *testing.T, method string,
 	createCalls, updateCalls map[string][]MockFuncCall,
 	reconcile func(*MockClient, interface{}) error,
 	listInvolved bool,
-	initObjects ...runtime.Object) {
+	initObjects ...client.Object) {
 
 	// initialize client
 	c := NewMockClient()
@@ -409,7 +488,7 @@ func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 	createCalls, updateCalls map[string][]MockFuncCall,
 	reconcile func(*MockClient, interface{}) error,
 	listInvolved bool,
-	initObjects ...runtime.Object) {
+	initObjects ...client.Object) {
 
 	// initialize client
 	c := NewMockClient()
@@ -427,7 +506,7 @@ func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 // PodManagerUpdateTester is used to a single reconcile update using a StatefulSetPodManager
 func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulSetPodManager,
 	desiredReplicas int32, wantPhase splcommon.Phase, statefulSet *appsv1.StatefulSet,
-	wantCalls map[string][]MockFuncCall, wantError error, initObjects ...runtime.Object) {
+	wantCalls map[string][]MockFuncCall, wantError error, initObjects ...client.Object) {
 
 	// initialize client
 	c := NewMockClient()

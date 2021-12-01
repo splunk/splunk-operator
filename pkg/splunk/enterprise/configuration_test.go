@@ -15,11 +15,12 @@
 package enterprise
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -254,7 +255,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyStandalone(client, &cr)
+	_, err := ApplyStandalone(context.Background(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
 	}

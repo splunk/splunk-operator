@@ -37,8 +37,9 @@ import (
 	// Used to move files between pods
 	_ "unsafe"
 
-	// Import kubectl cmd cp utils
-	_ "k8s.io/kubernetes/pkg/kubectl/cmd/cp"
+	// Import kubectl cmd cp utils FIXME
+	//_ "k8s.io/kubernetes/pkg/kubectl/cmd/cp"
+	_ "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // CreateMockLogfile creates a mock logfile with n entries to be ingested.
@@ -184,7 +185,8 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	if err != nil {
 		return "", "", err
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	//FIXME
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}

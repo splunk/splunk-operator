@@ -1,0 +1,6 @@
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: standalone-sample
+spec:
+  # Add fields here

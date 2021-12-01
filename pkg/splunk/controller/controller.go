@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -36,7 +35,7 @@ type SplunkController interface {
 	GetInstance() splcommon.MetaObject
 
 	// GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-	GetWatchTypes() []runtime.Object
+	GetWatchTypes() []client.Object
 
 	// Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 	Reconcile(client.Client, splcommon.MetaObject) (reconcile.Result, error)
@@ -95,7 +94,7 @@ type splunkReconciler struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r splunkReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	instance := r.splctrl.GetInstance()
 	gvk := instance.GroupVersionKind()
 	scopedLog := log.WithName("Reconcile").WithValues("Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)

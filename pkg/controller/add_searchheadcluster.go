@@ -18,11 +18,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -49,8 +48,8 @@ func (ctrl SearchHeadClusterController) GetInstance() splcommon.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl SearchHeadClusterController) GetWatchTypes() []runtime.Object {
-	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
+func (ctrl SearchHeadClusterController) GetWatchTypes() []client.Object {
+	return []client.Object{&appsv1.StatefulSet{}, &corev1.Secret{}, &corev1.ConfigMap{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller

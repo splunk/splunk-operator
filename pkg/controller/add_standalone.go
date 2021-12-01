@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -36,7 +38,10 @@ func init() {
 var _ splctrl.SplunkController = &StandaloneController{}
 
 // StandaloneController is used to manage Standalone custom resources
-type StandaloneController struct{}
+type StandaloneController struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
 
 // GetInstance returns an instance of the custom resource managed by the controller
 func (ctrl StandaloneController) GetInstance() splcommon.MetaObject {
@@ -49,12 +54,12 @@ func (ctrl StandaloneController) GetInstance() splcommon.MetaObject {
 }
 
 // GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-func (ctrl StandaloneController) GetWatchTypes() []runtime.Object {
-	return []runtime.Object{&appsv1.StatefulSet{}, &corev1.Secret{}}
+func (ctrl StandaloneController) GetWatchTypes() []client.Object {
+	return []client.Object{&appsv1.StatefulSet{}, &corev1.Secret{}, &corev1.ConfigMap{}}
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl StandaloneController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.Standalone)
-	return enterprise.ApplyStandalone(client, instance)
+	return enterprise.ApplyStandalone(context.Background(), client, instance)
 }
