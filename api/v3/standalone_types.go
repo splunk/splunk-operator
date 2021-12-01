@@ -74,18 +74,18 @@ type StandaloneStatus struct {
 	AppContext AppDeploymentContext `json:"appContext"`
 }
 
-//+kubebuilder:object:root=true
-//+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Standalone is the Schema for a Splunk Enterprise standalone instances.
-//+kubebuilder:subresource:status
-//+kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-//+kubebuilder:resource:path=standalones,scope=Namespaced,shortName=stdaln
-//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of standalone instances"
-//+kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired standalone instances"
-//+kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready standalone instances"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of standalone resource"
-//+kubebuilder:storageversion
+// +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
+// +kubebuilder:resource:path=standalones,scope=Namespaced,shortName=stdaln
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of standalone instances"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired standalone instances"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready standalone instances"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of standalone resource"
+// +kubebuilder:storageversion
 type Standalone struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

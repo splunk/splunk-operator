@@ -107,10 +107,10 @@ type IndexerClusterStatus struct {
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 }
 
-//+kubebuilder:object:root=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+// +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=indexerclusters,scope=Namespaced,shortName=idc;idxc

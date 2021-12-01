@@ -19,10 +19,26 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of cluster manager
+    - description: Status of indexer cluster
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: Status of cluster manager
+      jsonPath: .status.clusterMasterPhase
+      name: Master
+      type: string
+    - description: Desired number of indexer peers
+      jsonPath: .status.replicas
+      name: Desired
+      type: integer
+    - description: Current number of ready indexer peers
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Age of indexer cluster
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     - description: Status of cluster manager
       jsonPath: .status.phase
       name: Phase

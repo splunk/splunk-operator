@@ -23,10 +23,26 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of monitoring console
+    - description: Status of search head cluster
       jsonPath: .status.phase
       name: Phase
       type: string
+    - description: Status of the deployer
+      jsonPath: .status.deployerPhase
+      name: Deployer
+      type: string
+    - description: Desired number of search head cluster members
+      jsonPath: .status.replicas
+      name: Desired
+      type: integer
+    - description: Current number of ready search head cluster members
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Age of search head cluster
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v3
     schema:
       openAPIV3Schema:
