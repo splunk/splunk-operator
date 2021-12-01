@@ -265,6 +265,7 @@ func (testenv *TestEnv) setup() error {
 		return err
 	}
 
+	/*
 	err = testenv.createRole()
 	if err != nil {
 		return err
@@ -275,10 +276,12 @@ func (testenv *TestEnv) setup() error {
 		return err
 	}
 
+	
 	err = testenv.createOperator()
-	if err != nil {
-		return err
-	}
+		if err != nil {
+			return err
+		}
+	*/
 
 	// Create s3 secret object for index test
 	testenv.createIndexSecret()

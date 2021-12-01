@@ -51,7 +51,7 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 
 	ad := &enterprisev3.Standalone{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
+			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "Standalone",
 		},
 		ObjectMeta: metav1.ObjectMeta{
