@@ -109,12 +109,12 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: true,
-				OwnerType:    &enterprisev3.SearchHeadCluster{},
+				OwnerType:    &enterprisev3.IndexerCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: true,
-				OwnerType:    &enterprisev3.SearchHeadCluster{},
+				OwnerType:    &enterprisev3.IndexerCluster{},
 			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
