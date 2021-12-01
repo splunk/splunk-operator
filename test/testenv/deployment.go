@@ -683,17 +683,15 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(name strin
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpec enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) error {
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseManager(name)
+		_, err := d.DeployLicenseManager(licenseMaster)
 		if err != nil {
 			return err
 		}
-
-		licenseMaster = name
 	}
 
 	// Deploy the cluster-manager
@@ -725,7 +723,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			},
 			Defaults: defaults,
 		},
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 
 	_, err := d.DeployClusterMasterWithGivenSpec(name, cmSpec)
@@ -771,7 +769,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(name st
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
 		Replicas:           3,
-		AppFrameworkConfig: appFrameworkSpec,
+		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(name+"-shc", shSpec)
