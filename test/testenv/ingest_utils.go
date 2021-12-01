@@ -164,7 +164,8 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	}
 	go func() {
 		defer writer.Close()
-		err := cpMakeTar(srcPath, destPath, writer)
+		//err := cpMakeTar(srcPath, destPath, writer)
+		err := cpMakeTar(localPath{file: srcPath}, remotePath{file: destPath}, writer)
 		if err != nil {
 			return
 		}
@@ -223,7 +224,7 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 }
 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
-func cpMakeTar(srcPath, destPath string, writer io.Writer) error
+//func cpMakeTar(srcPath, destPath string, writer io.Writer) error
 
 // IngestFileViaMonitor ingests a file into an instance using the monitor CLI
 func IngestFileViaMonitor(logFile string, indexName string, podName string, deployment *Deployment) error {
