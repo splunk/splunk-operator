@@ -4,8 +4,8 @@
 #FROM registry.access.redhat.com/ubi8/go-toolset:1.12.8-18
 
 ##################################################################
-## BEGIN: REPLACE ME WHEN go-toolset IS UPDATED TO GOLANG 1.13  ##
-## THIS IS A TEMPORARY HACK TO MIMIC go-toolset FOR GOLANG 1.13 ##
+## BEGIN: REPLACE ME WHEN go-toolset IS UPDATED TO GOLANG 1.17.3  ##
+## THIS IS A TEMPORARY HACK TO MIMIC go-toolset FOR GOLANG 1.17.3 ##
 ##################################################################
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 ENV HOME /opt/app-root/src
@@ -21,7 +21,7 @@ RUN ln -s /usr/bin/microdnf /usr/bin/dnf \
     && useradd -r -m -u 1000 -G root -d ${HOME} default \
     && chown -R default.root /opt/app-root
 ###############################################################
-## END: REPLACE ME WHEN go-toolset IS UPDATED TO GOLANG 1.13 ##
+## END: REPLACE ME WHEN go-toolset IS UPDATED TO GOLANG 1.17.3 ##
 ###############################################################
 
 USER root
