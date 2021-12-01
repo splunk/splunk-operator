@@ -18,6 +18,7 @@ package v3
 
 import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -88,4 +89,34 @@ type MonitoringConsoleList struct {
 
 func init() {
 	SchemeBuilder.Register(&MonitoringConsole{}, &MonitoringConsoleList{})
+}
+
+// NewEvent creates a new event associated with the object and ready
+// to be published to the kubernetes API.
+func (mcnsl *MonitoringConsole) NewEvent(eventType, reason, message string) corev1.Event {
+	t := metav1.Now()
+	return corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: reason + "-",
+			Namespace:    mcnsl.ObjectMeta.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       "MonitoringConsole",
+			Namespace:  mcnsl.Namespace,
+			Name:       mcnsl.Name,
+			UID:        mcnsl.UID,
+			APIVersion: GroupVersion.String(),
+		},
+		Reason:  reason,
+		Message: message,
+		Source: corev1.EventSource{
+			Component: "splunk-monitoringconsole-controller",
+		},
+		FirstTimestamp:      t,
+		LastTimestamp:       t,
+		Count:               1,
+		Type:                eventType,
+		ReportingController: "enterprise.splunk.com/monitoringconsole-controller",
+		//Related:             standln.Spec.ConsumerRef,
+	}
 }

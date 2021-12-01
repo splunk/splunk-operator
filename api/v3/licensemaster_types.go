@@ -18,6 +18,7 @@ package v3
 
 import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -80,4 +81,34 @@ type LicenseMasterList struct {
 
 func init() {
 	SchemeBuilder.Register(&LicenseMaster{}, &LicenseMasterList{})
+}
+
+// NewEvent creates a new event associated with the object and ready
+// to be published to the kubernetes API.
+func (lmstr *LicenseMaster) NewEvent(eventType, reason, message string) corev1.Event {
+	t := metav1.Now()
+	return corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: reason + "-",
+			Namespace:    lmstr.ObjectMeta.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       "LicenseMaster",
+			Namespace:  lmstr.Namespace,
+			Name:       lmstr.Name,
+			UID:        lmstr.UID,
+			APIVersion: GroupVersion.String(),
+		},
+		Reason:  reason,
+		Message: message,
+		Source: corev1.EventSource{
+			Component: "splunk-licensemaster-controller",
+		},
+		FirstTimestamp:      t,
+		LastTimestamp:       t,
+		Count:               1,
+		Type:                eventType,
+		ReportingController: "enterprise.splunk.com/licensemaster-controller",
+		//Related:             standln.Spec.ConsumerRef,
+	}
 }

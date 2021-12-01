@@ -18,6 +18,7 @@ package v3
 
 import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -150,4 +151,34 @@ type SearchHeadClusterList struct {
 
 func init() {
 	SchemeBuilder.Register(&SearchHeadCluster{}, &SearchHeadClusterList{})
+}
+
+// NewEvent creates a new event associated with the object and ready
+// to be published to the kubernetes API.
+func (shcstr *SearchHeadCluster) NewEvent(eventType, reason, message string) corev1.Event {
+	t := metav1.Now()
+	return corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: reason + "-",
+			Namespace:    shcstr.ObjectMeta.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       "SearchHeadCluster",
+			Namespace:  shcstr.Namespace,
+			Name:       shcstr.Name,
+			UID:        shcstr.UID,
+			APIVersion: GroupVersion.String(),
+		},
+		Reason:  reason,
+		Message: message,
+		Source: corev1.EventSource{
+			Component: "splunk-searchheadcluster-controller",
+		},
+		FirstTimestamp:      t,
+		LastTimestamp:       t,
+		Count:               1,
+		Type:                eventType,
+		ReportingController: "enterprise.splunk.com/searchheadcluster-controller",
+		//Related:             standln.Spec.ConsumerRef,
+	}
 }
