@@ -28,8 +28,8 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# splunk.com/splunk-operator-bundle:$VERSION and splunk.com/splunk-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= splunk.com/splunk-operator
+# splunk/splunk-operator-bundle:$VERSION and splunk/splunk-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= splunk/splunk-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -140,7 +140,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
@@ -250,6 +250,13 @@ setup_clair_scanner: stop_clair_scanner
 
 run_clair_scan:
 	@./clair-scanner -c http://0.0.0.0:6060 --ip ${SCANNER_LOCALIP} -r clair-scanner-logs/results.json -l clair-scanner-logs/results.log splunk/splunk-operator
+
+
+# generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
+generate-artifacts: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-install.yaml
+
 
 clean: stop_clair_scanner
 	@rm -rf ./build/_output

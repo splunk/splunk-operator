@@ -22,30 +22,31 @@ docker image save splunk/splunk-operator:${VERSION} | gzip -c > release-${VERSIO
 
 echo Generating release-${VERSION}/splunk-operator-crds.yaml
 touch release-${VERSION}/splunk-operator-crds.yaml
-for i in `ls config/crd/bases/|grep crd.yaml`
+for i in `ls config/crd/bases/|grep yaml`
 do
     echo "---" >> release-${VERSION}/splunk-operator-crds.yaml
     cat config/crd/bases/$i >> release-${VERSION}/splunk-operator-crds.yaml
 done
 
-echo Generating release-${VERSION}/splunk-operator-noadmin.yaml
-cat deploy/service_account.yaml deploy/role.yaml deploy/role_binding.yaml > release-${VERSION}/splunk-operator-noadmin.yaml
-echo "---" >> release-${VERSION}/splunk-operator-noadmin.yaml
-yq w deploy/operator.yaml "spec.template.spec.containers[0].image" $IMAGE >> release-${VERSION}/splunk-operator-noadmin.yaml
-
 echo Generating release-${VERSION}/splunk-operator-install.yaml
-cat release-${VERSION}/splunk-operator-crds.yaml release-${VERSION}/splunk-operator-noadmin.yaml > release-${VERSION}/splunk-operator-install.yaml
+#cat deploy/service_account.yaml deploy/role.yaml deploy/role_binding.yaml > release-${VERSION}/splunk-operator-noadmin.yaml
+#echo "---" >> release-${VERSION}/splunk-operator-noadmin.yaml
+#yq w deploy/operator.yaml "spec.template.spec.containers[0].image" $IMAGE >> release-${VERSION}/splunk-operator-noadmin.yaml
+make generate-artifacts IMG=${IMAGE} VERSION=${VERSION}
 
-echo Rebuilding release-${VERSION}/splunk-operator-cluster.yaml
-cat release-${VERSION}/splunk-operator-crds.yaml deploy/namespace.yaml > release-${VERSION}/splunk-operator-cluster.yaml
-echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/service_account.yaml metadata.namespace splunk-operator >> release-${VERSION}/splunk-operator-cluster.yaml
-echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/role.yaml kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
-echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/role_binding.yaml metadata.namespace splunk-operator | yq w - roleRef.kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
-cat deploy/cluster_role.yaml deploy/cluster_role_binding.yaml >> release-${VERSION}/splunk-operator-cluster.yaml
-echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
-yq w deploy/operator.yaml metadata.namespace splunk-operator | yq w - "spec.template.spec.containers[0].image" $IMAGE | yq w - "spec.template.spec.containers[0].env[0].value" "" | yq d - "spec.template.spec.containers[0].env[0].valueFrom" >> release-${VERSION}/splunk-operator-cluster.yaml
+#echo Generating release-${VERSION}/splunk-operator-install.yaml
+#cat release-${VERSION}/splunk-operator-crds.yaml release-${VERSION}/splunk-operator-noadmin.yaml > release-${VERSION}/splunk-operator-install.yaml
+
+#echo Rebuilding release-${VERSION}/splunk-operator-cluster.yaml
+#cat release-${VERSION}/splunk-operator-crds.yaml deploy/namespace.yaml > release-${VERSION}/splunk-operator-cluster.yaml
+#echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
+#yq w deploy/service_account.yaml metadata.namespace splunk-operator >> release-${VERSION}/splunk-operator-cluster.yaml
+#echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
+#yq w deploy/role.yaml kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
+#echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
+#yq w deploy/role_binding.yaml metadata.namespace splunk-operator | yq w - roleRef.kind ClusterRole >> release-${VERSION}/splunk-operator-cluster.yaml
+#cat deploy/cluster_role.yaml deploy/cluster_role_binding.yaml >> release-${VERSION}/splunk-operator-cluster.yaml
+#echo "---" >> release-${VERSION}/splunk-operator-cluster.yaml
+#yq w deploy/operator.yaml metadata.namespace splunk-operator | yq w - "spec.template.spec.containers[0].image" $IMAGE | yq w - "spec.template.spec.containers[0].env[0].value" "" | yq d - "spec.template.spec.containers[0].env[0].valueFrom" >> release-${VERSION}/splunk-operator-cluster.yaml
 
 ls -la release-${VERSION}/

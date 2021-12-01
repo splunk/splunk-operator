@@ -66,12 +66,12 @@ jobs:
 
     - name: Make Splunk Operator Image
       run: |
-        make image
+        make docker-build IMG="docker.io/splunk/splunk-operator:latest" 
         docker images
 
     - name: Run Make Package
       run: |
-        build/package.sh
+        tools/package.sh
         docker images
 
     - name: Update Operator Image name in Release Folder
