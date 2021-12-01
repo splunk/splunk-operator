@@ -121,6 +121,11 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: true,
 				OwnerType:    &enterprisev3.MonitoringConsole{},
 			}).
+		Watches(&source.Kind{Type: &corev1.Pod{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: true,
+				OwnerType:    &enterprisev3.MonitoringConsole{},
+			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

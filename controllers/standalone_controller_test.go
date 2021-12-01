@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -37,7 +36,7 @@ var _ = Describe("Standalone Controller", func() {
 	Context("Standalone Management", func() {
 
 		It("Create Standalone custom resource should succeeded", func() {
-			nsSpecs := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			//ss := CreateStandlaone("test-ss1", namespace, splcommon.PhaseReady)
 			//Expect(string(splcommon.PhaseReady)).To(Equal(ss.Status.Phase))
