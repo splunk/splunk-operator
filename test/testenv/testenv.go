@@ -266,21 +266,21 @@ func (testenv *TestEnv) setup() error {
 	}
 
 	/*
-	err = testenv.createRole()
-	if err != nil {
-		return err
-	}
-
-	err = testenv.createRoleBinding()
-	if err != nil {
-		return err
-	}
-
-	
-	err = testenv.createOperator()
+		err = testenv.createRole()
 		if err != nil {
 			return err
 		}
+
+		err = testenv.createRoleBinding()
+		if err != nil {
+			return err
+		}
+
+
+		err = testenv.createOperator()
+			if err != nil {
+				return err
+			}
 	*/
 
 	// Create s3 secret object for index test

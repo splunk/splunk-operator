@@ -20,7 +20,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
-
+  echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
     docker pull ${SPLUNK_OPERATOR_IMAGE}
@@ -57,11 +57,19 @@ fi
 
 
 # Install the CRDs
-echo "Installing enterprise CRDs..."
+#echo "Installing enterprise CRDs..."
+echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
 make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
 #kubectl apply -f ${topdir}/deploy/crds
 if [ $? -ne 0 ]; then
   echo "Unable to install the operator. Exiting..."
+  exit 1
+fi
+
+echo "wait for operator pod to be ready..."
+kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=300s -n splunk-operator
+if [ $? -ne 0 ]; then
+  echo "Operator installation not ready..."
   exit 1
 fi
 
