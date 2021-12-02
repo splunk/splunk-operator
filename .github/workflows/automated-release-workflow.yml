@@ -52,12 +52,12 @@ jobs:
     - name: Install golint
       run: |
         go version
-        go get -u golang.org/x/lint/golint
+        go install golang.org/x/lint/golint
     
     - name: Install goveralls
       run: |
         go version
-        go get github.com/mattn/goveralls@latest
+        go install github.com/mattn/goveralls@latest
     
     - name: Install Operator SDK
       run: |

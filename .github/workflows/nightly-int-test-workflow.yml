@@ -62,7 +62,7 @@ jobs:
       - name: Install Go Lint
         run: |
           go version
-          go get -u golang.org/x/lint/golint
+          go install golang.org/x/lint/golint
       - name: Install Ginkgo 
         run: |
             go get github.com/onsi/ginkgo/ginkgo
@@ -97,11 +97,11 @@ jobs:
       - name: Make Splunk Operator Image
         run: |
           docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-          operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Push Splunk Operator Image to ECR
         run: |
           echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
