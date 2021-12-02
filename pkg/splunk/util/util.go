@@ -19,6 +19,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -197,4 +198,40 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 		return "", "", err
 	}
 	return stdout.String(), stderr.String(), nil
+}
+
+// PodExecClientImpl is an interface which is used to implement
+// PodExecClient to run pod exec commands
+// NOTE: This client will be helpful in UTs since we can create
+// our own mock client and pass it to the tests to work correctly.
+type PodExecClientImpl interface {
+	RunPodExecCommand(string) (string, string, error)
+}
+
+// blank assignment to implement PodExecClientImpl
+var _ PodExecClientImpl = &PodExecClient{}
+
+// PodExecClient implements PodExecClientImpl
+type PodExecClient struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	targetPodName string
+}
+
+// GetPodExecClient returns the client object used to execute pod exec commands
+func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) *PodExecClient {
+	return &PodExecClient{
+		client:        client,
+		cr:            cr,
+		targetPodName: targetPodName,
+	}
+}
+
+// RunPodExecCommand runs the commands related to idxc bundle push
+func (podExecClient *PodExecClient) RunPodExecCommand(cmd string) (string, string, error) {
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(cmd),
+	}
+
+	return PodExecCommand(podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
 }

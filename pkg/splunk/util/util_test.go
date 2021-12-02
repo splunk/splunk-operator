@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -171,4 +172,26 @@ func TestPodExecCommand(t *testing.T) {
 
 	// Hit some error legs
 	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
+}
+
+func TestRunPodExecCommand(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	targetPodName := "splunk-cm-cluster-master-0"
+	podExecClient := GetPodExecClient(c, &cr, targetPodName)
+	dummyCmd := "dummyCmd"
+	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(dummyCmd)
+	if stdOut != "" && stdErr != "" {
+		t.Errorf("expected stdOut and stdErr to be empty since it is a dummy podExec call")
+	}
+
 }

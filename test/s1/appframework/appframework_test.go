@@ -34,11 +34,15 @@ var _ = Describe("s1appfw test", func() {
 	var deployment *testenv.Deployment
 	var s3TestDir string
 	var uploadedApps []string
+	var appSourceName string
+	var appSourceVolumeName string
 
 	BeforeEach(func() {
 		var err error
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
 	AfterEach(func() {
@@ -98,20 +102,9 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -135,32 +128,17 @@ var _ = Describe("s1appfw test", func() {
 
 			// Upload V1 apps to S3 for Standalone
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework spec for Standalone
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-
 			// Maximum apps to be downloaded in parallel
 			maxConcurrentAppDownloads := 5
 
-			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:                  appSourceDefaultSpec,
-				AppsRepoPollInterval:      60,
-				VolList:                   volumeSpec,
-				AppSources:                appSourceSpec,
-				MaxConcurrentAppDownloads: uint64(maxConcurrentAppDownloads),
-			}
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -191,14 +169,14 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhasePodCopy, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Standalone
 			opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), standalone.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
@@ -207,7 +185,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
 			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
+			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
 
@@ -273,7 +251,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -366,20 +344,9 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -400,20 +367,8 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Create App framework Spec for Standalone
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -444,7 +399,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -460,7 +415,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
 			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
+			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
 
@@ -526,7 +481,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -613,33 +568,19 @@ var _ = Describe("s1appfw test", func() {
 			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileListPhase3(appListV1)
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -666,20 +607,8 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Standalone
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -709,7 +638,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -725,7 +654,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
 			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
+			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
 
@@ -787,7 +716,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -855,7 +784,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhaseStandalone(deployment, testenvInstance, deployment.GetName(), appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			testenv.VerifyAppListPhaseMonitoringConsole(deployment, testenvInstance, mcName, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
 			appFileList = testenv.GetAppFileListPhase3(appListV1)
@@ -920,9 +849,6 @@ var _ = Describe("s1appfw test", func() {
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
-			// Create local directory for file download
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-
 			// Upload ES app to S3
 			testenvInstance.Log.Info("Upload ES app on S3")
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
@@ -930,21 +856,8 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceName := "appframework-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -1021,30 +934,13 @@ var _ = Describe("s1appfw test", func() {
 
 			// Upload apps to S3
 			testenvInstance.Log.Info("Upload bigger amount of apps to S3 for this test")
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
-
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -1133,33 +1029,14 @@ var _ = Describe("s1appfw test", func() {
 
 			// Upload V1 apps to S3
 			appVersion := "V1"
-			s3TestDir := "s1appfw-mc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileListPhase3(appListV1)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-
-			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-
-			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-
-			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 0,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

@@ -19,6 +19,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -113,6 +114,34 @@ type AppInstallPipeline struct {
 
 	// Refernce to app deploy context
 	appDeployContext *enterpriseApi.AppDeploymentContext
+}
+
+// PlayBookImpl is an interface to implement individual playbooks
+type PlayBookImpl interface {
+	runPlayBook() error
+}
+
+// blank assignment to implement PlayBookImpl
+var _ PlayBookImpl = &IdxcPlayBookContext{}
+
+// TODO: gaurav - implement SHC playbook
+//var _ PlayBookImpl = &SHCPlayBookContext{}
+
+// IdxcPlayBookContext is used to implement playbook to push bundle to indexer cluster peers
+type IdxcPlayBookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
+	podExecClient splutil.PodExecClientImpl
+}
+
+// SHCPlayBookContext is used to implement playbook to push bundle to SHC members
+type SHCPlayBookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
 }
 
 type localScopeInstallContext struct {
