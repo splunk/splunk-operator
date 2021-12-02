@@ -52,6 +52,51 @@ import (
 // kubernetes logger used by splunk.enterprise package
 var log = logf.Log.WithName("splunk.enterprise")
 
+var operatorResourceTracker *globalResourceTracker = nil
+
+// initialize operator level context
+func init() {
+	operatorResourceTracker = &globalResourceTracker{}
+
+	// initialize the storage tracker
+	initStorageTracker()
+}
+
+func initStorageTracker() error {
+	// For now, App framework is the only functionality using the storage space tracker
+	availableDiskSpace, err := getAvailableDiskSpace()
+	if err != nil {
+		return err
+	}
+
+	operatorResourceTracker.storage = &storageTracker{
+		availableDiskSpace: availableDiskSpace,
+	}
+
+	return err
+}
+
+// updateStorageTracker updates the storage tracker with the latest disk info
+func updateStorageTracker() error {
+	if !isPersistantVolConfigured() {
+		return fmt.Errorf("operator resource tracker not initialized")
+
+	}
+
+	availableDiskSpace, err := getAvailableDiskSpace()
+	if err != nil {
+		return err
+	}
+
+	return func() error {
+		operatorResourceTracker.storage.mutex.Lock()
+		defer operatorResourceTracker.storage.mutex.Unlock()
+
+		operatorResourceTracker.storage.availableDiskSpace = availableDiskSpace
+		return err
+	}()
+}
+
 // GetRemoteStorageClient returns the corresponding S3Client
 func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 
@@ -1688,4 +1733,44 @@ func getAdminPasswordFromSecret(client splcommon.ControllerClient, cr splcommon.
 		return nil, fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 	return adminPwd, nil
+}
+
+// isPersistantVolConfigured confirms if the Operator Pod is configured with storage
+func isPersistantVolConfigured() bool {
+	return operatorResourceTracker != nil && operatorResourceTracker.storage != nil
+}
+
+// reserveStorage tries to reserve the amount of requested storage
+func reserveStorage(allocSize uint64) error {
+	if !isPersistantVolConfigured() {
+		return fmt.Errorf("storageTracker was not initialized")
+	}
+
+	sTracker := operatorResourceTracker.storage
+	return func() error {
+		sTracker.mutex.Lock()
+		defer sTracker.mutex.Unlock()
+		if sTracker.availableDiskSpace < allocSize {
+			return fmt.Errorf("requested disk space not available. requested: %d Bytes, available: %d Bytes", allocSize, sTracker.availableDiskSpace)
+		}
+
+		sTracker.availableDiskSpace -= allocSize
+		return nil
+	}()
+}
+
+// releaseStorage releases the reserved storage
+func releaseStorage(releaseSize uint64) error {
+	if !isPersistantVolConfigured() {
+		return fmt.Errorf("storageTracker was not initialized")
+	}
+
+	sTracker := operatorResourceTracker.storage
+	return func() error {
+		sTracker.mutex.Lock()
+		defer sTracker.mutex.Unlock()
+
+		sTracker.availableDiskSpace += releaseSize
+		return nil
+	}()
 }
