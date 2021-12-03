@@ -76,6 +76,13 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		}
 	}()
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
+		return result, err
+	}
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -84,13 +91,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		} else {
 			result.Requeue = false
 		}
-		return result, err
-	}
-
-	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
-	if err != nil {
-		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
 		return result, err
 	}
 

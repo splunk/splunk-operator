@@ -78,10 +78,10 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 
 // Normal publish normal events to k8s
 func (k *K8EventPublisher) Normal(reason, message string) {
-	//k.publishEvent(corev1.EventTypeNormal, reason, message)
+	k.publishEvent(corev1.EventTypeNormal, reason, message)
 }
 
 // Warning publish warning events to k8s
 func (k *K8EventPublisher) Warning(reason, message string) {
-	//k.publishEvent(corev1.EventTypeWarning, reason, message)
+	k.publishEvent(corev1.EventTypeWarning, reason, message)
 }
