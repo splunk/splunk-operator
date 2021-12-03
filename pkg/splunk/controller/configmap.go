@@ -19,6 +19,7 @@ import (
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -48,7 +49,7 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
-	} else {
+	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(client, configMap)
 		if err == nil {
 			dataUpdated = true
@@ -81,20 +82,26 @@ func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedNa
 func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
 	err := client.Get(context.TODO(), namespacedName, &configMap)
-	if err != nil {
+	if err != nil && k8serrors.IsNotFound(err) {
 		//if we don't find mc configmap create and return an empty configmap
-		var configMap corev1.ConfigMap
-		configMap = corev1.ConfigMap{
+		//var configMap corev1.ConfigMap
+		configMap := corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      namespacedName.Name,
 				Namespace: namespacedName.Namespace,
 			},
 			Data: make(map[string]string),
 		}
+		owner := splcommon.AsOwner(cr, false)
+		owner.APIVersion = cr.GetObjectKind().GroupVersionKind().Version
+		// Owner ref doesn't exist, update configmap with owner references
+		configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), owner))
 		err = splutil.CreateResource(client, &configMap)
 		if err != nil {
 			return nil, err
 		}
+	} else if err != nil {
+		return nil, err
 	}
 	err = SetConfigMapOwnerRef(client, cr, namespacedName)
 	if err != nil {
@@ -110,18 +117,31 @@ func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaOb
 		return err
 	}
 
+	owner := splcommon.AsOwner(cr, false)
 	currentOwnerRef := configMap.GetOwnerReferences()
 	// Check if owner ref exists
 	for i := 0; i < len(currentOwnerRef); i++ {
-		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+		if currentOwnerRef[i].UID == owner.UID || (currentOwnerRef[i].Kind == owner.Kind && currentOwnerRef[i].Name == owner.Name) {
 			return nil
 		}
+		/*if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+			return nil
+		}*/
 	}
 
+	owner.APIVersion = cr.GetObjectKind().GroupVersionKind().Version
 	// Owner ref doesn't exist, update configmap with owner references
-	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), owner))
 
-	return splutil.UpdateResource(client, configMap)
+	// Update owner reference if needed
+	err = splutil.UpdateResource(client, configMap)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+	//return splutil.UpdateResource(client, configMap)
 }
 
 // PrepareConfigMap prepares and returns a K8 ConfigMap object for the given data

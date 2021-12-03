@@ -43,22 +43,22 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.IndexerCluster:
-		cr := k.instance.(*enterpriseApi.LicenseMaster)
+		cr := k.instance.(*enterpriseApi.IndexerCluster)
 		name = cr.Name
 		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.ClusterMaster:
-		cr := k.instance.(*enterpriseApi.LicenseMaster)
+		cr := k.instance.(*enterpriseApi.ClusterMaster)
 		name = cr.Name
 		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.MonitoringConsole:
-		cr := k.instance.(*enterpriseApi.LicenseMaster)
+		cr := k.instance.(*enterpriseApi.MonitoringConsole)
 		name = cr.Name
 		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
-		cr := k.instance.(*enterpriseApi.LicenseMaster)
+		cr := k.instance.(*enterpriseApi.SearchHeadCluster)
 		name = cr.Name
 		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)

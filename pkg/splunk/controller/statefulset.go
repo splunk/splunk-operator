@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -302,7 +303,11 @@ func DeleteReferencesToAutomatedMCIfExists(client splcommon.ControllerClient, cr
 		}
 	}
 	//delete corresponding mc configmap
+	// FIXME TODO, I am not sure if this is the right place for checking this
 	configmap, err := GetConfigMap(client, namespacedName)
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

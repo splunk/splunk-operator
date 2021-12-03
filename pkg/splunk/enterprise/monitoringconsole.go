@@ -42,6 +42,8 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -74,12 +76,6 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		}
 	}()
 
-	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
-	if err != nil {
-		return result, err
-	}
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(cr, client)
@@ -91,27 +87,38 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		return result, err
 	}
 
+	// create or update general config resources
+	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
+		return result, err
+	}
+
 	// create or update a headless service
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
+		eventPublisher.Warning("ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update a regular service
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
+		eventPublisher.Warning("ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update statefulset
 	statefulSet, err := getMonitoringConsoleStatefulSet(client, cr)
 	if err != nil {
+		eventPublisher.Warning("getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
 		return result, err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(client, statefulSet, 1)
 	if err != nil {
+		eventPublisher.Warning("getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -133,6 +140,9 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		} else {
 			result.Requeue = false
 		}
+	}
+	if !result.Requeue {
+		return reconcile.Result{}, nil
 	}
 	return result, nil
 }

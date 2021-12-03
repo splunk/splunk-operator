@@ -119,7 +119,7 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
