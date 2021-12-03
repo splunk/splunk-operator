@@ -20,6 +20,7 @@ import (
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -50,13 +51,15 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 				return nil, err
 			}
 		}
-	} else {
+	} else if k8serrors.IsNotFound(err) {
 		scopedLog.Info("Didn't find secret, creating one")
 		err = splutil.CreateResource(client, secret)
 		if err != nil {
 			return nil, err
 		}
 		result = *secret
+	} else {
+		return nil, err
 	}
 
 	return &result, nil

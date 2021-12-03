@@ -19,6 +19,7 @@ import (
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -40,8 +41,10 @@ func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *core
 			current = *serviceAccount
 			err = splutil.UpdateResource(client, &current)
 		}
-	} else {
+	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(client, serviceAccount)
+	} else if err != nil {
+		return err
 	}
 
 	return err

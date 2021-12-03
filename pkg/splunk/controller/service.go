@@ -18,6 +18,7 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -34,8 +35,10 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	var current corev1.Service
 
 	err := client.Get(context.TODO(), namespacedName, &current)
-	if err != nil {
+	if err != nil && k8serrors.IsNotFound(err) {
 		return splutil.CreateResource(client, revised)
+	} else if err != nil {
+		return err
 	}
 
 	// check for changes in service template

@@ -19,6 +19,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -164,7 +165,7 @@ func TestSetStatefulSetOwnerRef(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 
 	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
-	if err.Error() != "NotFound" {
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 
@@ -234,7 +235,7 @@ func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 
 	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
-	if err.Error() != "NotFound" {
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 

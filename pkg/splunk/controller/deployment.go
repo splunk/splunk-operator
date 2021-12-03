@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -35,8 +36,10 @@ func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (
 	var current appsv1.Deployment
 
 	err := c.Get(context.TODO(), namespacedName, &current)
-	if err != nil {
+	if err != nil && k8serrors.IsNotFound(err) {
 		return splcommon.PhasePending, splutil.CreateResource(c, revised)
+	} else if err != nil {
+		return splcommon.PhasePending, err
 	}
 
 	// found an existing Deployment

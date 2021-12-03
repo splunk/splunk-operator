@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -327,7 +328,7 @@ func TestSetSecretOwnerRef(t *testing.T) {
 
 	// Negative testing non-existent secret
 	err := SetSecretOwnerRef(c, current.GetName(), &cr)
-	if err.Error() != "NotFound" {
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect missing secret %s", current.GetName())
 	}
 
@@ -366,7 +367,7 @@ func TestRemoveSecretOwnerRef(t *testing.T) {
 	}
 	// Test secret not found error condition
 	_, err := RemoveSecretOwnerRef(c, "testSecretName", &cr)
-	if err.Error() != "NotFound" {
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't find secret not found error")
 	}
 
@@ -501,7 +502,7 @@ func TestGetNamespaceScopedSecret(t *testing.T) {
 
 	// Negative testing - look for secret in "random" namespace(doesn't exist)
 	retrievedSecret, err = GetNamespaceScopedSecret(c, "random")
-	if err.Error() != "NotFound" {
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Failed to detect secret in random namespace")
 	}
 }

@@ -307,8 +307,7 @@ func DeleteReferencesToAutomatedMCIfExists(client splcommon.ControllerClient, cr
 	configmap, err := GetConfigMap(client, namespacedName)
 	if k8serrors.IsNotFound(err) {
 		return nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return err
 	}
 	err = splutil.DeleteResource(client, configmap)

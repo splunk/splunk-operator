@@ -24,9 +24,11 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	//"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -264,6 +266,12 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		copyMockObject(&obj, &srcObj)
 		return nil
 	}
+
+	dummySchemaResource := schema.GroupResource{
+		Group:    obj.GetObjectKind().GroupVersionKind().Group,
+		Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+	}
+	c.NotFoundError = k8serrors.NewNotFound(dummySchemaResource, obj.GetName())
 	return c.NotFoundError
 }
 
@@ -516,7 +524,7 @@ func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulS
 	gotPhase, err := mgr.Update(c, statefulSet, desiredReplicas)
 	if (err == nil && wantError != nil) ||
 		(err != nil && wantError == nil) ||
-		(err != nil && wantError != nil && err.Error() != wantError.Error()) {
+		(err != nil && wantError != nil && errors.Is(err, wantError)) {
 		t.Errorf("%s returned error %v; want %v", method, err, wantError)
 	}
 	if gotPhase != wantPhase {
@@ -635,8 +643,14 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	current.Status.ReadyReplicas = 1
 	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
 	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
+	//getPodCalls := map[string][]MockFuncCall{}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, errors.New("NotFound"), current)
+	groupResource := schema.GroupResource{
+		Group:    "test",
+		Resource: "test",
+	}
+	newNotFoundError := k8serrors.NewNotFound(groupResource, "test")
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, newNotFoundError, current)
 
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",

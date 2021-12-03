@@ -19,7 +19,7 @@ import (
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
-	//k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -82,8 +82,7 @@ func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedNa
 func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
 	err := client.Get(context.TODO(), namespacedName, &configMap)
-	// unable to add k8serrors.IsNotFound(err)  it fails in unit test
-	if err != nil {
+	if err != nil && errors.IsNotFound(err) {
 		//if we don't find mc configmap create and return an empty configmap
 		//var configMap corev1.ConfigMap
 		configMap := corev1.ConfigMap{
@@ -97,6 +96,8 @@ func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 		if err != nil {
 			return nil, err
 		}
+	} else if err != nil {
+		return nil, err
 	}
 	err = SetConfigMapOwnerRef(client, cr, namespacedName)
 	if err != nil {
