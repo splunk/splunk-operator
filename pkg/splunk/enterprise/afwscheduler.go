@@ -1058,10 +1058,10 @@ func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 
 		scopedLog.Info("SHC Bundle push complete")
 		// set the state to bundle push complete since SHC bundle push is a sync call
-		setBundlePushState(afwPipeline, enterpriseApi.BundlePushComplete)
+		setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
 
 		// reset the retry count
-		afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
+		shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
 
 		// set the state to install complete for all the cluster scoped apps
 		setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
@@ -1130,7 +1130,7 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 			setBundlePushState(idxcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
 
 			// reset the retry count
-			afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
+			idxcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)

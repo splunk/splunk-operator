@@ -1870,7 +1870,6 @@ func TestSHCRunPlayBook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline = nil
 	afwPipeline := initAppInstallPipeline(appDeployContext)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
