@@ -301,17 +301,19 @@ func DeleteReferencesToAutomatedMCIfExists(client splcommon.ControllerClient, cr
 		if err != nil {
 			return err
 		}
-	}
-	//delete corresponding mc configmap
-	// FIXME TODO, I am not sure if this is the right place for checking this
-	configmap, err := GetConfigMap(client, namespacedName)
-	if k8serrors.IsNotFound(err) {
-		return nil
-	} else if err != nil {
+
+		//delete corresponding mc configmap
+		configmap, err := GetConfigMap(client, namespacedName)
+		if k8serrors.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		err = splutil.DeleteResource(client, configmap)
 		return err
 	}
-	err = splutil.DeleteResource(client, configmap)
-	return err
+
+	return nil
 }
 
 //isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC

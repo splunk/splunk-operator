@@ -17,20 +17,20 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
-	"strings"
-	"time"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sort"
+	"strings"
+	"time"
 )
 
 // ApplyMonitoringConsole reconciles the StatefulSet for N monitoring console instances of Splunk Enterprise.
@@ -201,7 +201,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
 	err := client.Get(context.TODO(), namespacedName, &current)
 
-	if err == nil {
+	if err == nil && k8serrors.IsNotFound(err) {
 		revised := current.DeepCopy()
 		if addNewURLs {
 			AddURLsConfigMap(revised, crName, newURLs)
@@ -216,6 +216,8 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 			}
 		}
 		return &current, nil
+	} else if err != nil {
+		return nil, err
 	}
 
 	//If no configMap and deletion of CR is requested then create a empty configMap
