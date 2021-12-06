@@ -197,7 +197,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 	var current corev1.ConfigMap
 	current.Data = make(map[string]string)
 
-	configMap := GetSplunkMonitoringconsoleConfigMapName(monitoringConsoleRef, SplunkMonitoringConsole)
+	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
 	err := client.Get(context.TODO(), namespacedName, &current)
 
@@ -218,24 +218,20 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		return &current, nil
 	}
 
-	// if err is not nil and if the error is not resoruce not found, then just return with err
+	// if err is not resource not found then return the err
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return nil, err
 	}
 
-	// only cases here is , resource found or resoruce not found
+	// case when resource not found
 	//If no configMap and deletion of CR is requested then create a empty configMap
-	if err != nil && k8serrors.IsNotFound(err) {
-		current = corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      configMap,
-				Namespace: namespace,
-			},
-			Data: make(map[string]string),
-		}
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMap,
+			Namespace: namespace,
+		},
+		Data: make(map[string]string),
 	}
-
-	// if addNewURLs contains new values, then add them
 	if addNewURLs {
 		//else create a new configMap with new entries
 		for _, url := range newURLs {
@@ -248,16 +244,9 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		Namespace: namespace,
 	}
 
-	if err != nil && k8serrors.IsNotFound(err) {
-		err = splutil.CreateResource(client, &current)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		err = splutil.UpdateResource(client, &current)
-		if err != nil {
-			return nil, err
-		}
+	err = splutil.CreateResource(client, &current)
+	if err != nil {
+		return nil, err
 	}
 
 	return &current, nil
