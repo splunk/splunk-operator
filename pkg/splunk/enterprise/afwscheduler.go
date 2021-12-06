@@ -32,9 +32,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// handle to hold the pipeline
-var afwPipeline *AppInstallPipeline
-
 // createPipelineWorker creates a pipeline worker for an app package
 func createPipelineWorker(appDeployInfo *enterpriseApi.AppDeploymentInfo, appSrcName string, podName string,
 	appFrameworkConfig *enterpriseApi.AppFrameworkSpec, client *splcommon.ControllerClient,
@@ -391,19 +388,16 @@ downloadWork:
 					continue
 				}
 
-				ppln.pplnMutex.Lock()
 				// do not proceed if we dont have enough disk space to download this app
-				if int64(ppln.availableDiskSpace-downloadWorker.appDeployInfo.Size) <= 0 {
+
+				err := reserveStorage(downloadWorker.appDeployInfo.Size)
+				if err != nil {
+					scopedLog.Error(err, "insufficient storage for the app pkg download. appSrcName: %s, app name: %s, app size: %d Bytes", downloadWorker.appSrcName, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.Size)
 					// setting isActive to false here so that downloadPhaseManager can take care of it.
 					downloadWorker.isActive = false
-					ppln.pplnMutex.Unlock()
 					<-downloadWorkersRunPool
 					continue
 				}
-
-				// update the available disk space
-				ppln.availableDiskSpace = ppln.availableDiskSpace - downloadWorker.appDeployInfo.Size
-				ppln.pplnMutex.Unlock()
 
 				// increment the count in worker waitgroup
 				downloadWorker.waiter.Add(1)
@@ -418,6 +412,7 @@ downloadWork:
 				if err != nil {
 					// increment the retry count and mark this app as download pending
 					updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+
 					<-downloadWorkersRunPool
 					continue
 				}
@@ -924,7 +919,7 @@ func checkIfBundlePushIsDone(kind string, bundlePushState enterpriseApi.BundlePu
 }
 
 // initPipelinePhase initializes a given pipeline phase
-func initPipelinePhase(phase enterpriseApi.AppPhaseType) {
+func initPipelinePhase(afwPipeline *AppInstallPipeline, phase enterpriseApi.AppPhaseType) {
 	afwPipeline.pplnPhases[phase] = &PipelinePhase{
 		q:          []*PipelineWorker{},
 		msgChannel: make(chan *PipelineWorker, 1),
@@ -934,23 +929,20 @@ func initPipelinePhase(phase enterpriseApi.AppPhaseType) {
 // initAppInstallPipeline creates the AFW scheduler pipeline
 // TBD: Do we need to make it singleton? For now leave it till we have the clarity on
 func initAppInstallPipeline(appDeployContext *enterpriseApi.AppDeploymentContext) *AppInstallPipeline {
-	if afwPipeline != nil {
-		return afwPipeline
-	}
 
-	afwPipeline = &AppInstallPipeline{}
+	afwPipeline := &AppInstallPipeline{}
 	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 3)
 	afwPipeline.sigTerm = make(chan struct{})
 	afwPipeline.appDeployContext = appDeployContext
 
 	// Allocate the Download phase
-	initPipelinePhase(enterpriseApi.PhaseDownload)
+	initPipelinePhase(afwPipeline, enterpriseApi.PhaseDownload)
 
 	// Allocate the Pod Copy phase
-	initPipelinePhase(enterpriseApi.PhasePodCopy)
+	initPipelinePhase(afwPipeline, enterpriseApi.PhasePodCopy)
 
 	// Allocate the install phase
-	initPipelinePhase(enterpriseApi.PhaseInstall)
+	initPipelinePhase(afwPipeline, enterpriseApi.PhaseInstall)
 
 	return afwPipeline
 }
@@ -958,10 +950,6 @@ func initAppInstallPipeline(appDeployContext *enterpriseApi.AppDeploymentContext
 // deleteAppPkgFromOperator removes the app pkg from the Operator Pod
 func deleteAppPkgFromOperator(worker *PipelineWorker) {
 	scopedLog := log.WithName("deleteAppPkgFromOperator").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "app pkg", worker.appDeployInfo.AppName)
-	if afwPipeline == nil {
-		scopedLog.Error(nil, "Pipeline not initialized")
-		return
-	}
 
 	appPkgLocalPath := getAppPackageLocalPath(worker)
 	err := os.Remove(appPkgLocalPath)
@@ -969,11 +957,10 @@ func deleteAppPkgFromOperator(worker *PipelineWorker) {
 		// Issue is local, so just log an error msg and return
 		// ToDo: sgontla: For any transient errors, handle the clean-up at the end of the install
 		scopedLog.Error(err, "failed to delete app pkg from Operator", "app pkg path", appPkgLocalPath)
+		return
 	}
 
-	afwPipeline.pplnMutex.Lock()
-	afwPipeline.availableDiskSpace += worker.appDeployInfo.Size
-	afwPipeline.pplnMutex.Unlock()
+	releaseStorage(worker.appDeployInfo.Size)
 }
 
 func afwGetReleventStatefulsetByKind(cr splcommon.MetaObject, client splcommon.ControllerClient) *appsv1.StatefulSet {
@@ -1140,7 +1127,7 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 		// check if the bundle push is complete
 		if idxcPlayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
 			// set the bundle push status to complete
-			setBundlePushState(afwPipeline, enterpriseApi.BundlePushComplete)
+			setBundlePushState(idxcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
 
 			// reset the retry count
 			afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
@@ -1161,7 +1148,7 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 		}
 
 		// set the state to bundle push in progress
-		setBundlePushState(afwPipeline, enterpriseApi.BundlePushInProgress)
+		setBundlePushState(idxcPlayBookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
 
 	default:
 		err := fmt.Errorf("invalid Bundle push state=%s", bundlePushStateAsStr(appDeployContext.BundlePushStatus.BundlePushStage))
@@ -1174,25 +1161,24 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) error {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	afwPipeline = initAppInstallPipeline(appDeployContext)
+	afwPipeline := initAppInstallPipeline(appDeployContext)
 
 	var clusterScopedApps []*enterpriseApi.AppDeploymentInfo
 
 	afwEntryTime := time.Now().Unix()
+	var err error
 
-	// ToDo: sgontla: for now, just make the UT happy, until we get the glue logic
-	// check if this needs to be pure singleton for the entire reconcile span, considering CSPL-1169. CC: @Gaurav
-	// Finally delete the pipeline
-	defer func() {
-		afwPipeline = nil
-	}()
-
-	// get the current available disk space for downloading apps on operator pod
-	availableDiskSpace, err := getAvailableDiskSpace()
-	if err != nil {
-		return err
+	// return error, if there is no storage defined for the Operator pod
+	if !isPersistantVolConfigured() {
+		return fmt.Errorf("persistant volume required for the App framework, but not provisioned")
 	}
-	afwPipeline.availableDiskSpace = availableDiskSpace
+
+	// Operator pod storage is not fully under operator control
+	// for now, update on every scheduler entry
+	err = updateStorageTracker()
+	if err != nil {
+		return fmt.Errorf("failed to update storage tracker, error: %v", err)
+	}
 
 	// Start the download phase manager
 	afwPipeline.phaseWaiter.Add(1)

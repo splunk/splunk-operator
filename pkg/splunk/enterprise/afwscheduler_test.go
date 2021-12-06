@@ -113,9 +113,6 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 
 	// Test for createAndAddPipelineWorker
 	afwPpln := initAppInstallPipeline(&appFrameworkContext)
-	defer func() {
-		afwPipeline = nil
-	}()
 
 	afwPpln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)
 	if len(afwPpln.pplnPhases[enterpriseApi.PhaseDownload].q) != 1 {
@@ -123,7 +120,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 }
 
-func TestgetApplicablePodNameForAppFramework(t *testing.T) {
+func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -178,39 +175,15 @@ func TestgetApplicablePodNameForAppFramework(t *testing.T) {
 
 func TestInitAppInstallPipeline(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	afwPipeline = &AppInstallPipeline{}
-	defer func() {
-		afwPipeline = nil
-	}()
-
-	tmpPtr := afwPipeline
-
-	// Should not modify the pipeline, if it is already exists
-
-	retPtr := initAppInstallPipeline(appDeployContext)
-
-	if retPtr != tmpPtr {
-		t.Errorf("When the Pipeline is existing, should not overwrite it")
-	}
-
-	// if the pipeline doesn't exist, new pipeline should be created
-	afwPipeline = nil
-	retPtr = initAppInstallPipeline(appDeployContext)
-	if retPtr == nil {
+	ppln := initAppInstallPipeline(appDeployContext)
+	if ppln == nil {
 		t.Errorf("Failed to create a new pipeline")
 	}
-
-	// Finally delete the pipeline
-	afwPipeline = nil
 }
 
 func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	afwPipeline = nil
 	ppln := initAppInstallPipeline(appDeployContext)
-	defer func() {
-		afwPipeline = nil
-	}()
 
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -289,9 +262,6 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 func TestTransitionWorkerPhase(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln := initAppInstallPipeline(appDeployContext)
-	defer func() {
-		afwPipeline = nil
-	}()
 
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -363,8 +333,8 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 
 	// In the case of Standalone, make sure that there are new workers created for every replicaset member, once after the download phase is completed
-	afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].q = nil
-	afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
+	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = nil
+	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
 	cr.TypeMeta.Kind = "Standalone"
 	replicas = 5
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
@@ -378,9 +348,9 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 
 	// Make sure that the existing Aux phase info is honoured in case of the Stanalone replicas
-	afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].q = nil
-	afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
-	afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].q = nil
+	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = nil
+	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
+	ppln.pplnPhases[enterpriseApi.PhaseInstall].q = nil
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo = make([]enterpriseApi.PhaseInfo, replicas)
 	// Mark one pod for installation pending, all others as pod copy pending
@@ -435,9 +405,6 @@ func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 func TestPhaseManagersTermination(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln := initAppInstallPipeline(appDeployContext)
-	defer func() {
-		afwPipeline = nil
-	}()
 
 	ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads = 1
 	ppln.phaseWaiter.Add(1)
@@ -457,10 +424,6 @@ func TestPhaseManagersTermination(t *testing.T) {
 }
 
 func TestPhaseManagersMsgChannels(t *testing.T) {
-	defer func() {
-		afwPipeline = nil
-	}()
-
 	appDeployContext := &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 1,
 	}
@@ -553,14 +516,13 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// test  all the pipeline phases are able to send the worker to the downstreams
-	afwPipeline = nil
 	ppln := initAppInstallPipeline(appDeployContext)
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
 	// Start the download phase manager
-	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.downloadPhaseManager()
+	ppln.phaseWaiter.Add(1)
+	go ppln.downloadPhaseManager()
 	// drain the download phase channel
 	var worker *PipelineWorker
 	var i int
@@ -607,8 +569,8 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhaseInstall].q = append(ppln.pplnPhases[enterpriseApi.PhaseInstall].q, workerList...)
 
 	// Start the install phase manager
-	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.installPhaseManager()
+	ppln.phaseWaiter.Add(1)
+	go ppln.installPhaseManager()
 
 	// drain the install channel
 	for i := 0; i < int(replicas); i++ {
@@ -631,9 +593,6 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 func TestIsPipelineEmpty(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln := initAppInstallPipeline(appDeployContext)
-	defer func() {
-		afwPipeline = nil
-	}()
 
 	if !ppln.isPipelineEmpty() {
 		t.Errorf("Expected empty pipeline, but found some workers in pipeline")
@@ -1218,7 +1177,6 @@ func TestScheduleDownloads(t *testing.T) {
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln = nil
 	ppln = initAppInstallPipeline(appDeployContext)
-	ppln.availableDiskSpace = 100
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
 	cr := enterpriseApi.Standalone{
@@ -1667,9 +1625,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 	// Just make the lint conversion checks happy
 	var client splcommon.ControllerClient = getConvertedClient(c)
-	//var waiter sync.WaitGroup
 
-	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermaster-0",
@@ -1682,9 +1638,8 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 			},
 			ObjectHash: "abcd1234abcd",
 		},
-		client:    &client,
-		afwConfig: appFrameworkConfig,
-		//waiter:     &waiter,
+		client:     &client,
+		afwConfig:  appFrameworkConfig,
 		appSrcName: appFrameworkConfig.AppSources[0].Name,
 	}
 
@@ -1800,7 +1755,6 @@ func TestIDXCRunPlayBook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline = nil
 	afwPipeline := initAppInstallPipeline(appDeployContext)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
@@ -2076,9 +2030,10 @@ func TestFreeAppPkgStorageFromOperator(t *testing.T) {
 		},
 	}
 
-	afwPipeline = &AppInstallPipeline{
-		// 8 GB
-		availableDiskSpace: 8 * 1024 * 1024 * 1024,
+	operatorResourceTracker = &globalResourceTracker{
+		storage: &storageTracker{
+			availableDiskSpace: 1024 * 1024 * 1024,
+		},
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
@@ -2136,10 +2091,10 @@ func TestFreeAppPkgStorageFromOperator(t *testing.T) {
 	}
 	defer os.Remove(appPkgLocalPath)
 
-	diskSpaceBeforeRemoval := afwPipeline.availableDiskSpace
+	diskSpaceBeforeRemoval := operatorResourceTracker.storage.availableDiskSpace
 	deleteAppPkgFromOperator(worker)
 
-	if afwPipeline.availableDiskSpace != diskSpaceBeforeRemoval+worker.appDeployInfo.Size {
+	if operatorResourceTracker.storage.availableDiskSpace != diskSpaceBeforeRemoval+worker.appDeployInfo.Size {
 		t.Errorf("Unable to clean up the app package on Operator pod")
 	}
 }

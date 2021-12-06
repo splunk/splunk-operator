@@ -1621,3 +1621,122 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
 	}
 }
+
+func TestInitStorageTracker(t *testing.T) {
+	if operatorResourceTracker == nil {
+		t.Errorf("operatorResourceTracker should be initialized as part of the enterprise package init()")
+	}
+
+	// When the volume is not configured, should return an error
+	splcommon.AppDownloadVolume = "/non-existingDir"
+	err := initStorageTracker()
+	if err == nil {
+		t.Errorf("When the volume doesn't exist, should return an error")
+	}
+
+	// When the volume exists, should not return an error
+	splcommon.AppDownloadVolume = "/"
+	err = initStorageTracker()
+	if err != nil {
+		t.Errorf("When the volume exists, should not return an error. Error: %v", err)
+	}
+}
+
+func TestUpdateStorageTracker(t *testing.T) {
+	// When the resource tracker is not initialized, should return an error
+	operatorResourceTracker = nil
+	err := updateStorageTracker()
+	if err == nil {
+		t.Errorf("When the operator resource tracker is not initialized, should return an error")
+	}
+
+	// When the volume is not configured, should return an error
+	splcommon.AppDownloadVolume = "/non-existingdir"
+	err = updateStorageTracker()
+	if err == nil {
+		t.Errorf("When the volume doesn't exist should return an error")
+	}
+
+	// When the volume exists, should not return an error
+	operatorResourceTracker = &globalResourceTracker{
+		storage: &storageTracker{},
+	}
+	splcommon.AppDownloadVolume = "/"
+	err = updateStorageTracker()
+	if err != nil {
+		t.Errorf("When the volume exists should not return an error. Error: %v", err)
+	}
+}
+
+func TestIsPersistantVolConfigured(t *testing.T) {
+	// when the resource tracker not initialized, should return false
+	operatorResourceTracker = nil
+	if isPersistantVolConfigured() {
+		t.Errorf("When the resource tracker is not initialized, should resturn false")
+	}
+
+	// when the storage tracker not initialized, should return false
+	operatorResourceTracker = &globalResourceTracker{}
+	if isPersistantVolConfigured() {
+		t.Errorf("When the storage tracker is not initialized, should return false")
+	}
+
+	// Should return true, when the trackers are initialized
+	operatorResourceTracker.storage = &storageTracker{}
+	if !isPersistantVolConfigured() {
+		t.Errorf("When the storage tracker is initialized, should return true")
+	}
+}
+
+func TestReserveStorage(t *testing.T) {
+	// when the resource tracker is not intiailzed, should return an error
+	operatorResourceTracker = nil
+
+	err := reserveStorage(1 * 1024)
+	if err == nil {
+		t.Errorf("When the resource tracker is not initialized, reservation should fail")
+	}
+
+	// When there is capacity, reservation should not fail
+	operatorResourceTracker = &globalResourceTracker{
+		storage: &storageTracker{
+			availableDiskSpace: 8 * 1024,
+		},
+	}
+
+	err = reserveStorage(1 * 1024)
+	if err != nil {
+		t.Errorf("Expected to reserver storage, but got an error: %v", err)
+	}
+
+	// When there is no capacity, reservation should fail
+	err = reserveStorage(1 * 1024 * 1024)
+	if err == nil {
+		t.Errorf("Expected to fail storage allocation, but succeeded")
+	}
+}
+
+func TestReleaseStorage(t *testing.T) {
+	// When the resource tracker not initialized, should return an error
+	operatorResourceTracker = nil
+
+	err := releaseStorage(1 * 1024)
+	if err == nil {
+		t.Errorf("When the resource tracker is not initialized, release should fail")
+	}
+
+	operatorResourceTracker = &globalResourceTracker{
+		storage: &storageTracker{
+			availableDiskSpace: 8 * 1024,
+		},
+	}
+
+	// When the storage is released, same should be reflecting in the storage tracker
+	err = releaseStorage(1 * 1024)
+	if err != nil {
+		t.Errorf("Storage release should not fail")
+	}
+	if operatorResourceTracker.storage.availableDiskSpace != 9*1024 {
+		t.Errorf("Released storage is not reflecting in the storage tracker")
+	}
+}

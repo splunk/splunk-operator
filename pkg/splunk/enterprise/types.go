@@ -57,6 +57,18 @@ const (
 	maxRunTimeBeforeAttemptingYield = 90
 )
 
+type globalResourceTracker struct {
+	storage *storageTracker
+}
+
+type storageTracker struct {
+	// represents the available disk space on operator pod
+	availableDiskSpace uint64
+
+	// mutex to serialize the access
+	mutex sync.Mutex
+}
+
 // PipelineWorker represents execution context used to run an app pkg worker thread
 type PipelineWorker struct {
 	//  to the AppSource Spec entry
@@ -106,13 +118,7 @@ type AppInstallPipeline struct {
 	// Used by yield logic
 	sigTerm chan struct{}
 
-	// represents the available disk space on operator pod
-	availableDiskSpace uint64
-
-	// mutex to synchronize shared variables across phases
-	pplnMutex sync.Mutex
-
-	// Refernce to app deploy context
+	// Reference to app deploy context
 	appDeployContext *enterpriseApi.AppDeploymentContext
 }
 

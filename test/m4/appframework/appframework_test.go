@@ -31,13 +31,22 @@ import (
 var _ = Describe("m4appfw test", func() {
 
 	var deployment *testenv.Deployment
-	var s3TestDir string
 	var uploadedApps []string
+	var appSourceNameIdxc string
+	var appSourceNameShc string
+	var s3TestDirShc string
+	var s3TestDirIdxc string
+	var appSourceVolumeNameIdxc string
+	var appSourceVolumeNameShc string
 
 	BeforeEach(func() {
 		var err error
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+		s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
+		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
+		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
 	})
 
 	AfterEach(func() {
@@ -86,20 +95,9 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -119,35 +117,30 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Upload V1 apps to S3 for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
-			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			// Upload V1 apps to S3 for Indexer Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeCluster,
-			}
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, mcName, "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -169,11 +162,15 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########## INITIAL VERIFICATIONS ##########
-			// Verify V1 apps are downloaded on Cluster Manager and Deployer
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V1 apps are downloaded on Cluster Manager
+			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V1 apps are downloaded on Deployer
+			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are downloaded on Monitoring Console
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
@@ -190,15 +187,16 @@ var _ = Describe("m4appfw test", func() {
 			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Add Search Head Cluster and Indexer Pods to all Pod Names
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			allPodNames := podNames
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 
-			// Verify Apps are copied to correct location for M4 SVA
+			// Verify apps are copied to correct location for M4 SVA
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for M4", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
-			// Verify Apps are copied to correct location for Monitoring Console
+			// Verify apps are copied to correct location for Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
 
@@ -220,12 +218,18 @@ var _ = Describe("m4appfw test", func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for M4
+			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2, 2)
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps for Monitoring Console
@@ -256,9 +260,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########## UPGRADE VERIFICATIONS ##########
-			// Verify V2 apps are downloaded on Cluster Manager and Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V2 apps are downloaded on Cluster Manager
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V2 apps are downloaded on Deployer
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V2 apps are downloaded on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
@@ -268,15 +276,15 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
-			// Verify apps are copied to location for M4 SVA
+			// Verify V2 apps are copied to location for M4 SVA
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on M4 pods", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
-			// Verify apps are copied to location for Monitoring Console
+			// Verify V2 apps are copied to location for Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
+			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
 
@@ -318,24 +326,13 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), "Unable to upload newer version of apps for Monitoring Console to S3 test directory")
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			volumeSpecMC := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeNameMC, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpecMC := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeNameMC,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceNameMC := "appframework-mc-" + testenv.RandomDNSName(3)
-			appSourceSpecMC := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameMC, s3TestDirMC, appSourceDefaultSpecMC)}
-			appFrameworkSpecMC := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpecMC,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpecMC,
-				AppSources:           appSourceSpecMC,
-			}
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: splcommon.Spec{
@@ -355,35 +352,30 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
-			// Upload V2 version of apps to S3 for M4
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
-			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			// Upload V2 apps to S3 for Indexer Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeCluster,
-			}
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, mcName, "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -405,11 +397,15 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########## INITIAL VERIFICATIONS ##########
-			// Verify V2 apps are downloaded on Cluster Manager and Deployer
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded for M4", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V2 apps are downloaded on Cluster Manager
+			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V2 apps are downloaded on Deployer
+			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V2 apps are downloaded on Monitoring Console
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
@@ -422,10 +418,11 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
-			// Saving current V1 bundle hash for future comparison
+			// Saving current V2 bundle hash for future comparison
 			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
 
 			// Add Search Head Cluster and Indexer Pods to all Pod Names
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			allPodNames := podNames
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
@@ -456,12 +453,18 @@ var _ = Describe("m4appfw test", func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V1 apps to S3 for M4
+			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion = "V1"
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1, 1)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V1 apps to S3 for Monitoring Console
@@ -492,9 +495,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########## DOWNGRADE VERIFICATIONS ########
-			// Verify V1 apps are downloaded on Cluster Manager and Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V1 apps are downloaded on Cluster Manager
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V1 apps are downloaded on Deployer
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are downloaded on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
@@ -505,15 +512,15 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
 			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
-			// Verify apps are copied to correct location for M4 SVA
+			// Verify V1 apps are copied to correct location for M4 SVA
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for M4", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
-			// Verify apps are copied to correct location for Monitoring Console
+			// Verify V1 apps are copied to correct location for Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
+			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
 
@@ -553,37 +560,32 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V1 apps to S3 for M4
+			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
 			appFileList := testenv.GetAppFileList(appListV1, 1)
-			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeCluster,
-			}
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy M4 CRD
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			indexersPerSite := 1
 			shReplicas := 3
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, "", "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -602,11 +604,15 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//########### INITIAL VERIFICATIONS #########
-			// Verify apps are downloaded on Cluster Manager and Deployer
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Master and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify apps are downloaded on Cluster Manager
+			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Master", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify apps are downloaded on Deployer
+			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify bundle push status
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
@@ -773,36 +779,31 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for M4
+			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
-			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for M4", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeLocal,
-			}
-			appSourceName := "appframework-" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 60,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
 			indexersPerSite := 1
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, "", "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -815,14 +816,19 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			//########## INITIAL VERIFICATION #############
-			// Verify V1 apps are downloaded
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			// Verify V1 apps are downloaded on Cluster Manager
+			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
 			appFileList = testenv.GetAppFileList(appListV1, 1)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded ", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V1 apps are downloaded on Deployer
+			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
@@ -840,12 +846,18 @@ var _ = Describe("m4appfw test", func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3
+			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2, 2)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
@@ -861,9 +873,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			//########## UPGRADE VERIFICATIONS ############
-			// Verify V2 apps are downloaded on Cluster Manager and Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V2 apps are downloaded on Cluster Manager
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V2 apps are downloaded on Deployer
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V2 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
@@ -882,41 +898,31 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 
-			// Upload V1 apps to S3
+			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
-			s3TestDir = "m4appfw-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1, 1)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			volumeName := "appframework-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
-
-			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-				VolName: volumeName,
-				Scope:   enterpriseApi.ScopeCluster,
-			}
-
-			// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-			appSourceName := "appframework" + testenv.RandomDNSName(3)
-			appSourceSpec := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceName, s3TestDir, appSourceDefaultSpec)}
-
-			// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-			appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-				Defaults:             appSourceDefaultSpec,
-				AppsRepoPollInterval: 0,
-				VolList:              volumeSpec,
-				AppSources:           appSourceSpec,
-			}
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			siteCount := 3
 			indexersPerSite := 1
 
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster")
-			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpec, true, "", "")
+			err = deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -934,13 +940,18 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
-			// Verify V1 apps are downloaded
-			initContDownloadLocation := "/init-apps/" + appSourceName
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify V1 apps are downloaded on Cluster Manager
+			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify V1 apps are downloaded on Deployer
+			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are copied to location
+			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location based on Pod KIND", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
@@ -958,12 +969,18 @@ var _ = Describe("m4appfw test", func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
-			testenvInstance.Log.Info("Uploading %s apps to S3", appVersion)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for M4", appVersion))
+			appFileList = testenv.GetAppFileList(appListV2, 2)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
@@ -1021,9 +1038,13 @@ var _ = Describe("m4appfw test", func() {
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
-			// Verify apps are downloaded
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded by init container for apps", appVersion))
-			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), podNames, appFileList, initContDownloadLocation)
+			// Verify apps are downloaded on Cluster Manager
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+
+			// Verify apps are downloaded on Deployer
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
+			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location based on Pod KIND", appVersion))
