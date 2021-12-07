@@ -1042,6 +1042,12 @@ func (shcPlayBookContext *SHCPlayBookContext) triggerBundlePush(cmd string) erro
 func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 	scopedLog := log.WithName("runPlayBook").WithValues("crName", shcPlayBookContext.cr.GetName(), "namespace", shcPlayBookContext.cr.GetNamespace())
 
+	cr := shcPlayBookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	if cr.Status.Phase != splcommon.PhaseReady {
+		scopedLog.Info("SHC is not ready yet.")
+		return nil
+	}
+
 	appDeployContext := shcPlayBookContext.afwPipeline.appDeployContext
 
 	switch appDeployContext.BundlePushStatus.BundlePushStage {
@@ -1053,6 +1059,7 @@ func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 		err := shcPlayBookContext.triggerBundlePush(bundlePushCmd)
 		if err != nil {
 			scopedLog.Error(err, "failed to apply cluster bundle")
+			shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount++
 			return err
 		}
 

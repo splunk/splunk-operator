@@ -438,7 +438,13 @@ func getRemoteObjectKey(cr splcommon.MetaObject, appFrameworkConfig *enterpriseA
 
 	volumePath := vol.Path
 	index := strings.Index(volumePath, "/")
-	volumePath = volumePath[index+1:]
+	// CSPL-1528: If volume path only contains the bucket name,
+	// then don't append the bucket name to the remote key
+	if index < 0 {
+		volumePath = ""
+	} else {
+		volumePath = volumePath[index+1:]
+	}
 	location := appSrc.Location
 
 	remoteObjectKey = filepath.Join(volumePath, location, appName)
