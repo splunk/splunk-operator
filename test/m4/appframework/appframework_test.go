@@ -192,15 +192,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -524,13 +522,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -824,13 +822,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -1351,13 +1349,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 

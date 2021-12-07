@@ -69,6 +69,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -79,6 +80,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Upload V2 apps on S3
 			   * Wait for Monitoring Console and C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -185,14 +187,14 @@ var _ = Describe("c3appfw test", func() {
 			//Verify App Copy State on Monitoring Console CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
-			// Verify Apps Deleted on Operaotor Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			// Verify Apps Deleted on Operator Pod for Cluster Manager
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
-			// Verify Apps Deleted on Operaotor Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			// Verify Apps Deleted on Operator Pod for Search Head Cluster
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -396,6 +398,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Create app source for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ########### INITIAL VERIFICATIONS ###########
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -406,6 +409,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Upload V1 apps on S3
 			   * Wait for Monitoring Console and C3 pods to be ready
 			   ########### FINAL VERIFICATIONS #############
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -514,13 +518,13 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -686,10 +690,6 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
 
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
 			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
@@ -726,6 +726,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app config and wait for pods to be ready
 			   ########## INITIAL VERIFICATIONS ############
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -736,6 +737,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Scale up indexers and Search Heads
 			   * Wait for C3 to be ready
 			   ########## SCALING UP VERIFICATIONS #########
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -813,13 +815,13 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -1070,6 +1072,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Create app source with local scope for C3 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ############# INITIAL VERIFICATION ##########
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -1079,6 +1082,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Upgrade apps in app sources
 			   * Wait for pods to be ready
 			   ########### UPGRADE VERIFICATIONS ###########
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -1756,6 +1760,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Add more apps than usual on S3 for this test
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ############### VERIFICATIONS ###############
+			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
@@ -1833,13 +1838,13 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
@@ -1974,13 +1979,13 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
+			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
 			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
 			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
+			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
 
