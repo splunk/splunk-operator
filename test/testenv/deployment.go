@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -78,6 +79,22 @@ func (d *Deployment) Teardown() error {
 	}
 
 	var cleanupErr error
+
+	// Printing Operator pod logs
+	operatorPod := GetOperatorPod(d.testenv.GetName())
+	output, _ := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), operatorPod).Output()
+	d.testenv.Log.Info("Printing Operator pod logs: \n %s \n", string(output))
+
+	// Saving Splunk pods logs
+	d.testenv.Log.Info("Saving Splunk pods logs")
+	podNames := DumpGetPods(d.testenv.GetName())
+	ansibleLog := "/opt/container_artifact/ansible.log"
+
+	for _, podName := range podNames {
+		filename := d.GetName() + "/" + podName + ".log"
+		fmt.Printf("Splunk pod logs file created: %v \n", filename)
+		exec.Command("kubectl", "cp", "-n", d.GetName(), podName+":"+ansibleLog, filename).Output()
+	}
 
 	for fn, err := d.popCleanupFunc(); err == nil; fn, err = d.popCleanupFunc() {
 		cleanupErr = fn()

@@ -18,9 +18,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os"
 	"time"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
@@ -101,6 +102,9 @@ const (
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
+
+	// TestArtifacts defines splunk pods logs saving location
+	TestArtifacts = "test/test_artifacts/%s/%s/"
 )
 
 var (

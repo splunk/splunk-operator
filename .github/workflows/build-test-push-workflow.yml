@@ -229,8 +229,17 @@ jobs:
         run: |
            make cluster-up
       - name: Run smoke test
+        id: smoketest
         run: |
           make int-test
+          mkdir -p /tmp/pod_logs
+          find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
+      - name: Archive Pod Logs if Failure in Smoke Test
+        uses: actions/upload-artifact@v2
+        if: failure() && steps.smoketest.outcome == 'failure'
+        with:
+          name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
+          path: "test/test_artifacts"
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: | 
