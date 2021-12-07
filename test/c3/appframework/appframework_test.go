@@ -213,13 +213,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
@@ -347,11 +347,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
@@ -541,13 +541,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
@@ -675,11 +675,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
@@ -687,7 +687,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify bundle push status
@@ -832,13 +832,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify bundle push status
@@ -937,11 +937,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
@@ -1033,11 +1033,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify bundle push status
@@ -1162,13 +1162,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
@@ -1244,11 +1244,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V2 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
@@ -1852,13 +1852,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify bundle push status
@@ -1993,13 +1993,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify apps are deleted on Cluster Manager Pod
 			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
 			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify apps are copied to location
@@ -2068,7 +2068,7 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
-			// Ensure Standalone is updating
+			// Ensure Cluster Manager is updating
 			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -2117,11 +2117,11 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, clusterManagerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, deployerPodName))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify apps are copied to location
