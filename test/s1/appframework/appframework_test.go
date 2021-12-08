@@ -165,7 +165,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############ INITIAL VERIFICATION ###########
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -245,7 +245,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############ UPGRADE VERIFICATION ###########
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -391,7 +391,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############ INITIAL VERIFICATION ###########
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -471,7 +471,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//########## DOWNGRADE VERIFICATION ###########
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -510,7 +510,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, true)
 
 			// Verify Apps are installed
-			testenvInstance.Log.Info("Verify Apps are installed on the pods by running Splunk CLI commands for app", "version", appVersion)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s Apps are installed on the pods by running Splunk CLI commands for app", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 		})
 	})
@@ -627,7 +627,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########## INITIAL VERIFICATION #############
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -704,7 +704,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//########### SCALING UP VERIFICATION #########
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -770,7 +770,7 @@ var _ = Describe("s1appfw test", func() {
 			podNames = []string{standalonePodName, mcPodName}
 
 			//########### SCALING DOWN VERIFICATION #######
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Download State on Monitoring Console CR
@@ -949,7 +949,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
@@ -1043,7 +1043,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
@@ -1094,7 +1094,7 @@ var _ = Describe("s1appfw test", func() {
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 
 			appVersion = "V1"
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
@@ -1139,7 +1139,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION FOR UPGRADE ################
 
-			// Verify App Download State on Standlaone CR
+			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
 			// Verify App Copy State on Standalone CR
