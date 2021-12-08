@@ -195,7 +195,6 @@ func validateMonitoringConsoleSpec(cr *enterpriseApi.MonitoringConsole) error {
 func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
-	current.Data = make(map[string]string)
 
 	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
@@ -203,6 +202,9 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 
 	if err == nil {
 		revised := current.DeepCopy()
+		if revised.Data == nil {
+			revised.Data = make(map[string]string)
+		}
 		if addNewURLs {
 			AddURLsConfigMap(revised, crName, newURLs)
 		} else {

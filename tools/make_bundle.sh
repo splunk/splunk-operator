@@ -12,7 +12,7 @@ OPERATOR_IMAGE="$DOCKER_IO_PATH/splunk-operator:${VERSION}"
 OLM_CATALOG=deploy/olm-catalog
 OLM_CERTIFIED=deploy/olm-certified
 YAML_SCRIPT_FILE=.yq_script.yaml
-CRDS_PATH="deploy/crds"
+CRDS_PATH="config/crd/bases"
 echo "$OLM_CATALOG/splunk/*/"
 LAST_RELEASE_VERSION=$(ls -lr $OLM_CATALOG/splunk/ | grep "^d" | head -1 | awk '{print $NF}')
 echo "LAST RELEASE VERSION :: $LAST_RELEASE_VERSION"
@@ -38,9 +38,9 @@ EOF
 done
 
 # append older versions to CRD files
-for crd in deploy/crds/*_crd.yaml; do
+for crd in config/crd/bases/*_crd.yaml; do
   # when moving from V3 to V4 version re-evaluate this condition CSPL-1401
-  if [ "$crd" != deploy/crds/enterprise.splunk.com_monitoringconsoles_crd.yaml ]
+  if [ "$crd" != config/crd/bases/enterprise.splunk.com_monitoringconsoles_crd.yaml ]
   then
     yq w -i -s $YAML_SCRIPT_FILE $crd
   fi
