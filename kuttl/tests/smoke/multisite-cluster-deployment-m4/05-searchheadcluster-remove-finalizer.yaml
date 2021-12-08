@@ -1,0 +1,14 @@
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: test-shc
+  finalizers: []
+spec: 
+  volumes: []
+  spec: 
+    imagePullPolicy: "IfNotPresent"
+  clusterMasterRef: 
+    name: test
+  licenseMasterRef: 
+    name: ""
+  defaults: ""
