@@ -32,7 +32,7 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 
 	// in the case of testing, client is not passed
 	if k.client == nil {
-		return 
+		return
 	}
 
 	// based on the custom resource instance type find name, type and create new event

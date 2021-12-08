@@ -91,6 +91,9 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 		} else {
 			result.Requeue = false
 		}
+		if err != nil {
+			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+		}
 		return result, err
 	}
 

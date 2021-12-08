@@ -42,6 +42,8 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -117,6 +119,9 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
 			result.Requeue = false
+		}
+		if err != nil {
+			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}

@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -38,6 +39,8 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(cr)
 	if err != nil {
@@ -82,6 +85,9 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
 			result.Requeue = false
+		}
+		if err != nil {
+			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}

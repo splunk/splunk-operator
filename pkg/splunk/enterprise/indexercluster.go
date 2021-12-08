@@ -44,6 +44,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplyIndexerCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(cr)
@@ -68,6 +69,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 	defer func() {
 		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
+			eventPublisher.Warning("Update", fmt.Sprintf("custom resource update failed %s", err.Error()))
 			scopedLog.Error(err, "Status update failed")
 		}
 	}()
@@ -75,6 +77,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
+		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
 		return result, err
 	}
 
@@ -94,6 +97,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
 		err = mgr.verifyRFPeers(client)
 		if err != nil {
+			eventPublisher.Warning("verifyRFPeers", fmt.Sprintf("verify RF peef failed %s", err.Error()))
 			return result, err
 		}
 	}
@@ -108,28 +112,35 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		} else {
 			result.Requeue = false
 		}
+		if err != nil {
+			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+		}
 		return result, err
 	}
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
+		eventPublisher.Warning("ApplyService", fmt.Sprintf("create/update headless service for indexer cluster failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
 	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
+		eventPublisher.Warning("ApplyService", fmt.Sprintf("create/update service fro indexer cluster failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update statefulset for the indexers
 	statefulSet, err := getIndexerStatefulSet(client, cr)
 	if err != nil {
+		eventPublisher.Warning("getIndexerStatefulSet", fmt.Sprintf("get indexer stateful set failed %s", err.Error()))
 		return result, err
 	}
 
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
+		eventPublisher.Warning("Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -140,6 +151,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(client, cr, cr.Spec.ClusterMasterRef.Name)
 		if err != nil {
+			eventPublisher.Warning("RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -150,6 +162,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 				err := c.AutomateMCApplyChanges(false)
 				if err != nil {
+					eventPublisher.Warning("AutomateMCApplyChanges", fmt.Sprintf("get monitoring console client failed %s", err.Error()))
 					return result, err
 				}
 			}
@@ -161,6 +174,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(client, cr, false, false)
 			if err != nil {
+				eventPublisher.Warning("SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -176,6 +190,7 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(client, cr, namespacedName)
 		if err != nil {
+			eventPublisher.Warning("SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
 			result.Requeue = true
 			return result, err
 		}

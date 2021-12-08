@@ -41,6 +41,7 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 		RequeueAfter: time.Second * 5,
 	}
 	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
 	err := validateSearchHeadClusterSpec(cr)
@@ -105,6 +106,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 			cr.Status.DeployerPhase = splcommon.PhaseTerminating
 		} else {
 			result.Requeue = false
+		}
+		if err != nil {
+			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}
