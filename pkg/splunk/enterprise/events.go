@@ -30,6 +30,11 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 	var namespace string
 	var event corev1.Event
 
+	// in the case of testing, client is not passed
+	if k.client == nil {
+		return 
+	}
+
 	// based on the custom resource instance type find name, type and create new event
 	switch k.instance.(type) {
 	case *enterpriseApi.Standalone:
