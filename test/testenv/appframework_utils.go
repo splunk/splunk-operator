@@ -248,13 +248,13 @@ func GetAppDeploymentInfo(deployment *Deployment, testenvInstance *TestEnv, name
 	var appDeploymentInfo enterpriseApi.AppDeploymentInfo
 	var err error
 	switch crKind {
-	case "standalone":
+	case "Standalone":
 		appDeploymentInfo, err = GetAppDeploymentInfoStandalone(deployment, testenvInstance, name, appSourceName, appName)
-	case "monitoring-console":
+	case "MonitoringConsole":
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(deployment, testenvInstance, name, appSourceName, appName)
-	case "search-head":
+	case "SearchHeadCluster":
 		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(deployment, testenvInstance, name, appSourceName, appName)
-	case "indexer":
+	case "ClusterMaster":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterMaster(deployment, testenvInstance, name, appSourceName, appName)
 	default:
 		message := fmt.Sprintf("Failed to fetch AppDeploymentInfo. Incorrect CR Kind %s", crKind)

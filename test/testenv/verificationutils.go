@@ -708,12 +708,17 @@ func VerifyAppsDownloadedOnContainer(deployment *Deployment, testenvInstance *Te
 // VerifyAppsPackageDeletedOnContainer verify that apps are deleted by container
 func VerifyAppsPackageDeletedOnContainer(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
 	for _, podName := range pods {
-		appList, err := GetDirsOrFilesInPath(deployment, podName, path, false)
-		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
-			found := CheckStringInSlice(appList, app)
-			testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
-			gomega.Expect(found).Should(gomega.Equal(false))
+			gomega.Eventually(func() bool {
+				appList, err := GetDirsOrFilesInPath(deployment, podName, path, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Unable to get apps on pod", "Pod", podName)
+					return true
+				}
+				found := CheckStringInSlice(appList, app+"_")
+				testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
+				return found
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
 		}
 	}
 }
@@ -742,7 +747,11 @@ func VerifyAppListPhase(deployment *Deployment, testenvInstance *TestEnv, name s
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
 					return enterpriseApi.PhaseDownload
 				}
-				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
+				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+					testenvInstance.Log.Info("Phase Install Not Complete.", "Phase Found", appDeploymentInfo.PhaseInfo.Phase, "Phase Status Found", appDeploymentInfo.PhaseInfo.Status)
+					return enterpriseApi.PhaseDownload
+				}
 				return appDeploymentInfo.PhaseInfo.Phase
 			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 		}
