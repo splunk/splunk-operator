@@ -123,7 +123,7 @@ Other make targets include (more info below):
 Ensure that you have the Custom Resource Definitions installed in your cluster:
 
 ```
-kubectl apply -f deploy/crds
+kubectl apply -f config/crd/bases
 ```
 
 Use this to run the operator as a local foreground process on your machine:

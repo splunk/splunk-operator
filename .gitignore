@@ -95,3 +95,4 @@ deploy/olm-certified
 .biaslanguage/
 bin/
 pkg/splunk/enterprise/app1.tgz_
+bundle_*/

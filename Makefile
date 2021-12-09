@@ -153,7 +153,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
@@ -221,7 +221,7 @@ code/sec: $GOBIN/gosec ## Run gosec
 	gosec -severity medium --confidence medium -quiet ./...
 
 $GOBIN/gosec:
-	go get -u github.com/securego/gosec/cmd/gosec
+	go install github.com/securego/gosec/cmd/gosec
 
 .PHONY: cluster-up
 cluster-up:
