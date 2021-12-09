@@ -98,7 +98,7 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return enterprise.ApplyClusterManager(r.Client, instance)
+	return enterprise.ApplyClusterManager(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

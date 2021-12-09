@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"context"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -54,5 +56,5 @@ func (ctrl ClusterManagerController) GetWatchTypes() []client.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl ClusterManagerController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.ClusterMaster)
-	return enterprise.ApplyClusterManager(client, instance)
+	return enterprise.ApplyClusterManager(context.TODO(), client, instance)
 }

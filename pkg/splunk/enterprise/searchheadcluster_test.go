@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	revised := statefulSet.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySearchHeadCluster(c, cr.(*enterpriseApi.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(context.TODO(), c, cr.(*enterpriseApi.SearchHeadCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
@@ -90,7 +91,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplySearchHeadCluster(c, cr.(*enterpriseApi.SearchHeadCluster))
+		_, err := ApplySearchHeadCluster(context.Background(), c, cr.(*enterpriseApi.SearchHeadCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -675,7 +676,7 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplySearchHeadCluster(client, &cr)
+	_, err = ApplySearchHeadCluster(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplySearchHeadCluster should be successful")
 	}

@@ -34,7 +34,7 @@ import (
 )
 
 // ApplyMonitoringConsole reconciles the StatefulSet for N monitoring console instances of Splunk Enterprise.
-func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{

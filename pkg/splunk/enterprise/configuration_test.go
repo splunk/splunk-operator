@@ -223,7 +223,7 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterManager(client, &cr)
+	_, err := ApplyClusterManager(context.Background(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}

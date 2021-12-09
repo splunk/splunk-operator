@@ -98,7 +98,7 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplySearchHeadCluster(r.Client, instance)
+	return enterprise.ApplySearchHeadCluster(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

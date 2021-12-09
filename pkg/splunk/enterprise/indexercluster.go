@@ -36,7 +36,7 @@ import (
 )
 
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
-func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{

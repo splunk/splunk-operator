@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,5 +57,5 @@ func (ctrl SearchHeadClusterController) GetWatchTypes() []client.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl SearchHeadClusterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.SearchHeadCluster)
-	return enterprise.ApplySearchHeadCluster(client, instance)
+	return enterprise.ApplySearchHeadCluster(context.TODO(), client, instance)
 }

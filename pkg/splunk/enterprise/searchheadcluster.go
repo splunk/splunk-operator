@@ -34,7 +34,7 @@ import (
 )
 
 // ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
-func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,

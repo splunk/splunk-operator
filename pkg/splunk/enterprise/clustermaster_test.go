@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	//"os"
 	"strings"
@@ -79,7 +80,7 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -89,7 +90,7 @@ func TestApplyClusterManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterManager(c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -223,7 +224,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Without S3 keys, ApplyClusterManager should fail
-	_, err := ApplyClusterManager(client, &current)
+	_, err := ApplyClusterManager(context.Background(), client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
 	}
@@ -252,7 +253,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
 	}
 
@@ -279,12 +280,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	if _, err = ApplyClusterManager(client, &current); err != nil {
+	if _, err = ApplyClusterManager(context.Background(), client, &current); err != nil {
 		t.Errorf("ApplyClusterManager() should not have returned error")
 	}
 
 	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyClusterManager(client, &current); err == nil {
+	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 
@@ -294,7 +295,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if result, err := ApplyClusterManager(client, &current); err == nil && !result.Requeue {
+	if result, err := ApplyClusterManager(context.Background(), client, &current); err == nil && !result.Requeue {
 		t.Errorf("ApplyClusterManager() should have returned error or result.requeue should have been false")
 	}
 
@@ -304,7 +305,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client.AddObjects(objects)
 	current.Spec.CommonSplunkSpec.Mock = false
 
-	if _, err := ApplyClusterManager(client, &current); err == nil {
+	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 }
@@ -483,7 +484,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyClusterManager(client, &cm)
+	_, err = ApplyClusterManager(context.Background(), client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}

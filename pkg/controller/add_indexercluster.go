@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,5 +57,5 @@ func (ctrl IndexerClusterController) GetWatchTypes() []client.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl IndexerClusterController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.IndexerCluster)
-	return enterprise.ApplyIndexerCluster(client, instance)
+	return enterprise.ApplyIndexerCluster(context.TODO(), client, instance)
 }

@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -67,7 +68,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyMonitoringConsole(c, cr.(*enterpriseApi.MonitoringConsole))
+		_, err := ApplyMonitoringConsole(context.Background(), c, cr.(*enterpriseApi.MonitoringConsole))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -77,7 +78,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyMonitoringConsole(c, cr.(*enterpriseApi.MonitoringConsole))
+		_, err := ApplyMonitoringConsole(context.Background(), c, cr.(*enterpriseApi.MonitoringConsole))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -312,7 +313,7 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyMonitoringConsole(client, &cr)
+	_, err = ApplyMonitoringConsole(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplyMonitoringConsole should be successful")
 	}

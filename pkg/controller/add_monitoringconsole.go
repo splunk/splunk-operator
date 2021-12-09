@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"context"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -54,5 +56,5 @@ func (ctrl MonitoringConsoleController) GetWatchTypes() []client.Object {
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
 func (ctrl MonitoringConsoleController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	instance := cr.(*enterpriseApi.MonitoringConsole)
-	return enterprise.ApplyMonitoringConsole(client, instance)
+	return enterprise.ApplyMonitoringConsole(context.TODO(), client, instance)
 }

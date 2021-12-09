@@ -98,7 +98,7 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	return enterprise.ApplyIndexerCluster(r.Client, instance)
+	return enterprise.ApplyIndexerCluster(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

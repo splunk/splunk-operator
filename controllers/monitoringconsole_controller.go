@@ -98,7 +98,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplyMonitoringConsole(r.Client, instance)
+	return enterprise.ApplyMonitoringConsole(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

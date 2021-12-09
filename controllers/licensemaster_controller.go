@@ -98,7 +98,7 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return enterprise.ApplyLicenseManager(r.Client, instance)
+	return enterprise.ApplyLicenseManager(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

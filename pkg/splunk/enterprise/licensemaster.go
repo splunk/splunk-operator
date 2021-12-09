@@ -31,7 +31,7 @@ import (
 )
 
 // ApplyLicenseManager reconciles the state for the Splunk Enterprise license manager.
-func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
+func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
