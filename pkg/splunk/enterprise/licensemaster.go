@@ -137,21 +137,9 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 				return result, err
 			}
 		}
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			afwSchedulerEntry(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-			//markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
-			if cr.Status.AppContext.IsDeploymentInProgress {
-				cr.Status.AppContext.IsDeploymentInProgress = false
-				return result, nil
-			}
-		}
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
-		}
+
+		finalResult := handleAppFrameworkActivity(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
 	}
 	return result, nil
 }

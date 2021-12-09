@@ -15,7 +15,6 @@
 package client
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -86,12 +85,13 @@ type RemoteObject struct {
 
 //RegisterS3Client registers the respective Client
 func RegisterS3Client(provider string) {
+	scopedLog := log.WithName("RegisterS3Client")
 	switch provider {
 	case "aws":
 		RegisterAWSS3Client()
 	case "minio":
 		RegisterMinioClient()
 	default:
-		fmt.Println("ERROR: Invalid provider specified: ", provider)
+		scopedLog.Error(nil, "invalid provider specified", "provider", provider)
 	}
 }

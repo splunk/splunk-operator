@@ -314,8 +314,10 @@ type AppSrcDeployInfo struct {
 type BundlePushStageType int
 
 const (
+	// BundlePushUninitialized indicates bundle push never happend
+	BundlePushUninitialized BundlePushStageType = iota
 	// BundlePushPending waiting for all the apps to be copied to the Pod
-	BundlePushPending BundlePushStageType = iota + 1
+	BundlePushPending
 	// BundlePushInProgress indicates bundle push in progress
 	BundlePushInProgress
 	// BundlePushComplete bundle push completed

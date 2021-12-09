@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -1707,26 +1708,23 @@ func validateMonitoringConsoleRef(c splcommon.ControllerClient, revised *appsv1.
 }
 
 // setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
-func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext, status enterpriseApi.AppPhaseStatusType) {
+func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDeploymentContext) {
 	scopedLog := log.WithName("setInstallStateForClusterScopedApps")
 
-	var isClusterScoped bool
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
-		appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
-		if err != nil {
-			// Error, should never happen
-			scopedLog.Error(err, "Unable to find App src", "App src name", appSrcName)
+		// Mark only cluster scoped apps
+		if enterpriseApi.ScopeCluster != getAppSrcScope(&appDeployContext.AppFrameworkConfig, appSrcName) {
 			continue
-		}
-		if appSrc.Scope == enterpriseApi.ScopeCluster {
-			isClusterScoped = true
 		}
 
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
-			if isClusterScoped {
+			if deployInfoList[i].PhaseInfo.Phase == enterpriseApi.PhasePodCopy && deployInfoList[i].PhaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete {
 				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
-				deployInfoList[i].PhaseInfo.Status = status
+				deployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+				scopedLog.Info("Cluster scoped app installed", "app name", deployInfoList[i].AppName, "digest", deployInfoList[i].ObjectHash)
+			} else {
+				scopedLog.Error(nil, "app missing from bundle push", "app name", deployInfoList[i].AppName, "digest", deployInfoList[i].ObjectHash, "phase", deployInfoList[i].PhaseInfo.Phase, "status", deployInfoList[i].PhaseInfo.Status)
 			}
 		}
 	}
@@ -1787,4 +1785,50 @@ func releaseStorage(releaseSize uint64) error {
 		sTracker.availableDiskSpace += releaseSize
 		return nil
 	}()
+}
+
+// updateReconcileRequeueTime updates the reconcile requeue result
+func updateReconcileRequeueTime(result *reconcile.Result, rqTime time.Duration, requeue bool) {
+	scopedLog := log.WithName("updateReconcileRequeueTime")
+	if result == nil {
+		scopedLog.Error(nil, "invalid result")
+		return
+	}
+	if rqTime <= 0 {
+		scopedLog.Error(nil, "invalid requeue time: %d", rqTime)
+		return
+	}
+
+	result.Requeue = requeue
+
+	// updated the requested, if it is lower than the one in hand
+	if rqTime < result.RequeueAfter {
+		result.RequeueAfter = rqTime
+	}
+}
+
+// handleAppFrameworkActivity handles any pending app framework activity
+func handleAppFrameworkActivity(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
+	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	finalResult := &reconcile.Result{
+		Requeue:      false,
+		RequeueAfter: maxRecDuration,
+	}
+
+	if appDeployContext.LastAppInfoCheckTime != 0 {
+		requeueAfter := GetNextRequeueTime(appDeployContext.AppsRepoStatusPollInterval, appDeployContext.LastAppInfoCheckTime)
+		updateReconcileRequeueTime(finalResult, requeueAfter, true)
+	}
+
+	if appDeployContext.AppsSrcDeployStatus != nil {
+		requeue, err := afwSchedulerEntry(client, cr, appDeployContext, appFrameworkConfig)
+		if err != nil {
+			scopedLog.Error(err, "app framework returned error")
+		}
+		if requeue {
+			updateReconcileRequeueTime(finalResult, time.Second*5, true)
+		}
+	}
+
+	return finalResult
 }
