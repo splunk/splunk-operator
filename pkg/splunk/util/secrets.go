@@ -18,15 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
-	"strconv"
-	"strings"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
+	"strings"
 )
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
@@ -419,9 +419,6 @@ func ApplySplunkSecret(c splcommon.ControllerClient, cr splcommon.MetaObject, se
 func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
-	// Make data
-	current.Data = make(map[string][]byte)
-
 	// Check if a namespace scoped K8S secrets object exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(context.TODO(), namespacedName, &current)
@@ -449,8 +446,13 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 		}
 
 		return &current, nil
+	} else if err != nil && !k8serrors.IsNotFound(err) {
+		// get secret call failed with othert than NotFound error return the err
+		return nil, err
 	}
 
+	// Make data
+	current.Data = make(map[string][]byte)
 	// Not found, update data by generating values for all types of tokens
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
