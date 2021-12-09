@@ -438,10 +438,16 @@ func getRemoteObjectKey(cr splcommon.MetaObject, appFrameworkConfig *enterpriseA
 
 	volumePath := vol.Path
 	index := strings.Index(volumePath, "/")
-	volumePath = volumePath[index+1:]
+	// CSPL-1528: If volume path only contains the bucket name,
+	// then don't append the bucket name to the remote key
+	if index < 0 {
+		volumePath = ""
+	} else {
+		volumePath = volumePath[index+1:]
+	}
 	location := appSrc.Location
 
-	remoteObjectKey = volumePath + location + appName
+	remoteObjectKey = filepath.Join(volumePath, location, appName)
 
 	return remoteObjectKey, nil
 }
@@ -1239,10 +1245,18 @@ func isAppAlreadyDownloaded(downloadWorker *PipelineWorker) bool {
 	localAppFileName := getLocalAppFileName(localPath, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.ObjectHash)
 
 	// check if the app is present on operator pod
-	_, err := os.Stat(localAppFileName)
+	fileInfo, err := os.Stat(localAppFileName)
 
 	if os.IsNotExist(err) {
 		scopedLog.Info("App not present on operator pod")
+		return false
+	}
+
+	localSize := fileInfo.Size()
+	remoteSize := int64(downloadWorker.appDeployInfo.Size)
+	if localSize != remoteSize {
+		err = fmt.Errorf("local size does not match with size on remote storage. localSize=%d, remoteSize=%d", localSize, remoteSize)
+		scopedLog.Error(err, "incorrect app size")
 		return false
 	}
 	return true

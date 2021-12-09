@@ -130,8 +130,7 @@ type PlayBookImpl interface {
 // blank assignment to implement PlayBookImpl
 var _ PlayBookImpl = &IdxcPlayBookContext{}
 
-// TODO: gaurav - implement SHC playbook
-//var _ PlayBookImpl = &SHCPlayBookContext{}
+var _ PlayBookImpl = &SHCPlayBookContext{}
 
 // IdxcPlayBookContext is used to implement playbook to push bundle to indexer cluster peers
 type IdxcPlayBookContext struct {
@@ -144,10 +143,12 @@ type IdxcPlayBookContext struct {
 
 // SHCPlayBookContext is used to implement playbook to push bundle to SHC members
 type SHCPlayBookContext struct {
-	client        splcommon.ControllerClient
-	cr            splcommon.MetaObject
-	afwPipeline   *AppInstallPipeline
-	targetPodName string
+	client               splcommon.ControllerClient
+	cr                   splcommon.MetaObject
+	afwPipeline          *AppInstallPipeline
+	targetPodName        string
+	searchHeadCaptainURL string
+	podExecClient        splutil.PodExecClientImpl
 }
 
 type localScopeInstallContext struct {

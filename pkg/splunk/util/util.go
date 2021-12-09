@@ -227,7 +227,7 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 	}
 }
 
-// RunPodExecCommand runs the commands related to idxc bundle push
+// RunPodExecCommand runs the specific pod exec command
 func (podExecClient *PodExecClient) RunPodExecCommand(cmd string) (string, string, error) {
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(cmd),
