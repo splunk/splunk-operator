@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -73,27 +74,45 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
+	var cleanupErr error
+
+	// Formatted string for pod logs
+	podLogFile := "%s-%s.log"
+
+	// Saving Operator Logs to File
+	operatorPod := GetOperatorPod(d.testenv.GetName())
+	output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), operatorPod).Output()
+	if err != nil {
+		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from operator pod %s", operatorPod))
+	} else {
+		opLogFileName := fmt.Sprintf(podLogFile, d.GetName(), operatorPod)
+		d.testenv.Log.Info("Writing %s Operator pod logs to file %s ", operatorPod, opLogFileName)
+		opLogFile, err := os.Create(opLogFileName)
+		if err != nil {
+			d.testenv.Log.Error(err, fmt.Sprintf("Failed to create operator log file %s", opLogFileName))
+		} else {
+			opLogFile.Write(output)
+			d.testenv.Log.Info(fmt.Sprintf("Finished writing %s operator log to file %s", operatorPod, opLogFileName))
+		}
+		opLogFile.Close()
+	}
+
+	// Saving Splunk Pod Logs to File
+	d.testenv.Log.Info("Saving Splunk pods logs to Files")
+	podNames := DumpGetPods(d.testenv.GetName())
+	ansibleLogLocation := "/opt/container_artifact/ansible.log"
+	for _, podName := range podNames {
+		logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
+		d.testenv.Log.Info(fmt.Sprintf("Splunk pod %s logs file %s created", podName, logFileName))
+		_, err = exec.Command("kubectl", "cp", "-n", d.GetName(), podName+":"+ansibleLogLocation, logFileName).Output()
+		if err != nil {
+			d.testenv.Log.Error(err, fmt.Sprintf("Failed to write logs from splunk pod %s to file %s", podName, logFileName))
+		}
+	}
+
 	if d.testenv.SkipTeardown && d.testenv.debug == "True" {
 		d.testenv.Log.Info("deployment teardown is skipped!\n")
 		return nil
-	}
-
-	var cleanupErr error
-
-	// Printing Operator pod logs
-	operatorPod := GetOperatorPod(d.testenv.GetName())
-	output, _ := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), operatorPod).Output()
-	d.testenv.Log.Info("Printing Operator pod logs: \n %s \n", string(output))
-
-	// Saving Splunk pods logs
-	d.testenv.Log.Info("Saving Splunk pods logs")
-	podNames := DumpGetPods(d.testenv.GetName())
-	ansibleLog := "/opt/container_artifact/ansible.log"
-
-	for _, podName := range podNames {
-		filename := d.GetName() + "/" + podName + ".log"
-		fmt.Printf("Splunk pod logs file created: %v \n", filename)
-		exec.Command("kubectl", "cp", "-n", d.GetName(), podName+":"+ansibleLog, filename).Output()
 	}
 
 	for fn, err := d.popCleanupFunc(); err == nil; fn, err = d.popCleanupFunc() {
