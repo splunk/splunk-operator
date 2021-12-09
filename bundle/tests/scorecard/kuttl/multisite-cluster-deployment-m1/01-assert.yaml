@@ -1,6 +1,6 @@
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
-  name: indexercluster-sample
-spec: {}
-  # Add fields here
+  name: test-idxc
+status:
+  phase: Ready

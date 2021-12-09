@@ -1,6 +1,6 @@
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
-  name: clustermaster-sample
-spec: {}
-  # Add fields here
+  name: test
+status:
+  phase: Ready

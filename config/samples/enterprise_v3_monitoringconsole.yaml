@@ -2,5 +2,5 @@ apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: monitoringconsole-sample
-spec:
+spec: {}
   # Add fields here

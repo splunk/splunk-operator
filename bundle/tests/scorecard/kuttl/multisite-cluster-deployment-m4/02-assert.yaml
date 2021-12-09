@@ -1,6 +1,6 @@
 apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
-  name: searchheadcluster-sample
-spec: {}
-  # Add fields here
+  name: test-shc
+status:
+  phase: Ready
