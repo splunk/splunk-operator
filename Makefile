@@ -221,7 +221,7 @@ code/sec: $GOBIN/gosec ## Run gosec
 	gosec -severity medium --confidence medium -quiet ./...
 
 $GOBIN/gosec:
-	go install github.com/securego/gosec/cmd/gosec
+	go get -u github.com/securego/gosec/cmd/gosec
 
 .PHONY: cluster-up
 cluster-up:
