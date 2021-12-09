@@ -74,7 +74,6 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
-	var cleanupErr error
 
 	// Formatted string for pod logs
 	podLogFile := "%s-%s.log"
@@ -114,6 +113,8 @@ func (d *Deployment) Teardown() error {
 		d.testenv.Log.Info("deployment teardown is skipped!\n")
 		return nil
 	}
+
+	var cleanupErr error
 
 	for fn, err := d.popCleanupFunc(); err == nil; fn, err = d.popCleanupFunc() {
 		cleanupErr = fn()
