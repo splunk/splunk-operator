@@ -1029,7 +1029,8 @@ func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObje
 }
 
 // triggerBundlePush triggers the bundle push operation for SHC
-func (shcPlayBookContext *SHCPlayBookContext) triggerBundlePush(cmd string) error {
+func (shcPlayBookContext *SHCPlayBookContext) triggerBundlePush() error {
+	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlayBookContext.searchHeadCaptainURL)
 	stdOut, stdErr, err := shcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
 	if err != nil || stdErr != "" {
 		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
@@ -1055,8 +1056,7 @@ func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 		// run the command to apply cluster bundle
 		scopedLog.Info("running command to apply cluster bundle")
 
-		bundlePushCmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlayBookContext.searchHeadCaptainURL)
-		err := shcPlayBookContext.triggerBundlePush(bundlePushCmd)
+		err := shcPlayBookContext.triggerBundlePush()
 		if err != nil {
 			scopedLog.Error(err, "failed to apply cluster bundle")
 			shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount++
@@ -1102,9 +1102,9 @@ func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete(cmd string)
 }
 
 // triggerBundlePush triggers the bundle push for indexer cluster
-func (idxcPlayBookContext *IdxcPlayBookContext) triggerBundlePush(bundlePushCmd string) error {
-	scopedLog := log.WithName("triggerBundlePush")
-	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(bundlePushCmd)
+func (idxcPlayBookContext *IdxcPlayBookContext) triggerBundlePush() error {
+	scopedLog := log.WithName("idxcPlayBookContext.triggerBundlePush()")
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(applyIdxcBundleCmdStr)
 
 	// If the error is due to a bundle which is already present, don't do anything.
 	// In the next reconcile we will mark it as bundle push complete
@@ -1148,7 +1148,7 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
 		scopedLog.Info("running command to apply cluster bundle")
-		err := idxcPlayBookContext.triggerBundlePush(applyIdxcBundleCmdStr)
+		err := idxcPlayBookContext.triggerBundlePush()
 		if err != nil {
 			scopedLog.Error(err, "failed to apply cluster bundle")
 			return err
