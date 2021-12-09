@@ -65,7 +65,7 @@ var _ = BeforeSuite(func() {
 
 	// Create a list of apps to upload to S3
 	appListV1 = testenv.BasicApps
-	appFileList := testenv.GetAppFileListPhase3(appListV1)
+	appFileList := testenv.GetAppFileList(appListV1)
 
 	// Download V1 Apps from S3
 	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 
 	// Create a list of apps to upload to S3 after poll period
 	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-	appFileList = testenv.GetAppFileListPhase3(appListV2)
+	appFileList = testenv.GetAppFileList(appListV2)
 
 	// Download V2 Apps from S3
 	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
