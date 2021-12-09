@@ -456,7 +456,7 @@ spec:
                   value: splunk-operator
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
                   value: docker.io/splunk/splunk:8.2.2
-                image: public.ecr.aws/t7s8z8m6/splunk/splunk-operator:latest
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
