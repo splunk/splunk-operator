@@ -78,34 +78,24 @@ func (d *Deployment) Teardown() error {
 	// Formatted string for pod logs
 	podLogFile := "%s-%s.log"
 
-	// Saving Operator Logs to File
-	operatorPod := GetOperatorPod(d.testenv.GetName())
-	output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), operatorPod).Output()
-	if err != nil {
-		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from operator pod %s", operatorPod))
-	} else {
-		opLogFileName := fmt.Sprintf(podLogFile, d.GetName(), operatorPod)
-		d.testenv.Log.Info("Writing %s Operator pod logs to file %s ", operatorPod, opLogFileName)
-		opLogFile, err := os.Create(opLogFileName)
-		if err != nil {
-			d.testenv.Log.Error(err, fmt.Sprintf("Failed to create operator log file %s", opLogFileName))
-		} else {
-			opLogFile.Write(output)
-			d.testenv.Log.Info(fmt.Sprintf("Finished writing %s operator log to file %s", operatorPod, opLogFileName))
-		}
-		opLogFile.Close()
-	}
-
-	// Saving Splunk Pod Logs to File
-	d.testenv.Log.Info("Saving Splunk pods logs to Files")
+	// Saving Operator and Splunk Pod Logs to File
 	podNames := DumpGetPods(d.testenv.GetName())
-	ansibleLogLocation := "/opt/container_artifact/ansible.log"
+	podNames = append(podNames, GetOperatorPod(d.testenv.GetName()))
 	for _, podName := range podNames {
-		logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
-		d.testenv.Log.Info(fmt.Sprintf("Splunk pod %s logs file %s created", podName, logFileName))
-		_, err = exec.Command("kubectl", "cp", "-n", d.GetName(), podName+":"+ansibleLogLocation, logFileName).Output()
+		output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 		if err != nil {
-			d.testenv.Log.Error(err, fmt.Sprintf("Failed to write logs from splunk pod %s to file %s", podName, logFileName))
+			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))
+		} else {
+			logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
+			d.testenv.Log.Info("Writing %s Pod logs to file %s ", podName, logFileName)
+			logFile, err := os.Create(logFileName)
+			if err != nil {
+				d.testenv.Log.Error(err, fmt.Sprintf("Failed to create log file %s", logFileName))
+			} else {
+				logFile.Write(output)
+				d.testenv.Log.Info(fmt.Sprintf("Finished writing %s log to file %s", podName, logFileName))
+			}
+			logFile.Close()
 		}
 	}
 
