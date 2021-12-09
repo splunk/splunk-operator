@@ -111,8 +111,8 @@ var _ = Describe("Licensemanager test", func() {
 				appListV2        []string
 				testS3Bucket     = os.Getenv("TEST_INDEXES_S3_BUCKET")
 				testDataS3Bucket = os.Getenv("TEST_BUCKET")
-				s3AppDirV1       = "appframework/regressionappsv1/"
-				s3AppDirV2       = "appframework/regressionappsv2/"
+				s3AppDirV1       = testenv.AppLocationV1
+				s3AppDirV2       = testenv.AppLocationV2
 				currDir, _       = os.Getwd()
 				downloadDirV1    = filepath.Join(currDir, "lmV1-"+testenv.RandomDNSName(4))
 				downloadDirV2    = filepath.Join(currDir, "lmV2-"+testenv.RandomDNSName(4))
@@ -121,7 +121,7 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Create a list of apps to upload to S3
 			appListV1 = testenv.BasicApps
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 
 			// Download V1 Apps from S3
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
@@ -205,7 +205,7 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Create a list of apps to upload to S3 after poll period
 			appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2)
 
 			// Download V2 Apps from S3
 			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
