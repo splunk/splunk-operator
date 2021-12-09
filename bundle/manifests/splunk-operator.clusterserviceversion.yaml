@@ -1,0 +1,545 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "ClusterMaster",
+          "metadata": {
+            "name": "clustermaster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "IndexerCluster",
+          "metadata": {
+            "name": "indexercluster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "LicenseMaster",
+          "metadata": {
+            "name": "licensemaster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "MonitoringConsole",
+          "metadata": {
+            "name": "monitoringconsole-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "SearchHeadCluster",
+          "metadata": {
+            "name": "searchheadcluster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "Standalone",
+          "metadata": {
+            "name": "standalone-sample"
+          },
+          "spec": null
+        }
+      ]
+    capabilities: Basic Install
+    operators.operatorframework.io/builder: operator-sdk-v1.15.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+  name: splunk-operator.v1.0.3
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: ClusterMaster is the Schema for the clustermanagers API
+      displayName: Cluster Master
+      kind: ClusterMaster
+      name: clustermasters.enterprise.splunk.com
+      version: v3
+    - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      displayName: Indexer Cluster
+      kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v3
+    - description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
+      displayName: License Master
+      kind: LicenseMaster
+      name: licensemasters.enterprise.splunk.com
+      version: v3
+    - description: MonitoringConsole is the Schema for the monitoringconsole API
+      displayName: Monitoring Console
+      kind: MonitoringConsole
+      name: monitoringconsoles.enterprise.splunk.com
+      version: v3
+    - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
+      displayName: Search Head Cluster
+      kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v3
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      displayName: Standalone
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v3
+  description: K8 Operator for Splunk Enterprise Deployments
+  displayName: Splunk Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - endpoints
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services/finalizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermasters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermasters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermasters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - indexerclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - indexerclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - indexerclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - licensemasters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - licensemasters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - licensemasters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - monitoringconsoles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - monitoringconsoles/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - monitoringconsoles/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - searchheadclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - searchheadclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - searchheadclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - standalones
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - standalones/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - standalones/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: splunk-operator-controller-manager
+      deployments:
+      - name: splunk-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources: {}
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                command:
+                - /manager
+                env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: OPERATOR_NAME
+                  value: splunk-operator
+                - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+                  value: docker.io/splunk/splunk:8.2.2
+                image: public.ecr.aws/t7s8z8m6/splunk/splunk-operator:latest
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 200m
+                    memory: 1000Mi
+                  requests:
+                    cpu: 200m
+                    memory: 200Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              securityContext:
+                runAsUser: 1000
+              serviceAccountName: splunk-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: splunk-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - splunk
+  - enterprise
+  - operator
+  links:
+  - name: Splunk Operator
+    url: https://splunk-operator.domain
+  maintainers:
+  - email: docker-maint@splunk.com
+    name: Splunk Docker Maintainers
+  maturity: alpha
+  provider:
+    name: Splunk Inc.
+    url: www.splunk.com
+  version: 1.0.3
