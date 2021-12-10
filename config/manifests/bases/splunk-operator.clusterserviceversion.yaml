@@ -4,6 +4,8 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Basic Install
+    marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
+    marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
   name: splunk-operator.v1.0.3
   namespace: placeholder
 spec:
