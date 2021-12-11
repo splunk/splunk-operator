@@ -86,7 +86,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ##################
 			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
@@ -219,7 +219,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -321,7 +321,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ##################
 			// Upload V2 version of apps to S3 for Monitoring Console
 			appVersion := "V2"
-			appFileList := testenv.GetAppFileList(appListV2, 2)
+			appFileList := testenv.GetAppFileList(appListV2)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
@@ -454,7 +454,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appFileList = testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -561,7 +561,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ##################
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -780,7 +780,7 @@ var _ = Describe("m4appfw test", func() {
 			//################## SETUP ####################
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -817,7 +817,7 @@ var _ = Describe("m4appfw test", func() {
 			//########## INITIAL VERIFICATION #############
 			// Verify V1 apps are downloaded on Cluster Manager
 			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
-			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appFileList = testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 
@@ -847,7 +847,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))

@@ -82,7 +82,7 @@ var _ = Describe("c3appfw test", func() {
 			//################## SETUP ####################
 			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
@@ -214,7 +214,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -312,7 +312,7 @@ var _ = Describe("c3appfw test", func() {
 			//################## SETUP ####################
 			// Upload V2 apps to S3 for Monitoring Console
 			appVersion := "V2"
-			appFileList := testenv.GetAppFileList(appListV2, 2)
+			appFileList := testenv.GetAppFileList(appListV2)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
@@ -445,7 +445,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1, 1)
+			appFileList = testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexers", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexers", appVersion))
@@ -546,7 +546,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -771,7 +771,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload V1 apps to S3 for Indexer Cluster
 			appVersion := "V1"
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			appFileList := testenv.GetAppFileList(appListV1, 1)
+			appFileList := testenv.GetAppFileList(appListV1)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
@@ -842,7 +842,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload V2 apps to S3
 			appVersion = "V2"
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
-			appFileList = testenv.GetAppFileList(appListV2, 2)
+			appFileList = testenv.GetAppFileList(appListV2)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -903,7 +903,7 @@ var _ = Describe("c3appfw test", func() {
 			// Download ES app from S3
 			testenvInstance.Log.Info("Download ES app from S3")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
-			appFileList := testenv.GetAppFileList(esApp, 1)
+			appFileList := testenv.GetAppFileList(esApp)
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
 
@@ -1018,7 +1018,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListLocal list of apps to S3 (to be used for local install)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
 			s3TestDir := "c3appfw-" + testenv.RandomDNSName(4)
-			appFileList := testenv.GetAppFileList(appListLocal, 1)
+			appFileList := testenv.GetAppFileList(appListLocal)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1026,7 +1026,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirCluster := "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			clusterappFileList := testenv.GetAppFileList(appListCluster, 1)
+			clusterappFileList := testenv.GetAppFileList(appListCluster)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1077,13 +1077,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify V1 apps with local scope are downloaded
 			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
 			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify V1 apps with cluster scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
-			appFileList = testenv.GetAppFileList(appListCluster, 1)
+			appFileList = testenv.GetAppFileList(appListCluster)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
@@ -1123,13 +1123,13 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListLocal list of V2 apps to S3 (to be used for local install)
 			appVersion = "V2"
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			appFileList = testenv.GetAppFileList(appListLocal, 2)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
-			clusterappFileList = testenv.GetAppFileList(appListCluster, 2)
+			clusterappFileList = testenv.GetAppFileList(appListCluster)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1152,13 +1152,13 @@ var _ = Describe("c3appfw test", func() {
 			//########## UPGRADE VERIFICATION #############
 			// Verify apps with local scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
-			appFileList = testenv.GetAppFileList(appListLocal, 2)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
-			appFileList = testenv.GetAppFileList(appListCluster, 2)
+			appFileList = testenv.GetAppFileList(appListCluster)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
@@ -1205,7 +1205,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListLocal to S3
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
 			s3TestDir := "c3appfw-" + testenv.RandomDNSName(4)
-			appFileList := testenv.GetAppFileList(appListLocal, 2)
+			appFileList := testenv.GetAppFileList(appListLocal)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s local apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1213,7 +1213,7 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirCluster := "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			clusterappFileList := testenv.GetAppFileList(appListCluster, 2)
+			clusterappFileList := testenv.GetAppFileList(appListCluster)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s cluster apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1264,13 +1264,13 @@ var _ = Describe("c3appfw test", func() {
 			// Verify V2 apps with local scope are downloaded
 			initContDownloadLocation := "/init-apps/" + appSourceNameLocal
 			downloadPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			appFileList = testenv.GetAppFileList(appListLocal, 2)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify V2 apps with cluster scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
-			appFileList = testenv.GetAppFileList(appListCluster, 2)
+			appFileList = testenv.GetAppFileList(appListCluster)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
@@ -1314,13 +1314,13 @@ var _ = Describe("c3appfw test", func() {
 			// Upload appListLocal list of V1 apps to S3 (to be used for local install)
 			appVersion = "V1"
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps for local install to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload appListCluster list of V1 apps to S3 (to be used for cluster-wide install)
-			clusterappFileList = testenv.GetAppFileList(appListCluster, 1)
+			clusterappFileList = testenv.GetAppFileList(appListCluster)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirCluster, clusterappFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps for cluster-wide install to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1343,13 +1343,13 @@ var _ = Describe("c3appfw test", func() {
 			//########## DOWNGRADE VERIFICATION ###########
 			// Verify apps with local scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameLocal
-			appFileList = testenv.GetAppFileList(appListLocal, 1)
+			appFileList = testenv.GetAppFileList(appListLocal)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
 			// Verify apps with cluster scope are downloaded
 			initContDownloadLocation = "/init-apps/" + appSourceNameCluster
-			appFileList = testenv.GetAppFileList(appListCluster, 1)
+			appFileList = testenv.GetAppFileList(appListCluster)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), downloadPodNames, appFileList, initContDownloadLocation)
 
@@ -1384,7 +1384,7 @@ var _ = Describe("c3appfw test", func() {
 			//################## SETUP ####################
 			// Creating a bigger list of apps to be installed than the default one
 			appList := []string{"splunk_app_db_connect", "splunk_app_aws", "Splunk_TA_microsoft-cloudservices", "Splunk_ML_Toolkit", "Splunk_Security_Essentials"}
-			appFileList := testenv.GetAppFileList(appList, 1)
+			appFileList := testenv.GetAppFileList(appList)
 
 			// Download apps from S3
 			testenvInstance.Log.Info("Download bigger amount of apps from S3 for this test")
@@ -1393,7 +1393,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create consolidated list of app files
 			appList = append(appListV1, appList...)
-			appFileList = testenv.GetAppFileList(appList, 1)
+			appFileList = testenv.GetAppFileList(appList)
 
 			// Upload app to S3 for Indexer Cluster
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
