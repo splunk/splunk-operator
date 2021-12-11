@@ -80,7 +80,7 @@ func (d *Deployment) Teardown() error {
 
 	// Saving Operator and Splunk Pod Logs to File
 	podNames := DumpGetPods(d.testenv.GetName())
-	podNames = append(podNames, GetOperatorPod(d.testenv.GetName()))
+	podNames = append(podNames, GetOperatorPodName(d.testenv.GetName()))
 	for _, podName := range podNames {
 		output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 		if err != nil {
