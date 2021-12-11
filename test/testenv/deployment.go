@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -72,6 +74,31 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
+
+	// Formatted string for pod logs
+	podLogFile := "%s-%s.log"
+
+	// Saving Operator and Splunk Pod Logs to File
+	podNames := DumpGetPods(d.testenv.GetName())
+	podNames = append(podNames, GetOperatorPod(d.testenv.GetName()))
+	for _, podName := range podNames {
+		output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
+		if err != nil {
+			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))
+		} else {
+			logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
+			d.testenv.Log.Info("Writing %s Pod logs to file %s ", podName, logFileName)
+			logFile, err := os.Create(logFileName)
+			if err != nil {
+				d.testenv.Log.Error(err, fmt.Sprintf("Failed to create log file %s", logFileName))
+			} else {
+				logFile.Write(output)
+				d.testenv.Log.Info(fmt.Sprintf("Finished writing %s log to file %s", podName, logFileName))
+			}
+			logFile.Close()
+		}
+	}
+
 	if d.testenv.SkipTeardown && d.testenv.debug == "True" {
 		d.testenv.Log.Info("deployment teardown is skipped!\n")
 		return nil

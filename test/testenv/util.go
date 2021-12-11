@@ -528,6 +528,19 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// GetOperatorPod prints and returns operator pod in the namespace
+func GetOperatorPod(ns string) string {
+	output, _ := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	var operatorPod string
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk-op") {
+			operatorPod = strings.Fields(line)[0]
+		}
+	}
+	return operatorPod
+}
+
 // DumpGetPvcs prints and returns list of pvcs in the namespace
 func DumpGetPvcs(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pvc", "-n", ns).Output()
