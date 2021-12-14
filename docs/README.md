@@ -59,8 +59,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.3 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.2 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.4 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.3.2 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -109,7 +109,7 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.3/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.4/splunk-operator-install.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
