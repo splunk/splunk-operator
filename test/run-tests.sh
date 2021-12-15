@@ -140,7 +140,7 @@ ginkgo -v -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false 
 
 make undeploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
 #kubectl apply -f ${topdir}/deploy/crds
-if [ $? -ne 0 ]; then
-  echo "Unable to uninstall operator. Exiting..."
-  exit 1
-fi
+#if [ $? -ne 0 ]; then
+#  echo "Unable to uninstall operator. Exiting..."
+#  exit 1
+#fi
