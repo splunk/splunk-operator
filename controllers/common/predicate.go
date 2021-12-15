@@ -129,7 +129,7 @@ func PodChangedPredicate() predicate.Predicate {
 	return err
 }
 
-// PodChangedPredicate .
+// ResourceFailedPredicate .
 func ResourceFailedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
