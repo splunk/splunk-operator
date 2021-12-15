@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/google/go-cmp/cmp"
+	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -119,6 +120,33 @@ func PodChangedPredicate() predicate.Predicate {
 			newObj := e.ObjectNew.DeepCopyObject().(*corev1.Pod)
 			oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
 			return !cmp.Equal(newObj.Spec, oldObj.Spec)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
+// PodChangedPredicate .
+func ResourceFailedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*enterprisev3.Standalone); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj := e.ObjectNew.DeepCopyObject().(*enterprisev3.Standalone)
+			//oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
+			//return !cmp.Equal(newObj.Spec, oldObj.Spec)
+			return newObj.Status.Phase == "Error"
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.

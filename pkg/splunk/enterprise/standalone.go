@@ -96,7 +96,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
 	if err != nil {
-		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("create/update general configur resource failed %s", err.Error()))
+		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("create/update configmap resource failed %s", err.Error()))
 		return result, err
 	}
 

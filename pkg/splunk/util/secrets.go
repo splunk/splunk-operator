@@ -427,6 +427,9 @@ func ApplyNamespaceScopedSecretObject(client splcommon.ControllerClient, namespa
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 			if _, ok := current.Data[tokenType]; !ok {
+				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
+					current.Data = make(map[string][]byte)
+				}
 				// Value for token not found, generate
 				if tokenType == "hec_token" {
 					current.Data[tokenType] = generateHECToken()

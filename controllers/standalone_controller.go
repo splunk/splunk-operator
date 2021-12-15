@@ -120,6 +120,7 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
+			//common.ResourceFailedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{

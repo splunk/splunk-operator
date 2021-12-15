@@ -96,3 +96,5 @@ deploy/olm-certified
 bin/
 pkg/splunk/enterprise/app1.tgz_
 bundle_*/
+test/secret/*.log
+kubeconfig

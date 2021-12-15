@@ -34,7 +34,7 @@ The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk
 must also be installed to build this project.
 
 ```
-git clone -b v0.18.2 https://github.com/operator-framework/operator-sdk
+git clone -b v1.15.0 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
 make tidy
 make install
@@ -80,7 +80,7 @@ This repository consists of the following code used to build the splunk-operator
 * `pkg/splunk/client/`: Simple client for Splunk Enterprise REST API
 * `pkg/splunk/test/`: Common code used by other packages for unit testing
 
-`main()` uses `pkg/controllers` to register all the `enterprise` controllers
+`main()` uses `controllers` to register all the `enterprise` controllers
 that manage custom resources by watching for Kubernetes events.
 The `enterprise`  controllers are implemented using common code provided
 by the `controllers` package. The `enterprise` controllers also use the REST API client
@@ -93,7 +93,7 @@ In addition to the source code, this repository includes:
 * `build`: Build scripts, templates, etc. used to build the container image
 * `deploy`: Kubernetes YAML templates used to install the Splunk Operator
 * `docs`: Getting Started Guide and other documentation in Markdown format
-* `test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
+* `int-test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
 
 
 ## Building the operator
@@ -103,7 +103,7 @@ You can build the operator by just running `make`.
 Other make targets include (more info below):
 
 * `make all`: builds `splunk/splunk-operator` container image (same as `make image`)
-* `make builder`: builds the `splunk/splunk-operator-builder` container image
+* `make build`: builds the `splunk/splunk-operator-builder` container image
 * `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
 * `make builder-test`: Runs unit tests using the `splunk/splunk-operator-builder` image
 * `make image`: builds the `splunk/splunk-operator` container image without using `splunk/splunk-operator-builder`
