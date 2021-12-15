@@ -49,12 +49,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	Context("Standalone deployment (S1) with LM and MC", func() {
 		It("secret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
 
-			/* Test Scenario
-			1. Update Secrets Data
-			2. Verify New versioned secret are created with correct value.
-			3. Verify new secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
-			5. Verify New Secrets via api access (password)*/
+			//  Test Scenario
+			// 1. Update Secrets Data
+			// 2. Verify New versioned secret are created with correct value.
+			// 3. Verify new secrets are mounted on pods.
+			// 4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			// 5. Verify New Secrets via api access (password)
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -134,12 +134,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	Context("Standalone deployment (S1) with LM amd MC", func() {
 		It("secret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
 
-			/* Test Scenario
-			1. Delete Secret Object
-			2. Verify New versioned secret are created with new values.
-			3. Verify New secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
-			5. Verify New Secrets via api access (password)*/
+			// Test Scenario
+			//1. Delete Secret Object
+			//2. Verify New versioned secret are created with new values.
+			//3. Verify New secrets are mounted on pods.
+			//4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			//5. Verify New Secrets via api access (password)
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -214,12 +214,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	Context("Standalone deployment (S1)", func() {
 		It("secret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
 
-			/* Test Scenario
-			1. Delete Secret Passing Empty Data Map to secret Object
-			2. Verify New versioned secret are created with new values.
-			3. Verify New secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
-			5. Verify New Secrets via api access (password)*/
+			// Test Scenario
+			// 1. Delete Secret Passing Empty Data Map to secret Object
+			// 2. Verify New versioned secret are created with new values.
+			// 3. Verify New secrets are mounted on pods.
+			// 4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			// 5. Verify New Secrets via api access (password)
 
 			// Create standalone Deployment with MonitoringConsoleRef
 			mcName := deployment.GetName()

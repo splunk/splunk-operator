@@ -18,8 +18,8 @@ package controllers
 
 import (
 	"context"
-
 	"github.com/pkg/errors"
+	common "github.com/splunk/splunk-operator/controllers/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -107,25 +107,30 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.SearchHeadCluster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			common.LabelChangedPredicate(),
+			common.SecretChangedPredicate(),
+			common.ConfigChangedPredicate(),
+			common.StatefulsetChangedPredicate(),
+			common.PodChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.SearchHeadCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.SearchHeadCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.SearchHeadCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.SearchHeadCluster{},
 			}).
 		WithOptions(controller.Options{

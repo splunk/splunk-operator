@@ -219,6 +219,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			result.Requeue = false
 		}
 	}
+	if !result.Requeue {
+		return reconcile.Result{}, nil
+	}
 	return result, nil
 }
 

@@ -1,0 +1,42 @@
+apiVersion: enterprise.splunk.com/v3
+kind: LicenseMaster
+metadata:
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+  name: lc-test
+spec:
+  Mock: false
+  affinity: {}
+  appRepo:
+    defaults: {}
+  clusterMasterRef: {}
+  defaults: ""
+  defaultsUrl: ""
+  defaultsUrlApps: ""
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  image: ""
+  imagePullPolicy: IfNotPresent
+  licenseMasterRef: {}
+  licenseUrl: /mnt/licenses/enterprise.lic
+  livenessInitialDelaySeconds: 0
+  monitoringConsoleRef: {}
+  readinessInitialDelaySeconds: 0
+  resources: {}
+  schedulerName: ""
+  serviceAccount: ""
+  serviceTemplate:
+    metadata: {}
+    spec: {}
+    status:
+      loadBalancer: {}
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  volumes:
+  - configMap:
+      name: license-confmap
+    name: licenses

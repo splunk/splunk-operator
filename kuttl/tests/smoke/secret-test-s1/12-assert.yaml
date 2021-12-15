@@ -1,0 +1,7 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  name: mc-test
+status:
+  phase: Ready

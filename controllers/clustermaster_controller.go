@@ -20,6 +20,9 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	common "github.com/splunk/splunk-operator/controllers/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,9 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // ClusterMasterReconciler reconciles a ClusterMaster object
@@ -107,20 +107,24 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			common.LabelChangedPredicate(),
+			common.SecretChangedPredicate(),
+			common.StatefulsetChangedPredicate(),
+			common.PodChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.ClusterMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.ClusterMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.ClusterMaster{},
 			}).
 		WithOptions(controller.Options{

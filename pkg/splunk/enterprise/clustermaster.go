@@ -198,6 +198,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 	}
+	if !result.Requeue {
+		return reconcile.Result{}, nil
+	}
 	return result, nil
 }
 

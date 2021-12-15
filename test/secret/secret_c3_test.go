@@ -46,12 +46,12 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
 
-			/* Test Scenario
-			1. Update Secrets Data
-			2. Verify New versioned secret are created with correct value.
-			3. Verify new secrets are mounted on pods.
-			4. Verify New Secrets are present in server.conf (Pass4SymmKey)
-			5. Verify New Secrets via api access (password)*/
+			// Test Scenario
+			// 1. Update Secrets Data
+			// 2. Verify New versioned secret are created with correct value.
+			// 3. Verify new secrets are mounted on pods.
+			// 4. Verify New Secrets are present in server.conf (Pass4SymmKey)
+			// 5. Verify New Secrets via api access (password)
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()

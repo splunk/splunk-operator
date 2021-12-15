@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
@@ -114,6 +115,11 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.Standalone{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			common.LabelChangedPredicate(),
+			common.SecretChangedPredicate(),
+			common.ConfigChangedPredicate(),
+			common.StatefulsetChangedPredicate(),
+			common.PodChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -122,17 +128,17 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
 		WithOptions(controller.Options{
