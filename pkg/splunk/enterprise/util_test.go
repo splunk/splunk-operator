@@ -1498,7 +1498,34 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
-	setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
+	// When the phase is not in podCopy complete, install state should not be set
+	setInstallStateForClusterScopedApps(appDeployContext)
+
+	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
+		for i := range deployInfoList {
+			appSrc, err := getAppSrcSpec(appDeployContext.AppFrameworkConfig.AppSources, appSrcName)
+			if err != nil {
+				// Error, should never happen
+				t.Errorf("Unable to find App src. App src name%s, appName: %s", appSrcName, deployInfoList[i].AppName)
+			}
+
+			if appSrc.Scope == enterpriseApi.ScopeCluster &&
+				(deployInfoList[i].PhaseInfo.Phase == enterpriseApi.PhaseInstall || deployInfoList[i].PhaseInfo.Status == enterpriseApi.AppPkgInstallComplete) {
+				t.Errorf("wrong install state for app: %s. Got(Phase=%s, PhaseStatus=%s), wanted(Phase=%s, PhaseStatus=%s)",
+					deployInfoList[i].AppName, deployInfoList[i].PhaseInfo.Phase, appPhaseStatusAsStr(deployInfoList[i].PhaseInfo.Status), enterpriseApi.PhaseInstall, appPhaseStatusAsStr(enterpriseApi.AppPkgInstallComplete))
+			}
+		}
+	}
+
+	// When the phase is in podCopy complete, install state should be set
+
+	for i := range appDeployInfoList {
+		appDeployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhasePodCopy
+		appDeployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+	}
+
+	setInstallStateForClusterScopedApps(appDeployContext)
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
@@ -1516,6 +1543,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 			}
 		}
 	}
+
 }
 
 func TestCheckIfFileExistsOnPod(t *testing.T) {

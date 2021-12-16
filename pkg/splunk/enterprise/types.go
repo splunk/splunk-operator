@@ -16,11 +16,16 @@ package enterprise
 
 import (
 	"sync"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
+)
+
+const (
+	maxRecDuration time.Duration = 1<<63 - 1
 )
 
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
@@ -55,6 +60,9 @@ const (
 
 	// Max. time the app framework scheduler waits before trying to yield
 	maxRunTimeBeforeAttemptingYield = 90
+
+	// Max. of parallel installs for a given Pod
+	maxParallelInstallsPerPod = 1
 )
 
 type globalResourceTracker struct {
@@ -84,7 +92,7 @@ type PipelineWorker struct {
 	targetPodName string
 
 	// runtime client
-	client *splcommon.ControllerClient
+	client splcommon.ControllerClient
 
 	// cr meta object
 	cr splcommon.MetaObject
@@ -120,20 +128,35 @@ type AppInstallPipeline struct {
 
 	// Reference to app deploy context
 	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// Scheduler entry time
+	afwEntryTime int64
+
+	// additional context used for bundle push logic
+	// runtime client
+	client splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
 }
 
-// PlayBookImpl is an interface to implement individual playbooks
-type PlayBookImpl interface {
-	runPlayBook() error
+// PlaybookImpl is an interface to implement individual playbooks
+type PlaybookImpl interface {
+	runPlaybook() error
 }
 
-// blank assignment to implement PlayBookImpl
-var _ PlayBookImpl = &IdxcPlayBookContext{}
+var _ PlaybookImpl = &localScopePlaybookContext{}
 
-var _ PlayBookImpl = &SHCPlayBookContext{}
+// blank assignment to implement PlaybookImpl
+var _ PlaybookImpl = &IdxcPlaybookContext{}
 
-// IdxcPlayBookContext is used to implement playbook to push bundle to indexer cluster peers
-type IdxcPlayBookContext struct {
+var _ PlaybookImpl = &SHCPlaybookContext{}
+
+// IdxcPlaybookContext is used to implement playbook to push bundle to indexer cluster peers
+type IdxcPlaybookContext struct {
 	client        splcommon.ControllerClient
 	cr            splcommon.MetaObject
 	afwPipeline   *AppInstallPipeline
@@ -141,8 +164,8 @@ type IdxcPlayBookContext struct {
 	podExecClient splutil.PodExecClientImpl
 }
 
-// SHCPlayBookContext is used to implement playbook to push bundle to SHC members
-type SHCPlayBookContext struct {
+// SHCPlaybookContext is used to implement playbook to push bundle to SHC members
+type SHCPlaybookContext struct {
 	client               splcommon.ControllerClient
 	cr                   splcommon.MetaObject
 	afwPipeline          *AppInstallPipeline
@@ -151,11 +174,12 @@ type SHCPlayBookContext struct {
 	podExecClient        splutil.PodExecClientImpl
 }
 
-type localScopeInstallContext struct {
+type localScopePlaybookContext struct {
 	worker *PipelineWorker
 
 	// semaphore to track only one app install at any time for a given replicaset pod
-	sem chan struct{}
+	sem           chan struct{}
+	podExecClient splutil.PodExecClientImpl
 }
 
 // ToString returns a string for a given InstanceType

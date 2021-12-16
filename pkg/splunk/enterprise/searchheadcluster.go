@@ -173,18 +173,13 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 	}
 	cr.Status.Phase = phase
 
+	var finalResult *reconcile.Result
+	if cr.Status.DeployerPhase == splcommon.PhaseReady {
+		finalResult = handleAppFrameworkActivity(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+	}
+
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil && cr.Status.DeployerPhase == splcommon.PhaseReady {
-			afwSchedulerEntry(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-			//markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
-			if cr.Status.AppContext.IsDeploymentInProgress {
-				cr.Status.AppContext.IsDeploymentInProgress = false
-				return result, nil
-			}
-		}
-
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
@@ -197,18 +192,15 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 				return result, err
 			}
 		}
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
-		}
 
 		// Reset secrets related status structs
 		cr.Status.ShcSecretChanged = []bool{}
 		cr.Status.AdminSecretChanged = []bool{}
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
+
+		// Update the requeue result as needed by the app framework
+		result = *finalResult
 	}
 	return result, nil
 }
