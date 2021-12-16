@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -1028,12 +1029,80 @@ func getPlayBookContext(client splcommon.ControllerClient, cr splcommon.MetaObje
 	}
 }
 
+// removeSHCBundlePushStatusFile removes the SHC Bundle status file from deployer pod
+func (shcPlayBookContext *SHCPlayBookContext) removeSHCBundlePushStatusFile() error {
+	scopedLog := log.WithName("removeSHCBundlePushStatusFile").WithValues("crName", shcPlayBookContext.cr.GetName(), "namespace", shcPlayBookContext)
+
+	cmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
+	_, stdErr, err := shcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
+	if err != nil || stdErr != "" {
+		scopedLog.Error(err, "unable to remove SHC Bundle Push status file")
+		// don't return error from here, so that we can retry cleaning the file in next run
+		return err
+	}
+	return nil
+}
+
+// isBundlePushComplete checks whether the SHC bundle push is complete or still pending
+func (shcPlayBookContext *SHCPlayBookContext) isBundlePushComplete() (bool, error) {
+	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", shcPlayBookContext.cr.GetName(), "namespace", shcPlayBookContext.cr.GetNamespace())
+
+	cmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
+	// check the content of the status file
+	stdOut, stdErr, err := shcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
+	// check if there is an error returned from running the pod exec command
+	if err != nil || stdErr != "" {
+		scopedLog.Error(err, "checking the status of SHC Bundle Push failed", "stdout", stdOut, "stderr", stdErr)
+		// reset the bundle push state to Pending, so that we retry again.
+		setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushPending)
+
+		// remove the status file too, so that we dont have any stale status
+		removeErr := shcPlayBookContext.removeSHCBundlePushStatusFile()
+		if removeErr != nil {
+			errors.Wrap(err, removeErr.Error())
+		}
+		return false, err
+	}
+
+	// Check if we did not get the desired output in the status file. There can be 2 scenarios -
+	// 1. stdOut is empty, which means bundle push is still in progress
+	// 2. stdOut has some other string other than the bundle push success message
+	if stdOut == "" {
+		scopedLog.Info("SHC Bundle Push is still in progress")
+		return false, nil
+	} else if !strings.Contains(stdOut, shcBundlePushCompleteStr) {
+		// this means there was an error in bundle push command
+		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", stdOut)
+		scopedLog.Error(err, "SHC Bundle push status file reported an error while applying bundle")
+
+		// reset the bundle push state to Pending, so that we retry again.
+		setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushPending)
+
+		// remove the status file too, so that we dont have any stale status
+		removeErr := shcPlayBookContext.removeSHCBundlePushStatusFile()
+		if removeErr != nil {
+			errors.Wrap(err, removeErr.Error())
+		}
+		return false, err
+	}
+
+	// now that bundle push is complete, remove the status file
+	err = shcPlayBookContext.removeSHCBundlePushStatusFile()
+	if err != nil {
+		scopedLog.Error(err, "removing SHC Bundle Push status file failed, will retry again.")
+		// don't return error from here, so that we can retry cleaning the file in next run
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlayBookContext *SHCPlayBookContext) triggerBundlePush() error {
-	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlayBookContext.searchHeadCaptainURL)
+	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlayBookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
 	stdOut, stdErr, err := shcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
 	if err != nil || stdErr != "" {
-		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
+		err = fmt.Errorf("error while applying SHC Bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
 		return err
 	}
 	return nil
@@ -1043,6 +1112,8 @@ func (shcPlayBookContext *SHCPlayBookContext) triggerBundlePush() error {
 func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 	scopedLog := log.WithName("runPlayBook").WithValues("crName", shcPlayBookContext.cr.GetName(), "namespace", shcPlayBookContext.cr.GetNamespace())
 
+	var err error
+	var ok bool
 	cr := shcPlayBookContext.cr.(*enterpriseApi.SearchHeadCluster)
 	if cr.Status.Phase != splcommon.PhaseReady {
 		scopedLog.Info("SHC is not ready yet.")
@@ -1052,47 +1123,57 @@ func (shcPlayBookContext *SHCPlayBookContext) runPlayBook() error {
 	appDeployContext := shcPlayBookContext.afwPipeline.appDeployContext
 
 	switch appDeployContext.BundlePushStatus.BundlePushStage {
+	// if the bundle push is already in progress, check the status
+	case enterpriseApi.BundlePushInProgress:
+		scopedLog.Info("checking the status of SHC Bundle Push")
+		// check if the bundle push is complete
+		ok, err = shcPlayBookContext.isBundlePushComplete()
+		if ok {
+			// set the bundle push status to complete
+			setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
+
+			// reset the retry count
+			shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
+
+			// set the state to install complete for all the cluster scoped apps
+			setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
+		} else if err != nil {
+			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again.")
+		} else {
+			scopedLog.Info("SHC Bundle Push is still in progress, will check back again in next reconcile..")
+		}
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
-		scopedLog.Info("running command to apply cluster bundle")
+		scopedLog.Info("running command to apply SHC Bundle")
 
-		err := shcPlayBookContext.triggerBundlePush()
+		err = shcPlayBookContext.triggerBundlePush()
 		if err != nil {
-			scopedLog.Error(err, "failed to apply cluster bundle")
-			shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount++
-			return err
+			scopedLog.Error(err, "failed to apply SHC Bundle")
 		}
 
-		scopedLog.Info("SHC Bundle push complete")
+		scopedLog.Info("SHC Bundle Push is in progress")
+
 		// set the state to bundle push complete since SHC bundle push is a sync call
-		setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
-
-		// reset the retry count
-		shcPlayBookContext.afwPipeline.appDeployContext.BundlePushStatus.RetryCount = 0
-
-		// set the state to install complete for all the cluster scoped apps
-		setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
-
+		setBundlePushState(shcPlayBookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
 	default:
-		err := fmt.Errorf("invalid bundle push state=%s", bundlePushStateAsStr(appDeployContext.BundlePushStatus.BundlePushStage))
-		return err
+		err = fmt.Errorf("invalid bundle push state=%s", bundlePushStateAsStr(appDeployContext.BundlePushStatus.BundlePushStage))
 	}
 
-	return nil
+	return err
 }
 
 // isBundlePushComplete checks the status of bundle push
-func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete(cmd string) bool {
+func (idxcPlayBookContext *IdxcPlayBookContext) isBundlePushComplete() bool {
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", idxcPlayBookContext.cr.GetName(), "namespace", idxcPlayBookContext.cr.GetNamespace())
 
-	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(cmd)
+	stdOut, stdErr, err := idxcPlayBookContext.podExecClient.RunPodExecCommand(idxcShowClusterBundleStatusStr)
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
 		return false
 	}
 
 	if !strings.Contains(stdOut, "cluster_status=None") {
-		scopedLog.Info("Bundle push is still in progress")
+		scopedLog.Info("IndexerCluster Bundle push is still in progress")
 		return false
 	}
 
@@ -1130,9 +1211,9 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 	switch appDeployContext.BundlePushStatus.BundlePushStage {
 	// if the bundle push is already in progress, check the status
 	case enterpriseApi.BundlePushInProgress:
-		scopedLog.Info("checking the status of bundle push")
+		scopedLog.Info("checking the status of IndexerCluster Bundle Push")
 		// check if the bundle push is complete
-		if idxcPlayBookContext.isBundlePushComplete(idxcShowClusterBundleStatusStr) {
+		if idxcPlayBookContext.isBundlePushComplete() {
 			// set the bundle push status to complete
 			setBundlePushState(idxcPlayBookContext.afwPipeline, enterpriseApi.BundlePushComplete)
 
@@ -1142,15 +1223,15 @@ func (idxcPlayBookContext *IdxcPlayBookContext) runPlayBook() error {
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(appDeployContext, enterpriseApi.AppPkgInstallComplete)
 		} else {
-			scopedLog.Info("bundle push is still in progress, will check back again in next reconcile..")
+			scopedLog.Info("IndexerCluster Bundle Push is still in progress, will check back again in next reconcile..")
 		}
 
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
-		scopedLog.Info("running command to apply cluster bundle")
+		scopedLog.Info("running command to apply IndexerCluster Bundle")
 		err := idxcPlayBookContext.triggerBundlePush()
 		if err != nil {
-			scopedLog.Error(err, "failed to apply cluster bundle")
+			scopedLog.Error(err, "failed to apply IndexerCluster Bundle")
 			return err
 		}
 

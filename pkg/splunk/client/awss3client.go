@@ -235,6 +235,7 @@ func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile, etag string) (b
 		})
 	if err != nil {
 		scopedLog.Error(err, "Unable to download item %s, %v", remoteFile, err)
+		os.Remove(localFile)
 		return false, err
 	}
 
