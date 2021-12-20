@@ -999,14 +999,16 @@ var _ = Describe("c3appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Create app sources having both local and cluster scopes for C3 SVA
-			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
+			   * Split Applist into clusterlist and local list
+			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
+			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ############ INITIAL VERIFICATIONS ##########
 			   * Verify apps with local scope are installed locally on Cluster Manager and Deployer
 			   * Verify apps with cluster scope are installed cluster-wide on Indexers and Search Heads
 			   ############### UPGRADE APPS ################
 			   * Upload V2 apps on S3
-			   * Wait for pods to be ready
+			   * Wait for all C3 pods to be ready
 			   ########## UPGRADE VERIFICATION #############
 			   * Verify bundle push is successful
 			   * Verify apps with local scope are upgraded locally on Cluster Manager and on Deployer
@@ -1211,14 +1213,16 @@ var _ = Describe("c3appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Create app sources having both local and cluster scopes for C3 SVA
-			   * Prepare and deploy C3 CRD and wait for pods to be ready
+			   * Split Applist into clusterlist and local list
+			   * Upload V2 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
+			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ############# INITIAL VERIFICATION ##########
 			   * Verify apps with local scope are installed locally on Cluster Manager and Deployer
 			   * Verify apps with cluster scope are installed cluster-wide on Indexers and Search Heads
 			   ############# DOWNGRADE APPS ################
 			   * Upload V1 apps on S3
-			   * Wait for pods to be ready
+			   * Wait for all C3 pods to be ready
 			   ########## DOWNGRADE VERIFICATION ###########
 			   * Verify bundle push is successful
 			   * Verify apps with local scope are downgraded locally on Cluster Manager and on Deployer
