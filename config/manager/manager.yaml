@@ -30,14 +30,14 @@ spec:
         - /manager
         args:
         - --leader-elect
+        - --pprof
         image: controller:latest
         imagePullPolicy: Always
         name: manager
         env:
-        - name: WATCH_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: ""
+        #- name: WATCH_NAMESPACE
+        #  valueFrom:
+        #    fieldRef:
         #      fieldPath: metadata.namespace
         - name: POD_NAME
           valueFrom:
