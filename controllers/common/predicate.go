@@ -93,7 +93,7 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 			// if old and new data is the same, don't reconcile
 			newObj := e.ObjectNew.DeepCopyObject().(*appsv1.StatefulSet)
 			oldObj := e.ObjectOld.DeepCopyObject().(*appsv1.StatefulSet)
-			return !cmp.Equal(newObj.Spec, oldObj.Spec)
+			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.
@@ -119,7 +119,7 @@ func PodChangedPredicate() predicate.Predicate {
 			// if old and new data is the same, don't reconcile
 			newObj := e.ObjectNew.DeepCopyObject().(*corev1.Pod)
 			oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
-			return !cmp.Equal(newObj.Spec, oldObj.Spec)
+			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.

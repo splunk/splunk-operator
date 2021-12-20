@@ -107,6 +107,7 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),

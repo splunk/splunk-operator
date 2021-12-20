@@ -107,6 +107,7 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.MonitoringConsole{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigChangedPredicate(),

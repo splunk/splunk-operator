@@ -34,9 +34,10 @@ spec:
         imagePullPolicy: Always
         name: manager
         env:
-        #- name: WATCH_NAMESPACE
-        #  valueFrom:
-        #    fieldRef:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: ""
         #      fieldPath: metadata.namespace
         - name: POD_NAME
           valueFrom:
@@ -67,12 +68,12 @@ spec:
           requests:
             cpu: 200m
             memory: 200Mi
-        volumeMounts:
-          - mountPath: /opt/splunk/appframework/
-            name: app-staging
+        #volumeMounts:
+        #  - mountPath: /opt/splunk/appframework/
+        #    name: app-staging
       serviceAccountName: controller-manager
-      volumes:
-        - name:  app-staging
-          persistentVolumeClaim:
-            claimName: tmp-app-download
+      #volumes:
+      #  - name:  app-staging
+      #    persistentVolumeClaim:
+      #      claimName: tmp-app-download
       terminationGracePeriodSeconds: 10

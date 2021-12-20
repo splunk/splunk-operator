@@ -108,6 +108,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.IndexerCluster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),

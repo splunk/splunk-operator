@@ -115,6 +115,7 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterprisev3.Standalone{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigChangedPredicate(),
@@ -124,7 +125,7 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
-				IsController: true,
+				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
