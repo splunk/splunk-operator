@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.4/splunk-operator-install.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
 ```
 
 
@@ -18,13 +18,13 @@ Kubernetes only allows administrators to install new `CustomResourceDefinition` 
 If you are not an administrator, you can have an administrator create the required objects for you by running:
 
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.4/splunk-operator-crds.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-crds.yaml
 ```
 
 Afterwards, you can download and use the yaml file to install the operator within your own namespace:
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.4/splunk-operator-noadmin.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-noadmin.yaml
 kubectl config set-context --current --namespace=<NAMESPACE>
 kubectl apply -f splunk-operator.yaml
 ```
@@ -35,7 +35,7 @@ kubectl apply -f splunk-operator.yaml
 If you want to configure a single instance of the operator to watch all the namespaces of your cluster while managing deployments only in the namespace `splunk-operator`, use the alternative cluster scope installation yaml file:
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.4/splunk-operator-cluster.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
 ```
 
 **Note**: The operator has the ability to watch, list secret objects in all namespaces.
