@@ -1,4 +1,11 @@
 # Splunk Operator for Kubernetes Change Log
+## 1.0.5 (2021-12-17)
+* This is the 1.0.5 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.3.3 image with it
+
+* CSPL-1553: Modify apiVersion in cluster_role.yaml to rbac.authorization.k8s.io/v1 (for compatibility with Kubernetes 1.22+)
+
 ## 1.0.4 (2021-12-13)
 * This is the 1.0.4 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
 
