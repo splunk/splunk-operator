@@ -324,13 +324,13 @@ func TestIsStatefulSetScalingUp(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	*current.Spec.Replicas = 2
-	_, err := IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	_, err := IsStatefulSetScalingUpOrDown(c, &cr, statefulSetName, replicas)
 	if err == nil {
 		t.Errorf("IsStatefulSetScalingUp should have returned error as we have not yet added statefulset to client.")
 	}
 
 	c.AddObject(current)
-	_, err = IsStatefulSetScalingUp(c, &cr, statefulSetName, replicas)
+	_, err = IsStatefulSetScalingUpOrDown(c, &cr, statefulSetName, replicas)
 	if err != nil {
 		t.Errorf("IsStatefulSetScalingUp should not have returned error")
 	}

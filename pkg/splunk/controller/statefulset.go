@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 
+	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -317,16 +318,22 @@ func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerRefer
 	return reflect.DeepEqual(currentOwners[0], splcommon.AsOwner(cr, false))
 }
 
-// IsStatefulSetScalingUp checks if we are currently scaling up
-func IsStatefulSetScalingUp(client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (bool, error) {
+// IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down
+func IsStatefulSetScalingUpOrDown(client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, error) {
 	scopedLog := log.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
 	current, err := GetStatefulSetByName(client, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
-		return false, err
+		return enterpriseApi.StatefulSetNotScaling, err
 	}
 
-	return *current.Spec.Replicas < desiredReplicas, nil
+	if *current.Spec.Replicas < desiredReplicas {
+		return enterpriseApi.StatefulSetScalingUp, nil
+	} else if *current.Spec.Replicas > desiredReplicas {
+		return enterpriseApi.StatefulSetScalingDown, nil
+	}
+
+	return enterpriseApi.StatefulSetNotScaling, nil
 }

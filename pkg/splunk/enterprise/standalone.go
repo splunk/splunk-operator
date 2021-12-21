@@ -140,29 +140,34 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	// configMap with all the appSource entries. This is done so that the new pods
 	// that come up now will have the complete list of all the apps and then can
 	// download and install all the apps.
-	// TODO: Improve this logic so that we only recycle the new pod/replica
-	// and not all the existing pods.
+	// If, we are scaling down, just update the auxPhaseInfo list
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
-		isScalingUp, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
+		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
-		} else if isScalingUp {
+		}
+		appStatusContext := cr.Status.AppContext
+		switch isStatefulSetScaling {
+		case enterpriseApi.StatefulSetScalingUp:
 			// if we are indeed scaling up, then mark the deploy status to Pending
 			// for all the app sources so that we add all the app sources in configMap.
 			cr.Status.AppContext.IsDeploymentInProgress = true
-			appStatusContext := cr.Status.AppContext
+
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
 				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				changePhaseInfo(cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
-			// Now apply the configMap will full app listing.
-			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus, false)
-			if err != nil {
-				return result, err
+		// if we are scaling down, just delete the state auxPhaseInfo entries
+		case enterpriseApi.StatefulSetScalingDown:
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				removeStaleEntriesFromAuxPhaseInfo(cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
+		default:
+			// nothing to be done
 		}
 	}
 

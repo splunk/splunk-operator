@@ -425,3 +425,15 @@ const (
 	// AppPkgInstallError indicates error after retries
 	AppPkgInstallError = 399
 )
+
+// StatefulSetScalingType determines if the statefulset is scaling up/down
+type StatefulSetScalingType uint32
+
+const (
+	// StatefulSetNotScaling indicates sts is not scaling
+	StatefulSetNotScaling StatefulSetScalingType = iota
+	// StatefulSetScalingUp indicates sts is scaling up
+	StatefulSetScalingUp
+	// StatefulSetScalingDown indicates sts is scaling down
+	StatefulSetScalingDown
+)
