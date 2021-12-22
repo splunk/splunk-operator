@@ -333,6 +333,14 @@ type BundlePushTracker struct {
 	RetryCount int32 `json:"retryCount,omitempty"`
 }
 
+const (
+	// AfwPhase2 represents Phase-2 app framework
+	AfwPhase2 uint16 = iota
+
+	// AfwPhase3 represents Phase-3 app framework
+	AfwPhase3
+)
+
 // AppDeploymentContext for storing the Apps deployment information
 type AppDeploymentContext struct {
 	// App Framework version info for future use

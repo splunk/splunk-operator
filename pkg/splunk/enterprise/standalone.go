@@ -55,6 +55,12 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
+
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
@@ -83,7 +89,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
-		client.Status().Update(context.TODO(), cr)
+		err = client.Status().Update(context.TODO(), cr)
 		if err != nil {
 			scopedLog.Error(err, "Status update failed")
 		}

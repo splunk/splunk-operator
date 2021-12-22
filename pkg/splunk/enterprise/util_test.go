@@ -1854,3 +1854,273 @@ func TestRemoveStaleEntriesFromAuxPhaseInfo(t *testing.T) {
 		t.Errorf("removeStaleEntriesFromAuxPhaseInfo should have cleared the last 2 entries from AuxPhaseInfo")
 	}
 }
+
+func TestMigrateAfwStatus(t *testing.T) {
+	cr := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	statefulSetName := "splunk-stack1-standalone"
+	var replicas int32 = 4
+
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	client := spltest.NewMockClient()
+	_, err := splctrl.ApplyStatefulSet(client, sts)
+	if err != nil {
+		t.Errorf("unable to apply statefulset")
+	}
+
+	appDeployContext := &enterpriseApi.AppDeploymentContext{
+		Version: enterpriseApi.AfwPhase2,
+	}
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
+	appSrcDeploymentInfo := enterpriseApi.AppSrcDeployInfo{}
+	appSrcDeploymentInfo.AppDeploymentInfoList = make([]enterpriseApi.AppDeploymentInfo, 5)
+
+	// When the App package is already deleted, no need to set the Phase info, aux phase info
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		appSrcDeploymentInfo.AppDeploymentInfoList[i] = enterpriseApi.AppDeploymentInfo{
+			AppName:      fmt.Sprintf("app%v.spl", i),
+			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v\"", i),
+			DeployStatus: enterpriseApi.DeployStatusComplete,
+			RepoState:    enterpriseApi.RepoStateDeleted,
+		}
+	}
+
+	appDeployContext.Version = enterpriseApi.AfwPhase2
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
+
+	migrated := migrateAfwStatus(client, cr, appDeployContext)
+	if !migrated {
+		t.Errorf("When there are objects to be migrated, should return true")
+	}
+
+	if appDeployContext.Version != currentAfwVersion {
+		t.Errorf("Unable to update the App framework version")
+	}
+
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		if strings.Contains(appSrcDeploymentInfo.AppDeploymentInfoList[i].ObjectHash, "\"") {
+			t.Errorf("failed to modify the Object hash for app %v", i)
+		}
+
+		if appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Phase == enterpriseApi.PhaseInstall || appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+			t.Errorf("When the app pkg is not active, no need to set the Phase-3 phase info")
+		}
+
+		auxPhaseInfo := appSrcDeploymentInfo.AppDeploymentInfoList[i].AuxPhaseInfo
+
+		for _, phase := range auxPhaseInfo {
+			if phase == appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo {
+				t.Errorf("When the app pkg is not active, no need to set the Phase-3 aux. phase info")
+			}
+		}
+	}
+
+	// When the app package is not installed already, should set the phase info and aux phase info with the download phase
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		appSrcDeploymentInfo.AppDeploymentInfoList[i] = enterpriseApi.AppDeploymentInfo{
+			AppName:      fmt.Sprintf("app%v.spl", i),
+			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v\"", i),
+			DeployStatus: enterpriseApi.DeployStatusError,
+			RepoState:    enterpriseApi.RepoStateActive,
+		}
+	}
+
+	appDeployContext.Version = enterpriseApi.AfwPhase2
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
+
+	migrated = migrateAfwStatus(client, cr, appDeployContext)
+	if !migrated {
+		t.Errorf("When there are objects to be migrated, should return true")
+	}
+
+	if appDeployContext.Version != currentAfwVersion {
+		t.Errorf("Unable to update the App framework version")
+	}
+
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		if strings.Contains(appSrcDeploymentInfo.AppDeploymentInfoList[i].ObjectHash, "\"") {
+			t.Errorf("failed to modify the Object hash for app %v", i)
+		}
+
+		if appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Phase != enterpriseApi.PhaseDownload || appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgDownloadPending {
+			t.Errorf("When the DeployStatus is not in install complete, should start with the download phase")
+		}
+	}
+
+	// When the deploy status is set to install complete, phase-3 phase info, and aux phaseinfo should reflect the install phase completion
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		appSrcDeploymentInfo.AppDeploymentInfoList[i] = enterpriseApi.AppDeploymentInfo{
+			AppName:      fmt.Sprintf("app%v.spl", i),
+			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v\"", i),
+			DeployStatus: enterpriseApi.DeployStatusComplete,
+			RepoState:    enterpriseApi.RepoStateActive,
+		}
+	}
+
+	appDeployContext.Version = enterpriseApi.AfwPhase2
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
+
+	migrated = migrateAfwStatus(client, cr, appDeployContext)
+	if !migrated {
+		t.Errorf("When there are objects to be migrated, should return true")
+	}
+
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		if strings.Contains(appSrcDeploymentInfo.AppDeploymentInfoList[i].ObjectHash, "\"") {
+			t.Errorf("failed to modify the Object hash for app %v", i)
+		}
+
+		if appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Phase != enterpriseApi.PhaseInstall || appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+			t.Errorf("Unable to update the Phase-3 Phase info for app: %v", i)
+		}
+
+		auxPhaseInfo := appSrcDeploymentInfo.AppDeploymentInfoList[i].AuxPhaseInfo
+
+		for _, phase := range auxPhaseInfo {
+			if phase != appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo {
+				t.Errorf("Failed to update the AuxPhase info during the migration")
+			}
+		}
+	}
+}
+
+func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
+	var appDeployContext *enterpriseApi.AppDeploymentContext
+
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
+	err := checkAndMigrateAppDeployStatus(client, cr, appDeployContext, appFrameworkConfig, true)
+	if err != nil {
+		t.Errorf("When the app deploy context is nil, should not return an error")
+	}
+
+	appDeployContext = &enterpriseApi.AppDeploymentContext{
+		Version: enterpriseApi.AfwPhase2,
+	}
+	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
+	appSrcDeploymentInfo := enterpriseApi.AppSrcDeployInfo{}
+	appSrcDeploymentInfo.AppDeploymentInfoList = make([]enterpriseApi.AppDeploymentInfo, 5)
+
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		appSrcDeploymentInfo.AppDeploymentInfoList[i] = enterpriseApi.AppDeploymentInfo{
+			AppName:      fmt.Sprintf("app%v.spl", i),
+			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v\"", i),
+			DeployStatus: enterpriseApi.DeployStatusComplete,
+			RepoState:    enterpriseApi.RepoStateActive,
+		}
+	}
+
+	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
+
+	statefulSetName := "splunk-stack1-standalone"
+	var replicas int32 = 4
+
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	_, err = splctrl.ApplyStatefulSet(client, sts)
+	if err != nil {
+		t.Errorf("unable to apply statefulset")
+	}
+
+	defaultVol := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = "/tmp/testdir"
+	defer func() {
+		os.RemoveAll(splcommon.AppDownloadVolume)
+		splcommon.AppDownloadVolume = defaultVol
+	}()
+
+	_, err = os.Stat(splcommon.AppDownloadVolume)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	err = checkAndMigrateAppDeployStatus(client, cr, appDeployContext, appFrameworkConfig, true)
+	if err != nil {
+		t.Errorf("With proper app spec and status contexts, migration should happen. error: %v", err)
+	}
+
+	if appDeployContext.Version != currentAfwVersion {
+		t.Errorf("Unable to update the App framework version")
+	}
+
+	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
+		if strings.Contains(appSrcDeploymentInfo.AppDeploymentInfoList[i].ObjectHash, "\"") {
+			t.Errorf("failed to modify the Object hash for app %v", i)
+		}
+
+		if appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Phase != enterpriseApi.PhaseInstall || appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+			t.Errorf("Unable to update the Phase-3 Phase info for app: %v", i)
+		}
+
+		auxPhaseInfo := appSrcDeploymentInfo.AppDeploymentInfoList[i].AuxPhaseInfo
+
+		for _, phase := range auxPhaseInfo {
+			if phase != appSrcDeploymentInfo.AppDeploymentInfoList[i].PhaseInfo {
+				t.Errorf("Failed to update the AuxPhase info during the migration")
+			}
+		}
+	}
+}
