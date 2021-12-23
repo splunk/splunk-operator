@@ -77,6 +77,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############ UPGRADE V2 APPS ###########
 			   * Upload V2 apps to S3 App Source
@@ -87,6 +88,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
@@ -163,6 +165,9 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			// ############ INITIAL VERIFICATION ###########
 
 			// Verify App Download State on Standalone CR
@@ -211,6 +216,9 @@ var _ = Describe("s1appfw test", func() {
 			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V1 apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
@@ -242,6 +250,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
 
@@ -283,6 +294,9 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V2 apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
@@ -308,6 +322,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############# DOWNGRADE APPS ################
 			   * Upload V1 apps on S3
@@ -319,6 +334,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
@@ -389,6 +405,9 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//############ INITIAL VERIFICATION ###########
 
 			// Verify App Download State on Standalone CR
@@ -437,6 +456,9 @@ var _ = Describe("s1appfw test", func() {
 			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V2 apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
@@ -468,6 +490,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
 
 			//########## DOWNGRADE VERIFICATION ###########
 
@@ -509,14 +534,16 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Verify Apps are copied to correct location on Pod for app", "version", appVersion)
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, true)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify Apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s Apps are installed on the pods by running Splunk CLI commands for app", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 		})
 	})
 
-	// Enable later as part of CSPL-1170
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
@@ -532,6 +559,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############### SCALING UP ##################
 			   * Scale up Standalone
@@ -543,6 +571,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############## SCALING DOWN #################
 			   * Scale down Standalone
@@ -554,6 +583,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
@@ -626,6 +656,9 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//########## INITIAL VERIFICATION #############
 			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
@@ -673,6 +706,9 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
 			podNames := []string{standalonePodName, mcPodName}
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, true)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
@@ -742,6 +778,9 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on all pods after scaling up", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on all pods after scaling up", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
@@ -807,6 +846,9 @@ var _ = Describe("s1appfw test", func() {
 			// Verify apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on all Pods after scaling down ", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are still installed on the pods after scaling down", appVersion))
@@ -947,6 +989,9 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//############### VERIFICATION ################
 
 			// Verify App Download State on Standalone CR
@@ -974,6 +1019,9 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info("Verify apps are copied to correct location on Standalone")
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appList, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify apps are installed
 			testenvInstance.Log.Info("Verify apps are installed on Standalone")
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appList, true, "enabled", false, false)
@@ -994,6 +1042,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled and version by running splunk cmd
 			     ############ UPGRADE V2 APPS ###########
 			   * Upload V2 apps to S3 App Source
@@ -1008,6 +1057,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
@@ -1041,6 +1091,9 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//############### VERIFICATION ################
 
 			// Verify App Download State on Standalone CR
@@ -1067,6 +1120,9 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on standalone(/etc/apps/)", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV1, true, true)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			//Verify Apps are installed
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed Locally on CM and Deployer", appVersion))
@@ -1132,6 +1188,9 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//Verify config map set back to off after poll trigger
 			testenvInstance.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
@@ -1159,6 +1218,9 @@ var _ = Describe("s1appfw test", func() {
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on standalone(/etc/apps/)", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV2, true, true)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			//Verify Apps are updated
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed Locally on standalone", appVersion))

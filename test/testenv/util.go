@@ -762,3 +762,25 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 	}
 	return podNames
 }
+
+// DumpGetPodsLife prints and returns list of pods and thier respective life in the namespace
+func DumpGetPodsLife(ns string) map[string]time.Duration {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	splunkPodsAge := make(map[string]time.Duration)
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
+			podAge, err := time.ParseDuration(strings.Fields(line)[len(strings.Fields(line))-1])
+			if err != nil {
+				logf.Log.Error(err, "Failed to get Age on pod", "command", strings.Fields(line)[0])
+				return nil
+			}
+			splunkPodsAge[strings.Fields(line)[0]] = podAge
+		}
+	}
+	return splunkPodsAge
+}
