@@ -375,8 +375,12 @@ func TestTransitionWorkerPhase(t *testing.T) {
 		ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[i].Phase = enterpriseApi.PhasePodCopy
 	}
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[2].Phase = enterpriseApi.PhaseInstall
+
+	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[3].Phase = enterpriseApi.PhaseInstall
+	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[3].Status = enterpriseApi.AppPkgInstallComplete
+
 	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
-	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas)-1 {
+	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas)-2 {
 		t.Errorf("Failed to create the pod copy workers, according to the AuxPhaseInfo")
 	}
 	if len(ppln.pplnPhases[enterpriseApi.PhaseInstall].q) != 1 {

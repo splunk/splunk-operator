@@ -886,6 +886,69 @@ func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map
 	return false
 }
 
+// updateAuxPhaseInfo updates the AuxPhaseInfo
+func updateAuxPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, desiredReplicas int32) {
+
+	auxPhaseInfoLen := len(appDeployInfo.AuxPhaseInfo)
+
+	for i := auxPhaseInfoLen; i < int(desiredReplicas); i++ {
+		phaseInfo := enterpriseApi.PhaseInfo{
+			Phase:      enterpriseApi.PhasePodCopy,
+			Status:     enterpriseApi.AppPkgPodCopyPending,
+			RetryCount: 0,
+		}
+		appDeployInfo.AuxPhaseInfo = append(appDeployInfo.AuxPhaseInfo, phaseInfo)
+	}
+}
+
+// changePhaseInfo changes PhaseInfo and AuxPhaseInfo for each app to desired state
+func changePhaseInfo(desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
+	scopedLog := log.WithName("changePhaseInfo")
+
+	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
+		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
+		for idx := range appDeployInfoList {
+			// no need to do anything if app is deleted already
+			if appDeployInfoList[idx].RepoState == enterpriseApi.RepoStateDeleted {
+				continue
+			}
+
+			// set the phase to download
+			appDeployInfoList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
+
+			// set the status to download pending
+			appDeployInfoList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+
+			if len(appDeployInfoList[idx].AuxPhaseInfo) != 0 {
+				// update the aux phase info
+				updateAuxPhaseInfo(&appDeployInfoList[idx], desiredReplicas)
+			}
+		}
+	} else {
+		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
+		scopedLog.Error(nil, "Could not find the App Source in App context")
+	}
+}
+
+func removeStaleEntriesFromAuxPhaseInfo(desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
+	scopedLog := log.WithName("changePhaseInfo")
+
+	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
+		appDeployInfoList := appSrcDeploymentInfo.AppDeploymentInfoList
+		for idx := range appDeployInfoList {
+			auxPhaseInfoLen := len(appDeployInfoList[idx].AuxPhaseInfo)
+			if auxPhaseInfoLen != 0 && auxPhaseInfoLen > int(desiredReplicas) {
+				// update the aux phase info
+				appDeployInfoList[idx].AuxPhaseInfo = appDeployInfoList[idx].AuxPhaseInfo[:desiredReplicas]
+			}
+		}
+	} else {
+		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
+		scopedLog.Error(nil, "Could not find the App Source in App context")
+	}
+
+}
+
 // changeAppSrcDeployInfoStatus sets the new status to all the apps in an AppSrc if the given repo state and deploy status matches
 // primarly used in Phase-3
 func changeAppSrcDeployInfoStatus(appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus) {

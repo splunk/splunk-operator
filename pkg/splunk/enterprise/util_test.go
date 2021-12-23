@@ -1768,3 +1768,89 @@ func TestReleaseStorage(t *testing.T) {
 		t.Errorf("Released storage is not reflecting in the storage tracker")
 	}
 }
+
+func TestChangePhaseInfo(t *testing.T) {
+	appSrcDeployStatus := make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
+
+	appDeployInfoList := []enterpriseApi.AppDeploymentInfo{
+		{
+			AppName:    "app1.tgz",
+			ObjectHash: "abcdef12345abcdef",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhaseDownload,
+				Status:     enterpriseApi.AppPkgDownloadPending,
+				RetryCount: 2,
+			},
+			AuxPhaseInfo: []enterpriseApi.PhaseInfo{
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+			},
+		},
+	}
+
+	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo = enterpriseApi.AppSrcDeployInfo{}
+	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
+	appSrcDeployStatus["appSrc1"] = appSrcDeployInfo
+
+	changePhaseInfo(5, "appSrc1", appSrcDeployStatus)
+
+	if len(appDeployInfoList[0].AuxPhaseInfo) != 5 {
+		t.Errorf("changePhaseInfo should have increased the size of AuxPhaseInfo")
+	}
+}
+
+func TestRemoveStaleEntriesFromAuxPhaseInfo(t *testing.T) {
+	appSrcDeployStatus := make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
+
+	appDeployInfoList := []enterpriseApi.AppDeploymentInfo{
+		{
+			AppName:    "app1.tgz",
+			ObjectHash: "abcdef12345abcdef",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhaseDownload,
+				Status:     enterpriseApi.AppPkgDownloadPending,
+				RetryCount: 2,
+			},
+			AuxPhaseInfo: []enterpriseApi.PhaseInfo{
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+				{
+					Phase:      enterpriseApi.PhaseDownload,
+					Status:     enterpriseApi.AppPkgDownloadPending,
+					RetryCount: 2,
+				},
+			},
+		},
+	}
+
+	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo = enterpriseApi.AppSrcDeployInfo{}
+	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
+	appSrcDeployStatus["appSrc1"] = appSrcDeployInfo
+
+	removeStaleEntriesFromAuxPhaseInfo(1, "appSrc1", appSrcDeployStatus)
+
+	if len(appDeployInfoList[0].AuxPhaseInfo) > 1 {
+		t.Errorf("removeStaleEntriesFromAuxPhaseInfo should have cleared the last 2 entries from AuxPhaseInfo")
+	}
+}

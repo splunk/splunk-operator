@@ -185,7 +185,6 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 			var copyWorkers, installWorkers []*PipelineWorker
 			scopedLog.Info("Fan-out transition")
 
-			// TBD, @Gaurav, As part of CSPL-1169, plz make sure that we are dealing with the right replica count in case of the scale-up scenario
 			// Seems like the download just finished. Allocate Phase info
 			if len(appDeployInfo.AuxPhaseInfo) == 0 {
 				scopedLog.Info("Just finished the download phase")
@@ -215,11 +214,16 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 					newWorker.targetPodName = getApplicablePodNameForAppFramework(worker.cr, podID)
 
 					if phaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
-						if phaseInfo.Phase == enterpriseApi.PhaseInstall && phaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+						if phaseInfo.Phase == enterpriseApi.PhaseInstall {
 							// If the install is already complete for that app, nothing to be done
-							scopedLog.Info("Created an install worker", "pod name", worker.targetPodName)
-							setContextForNewPhase(newWorker, phaseInfo, enterpriseApi.PhaseInstall)
-							installWorkers = append(installWorkers, newWorker)
+							if phaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+								scopedLog.Info("app already installed")
+								continue
+							} else {
+								scopedLog.Info("Created an install worker", "pod name", worker.targetPodName)
+								setContextForNewPhase(newWorker, phaseInfo, enterpriseApi.PhaseInstall)
+								installWorkers = append(installWorkers, newWorker)
+							}
 						} else if phaseInfo.Phase == enterpriseApi.PhasePodCopy {
 							scopedLog.Info("Created a pod copy worker", "pod name", worker.targetPodName)
 							setContextForNewPhase(newWorker, phaseInfo, enterpriseApi.PhasePodCopy)
@@ -526,7 +530,10 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 		worker.waiter.Done()
 	}()
 
+	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
+
+	// if appsrc is "appSrc1", then appPkgPathOnPod is /init-apps/appSrc1/app1.tgz_abcd1234
 	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
 
 	phaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhaseInstall)
@@ -546,11 +553,8 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	}
 
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
-
-	stdOut, stdErr, err := splutil.PodExecCommand(worker.client, worker.targetPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(command)
+	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
 		phaseInfo.RetryCount++
 		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "retry count", phaseInfo.RetryCount)
@@ -565,10 +569,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 	// Delete the app package from the target pod /init-apps/ location
 	// ToDo: sgontla: rename the "init-apps" to a different name, as the init-container is going away.
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
-	streamOptions = &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
-	stdOut, stdErr, err = splutil.PodExecCommand(worker.client, worker.targetPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(command)
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
