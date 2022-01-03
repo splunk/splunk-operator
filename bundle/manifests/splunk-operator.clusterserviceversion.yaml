@@ -58,7 +58,7 @@ metadata:
     marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
     operators.operatorframework.io/builder: operator-sdk-v1.15.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-  name: splunk-operator.v1.0.3
+  name: splunk-operator.v1.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -461,8 +461,8 @@ spec:
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:8.2.2
-                image: docker.io/vivekbasappa/splunk-operator:v1.0.3
+                  value: docker.io/splunk/splunk:8.2.3.3
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -545,8 +545,8 @@ spec:
   - email: docker-maint@splunk.com
     name: Splunk Docker Maintainers
   maturity: alpha
-  minKubeVersion: "1.18.0"
+  minKubeVersion: 1.18.0
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  version: 1.0.3
+  version: 1.1.0
