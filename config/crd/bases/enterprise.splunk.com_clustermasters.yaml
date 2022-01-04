@@ -19,7 +19,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of indexer cluster
+    - description: Status of cluster manager
       jsonPath: .status.phase
       name: Phase
       type: string
@@ -35,14 +35,14 @@ spec:
       jsonPath: .status.readyReplicas
       name: Ready
       type: integer
-    - description: Age of indexer cluster
+    - description: Age of cluster manager
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v3
     schema:
       openAPIV3Schema:
-        description: ClusterMaster is the Schema for the clustermanagers API
+        description: ClusterMaster is the Schema for the cluster manager API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

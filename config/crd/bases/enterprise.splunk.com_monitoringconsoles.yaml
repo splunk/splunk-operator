@@ -19,7 +19,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of search head cluster
+    - description: Status of monitoring console
       jsonPath: .status.phase
       name: Phase
       type: string
@@ -27,15 +27,15 @@ spec:
       jsonPath: .status.deployerPhase
       name: Deployer
       type: string
-    - description: Desired number of search head cluster members
+    - description: Desired number of monitoring console members
       jsonPath: .status.replicas
       name: Desired
       type: integer
-    - description: Current number of ready search head cluster members
+    - description: Current number of ready monitoring console members
       jsonPath: .status.readyReplicas
       name: Ready
       type: integer
-    - description: Age of search head cluster
+    - description: Age of monitoring console
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
