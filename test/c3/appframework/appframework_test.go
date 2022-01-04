@@ -295,7 +295,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -625,7 +625,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1210,7 +1210,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1597,7 +1597,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1894,7 +1894,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -2258,7 +2258,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)

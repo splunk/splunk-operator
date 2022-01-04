@@ -243,7 +243,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -483,7 +483,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
@@ -1142,7 +1142,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
