@@ -73,10 +73,10 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	reconcileCounters.With(getPrometheusLabels(req)).Inc()
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("indexcluster", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
 	reqLogger.Info("start")
 
-	// Fetch the IndexCluster
+	// Fetch the IndexerCluster
 	instance := &enterprisev3.IndexerCluster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {

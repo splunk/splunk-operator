@@ -31,9 +31,9 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// LicenseMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// LicenseManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LicenseMasterPausedAnnotation = "licensemaster.enterprise.splunk.com/paused"
+	LicenseManagerPausedAnnotation = "licensemanager.enterprise.splunk.com/paused"
 )
 
 // LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
@@ -109,6 +109,5 @@ func (lmstr *LicenseMaster) NewEvent(eventType, reason, message string) corev1.E
 		Count:               1,
 		Type:                eventType,
 		ReportingController: "enterprise.splunk.com/licensemaster-controller",
-		//Related:             standln.Spec.ConsumerRef,
 	}
 }

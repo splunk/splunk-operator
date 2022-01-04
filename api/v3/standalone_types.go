@@ -133,7 +133,5 @@ func (standln *Standalone) NewEvent(eventType, reason, message string) corev1.Ev
 		Count:               1,
 		Type:                eventType,
 		ReportingController: "enterprise.splunk.com/standalone-controller",
-		//Related:             standln.Spec.ConsumerRef,
-		//Action: "change password",
 	}
 }

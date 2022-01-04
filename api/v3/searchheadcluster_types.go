@@ -178,6 +178,5 @@ func (shcstr *SearchHeadCluster) NewEvent(eventType, reason, message string) cor
 		Count:               1,
 		Type:                eventType,
 		ReportingController: "enterprise.splunk.com/searchheadcluster-controller",
-		//Related:             standln.Spec.ConsumerRef,
 	}
 }

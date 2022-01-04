@@ -31,9 +31,9 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// ClusterMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	ClusterMasterPausedAnnotation = "clustermaster.enterprise.splunk.com/paused"
+	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
 )
 
 // ClusterMasterSpec defines the desired state of ClusterMaster
@@ -76,15 +76,15 @@ type BundlePushInfo struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterMaster is the Schema for the clustermanagers API
+// ClusterMaster is the Schema for the cluster manager API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of indexer cluster"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"
 // +kubebuilder:storageversion
 type ClusterMaster struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -133,6 +133,5 @@ func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.E
 		Count:               1,
 		Type:                eventType,
 		ReportingController: "enterprise.splunk.com/clustermaster-controller",
-		//Related:             standln.Spec.ConsumerRef,
 	}
 }

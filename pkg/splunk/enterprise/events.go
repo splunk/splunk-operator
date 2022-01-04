@@ -76,7 +76,7 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 
 	err := k.client.Create(context.TODO(), &event)
 	if err != nil {
-		scopedLog.Info("failed to record event, ignoring",
+		scopedLog.Error(err, "failed to record event, ignoring",
 			"reason", event.Reason, "message", event.Message, "error", err)
 	}
 }

@@ -33,7 +33,7 @@ import (
 const (
 	// IndexerClusterPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	IndexerClusterPausedAnnotation = "indexcluster.enterprise.splunk.com/paused"
+	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
@@ -151,7 +151,7 @@ func (icstr *IndexerCluster) NewEvent(eventType, reason, message string) corev1.
 			Namespace:    icstr.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "IndexCluster",
+			Kind:       "IndexerCluster",
 			Namespace:  icstr.Namespace,
 			Name:       icstr.Name,
 			UID:        icstr.UID,
@@ -160,14 +160,12 @@ func (icstr *IndexerCluster) NewEvent(eventType, reason, message string) corev1.
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-indexcluster-controller",
+			Component: "splunk-indexercluster-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/indexcluster-controller",
-		//Related:             standln.Spec.ConsumerRef,
-		//Action: TODO FIXME what action can be taken
+		ReportingController: "enterprise.splunk.com/indexercluster-controller",
 	}
 }

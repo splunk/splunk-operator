@@ -68,11 +68,11 @@ type MonitoringConsoleStatus struct {
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=monitoringconsoles,scope=Namespaced,shortName=mc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of search head cluster"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of monitoring console"
 // +kubebuilder:printcolumn:name="Deployer",type="string",JSONPath=".status.deployerPhase",description="Status of the deployer"
-// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of search head cluster members"
-// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of monitoring console members"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready monitoring console members"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of monitoring console"
 // +kubebuilder:storageversion
 type MonitoringConsole struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -121,6 +121,5 @@ func (mcnsl *MonitoringConsole) NewEvent(eventType, reason, message string) core
 		Count:               1,
 		Type:                eventType,
 		ReportingController: "enterprise.splunk.com/monitoringconsole-controller",
-		//Related:             standln.Spec.ConsumerRef,
 	}
 }

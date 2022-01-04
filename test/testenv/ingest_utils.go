@@ -164,7 +164,6 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	}
 	go func() {
 		defer writer.Close()
-		//err := cpMakeTar(srcPath, destPath, writer)
 		err := cpMakeTar(localPath{file: srcPath}, remotePath{file: destPath}, writer)
 		if err != nil {
 			return

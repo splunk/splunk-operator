@@ -25,11 +25,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 FROM registry.access.redhat.com/ubi8/ubi:latest
 
 ENV OPERATOR=/manager \
-    USER_UID=1000 \
+    USER_UID=1001 \
     USER_NAME=nonroot
 
 RUN yum -y install shadow-utils
-RUN useradd -ms /bin/bash nonroot -u 1000
+RUN useradd -ms /bin/bash nonroot -u 1001
 
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
@@ -46,6 +46,6 @@ COPY --from=builder /workspace/manager .
 COPY tools/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf /licenses
 COPY LICENSE /licenses/LICENSE-2.0.txt
 
-USER 1000
+USER 1001
 
 ENTRYPOINT ["/manager"]

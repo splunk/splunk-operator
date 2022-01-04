@@ -23,7 +23,7 @@ spec:
         control-plane: controller-manager
     spec:
       securityContext:
-        runAsUser: 1000
+        runAsUser: 1001
         #runAsNonRoot: true
       containers:
       - command:
