@@ -98,3 +98,4 @@ pkg/splunk/enterprise/app1.tgz_
 bundle_*/
 test/secret/*.log
 kubeconfig
+.devcontainer/devcontainer.json
