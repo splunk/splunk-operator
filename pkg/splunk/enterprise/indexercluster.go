@@ -88,7 +88,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	managerIdxCluster := &enterpriseApi.ClusterMaster{}
 	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
 	if err == nil {
-		cr.Status.ClusterMasterPhase = managerIdxCluster.Status.Phase
+		// when user creates both cluster manager and index cluster yaml file at the same time
+		// cluser master status is not yet set so it will be blank
+		if managerIdxCluster.Status.Phase == "" {
+			cr.Status.ClusterMasterPhase = splcommon.PhasePending
+		} else {
+			cr.Status.ClusterMasterPhase = managerIdxCluster.Status.Phase
+		}
 	} else {
 		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
@@ -140,7 +146,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
-		eventPublisher.Warning("Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
+		eventPublisher.Warning("UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
 		return result, err
 	}
 	cr.Status.Phase = phase

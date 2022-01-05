@@ -221,7 +221,6 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	return stdout.String(), stderr.String(), nil
 }
 
-
 // IngestFileViaMonitor ingests a file into an instance using the monitor CLI
 func IngestFileViaMonitor(logFile string, indexName string, podName string, deployment *Deployment) error {
 

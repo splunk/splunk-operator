@@ -262,6 +262,7 @@ func getClusterManagerStatefulSet(client splcommon.ControllerClient, cr *enterpr
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
 func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	managerIdxcName := cr.GetName()
 	cmPodName := fmt.Sprintf("splunk-%s-%s-0", managerIdxcName, splcommon.ClusterManager)
@@ -269,6 +270,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, command, false, false)
 	if err != nil || stdErr != "" {
+		eventPublisher.Warning("PodExecCommand", fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
 		return fmt.Errorf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
@@ -279,10 +281,12 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 			scopedLog.Info("Token Matched.", "on Pod=", stdOut, "from configMap=", tokenFromConfigMap)
 			return nil
 		}
+		eventPublisher.Warning("getSmartstoreConfigMap", fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
 		return fmt.Errorf("Waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
 	}
 
 	// Somehow the configmap was deleted, ideally this should not happen
+	eventPublisher.Warning("getSmartstoreConfigMap", "smartstore ConfigMap is missing")
 	return fmt.Errorf("Smartstore ConfigMap is missing")
 }
 
@@ -296,6 +300,8 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
 		return fmt.Errorf("Will re-attempt to push the bundle after the 5 seconds period passed from last check. LastCheckInterval=%d, current epoch=%d", cr.Status.BundlePushTracker.LastCheckInterval, currentEpoch)
@@ -321,22 +327,26 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 		cr.Status.BundlePushTracker.NeedToPushMasterApps = false
 	}
 
+	eventPublisher.Warning("BundlePush", fmt.Sprintf("Bundle push failed %s", err.Error()))
 	return err
 }
 
 // PushManagerAppsBundle issues the REST command to for cluster manager bundle push
 func PushManagerAppsBundle(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 	scopedLog := log.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(c, cr, defaultSecretObjName)
 	if err != nil {
+		eventPublisher.Warning("PushManagerAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
 		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if foundSecret == false {
+		eventPublisher.Warning("PushManagerAppsBundle", fmt.Sprintf("Could not find admin password while trying to push the manager apps bundle"))
 		return fmt.Errorf("Could not find admin password while trying to push the manager apps bundle")
 	}
 

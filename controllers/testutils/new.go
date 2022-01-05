@@ -16,7 +16,6 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 
 	c := &commonapi.Spec{
 		ImagePullPolicy: string(pullPolicy),
-
 	}
 
 	cs := &enterprisev3.CommonSplunkSpec{
@@ -26,7 +25,6 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
-
 	}
 
 	ad := &enterprisev3.Standalone{
