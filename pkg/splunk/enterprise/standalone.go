@@ -194,13 +194,13 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning("validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
+			eventPublisher.Warning("DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 			if err != nil {
-				eventPublisher.Warning("validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
+				eventPublisher.Warning("ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 				return result, err
 			}
 		}
