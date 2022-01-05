@@ -420,7 +420,7 @@ func ApplySmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.Me
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
-		mapSplunkConfDetails[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
+		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(client, SplunkOperatorAppConfigMap)
@@ -472,7 +472,7 @@ func DeleteOwnerReferencesForResources(client splcommon.ControllerClient, cr spl
 	defaultSecretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	_, err = splutil.RemoveSecretOwnerRef(client, defaultSecretName, cr)
 	if err != nil {
-		scopedLog.Error(err, "Owner reference removal failed for Secret Object %s", defaultSecretName)
+		scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", defaultSecretName))
 		return err
 	}
 
