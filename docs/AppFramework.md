@@ -1,30 +1,36 @@
 # App Framework Resource Guide
 
-The Splunk Operator provides support for Splunk App and Add-on deployment using the App Framework (Beta Version). The App Framework specification adds support for S3-compatible app repository, authentication, and supports specific Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR).
+The Splunk Operator provides support for Splunk App and Add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 
 
 ### Prerequisites
 
 Utilizing the App Framework requires:
 
-* An Amazon S3 or S3-API-compliant remote object storage location. App framework requires read-only access to the path containing the apps.
-* The remote object storage credentials via a secret, or an IAM role.
+* An Amazon S3 or S3-API-compliant remote object storage location. The App framework requires read-only access to the path used to host the apps.
+* The remote object storage credentials provided as a secret, or in an IAM role.
 * Splunk Apps and Add-ons in a .tgz or .spl archive format.
-* Connections to the remote object storage endpoint need to be secure using a minimum version of TLS 1.2.
+* Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
+* A persistent storage volume and path for the Operator Pod. 
 
+#### What is required to upgrade to the latest App Framework?
+1. Upgrade the Operator to the latest release. The Operator pod will restart. The apps and add-ons already manged by the App Framework will remain deployed, and their status won't change. Any new apps, or changes to existing apps will be ignored.
+2. Update the Operator to add a persistent storage volume. The Operator pod will restart. 
+  * Example: `insert an example yaml to porvide a storage path to the operator pod`
+3. The App Framework will resume polling the remote object storage location for new or changed apps at the 'appsRepoPollIntervalSeconds' default.
 
 ### How to use the App Framework on a Standalone CR
 
-In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archives, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
+In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archiv, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
-2. Configure credentials to connect to remote store by either:
-   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
-   * Create a Kubernetes Secret Object with the static storage credentials.
+2. Configure credentials to connect to remote store by:
+   * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations. 
+   * Or, create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
-3. Create folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we split the network and authentication Splunk Apps into different folders and named them `networkApps` and `authApps`.
+3. Create unique folders on the remote storage volume to use as App Source locations.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk Apps and Add-ons. In this example, the network and authentication Splunk Apps are split into different folders and named `networkApps` and `authApps`.
 
 4. Copy your Splunk App or Add-on archive files to the App Source.
    * In this example, the Splunk Apps are located at `bucket-app-framework-us-west-2/Standalone-us/networkAppsLoc/` and `bucket-app-framework-us-west-2/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com`.
@@ -64,9 +70,13 @@ spec:
 
 6. Apply the Custom Resource specification: `kubectl apply -f Standalone.yaml`
 
-The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps to the standalone instance for local use. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance. A Pod reset is triggered to install the new or modified apps.
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use. 
 
-Note: A similar approach can be used for installing apps on License Manager using it's own CR.
+The App Framework calculates a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+
+For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+
+You can use the same approach for installing apps on License Manager using it's own CR.
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
