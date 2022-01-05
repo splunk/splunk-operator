@@ -1,6 +1,6 @@
 # App Framework Resource Guide
 
-The Splunk Operator provides support for Splunk App and Add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 
+The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 
 
 ### Prerequisites
 
@@ -8,7 +8,7 @@ Utilizing the App Framework requires:
 
 * An Amazon S3 or S3-API-compliant remote object storage location. The App framework requires read-only access to the path used to host the apps.
 * The remote object storage credentials provided as a secret, or in an IAM role.
-* Splunk Apps and Add-ons in a .tgz or .spl archive format.
+* Splunk apps and add-ons in a .tgz or .spl archive format.
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. 
 
@@ -30,7 +30,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a select subset of Splunk Apps and Add-ons. In this example, the network and authentication Splunk Apps are split into different folders and named `networkApps` and `authApps`.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, the network and authentication Splunk Apps are split into different folders and named `networkApps` and `authApps`.
 
 4. Copy your Splunk App or Add-on archive files to the App Source.
    * In this example, the Splunk Apps are located at `bucket-app-framework-us-west-2/Standalone-us/networkAppsLoc/` and `bucket-app-framework-us-west-2/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com`.
@@ -83,25 +83,25 @@ For more information, see the [Description of App Framework Specification fields
 
 ### How to use the App Framework on Indexer Cluster
 
-This example describes the installation of apps on Indexer Cluster as well as Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
+This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, seting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
-2. Configure credentials to connect to remote store by either:
-   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
-   * Create a Kubernetes Secret Object with the static storage credentials.
+2. Configure credentials to connect to remote store by:
+   * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations. 
+   * Or, create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
-3. Create folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the cluster manager, and apps that will be distributed to all cluster peers by the cluster manager. 
+3. Create unique folders on the remote storage volume to use as App Source locations.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps that are installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager. 
    * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
-4. Copy your Splunk App or Add-on archive files to the App Source.
-   * In this example, the Splunk Apps for the cluster peers are located at `bucket-app-framework-us-west-2/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework-us-west-2/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework-us-west-2/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
+4. Copy your Splunk app or add-on archive files to the App Source.
+   * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework-us-west-2/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework-us-west-2/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework-us-west-2/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the ClusterMaster CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CR's where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes.
-   * In this example, the cluster manager will run some apps locally, and deploy other apps to the cluster peers. The App Source folder `adminApps` are Splunk Apps that are installed on the cluster manager, and will use a local scope. The apps in the App Source folders `networkApps` and `clusterBase` will be deployed from the cluster manager to the peers, and will use a cluster scope.
+   * In this example, the cluster manager will run some apps locally, and deploy other apps to the cluster peers. The App Source folder `adminApps` contains Splunk apps that are installed and run on the cluster manager, and will use a local scope. The apps in the App Source folders `networkApps` and `clusterBase` will be deployed from the cluster manager to the peers, and will use a cluster scope.
 
 Example: ClusterMaster.yaml
 
@@ -138,15 +138,19 @@ spec:
 
 6. Apply the Custom Resource specification: `kubectl apply -f ClusterMaster.yaml`
 
-The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the cluster manager instance for local use. A Pod reset is triggered on the cluster manager to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps` folder to the cluster manager instance for local use. 
 
-The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster. The cluster manager is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster peers. The cluster manager is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+
+The App Framework calculates a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+
+For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
 ### How to use the App Framework on Search Head Cluster
 
-This example describes the installation of apps on Search Head Cluster as well as Deployer. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
+This example describes the installation of apps on the Deployer and the Search Head Cluster. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
