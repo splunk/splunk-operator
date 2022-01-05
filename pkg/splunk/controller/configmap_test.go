@@ -30,9 +30,12 @@ import (
 )
 
 func TestApplyConfigMap(t *testing.T) {
-	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.ConfigMap-test-defaults"}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.ConfigMap-test-defaults"},
+		{MetaName: "*v1.ConfigMap-test-defaults"},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[0]}}
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",

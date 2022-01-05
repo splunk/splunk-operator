@@ -20,6 +20,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	errors "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -49,12 +50,13 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
-	} else {
+	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(client, configMap)
 		if err == nil {
 			dataUpdated = true
 		}
 	}
+	err = client.Get(context.TODO(), namespacedName, configMap)
 
 	return dataUpdated, err
 }

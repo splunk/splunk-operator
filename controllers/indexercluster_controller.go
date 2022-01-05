@@ -70,7 +70,7 @@ type IndexerClusterReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req)).Inc()
+	reconcileCounters.With(getPrometheusLabels(req, "IndexerCluster")).Inc()
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)

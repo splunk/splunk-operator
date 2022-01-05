@@ -61,6 +61,7 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 	} else {
 		return nil, err
 	}
+	err = client.Get(context.TODO(), namespacedName, secret)
 
-	return &result, nil
+	return &result, err
 }

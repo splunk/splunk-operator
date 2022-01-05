@@ -9,6 +9,7 @@ import (
 const (
 	labelNamespace       = "namespace"
 	labelName            = "name"
+	labelKind            = "kind"
 	labelErrorType       = "error_type"
 	labelMethodName      = "api"
 	labelModuleName      = "module"
@@ -18,7 +19,7 @@ const (
 var reconcileCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "splunk_operator_reconcile_total",
 	Help: "The number of times reconciled by this controller",
-}, []string{labelNamespace, labelName})
+}, []string{labelNamespace, labelName, labelKind})
 
 var reconcileErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "splunk_operator_reconcile_error_total",
@@ -27,18 +28,19 @@ var reconcileErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
 
 var actionFailureCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "splunk_operator_error_total",
-	Help: "The number of times standlaone has entered an error state",
+	Help: "The number of times operator has entered an error state",
 }, []string{labelErrorType})
 
 var apiTotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "splunk_operator_module_duration_in_milliseconds",
 	Help: "the time it takes to complete each call in standlaone (in milliseconds)",
-}, []string{labelNamespace, labelName, labelModuleName, labelMethodName})
+}, []string{labelNamespace, labelName, labelKind, labelModuleName, labelMethodName})
 
-func getPrometheusLabels(request reconcile.Request) prometheus.Labels {
+func getPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		labelNamespace: request.Namespace,
 		labelName:      request.Name,
+		labelKind:      kind,
 	}
 }
 

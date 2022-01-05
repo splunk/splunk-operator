@@ -27,9 +27,12 @@ import (
 
 func TestApplySecret(t *testing.T) {
 	// Re-concile tester
-	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.Secret-test-secrets"}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-secrets"},
+		{MetaName: "*v1.Secret-test-secrets"},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[0]}}
 	current := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secrets",
@@ -48,7 +51,7 @@ func TestApplySecret(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Test create
-	current.Data = map[string][]byte{"a": {'1', '1'}}
+	current.Data = map[string][]byte{"a": {'2', '1'}}
 	retr, err := ApplySecret(c, &current)
 	if err != nil {
 		t.Errorf("ApplySecret failed %s", err.Error())
