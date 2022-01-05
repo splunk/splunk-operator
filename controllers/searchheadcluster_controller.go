@@ -45,7 +45,6 @@ type SearchHeadClusterReconciler struct {
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=searchheadclusters/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete

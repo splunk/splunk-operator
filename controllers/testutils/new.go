@@ -16,13 +16,7 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 
 	c := &commonapi.Spec{
 		ImagePullPolicy: string(pullPolicy),
-		/*
-			SchedulerName :
-			Affinity :
-			Tolerations :
-			Resources :
-			ServiceTemplate :
-		*/
+
 	}
 
 	cs := &enterprisev3.CommonSplunkSpec{
@@ -32,21 +26,7 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
-		/*
-			EtcVolumeStorageConfig :
-			VarVolumeStorageConfig :
-			Defaults :
-			DefaultsURL :
-			DefaultsURLApps :
-			LicenseURL:
-			LicenseMasterRef :
-			ClusterMasterRef :
-			MonitoringConsoleRef :
-			ServiceAccount :
-			ExtraEnv :
-			ReadinessInitialDelaySeconds :
-			LivenessInitialDelaySeconds :
-		*/
+
 	}
 
 	ad := &enterprisev3.Standalone{
@@ -63,11 +43,6 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 
 	ad.Spec = enterprisev3.StandaloneSpec{
 		CommonSplunkSpec: *cs,
-		/*
-			Replicas:
-			SmartStore:
-			AppFrameworkConfig :
-		*/
 	}
 	return ad
 }
