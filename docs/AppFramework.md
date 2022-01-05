@@ -222,13 +222,13 @@ For more information, see the [Description of App Framework Specification fields
 
 
 ## Description of App Framework Specification fields
-App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework involves the following steps:
+The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework requires:
 
-* Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
-* Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)
-* Scope of Apps: Define if the Apps need to be installed locally (such as Standalone, Monitoring Console and License Manager) or cluster-wide (such as Indexer cluster, Search Head Cluster)
+* Remote Source of Apps: Define the remote storage location, including any unique folders and the path to each folder.
+* Destination of Apps: Define which Custom Resources need to be configured.
+* Scope of Apps: Define if the apps need to be installed and run locally (such as Standalone, Monitoring Console and License Manager,) or cluster-wide (such as Indexer Cluster, and Search Head Cluster.)
 
-Here is a typical App framework configuration in a Custom resource definition:
+Here is a typical App framework configuration in a Custom Resource definition:
 
 ```yaml
               appRepo:
@@ -307,29 +307,29 @@ Here is a typical App framework configuration in a Custom resource definition:
 
 ### appRepo
 
-`appRepo` is the start of the App Framework specification, and contains all the configurations required for App framework to be successfully configured
+`appRepo` is the start of the App Framework specification, and contains all the configurations required for App Framework to be successfully configured.
 
 ### volumes
 
-`volumes` helps configure the remote storage volumes. App framework expects apps that are to be installed in various Splunk deployments to be hosted in one or more remote storage volumes
+`volumes` defines the remote storage configurations. The App Framework expects any apps to be installed in various Splunk deployments to be hosted in one or more remote storage volumes.
 
-* `name` uniquely identifies the remote storage volume name within a CR. This is to locally used by the Operator to identify the volume
-* `storageType` describes the type of remote storage. Currently `s3` is the only supported type
-* `provider` describes the remote storage provider. Currently `aws` & `minio` are the supported providers 
-* `endpoint` helps configure the URI/URL of the remote storage endpoint that hosts the apps
+* `name` uniquely identifies the remote storage volume name within a CR. This is used by the Operator to identify the local volume.
+* `storageType` describes the type of remote storage. Currently, `s3` is the only supported storage type.
+* `provider` describes the remote storage provider. Currently, `aws` and `minio` are the supported providers.
+* `endpoint` describes the URI/URL of the remote storage endpoint that hosts the apps.
 * `secretRef` refers to the K8s secret object containing the static remote storage access key.  This parameter is not required if using IAM role based credentials.
-* `path` describes the path (including the bucket) of one or more app sources on the remote store 
+* `path` describes the path (including the folder) of one or more app sources on the remote store.
 
 ### appSources
 
-`appSources` helps configure the name & scope of the appSource, as well as remote storage volume & location
+`appSources` defines the name and scope of the appSource, the remote storage volume, and its location.
 
-* `name` uniquely identifies the App source configuration within a CR. This is to locally used by the Operator to identify the App source
-* `scope` defines the scope of the App to be installed. 
-  * If the scope is `local` the apps will be installed locally on the pod referred to by the CR
-  * If the scope is `cluster` the apps will be installed across the cluster referred to by the CR
-  * If the scope is `clusterWithPreConfig` the apps will be pre-configured before installing across the cluster referred to by the CR
-  * The cluster scope is only supported on CR's that manage cluster-wide app deployment
+* `name` uniquely identifies the App source configuration within a CR. This used locally by the Operator to identify the App source.
+* `scope` defines the scope of the app to be installed. 
+  * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR. 
+  * If the scope is `cluster`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) for deployment across the cluster referred to by the CR.
+  * If the scope is `clusterWithPreConfig`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) and run through a pre-configuration step before being installing across the cluster referred to by the CR.
+  * The cluster scope is only supported on CR's that manage cluster-wide app deployment.
   
     | CRD Type          | Scope support                          | App Framework support |
     | :---------------- | :------------------------------------- | :-------------------- |
@@ -340,18 +340,21 @@ Here is a typical App framework configuration in a Custom resource definition:
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
-* `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section)
-* `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed  
+* `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section.)
+* `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.  
 
 ### appsRepoPollIntervalSeconds
 
-The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage.  If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).
+The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage.  If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. 
+
+When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).
 
 
 ## Manual initiation of app management
-You can prevent the App Framework from automatically polling the remote storage for changes. By setting the CR setting `appsRepoPollIntervalSeconds` to `0`, the App Framework polling is disabled, and the configMap is updated with a new `status` field. The App Framework always performs an initial poll of the remote storage, even when the CR is initialized with polling disabled.
+You can prevent the App Framework from automatically polling the remote storage for app changes. By configuring the `appsRepoPollIntervalSeconds` setting to `0`, the App Framework polling is disabled, and the configMap is updated with a new `status` field. The App Framework will perform an initial poll of the remote storage, even when the CR is initialized with polling disabled.
 
-The 'status' field defaults to 'off'. When you're ready to initiate an app check using the App Framework, manually update the `status` field in the configMap for that CR type to `on`. 
+When you're ready to initiate an app check using the App Framework, manually update the `status` field in the configMap for that CR type to `on`. The 'status' field defaults to 'off'.
+
 For example, you deployed one Standalone CR with app framework enabled. 
 
 ```
@@ -359,7 +362,7 @@ kubectl get standalone
 NAME   PHASE   DESIRED   READY   AGE
 s1     Ready   1         1       13h
 ```
-As mentioned above, Splunk Operator will create the configMap(assuming `default` namespace) `splunk-default-manual-app-update` with an entry for Standalone CR as below -
+As mentioned above, Splunk Operator will create the configMap (assuming `default` namespace) `splunk-default-manual-app-update` with an entry for Standalone CR as below:
 
 ```yaml
 apiVersion: v1
@@ -383,28 +386,30 @@ metadata:
   uid: 413c6053-af4f-4cb3-97e0-6dbe7cd17721
   ```
 
-To trigger manual checking of app/s, update the configMap and set the `status` field to `on` for the Standalone CR as below:
+To trigger manual checking of apps, update the configMap, and set the `status` field to `on` for the Standalone CR as below:
 
 ```kubectl patch cm/splunk-default-manual-app-update --type merge -p '{"data":{"Standalone":"status: on\nrefCount: 1"}}'```
 
-The App Framework will perform its checks and updates, and reset the `status` to `off` when it has completed its tasks.
+The App Framework will perform its checks, update or install apps, and reset the `status` to `off` when it has completed its tasks.
 
-To re-enable the polling, update the CR `appsRepoPollIntervalSeconds` setting to a value greater than 0.
+To reinstate automatic polling, update the CR `appsRepoPollIntervalSeconds` setting to a value greater than 0.
 
-NOTE: All CR's of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CR's of the same type before updating the polling interval. We can have unexpected behavior of polling if we have CRs with a mix of polling enabled and disabled.
+NOTE: All CR's of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CR's of the same type before updating the polling interval. You can experience unexpected polling behavior if there are CRs configured with a mix of polling enabled and disabled.
 
 ## Impact of livenessInitialDelaySeconds and readinessInitialDelaySeconds
 
-* Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes
-* When App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs)
-* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone, Monitoring Console and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of Apps to be installed
+* Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes.
+* When the App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs.)
+* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone, Monitoring Console and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of apps to be installed.
 
 ## App Framework Limitations
 
-The App Framework does not review, preview, analyze, or enable Splunk Apps and Add-ons. The administrator is responsible for previewing the app or add-on contents, verifying the app is enabled, and that the app is supported with the version of Splunk Enterprise used in the containers. For App packaging specifications see [Package apps for Splunk Cloud or Splunk Enterprise](https://dev.splunk.com/enterprise/docs/releaseapps/packageapps/) in the Splunk Enterprise Developer documentation. The app archive files must end with .spl or .tgz; all other files are ignored.
+The App Framework does not preview, analyze, verify versions, or enable Splunk Apps and Add-ons. The administrator is responsible for previewing the app or add-on contents, verifying the app is enabled, and that the app is supported with the version of Splunk Enterprise deployed in the containers. For Splunk app packaging specifications see [Package apps for Splunk Cloud or Splunk Enterprise](https://dev.splunk.com/enterprise/docs/releaseapps/packageapps/) in the Splunk Enterprise Developer documentation. The app archive files must end with .spl or .tgz; all other files are ignored.
 
 1. The App Framework has no support to remove an app or add-on once it’s been deployed. To disable an app, update the archive contents located in the App Source, and set the app.conf state to disabled.
 
 2. The App Framework tracks the app installation state per CR. Whenever you scale up a Standalone CR, all the existing pods will recycle and all the apps in app sources will be re-installed. This is done so that the new replica(s) can install all the apps and not just the apps that were changed recently.
 
-3. When a change in the App Repo is detected by the App Framework, a pod reset is initiated to install the new or modified applications. For the ClusterMaster and SearchHeadCluster CR’s, a pod reset is applied to the cluster manager and deployer instances only. A cluster peer restart might be triggered by the contents of the Splunk apps deployed, but are not initiated by the App Framework.
+3. A cluster peer restart might be triggered by the contents of the Splunk apps deployed, but are not initiated by the App Framework.
+
+4. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster. 
