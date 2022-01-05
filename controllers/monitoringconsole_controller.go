@@ -110,7 +110,7 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
-			common.ConfigChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
 		)).

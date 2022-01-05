@@ -51,8 +51,8 @@ func SecretChangedPredicate() predicate.Predicate {
 	return err
 }
 
-// ConfigChangedPredicate .
-func ConfigChangedPredicate() predicate.Predicate {
+// ConfigMapChangedPredicate .
+func ConfigMapChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
