@@ -93,7 +93,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps that are installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager. 
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager. 
    * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
@@ -154,23 +154,23 @@ This example describes the installation of apps on the Deployer and the Search H
 
 1. Confirm your S3-based remote storage volume path and URL.
 
-2. Configure credentials to connect to remote store by either:
-   * Configure an IAM role for the Operator and Splunk instance pods using a service account or annotations, or
-   * Create a Kubernetes Secret Object with the static storage credentials.
+2. Configure credentials to connect to remote store by:
+   * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations. 
+   * Or, create a Kubernetes Secret Object with the static storage credentials.
      * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
 
-3. Create folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a subset of Splunk Apps and Add-ons. In this example, we have Splunk apps that are installed and run locally on the Deployer, and apps that will be distributed to all cluster search heads by the Deployer. 
+3. Create unique folders on the remote storage volume to use as App Source locations.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the Deployer, and select apps that will be distributed to all cluster search heads by the Deployer. 
    * The apps are split across 3 folders named `searchApps`, `machineLearningApps`, `adminApps` and `ESapps`. The apps placed into  `searchApps`, `machineLearningApps` and `ESapps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
 
-4. Copy your Splunk App or Add-on archive files to the App Source.
-   * In this example, the Splunk Apps for the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework-us-west-2/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework-us-west-2/shcLoc-us/adminAppsLoc/`. Apps that need pre-configuration by the deployer(Ex. Enterprise Security App) before installing to the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/ESappsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
+4. Copy your Splunk app or add-on archive files to the App Source.
+   * In this example, the Splunk apps for the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework-us-west-2/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework-us-west-2/shcLoc-us/adminAppsLoc/`. Apps that need pre-configuration by the deployer before installing to the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/ESappsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
 5. Update the SearchHeadCluster CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
-      * For CR's where the Splunk Enterprise instance will pre-configure before deploying to the search heads,  set the `scope: clusterWithPreConfig`.
-      * For CR's where the Splunk Enterprise instance will deploy the apps(without pre-configuring) to search heads set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes. 
-   * In this example, the Deployer will run some apps locally, and deploy other apps to the search heads. The App Source folder `adminApps` are Splunk Apps that are installed on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder ESapps, deployer pre-configures them, and then deploys them to the search heads.
+      * For CR's where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads, set the `scope: clusterWithPreConfig`.
+      * For CR's where the Splunk Enterprise instance will deploy the apps without pre-configuration to search heads, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes. 
+   * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder `ESappsLoc`, the Deployer will run a pre-configuration step before deploying those apps to the search heads.
 
 Example: SearchHeadCluster.yaml
 
@@ -210,9 +210,13 @@ spec:
 
 6. Apply the Custom Resource specification: `kubectl apply -f SearchHeadCluster.yaml`
 
-The App Framework detects the Splunk App archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the deployer instance for local use. A Pod reset is triggered on the deployer to install any new or modified apps. The App Framework will also scan for changes to the App Source folders based on the polling interval, and deploy updated archives to the instance.
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the Deployer instance for local use. 
 
-The apps in the `searchApps` and `machineLearningApps` folders are deployed to the deployer for use on the search head cluster. The deployer is responsible for deploying those apps to the search heads. The Splunk Search Head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+The apps in the `searchApps` and `machineLearningApps` folders are deployed to the Deployer for use on the clustered search heads. The Deployer is responsible for deploying those apps to the search heads. The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+
+The App Framework calculates a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+
+For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
