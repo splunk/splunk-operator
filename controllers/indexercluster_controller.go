@@ -113,6 +113,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -125,6 +126,11 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				OwnerType:    &enterprisev3.IndexerCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: false,
+				OwnerType:    &enterprisev3.IndexerCluster{},
+			}).
+		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
 				OwnerType:    &enterprisev3.IndexerCluster{},
