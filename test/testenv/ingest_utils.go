@@ -185,7 +185,6 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	if err != nil {
 		return "", "", err
 	}
-	//FIXME
 	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
@@ -222,8 +221,6 @@ func CopyFileToPod(podName string, srcPath string, destPath string, deployment *
 	return stdout.String(), stderr.String(), nil
 }
 
-//go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
-//func cpMakeTar(srcPath, destPath string, writer io.Writer) error
 
 // IngestFileViaMonitor ingests a file into an instance using the monitor CLI
 func IngestFileViaMonitor(logFile string, indexName string, podName string, deployment *Deployment) error {
