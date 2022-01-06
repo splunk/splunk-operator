@@ -124,7 +124,6 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 				return result, err
 			}
 		}
-
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after

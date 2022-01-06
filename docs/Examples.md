@@ -268,15 +268,6 @@ spec:
 EOF
 ```
 
-In the above environment, cluster manager controls the [applications loaded](#installing-splunk-apps) to all
-the parts of the indexer cluster, and the indexer services that it creates select the indexers
-deployed by all the IndexerCluster parts, while the indexer services created by indexer cluster only select the indexers that it manages.
-
-This can also allow to better control
-the upgrade cycle to respect the recommended order: cluster manager, then search heads,
-then indexers, by defining and updating the docker image used by each IndexerCluster part.
-
-
 ### Monitoring Console
 The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods. 
 

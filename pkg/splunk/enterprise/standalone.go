@@ -113,7 +113,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 				return result, err
 			}
 		}
-
 		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -199,7 +198,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
-
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 			if err != nil {
