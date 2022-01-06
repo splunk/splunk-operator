@@ -56,6 +56,7 @@ type PodDetailsStruct struct {
 		PodIPs []struct {
 			IP string `json:"ip"`
 		} `json:"podIPs"`
+		StartTime string `json:"startTime"`
 	} `json:"status"`
 }
 

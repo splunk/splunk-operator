@@ -172,6 +172,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//########## INITIAL VERIFICATIONS ##########
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -261,6 +264,9 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify apps are installed on M4 (cluster-wide)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on M4 pods (cluster-wide)", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
@@ -315,6 +321,9 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATIONS ##########
 			// Verify App Download State on Cluster Manager CR
@@ -383,6 +392,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are updated on M4(cluster-wide)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on M4 pods", appVersion))
@@ -502,6 +514,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//########## INITIAL VERIFICATIONS ##########
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -590,6 +605,9 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V2 apps are installed on (cluster-wide)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
@@ -644,6 +662,9 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
 
 			//########## DOWNGRADE VERIFICATIONS ########
 			// Verify App Download State on Cluster Manager CR
@@ -713,6 +734,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are downgraded on M4 (cluster-wide)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on the M4 pods", appVersion))
@@ -808,6 +832,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//########### INITIAL VERIFICATIONS #########
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -863,6 +890,9 @@ var _ = Describe("m4appfw test", func() {
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are installed on Monitoring Console and M4(cluster-wide)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed cluster-wide on the pods", appVersion))
@@ -961,6 +991,9 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling up of Indexers and Search Heads", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V1 apps are installed cluster-wide
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods after scaling up of Indexers and Search Heads", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
@@ -1055,6 +1088,9 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling down of Indexers and Search Heads", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify apps are installed cluster-wide after scaling down
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods after scaling down of Indexers and Search Heads", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
@@ -1125,6 +1161,9 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			//########## INITIAL VERIFICATION #############
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -1172,6 +1211,9 @@ var _ = Describe("m4appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+
 			// Verify V1 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
@@ -1211,6 +1253,9 @@ var _ = Describe("m4appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATIONS ############
 			// Verify App Download State on Cluster Manager CR
@@ -1254,6 +1299,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify V2 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify V2 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info("Verify apps have been updated to %s on Cluster Manager and Deployer", appVersion)
@@ -1335,6 +1383,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			// ########## INITIAL VERIFICATION #############
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -1386,6 +1437,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on CM and Deployer for app (App List: %s)", appVersion, appFileList))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify Apps are installed cluster-wide
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods", appVersion))
@@ -1497,6 +1551,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
+
 			// ########## Verify Manual Poll disabled after the check #################
 
 			// Verify config map set back to off after poll trigger
@@ -1548,6 +1605,9 @@ var _ = Describe("m4appfw test", func() {
 			// Verify apps are not copied in /etc/apps/ on CM and on Deployer (therefore not installed on Deployer and on CM)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on CM and Deployer for app", appVersion))
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			// Verify apps are installed cluster-wide
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods by running Splunk CLI commands for app", appVersion))
