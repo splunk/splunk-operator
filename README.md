@@ -11,14 +11,13 @@ Administrators to deploy and operate Enterprise deployments in a Kubernetes
 infrastructure. Packaged as a container, it uses the
 [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 to manage Splunk-specific [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
-following best practices to manage all the underlying Kubernetes objects for you. 
+following best practices to manage all the underlying Kubernetes objects for you.
 
 This repository is used to build the Splunk
 [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 for Kubernetes (SOK). If you are just looking for documentation on how to
 deploy and use the latest release, please see the
 [Getting Started Documentation](docs/README.md).
-
 
 ## Prerequisites
 
@@ -33,7 +32,7 @@ You must `export GO111MODULE=on` if cloning these repositories into your
 The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk)
 must also be installed to build this project.
 
-```
+```shell
 git clone -b v1.15.0 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
 make tidy
@@ -43,14 +42,14 @@ make install
 You may need to add `$GOPATH/bin` to you path to run the `operator-sdk`
 command line tool:
 
-```
+```shell
 export PATH=${PATH}:${GOPATH}/bin
 ```
 
 It is also recommended that you install the following golang tools,
 which are used by various `make` targets:
 
-```
+```shell
 go install golang.org/x/lint/golint
 go install golang.org/x/tools/cmd/cover
 go install github.com/mattn/goveralls
@@ -58,14 +57,12 @@ go get -u github.com/mikefarah/yq/v3
 go get -u github.com/go-delve/delve/cmd/dlv
 ```
 
-
 ## Cloning this repository
 
-```
+```shell
 git clone git@github.com:splunk/splunk-operator.git
 cd splunk-operator
 ```
-
 
 ## Repository overview
 
@@ -95,7 +92,6 @@ In addition to the source code, this repository includes:
 * `docs`: Getting Started Guide and other documentation in Markdown format
 * `test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
 
-
 ## Building the operator
 
 You can build the operator by just running `make`.
@@ -121,13 +117,13 @@ Other make targets include (more info below):
 
 Ensure that you have the Custom Resource Definitions and RBAC policies installed in your cluster:
 
-```
+```shell
 make install
 ```
 
 Use this to run the operator as a local foreground process on your machine:
 
-```
+```shell
 make run
 ```
 

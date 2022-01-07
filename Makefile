@@ -273,6 +273,6 @@ generate-artifacts: manifests kustomize ## Deploy controller to the K8s cluster 
 
 clean: stop_clair_scanner
 	@rm -rf ./build/_output
-	@docker rmi  splunk/splunk-operator:latest || true
+	@docker rmi  $(IMG) || true
 	@rm -f clair-scanner
 	@rm -rf clair-scanner-logs
