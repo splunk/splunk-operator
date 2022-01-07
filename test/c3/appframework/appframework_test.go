@@ -2107,8 +2107,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	// Enable when CSPL-1529 is fixed
-	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("integration, c3, appframework: can deploy a C3 SVA with App Framework enabled for manual update", func() {
 			/* Test Steps
 			   ################## SETUP ####################

@@ -1261,8 +1261,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	// Enable when CSPL-1529 is fixed
-	XContext("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with SHC (m4) with App Framework", func() {
 		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 			/* Test Steps
 			   ################## SETUP ####################
