@@ -51,9 +51,9 @@ It is also recommended that you install the following golang tools,
 which are used by various `make` targets:
 
 ```
-go get -u golang.org/x/lint/golint
-go get -u golang.org/x/tools/cmd/cover
-go get -u github.com/mattn/goveralls
+go install golang.org/x/lint/golint
+go install golang.org/x/tools/cmd/cover
+go install github.com/mattn/goveralls
 go get -u github.com/mikefarah/yq/v3
 go get -u github.com/go-delve/delve/cmd/dlv
 ```
@@ -71,9 +71,9 @@ cd splunk-operator
 
 This repository consists of the following code used to build the splunk-operator binary:
 
-* `cmd/manager/main.go`: Provides the main() function, where everything begins
-* `pkg/apis/`: Source code for the operator's custom resource definition types
-* `pkg/controllers/`: Used to register controllers that watch for changes to custom resources
+* `main.go`: Provides the main() function, where everything begins
+* `apis/`: Source code for the operator's custom resource definition types
+* `controllers/`: Used to register controllers that watch for changes to custom resources
 * `pkg/splunk/enterprise/`: Source code for controllers that manage Splunk Enterprise resources
 * `pkg/splunk/controller/`: Common code shared across Splunk controllers
 * `pkg/splunk/common/`: Common code used by most other splunk packages
@@ -84,16 +84,16 @@ This repository consists of the following code used to build the splunk-operator
 that manage custom resources by watching for Kubernetes events.
 The `enterprise`  controllers are implemented using common code provided
 by the `controllers` package. The `enterprise` controllers also use the REST API client
-provided in the `pkg/splunk/client` package. The types provided by `pkg/apis/` and
+provided in the `pkg/splunk/client` package. The types provided by `apis/` and
 common code in the `pkg/splunk/common/` package are used universally. Note that the
 source code for `main()` is generated from a template provided by the Operator SDK.
 
 In addition to the source code, this repository includes:
 
-* `build`: Build scripts, templates, etc. used to build the container image
-* `deploy`: Kubernetes YAML templates used to install the Splunk Operator
+* `tools`: Build scripts, templates, etc. used to build the container image
+* `config`: Kubernetes YAML templates used to install the Splunk Operator
 * `docs`: Getting Started Guide and other documentation in Markdown format
-* `int-test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
+* `test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
 
 
 ## Building the operator
@@ -102,28 +102,27 @@ You can build the operator by just running `make`.
 
 Other make targets include (more info below):
 
-* `make all`: builds `splunk/splunk-operator` container image (same as `make image`)
-* `make build`: builds the `splunk/splunk-operator-builder` container image
-* `make builder-image`: builds `splunk/splunk-operator` using the `splunk/splunk-operator-builder` image
-* `make builder-test`: Runs unit tests using the `splunk/splunk-operator-builder` image
-* `make image`: builds the `splunk/splunk-operator` container image without using `splunk/splunk-operator-builder`
-* `make local`: builds the splunk-operator-local binary for test and debugging purposes
+* `make all`: builds `manager` executable
 * `make test`: Runs unit tests with Coveralls code coverage output to coverage.out
 * `make scorecard`: Runs operator-sdk scorecard tests using OLM installation bundle
 * `make generate`: runs operator-generate k8s, crds and csv commands, updating installation YAML files and OLM bundle
-* `make package`: generates tarball of the `splunk/splunk-operator` container image and installation YAML file
-* `make clean`: removes the binary build output and `splunk/splunk-operator` container image
+* `make docker-build`: generates `splunk-operator` container image  example `make docker-build IMG=docker.io/splunk/splunk-operator:1.1.0`
+* `make docker-push`: push docker image to given repository example `make docker-push IMG=docker.io/splunk/splunk-operator:1.1.0`
+* `make clean`: removes the binary build output and `splunk-operator` container image example `make docker-push IMG=docker.io/splunk/splunk-operator:1.1.0`
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project
 * `make lint`: runs the `golint` utility on all `*.go` source files in this project
-
+* `make bundle-build`: generates `splunk-operator-bundle` bundle container image for OLM example `make bundle-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
+* `make bundle-push`: push OLM bundle docker image to given repository example `make bundle-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
+* `make catalog-build`: generates `splunk-operator-catalog` catalog container image example `make catalog-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
+* `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
 
 ## Running the Splunk Operator
 
-Ensure that you have the Custom Resource Definitions installed in your cluster:
+Ensure that you have the Custom Resource Definitions and RBAC policies installed in your cluster:
 
 ```
-kubectl apply -f config/crd/bases
+make install
 ```
 
 Use this to run the operator as a local foreground process on your machine:
