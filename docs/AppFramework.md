@@ -20,7 +20,7 @@ Utilizing the App Framework requires:
 
 ### How to use the App Framework on a Standalone CR
 
-In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archiv, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
+In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archive, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
