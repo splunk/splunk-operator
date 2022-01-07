@@ -18,19 +18,17 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
-	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"go.uber.org/zap/zapcore"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -38,6 +36,7 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers"
 	debug "github.com/splunk/splunk-operator/controllers/debug"
+	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -58,13 +57,17 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
+	var logEncoder string
+	var logLevel int
 
+	flag.StringVar(&logEncoder, "logEncoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
+	flag.IntVar(&logLevel, "loglevel", int(zapcore.InfoLevel), "set log level")
 
 	opts := zap.Options{
 		Development: true,
@@ -72,13 +75,8 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	watchNamespace, err := getWatchNamespace()
-	if err != nil {
-		setupLog.Error(err, "unable to get WatchNamespace, "+
-			"the manager will watch and manage resources in all namespaces")
-	}
 
 	options := ctrl.Options{
 		Scheme:                 scheme,
@@ -87,26 +85,9 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "270bec8c.splunk.com",
-		Namespace:              watchNamespace,
 	}
 
-	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
-	// inorder to use this option, define the environment variable in the config/manager/manager.yaml
-	// example
-	//...
-	//	env:
-	//	- name: WATCH_NAMESPACE
-	//		value: "ns1,ns2"
-	//	terminationGracePeriodSeconds: 10
-	//...
-	if strings.Contains(watchNamespace, ",") {
-		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
-		// configure cluster-scoped with MultiNamespacedCacheBuilder
-		options.Namespace = ""
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
-	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), config.ManagerOptionsWithNamespaces(setupLog, options))
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -175,20 +156,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-// getWatchNamespace returns the Namespace the operator should be watching for changes
-func getWatchNamespace() (string, error) {
-	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
-	// which specifies the Namespace to watch.
-	// An empty value means the operator is running with cluster scope.
-	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
-
-	ns, found := os.LookupEnv(watchNamespaceEnvVar)
-	if !found {
-		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
-	}
-	return ns, nil
 }
 
 // Note that these endpoints meant to be sensitive and shouldn't be exposed publicly.
