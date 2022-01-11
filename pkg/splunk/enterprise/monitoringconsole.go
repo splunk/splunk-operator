@@ -43,7 +43,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {

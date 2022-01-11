@@ -104,7 +104,6 @@ func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 		scopedLog.Error(err, "Failed to update resource")
 		return err
 	}
-
 	scopedLog.Info("Updated resource")
 
 	return nil

@@ -41,8 +41,7 @@ func newK8EventPublisher(client splcommon.ControllerClient, instance interface{}
 
 // publishEvents adds events to k8s
 func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, message string) {
-	var name string
-	var namespace string
+
 	var event corev1.Event
 
 	// in the case of testing, client is not passed
@@ -54,40 +53,28 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	switch k.instance.(type) {
 	case *enterpriseApi.Standalone:
 		cr := k.instance.(*enterpriseApi.Standalone)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.LicenseMaster:
 		cr := k.instance.(*enterpriseApi.LicenseMaster)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.IndexerCluster:
 		cr := k.instance.(*enterpriseApi.IndexerCluster)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.ClusterMaster:
 		cr := k.instance.(*enterpriseApi.ClusterMaster)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.MonitoringConsole:
 		cr := k.instance.(*enterpriseApi.MonitoringConsole)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
 		cr := k.instance.(*enterpriseApi.SearchHeadCluster)
-		name = cr.Name
-		namespace = cr.Namespace
 		event = cr.NewEvent(eventType, reason, message)
 	default:
 		return
 	}
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("PublishEvent").WithValues("name", name, "namespace", namespace)
+	scopedLog := reqLogger.WithName("PublishEvent")
 	scopedLog.Info("publishing event", "reason", event.Reason, "message", event.Message)
 
 	err := k.client.Create(ctx, &event)

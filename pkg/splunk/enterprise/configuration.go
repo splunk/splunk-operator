@@ -761,7 +761,7 @@ func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType
 // pod is ready if container artifact file is created with contents of "started".
 func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("getReadinessProbe")
 
 	readinessDelay := int32(readinessProbeDefaultDelaySec)
 

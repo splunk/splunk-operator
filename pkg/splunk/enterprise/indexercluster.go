@@ -520,7 +520,7 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 // getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
 func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context) *splclient.SplunkClient {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("indexerClusterPodManager.getClusterManagerClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	scopedLog := reqLogger.WithName("indexerClusterPodManager.getClusterManagerClient")
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string

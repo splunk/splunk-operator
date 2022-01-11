@@ -36,8 +36,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 	objectKind = cr.GetObjectKind().GroupVersionKind().Kind
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
-		"name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("DeleteSplunkPvc")
 
 	var components []string
 	switch objectKind {
