@@ -22,15 +22,15 @@ import (
 
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
@@ -41,7 +41,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {
@@ -49,7 +50,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// validate and updates defaults for CR
-	err := validateClusterManagerSpec(cr)
+	err := validateClusterManagerSpec(ctx, cr)
 	if err != nil {
 		return result, err
 	}
@@ -107,14 +108,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
+			extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
 			}
 		}
 		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
@@ -145,7 +146,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, err := VerifyCMisMultisite(cr, namespaceScopedSecret)
+	extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
@@ -174,7 +175,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 			if cr.Status.AppContext.IsDeploymentInProgress {
 				cr.Status.AppContext.IsDeploymentInProgress = false
@@ -192,7 +193,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-				result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+				result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 			} else {
 				result.Requeue = false
 			}
@@ -220,17 +221,17 @@ func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.C
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterManagerSpec(cr *enterpriseApi.ClusterMaster) error {
+func validateClusterManagerSpec(ctx context.Context, cr *enterpriseApi.ClusterMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
 		if err != nil {
 			return err
 		}
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
 		if err != nil {
 			return err
 		}
@@ -261,7 +262,8 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
 func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
-	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	managerIdxcName := cr.GetName()
@@ -296,7 +298,8 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 		return nil
 	}
 
-	scopedLog := log.WithName("PerformCmBundlePush").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("PerformCmBundlePush").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
@@ -333,7 +336,8 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 
 // PushManagerAppsBundle issues the REST command to for cluster manager bundle push
 func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
-	scopedLog := log.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
@@ -362,9 +366,10 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 }
 
 //VerifyCMisMultisite checks if its a multisite
-func VerifyCMisMultisite(cr *enterpriseApi.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
-	scopedLog := log.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	mgr := clusterManagerPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	cm := mgr.getClusterManagerClient(cr)
 	clusterInfo, err := cm.GetClusterInfo(false)

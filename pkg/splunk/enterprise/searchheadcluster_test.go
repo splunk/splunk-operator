@@ -102,7 +102,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 	wantCalls map[string][]spltest.MockFuncCall, wantError error, initObjects ...client.Object) {
 
 	// test for updating
-	scopedLog := log.WithName(method)
+	scopedLog := logt.WithName(method)
 	cr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -317,7 +317,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 func TestApplyShcSecret(t *testing.T) {
 	ctx := context.TODO()
 	method := "ApplyShcSecret"
-	scopedLog := log.WithName(method)
+	scopedLog := logt.WithName(method)
 	var initObjectList []client.Object
 
 	c := spltest.NewMockClient()
@@ -536,7 +536,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr); err != nil {
+			if err := validateSearchHeadClusterSpec(ctx, &cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getSearchHeadStatefulSet(ctx, c, &cr)
@@ -603,7 +603,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(&cr); err != nil {
+			if err := validateSearchHeadClusterSpec(ctx, &cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getDeployerStatefulSet(ctx, c, &cr)

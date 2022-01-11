@@ -113,7 +113,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(&cr); err != nil {
+			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
 			return getClusterManagerStatefulSet(ctx, c, &cr)

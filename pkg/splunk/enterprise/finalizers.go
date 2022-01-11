@@ -20,6 +20,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -30,11 +31,12 @@ func init() {
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
-func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
 	var objectKind string
 	objectKind = cr.GetObjectKind().GroupVersionKind().Kind
 
-	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var components []string

@@ -21,16 +21,16 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
@@ -40,11 +40,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplySearchHeadCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(cr)
+	err := validateSearchHeadClusterSpec(ctx, cr)
 	if err != nil {
 		return result, err
 	}
@@ -100,7 +101,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 			cr.Status.DeployerPhase = splcommon.PhaseTerminating
@@ -163,7 +164,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.Phase = phase
 
 	if cr.Status.AppContext.AppsSrcDeployStatus != nil && cr.Status.DeployerPhase == splcommon.PhaseReady {
-		markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 		// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 		if cr.Status.AppContext.IsDeploymentInProgress {
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -187,7 +188,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		}
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 		} else {
 			result.Requeue = false
 		}
@@ -222,7 +223,8 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		return err
 	}
 
-	scopedLog := log.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
@@ -247,7 +249,8 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Get search head pod's name
 		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
 
-		scopedLog := log.WithName("ApplyShcSecretPodLoop").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock, "pod", shPodName)
+		reqLogger := log.FromContext(ctx)
+		scopedLog := reqLogger.WithName("ApplyShcSecretPodLoop").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock, "pod", shPodName)
 
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
@@ -472,7 +475,8 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 // getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
 func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	scopedLog := log.WithName("searchHeadClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("searchHeadClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
@@ -574,13 +578,13 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
-func validateSearchHeadClusterSpec(cr *enterpriseApi.SearchHeadCluster) error {
+func validateSearchHeadClusterSpec(ctx context.Context, cr *enterpriseApi.SearchHeadCluster) error {
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
 		if err != nil {
 			return err
 		}

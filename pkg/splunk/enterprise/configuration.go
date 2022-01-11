@@ -31,10 +31,10 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var logC = logf.Log.WithName("splunk.enterprise.configValidation")
+//var log = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -487,7 +487,8 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
-	scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
@@ -614,8 +615,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	livenessProbe := getLivenessProbe(cr, instanceType, spec, additionalDelayForAppInstallation)
-	readinessProbe := getReadinessProbe(cr, instanceType, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec, additionalDelayForAppInstallation)
+	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec, 0)
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -735,8 +736,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	livenessDelay := int32(livenessProbeDefaultDelaySec)
 
@@ -757,8 +759,9 @@ func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *
 
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
-func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	readinessDelay := int32(readinessProbeDefaultDelaySec)
 
@@ -830,7 +833,8 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 		return false
 	}
 
-	scopedLog := log.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
@@ -979,13 +983,14 @@ func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
+func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
 	}
 
-	scopedLog := log.WithName("ValidateAppFrameworkSpec")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ValidateAppFrameworkSpec")
 
 	scopedLog.Info("configCheck", "scope", localScope)
 
@@ -1003,7 +1008,7 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
-	err = validateRemoteVolumeSpec(appFramework.VolList, true)
+	err = validateRemoteVolumeSpec(ctx, appFramework.VolList, true)
 	if err != nil {
 		return err
 	}
@@ -1017,11 +1022,12 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 }
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec
-func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
+func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
 
 	duplicateChecker := make(map[string]bool)
 
-	scopedLog := log.WithName("validateRemoteVolumeSpec")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateRemoteVolumeSpec")
 
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
@@ -1100,7 +1106,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 }
 
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
-func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
+func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi.SmartStoreSpec) error {
 	var err error
 
 	// Smartstore is an optional config (at least) for now
@@ -1114,7 +1120,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
-	err = validateRemoteVolumeSpec(smartstore.VolList, false)
+	err = validateRemoteVolumeSpec(ctx, smartstore.VolList, false)
 	if err != nil {
 		return err
 	}
@@ -1136,7 +1142,8 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
-	scopedLog := log.WithName("GetSmartstoreVolumesConfig")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetSmartstoreVolumesConfig")
 
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {

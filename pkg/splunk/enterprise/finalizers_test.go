@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -154,8 +155,9 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
 }
 
-func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {
+func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(context.Context, splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {
 	var component string
+	ctx := context.TODO()
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		component = "standalone"
@@ -207,13 +209,14 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 
 	c := spltest.NewMockClient()
 	c.ListObj = &pvclist
-	deleted, err := delete(cr, c)
+	deleted, err := delete(ctx, cr, c)
 	if deleted != wantDeleted || err != nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
 	}
 	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
 }
 func TestDeleteSplunkPvc(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -234,13 +237,14 @@ func TestDeleteSplunkPvc(t *testing.T) {
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()
 	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
-	deleted, err := splctrl.CheckForDeletion(&cr, c)
+	deleted, err := splctrl.CheckForDeletion(ctx, &cr, c)
 	if deleted != false || err == nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
 	}
 }
 
 func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -261,7 +265,7 @@ func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()
 	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
-	deleted, err := splctrl.CheckForDeletion(&cr, c)
+	deleted, err := splctrl.CheckForDeletion(ctx, &cr, c)
 	if deleted != false || err == nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
 	}

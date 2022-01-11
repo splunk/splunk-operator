@@ -31,7 +31,10 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var logt = logf.Log.WithName("splunk.enterprise.configValidation")
 
 func TestApplyIndexerCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
@@ -101,7 +104,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 func TestGetClusterManagerClient(t *testing.T) {
 
 	ctx := context.TODO()
-	scopedLog := log.WithName("TestGetClusterManagerClient")
+	scopedLog := logt.WithName("TestGetClusterManagerClient")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -151,7 +154,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 }
 
 func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPHandler, mockSplunkClient *spltest.MockHTTPClient, replicas int32) *indexerClusterPodManager {
-	scopedLog := log.WithName(method)
+	scopedLog := logt.WithName(method)
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -735,7 +738,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 
 func TestApplyIdxcSecret(t *testing.T) {
 	method := "ApplyIdxcSecret"
-	scopedLog := log.WithName(method)
+	scopedLog := logt.WithName(method)
 	var initObjectList []client.Object
 
 	ctx := context.TODO()

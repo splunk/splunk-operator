@@ -17,13 +17,13 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"time"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -38,11 +38,12 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateLicenseManagerSpec(cr)
+	err := validateLicenseManagerSpec(ctx, cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -80,7 +81,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
@@ -132,7 +133,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 			if cr.Status.AppContext.IsDeploymentInProgress {
 				cr.Status.AppContext.IsDeploymentInProgress = false
@@ -141,7 +142,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 		} else {
 			result.Requeue = false
 		}
@@ -166,10 +167,10 @@ func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.Controll
 }
 
 // validateLicenseManagerSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseManagerSpec(cr *enterpriseApi.LicenseMaster) error {
+func validateLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
 		if err != nil {
 			return err
 		}

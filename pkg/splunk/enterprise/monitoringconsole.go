@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sort"
 	"strings"
@@ -41,7 +42,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {
@@ -49,7 +51,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// validate and updates defaults for CR
-	err := validateMonitoringConsoleSpec(cr)
+	err := validateMonitoringConsoleSpec(ctx, cr)
 	if err != nil {
 		return result, err
 	}
@@ -85,7 +87,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
@@ -129,7 +131,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 			if cr.Status.AppContext.IsDeploymentInProgress {
 				cr.Status.AppContext.IsDeploymentInProgress = false
@@ -139,7 +141,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 		} else {
 			result.Requeue = false
 		}
@@ -184,9 +186,9 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 }
 
 // validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
-func validateMonitoringConsoleSpec(cr *enterpriseApi.MonitoringConsole) error {
+func validateMonitoringConsoleSpec(ctx context.Context, cr *enterpriseApi.MonitoringConsole) error {
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
 		if err != nil {
 			return err
 		}

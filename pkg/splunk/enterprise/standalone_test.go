@@ -205,7 +205,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateStandaloneSpec(&cr); err != nil {
+			if err := validateStandaloneSpec(ctx, &cr); err != nil {
 				t.Errorf("validateStandaloneSpec() returned error: %v", err)
 			}
 			return getStandaloneStatefulSet(ctx, c, &cr)

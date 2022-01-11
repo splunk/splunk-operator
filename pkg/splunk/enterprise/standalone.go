@@ -20,14 +20,14 @@ import (
 	"reflect"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
@@ -38,14 +38,16 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateStandaloneSpec(cr)
+	err := validateStandaloneSpec(ctx, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate standalone spec")
@@ -110,7 +112,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			}
 		}
 		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 		} else {
@@ -152,7 +154,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			cr.Status.AppContext.IsDeploymentInProgress = true
 			appStatusContext := cr.Status.AppContext
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				changeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
 			}
 
 			// Now apply the configMap will full app listing.
@@ -205,7 +207,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			}
 		}
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
 			if cr.Status.AppContext.IsDeploymentInProgress {
 				cr.Status.AppContext.IsDeploymentInProgress = false
@@ -214,7 +216,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		}
 		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
+			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
 		} else {
 			result.Requeue = false
 		}
@@ -246,20 +248,20 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(cr *enterpriseApi.Standalone) error {
+func validateStandaloneSpec(ctx context.Context, cr *enterpriseApi.Standalone) error {
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
 	}
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		err := ValidateSplunkSmartstoreSpec(&cr.Spec.SmartStore)
+		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
 		if err != nil {
 			return err
 		}
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
 		if err != nil {
 			return err
 		}

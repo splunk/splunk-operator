@@ -20,6 +20,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // K8EventPublisher structure used to publish k8s event
@@ -85,7 +86,8 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 		return
 	}
 
-	scopedLog := log.WithName("PublishEvent").WithValues("name", name, "namespace", namespace)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("PublishEvent").WithValues("name", name, "namespace", namespace)
 	scopedLog.Info("publishing event", "reason", event.Reason, "message", event.Message)
 
 	err := k.client.Create(ctx, &event)

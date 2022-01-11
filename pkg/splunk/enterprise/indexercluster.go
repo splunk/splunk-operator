@@ -33,6 +33,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
@@ -43,7 +44,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyIndexerCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyIndexerCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
@@ -111,7 +113,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
-		terminating, err := splctrl.CheckForDeletion(cr, client)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
 			cr.Status.ClusterMasterPhase = splcommon.PhaseTerminating
@@ -269,7 +271,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		return err
 	}
 
-	scopedLog := log.WithName("ApplyIdxcSecret").WithValues("Desired replicas", replicas, "IdxcSecretChanged", mgr.cr.Status.IndexerSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyIdxcSecret").WithValues("Desired replicas", replicas, "IdxcSecretChanged", mgr.cr.Status.IndexerSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
@@ -495,7 +498,8 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 
 // getClient for indexerClusterPodManager returns a SplunkClient for the member n
 func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	scopedLog := log.WithName("indexerClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("indexerClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
@@ -515,7 +519,8 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 
 // getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
 func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context) *splclient.SplunkClient {
-	scopedLog := log.WithName("indexerClusterPodManager.getClusterManagerClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("indexerClusterPodManager.getClusterManagerClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string
