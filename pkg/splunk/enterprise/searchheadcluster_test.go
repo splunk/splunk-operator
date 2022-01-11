@@ -315,6 +315,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 }
 
 func TestApplyShcSecret(t *testing.T) {
+	ctx := context.TODO()
 	method := "ApplyShcSecret"
 	scopedLog := log.WithName(method)
 	var initObjectList []client.Object
@@ -322,7 +323,7 @@ func TestApplyShcSecret(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Get namespace scoped secret
-	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
@@ -415,42 +416,42 @@ func TestApplyShcSecret(t *testing.T) {
 	}
 
 	// Set resource version as that of NS secret
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	// Change resource version and test
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	// Update admin password in secret again to hit already set scenario
 	secrets.Data["password"] = []byte{'1'}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	// Test set again for shc_secret
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	// Update admin password in secret again to hit already set scenario
 	secrets.Data["password"] = []byte{'1'}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
@@ -458,7 +459,7 @@ func TestApplyShcSecret(t *testing.T) {
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	mgr.cr.Status.AdminSecretChanged[0] = false
 	// Test set again for admin password
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -473,12 +474,12 @@ func TestApplyShcSecret(t *testing.T) {
 			"password": {'1', '2', '3'},
 		},
 	}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") {
 		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
 	}
@@ -494,12 +495,12 @@ func TestApplyShcSecret(t *testing.T) {
 		},
 	}
 
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") {
 		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
 	}
@@ -507,18 +508,19 @@ func TestApplyShcSecret(t *testing.T) {
 	// Make resource version of ns secret and cr the same
 	mgr.cr.Status.NamespaceSecretResourceVersion = "1"
 	nsSecret.ResourceVersion = mgr.cr.Status.NamespaceSecretResourceVersion
-	err = splutil.UpdateResource(c, nsSecret)
+	err = splutil.UpdateResource(ctx, c, nsSecret)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 }
 
 func TestGetSearchHeadStatefulSet(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -527,7 +529,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
@@ -537,7 +539,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
-			return getSearchHeadStatefulSet(c, &cr)
+			return getSearchHeadStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, fmt.Sprintf("getSearchHeadStatefulSet(Replicas=%d)", cr.Spec.Replicas), f, want)
 	}
@@ -570,7 +572,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	_ = splutil.CreateResource(c, &current)
+	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(splcommon.TestGetSearchHeadStatefulSetT3)
 
@@ -585,6 +587,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 }
 
 func TestGetDeployerStatefulSet(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -593,7 +596,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
@@ -603,7 +606,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 			if err := validateSearchHeadClusterSpec(&cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
-			return getDeployerStatefulSet(c, &cr)
+			return getDeployerStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, "getDeployerStatefulSet()", f, want)
 	}
@@ -622,12 +625,13 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	_ = splutil.CreateResource(c, &current)
+	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-deployer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
 }
 
 func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -666,7 +670,7 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -683,6 +687,7 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 }
 
 func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -747,12 +752,12 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -814,24 +819,24 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 		s3ClientMgr := &S3ClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
 			location: appSource.Location,
-			initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
-				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
 
-		s3Response, err := s3ClientMgr.GetAppsList()
+		s3Response, err := s3ClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -858,6 +863,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -888,12 +894,12 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -931,7 +937,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 	s3ClientMgr := &S3ClientManager{
 		client:          client,
@@ -939,20 +945,20 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 		vol:             &vol,
 		location:        appSource.Location,
-		initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+		getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
-			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -968,21 +974,21 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -992,18 +998,18 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// This should return an error as we have initialized initFn for s3ClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList()
+	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
 	}

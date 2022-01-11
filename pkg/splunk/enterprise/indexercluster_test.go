@@ -99,6 +99,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 }
 
 func TestGetClusterManagerClient(t *testing.T) {
+
+	ctx := context.TODO()
 	scopedLog := log.WithName("TestGetClusterManagerClient")
 	cr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -142,7 +144,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 	}
 	c := spltest.NewMockClient()
 	mgr.c = c
-	cm := mgr.getClusterManagerClient()
+	cm := mgr.getClusterManagerClient(ctx)
 	if cm.ManagementURI != splcommon.TestServiceURLClusterManagerMgmtPort {
 		t.Errorf("getClusterManagerClient() should have returned incorrect mgmt URI")
 	}
@@ -199,11 +201,13 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mgr *indexerClusterPodManager,
 	desiredReplicas int32, wantPhase splcommon.Phase, wantCalls map[string][]spltest.MockFuncCall, wantError error) {
 
+	ctx := context.TODO()
+
 	// initialize client
 	c := spltest.NewMockClient()
 
 	// test update
-	err := mgr.verifyRFPeers(c)
+	err := mgr.verifyRFPeers(ctx, c)
 	if (err == nil && wantError != nil) ||
 		(err != nil && wantError == nil) ||
 		(err != nil && wantError != nil && err.Error() != wantError.Error()) {
@@ -269,14 +273,16 @@ func checkResponseFromUpdateStatus(t *testing.T, method string, mockHandlers []s
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
 
+	ctx := context.TODO()
+
 	mgr := getIndexerClusterPodManager(method, mockHandlers, mockSplunkClient, replicas)
 
 	c := spltest.NewMockClient()
 	mgr.c = c
 
-	err := mgr.updateStatus(statefulSet)
+	err := mgr.updateStatus(ctx, statefulSet)
 	if retry == true {
-		err = mgr.updateStatus(statefulSet)
+		err = mgr.updateStatus(ctx, statefulSet)
 	}
 	return err
 }
@@ -346,6 +352,8 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 
 func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 	var replicas int32 = 1
+
+	ctx := context.TODO()
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1",
@@ -393,12 +401,12 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 	c := spltest.NewMockClient()
 	mgr.c = c
 
-	err := mgr.updateStatus(statefulSet)
+	err := mgr.updateStatus(ctx, statefulSet)
 	if err != nil {
 		t.Errorf("mgr.updateStatus() should not have returned an error here")
 	}
 
-	_, err = mgr.PrepareScaleDown(0)
+	_, err = mgr.PrepareScaleDown(ctx, 0)
 	if err == nil {
 		t.Errorf("mgr.PrepareScaleDown() should have returned an error here")
 	}
@@ -406,6 +414,8 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 
 func TestInvalidPeerInFinishRecycle(t *testing.T) {
 	var replicas int32 = 1
+
+	ctx := context.TODO()
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1",
@@ -452,13 +462,13 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 	c := spltest.NewMockClient()
 	mgr.c = c
 
-	err := mgr.updateStatus(statefulSet)
+	err := mgr.updateStatus(ctx, statefulSet)
 	if err != nil {
 		t.Errorf("mgr.updateStatus() should not have returned an error here")
 	}
 
 	// Here we are trying to call FinishRecycle for a peer which is not in the list.
-	_, err = mgr.FinishRecycle(1)
+	_, err = mgr.FinishRecycle(ctx, 1)
 	if err == nil {
 		t.Errorf("mgr.FinishRecycle() should have returned an error here")
 	}
@@ -620,10 +630,12 @@ func TestIndexerClusterPodManager(t *testing.T) {
 func TestSetClusterMaintenanceMode(t *testing.T) {
 	var initObjectList []client.Object
 
+	ctx := context.TODO()
+
 	c := spltest.NewMockClient()
 
 	// Get namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
@@ -687,7 +699,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 
 	cr.Spec.ClusterMasterRef.Name = cr.GetName()
 	// Enable CM maintenance mode
-	err = SetClusterMaintenanceMode(c, &cr, true, true)
+	err = SetClusterMaintenanceMode(ctx, c, &cr, true, true)
 	if err != nil {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
@@ -697,7 +709,7 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	}
 
 	// Disable CM maintenance mode
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	err = SetClusterMaintenanceMode(ctx, c, &cr, false, true)
 	if err != nil {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
@@ -708,14 +720,14 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 
 	// Disable CM maintenance mode
 	cr.Spec.ClusterMasterRef.Name = "random"
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	err = SetClusterMaintenanceMode(ctx, c, &cr, false, true)
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
 
 	// Empty clusterMaster reference
 	cr.Spec.ClusterMasterRef.Name = ""
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	err = SetClusterMaintenanceMode(ctx, c, &cr, false, true)
 	if err.Error() != splcommon.EmptyClusterMasterRef {
 		t.Errorf("Couldn't detect empty Cluster Manager reference %s", err.Error())
 	}
@@ -726,10 +738,12 @@ func TestApplyIdxcSecret(t *testing.T) {
 	scopedLog := log.WithName(method)
 	var initObjectList []client.Object
 
+	ctx := context.TODO()
+
 	c := spltest.NewMockClient()
 
 	// Get namespace scoped secret
-	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
@@ -857,14 +871,14 @@ func TestApplyIdxcSecret(t *testing.T) {
 	}
 
 	// Set resource version to that of NS secret
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	// Change resource version
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -872,30 +886,30 @@ func TestApplyIdxcSecret(t *testing.T) {
 
 	// Don't set as it is set already
 	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	mgr.cr.Status.IndexerSecretChanged[0] = false
 	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 	// Test set again
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	// Test the setCmMode failure
 	secrets.Data[splcommon.IdxcSecret] = []byte{'a'}
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
@@ -904,7 +918,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mgr.cr.Spec.ClusterMasterRef.Name = ""
 	mgr.cr.Status.MaintenanceMode = false
 	mgr.cr.Status.IndexerSecretChanged = []bool{}
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err.Error() != splcommon.EmptyClusterMasterRef {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -920,12 +934,12 @@ func TestApplyIdxcSecret(t *testing.T) {
 		},
 	}
 
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret) {
 		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
 	}
@@ -933,24 +947,24 @@ func TestApplyIdxcSecret(t *testing.T) {
 	// Test scenario with same namespace secret and cr status resource version
 	nsSecret.ResourceVersion = "1"
 	mgr.cr.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion
-	err = splutil.UpdateResource(c, secrets)
+	err = splutil.UpdateResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	// Test missing secret from pod
 	mgr.cr.Status.NamespaceSecretResourceVersion = "10"
-	err = splutil.DeleteResource(c, secrets)
+	err = splutil.DeleteResource(ctx, c, secrets)
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(ctx, mgr, 1, true)
 	if err.Error() != fmt.Sprintf(splcommon.PodSecretNotFoundError, podName) {
 		t.Errorf("Couldn't recognize missing secret from Pod, error: %s", err.Error())
 	}
@@ -1006,8 +1020,10 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 		},
 	}
 
+	ctx := context.TODO()
+
 	c := spltest.NewMockClient()
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
@@ -1015,10 +1031,10 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	cr.Spec.ClusterMasterRef.Name = "master1"
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateIndexerClusterSpec(&cr); err != nil {
+			if err := validateIndexerClusterSpec(ctx, &cr); err != nil {
 				t.Errorf("validateIndexerClusterSpec() returned error: %v", err)
 			}
-			return getIndexerStatefulSet(c, &cr)
+			return getIndexerStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, "getIndexerStatefulSet()", f, want)
 	}
@@ -1044,7 +1060,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	_ = splutil.CreateResource(c, &current)
+	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(splcommon.TestGetIndexerStatefulSettest4)
 
@@ -1058,7 +1074,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	test(splcommon.TestGetIndexerStatefulSettest5)
 
 	cr.Spec.ClusterMasterRef.Namespace = "other"
-	if err := validateIndexerClusterSpec(&cr); err == nil {
+	if err := validateIndexerClusterSpec(ctx, &cr); err == nil {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")
 	}
 }

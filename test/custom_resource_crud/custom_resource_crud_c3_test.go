@@ -14,6 +14,7 @@
 package crcrud
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -32,6 +33,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	var defaultCPULimits string
 	var newCPULimits string
 	var verificationTimeout time.Duration
+
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -57,27 +60,27 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(mcRef, "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify CPU limits on Indexers before updating the CR
 			indexerCount := 3
@@ -89,20 +92,20 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Change CPU limits to trigger CR update
 			idxc := &enterpriseApi.IndexerCluster{}
 			instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-			err = deployment.GetInstance(instanceName, idxc)
+			err = deployment.GetInstance(ctx, instanceName, idxc)
 			Expect(err).To(Succeed(), "Unable to get instance of indexer cluster")
 			idxc.Spec.Resources.Limits = corev1.ResourceList{
 				"cpu": resource.MustParse(newCPULimits),
 			}
-			err = deployment.UpdateCR(idxc)
+			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
 
 			// Verify Indexer Cluster is updating
 			idxcName := deployment.GetName() + "-idxc"
-			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseUpdating, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating, idxcName)
 
 			// Verify Indexers go to ready state
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Verify CPU limits on Indexers after updating the CR
 			for i := 0; i < indexerCount; i++ {
@@ -120,23 +123,23 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Change CPU limits to trigger CR update
 			shc := &enterpriseApi.SearchHeadCluster{}
 			instanceName = fmt.Sprintf("%s-shc", deployment.GetName())
-			err = deployment.GetInstance(instanceName, shc)
+			err = deployment.GetInstance(ctx, instanceName, shc)
 			Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
 
 			shc.Spec.Resources.Limits = corev1.ResourceList{
 				"cpu": resource.MustParse(newCPULimits),
 			}
-			err = deployment.UpdateCR(shc)
+			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
 
 			// Verify Search Head Cluster is updating
-			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Verify Search Head go to ready state
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
@@ -151,27 +154,27 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(mcRef, "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify Search Heads PVCs (etc and var) exists
 			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-search-head", 3, true, verificationTimeout)
@@ -187,29 +190,29 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(deployment.GetName()+"-shc", shc)
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
 			Expect(err).To(Succeed(), "Unable to GET SHC instance", "SHC Name", shc)
-			err = deployment.DeleteCR(shc)
+			err = deployment.DeleteCR(ctx, shc)
 			Expect(err).To(Succeed(), "Unable to delete SHC instance", "SHC Name", shc)
 
 			// Delete the Indexer Cluster
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(deployment.GetName()+"-idxc", idxc)
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
 			Expect(err).To(Succeed(), "Unable to GET IDXC instance", "IDXC Name", idxc)
-			err = deployment.DeleteCR(idxc)
+			err = deployment.DeleteCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 			// Delete the Cluster Manager
 			cm := &enterpriseApi.ClusterMaster{}
-			err = deployment.GetInstance(deployment.GetName(), cm)
+			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
-			err = deployment.DeleteCR(cm)
+			err = deployment.DeleteCR(ctx, cm)
 			Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manger Name", cm)
 
 			// Delete Monitoring Console
-			err = deployment.GetInstance(mcRef, mc)
+			err = deployment.GetInstance(ctx, mcRef, mc)
 			Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
-			err = deployment.DeleteCR(mc)
+			err = deployment.DeleteCR(ctx, mc)
 			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
 			// Verify Search Heads PVCs (etc and var) have been deleted

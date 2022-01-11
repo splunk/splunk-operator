@@ -14,6 +14,7 @@
 package c3appfw
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -38,6 +39,8 @@ var _ = Describe("c3appfw test", func() {
 	var appSourceNameIdxc string
 	var appSourceNameShc string
 	var uploadedApps []string
+
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -111,11 +114,11 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy Monitoring Console
 			testenvInstance.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testenvInstance.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -143,23 +146,23 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			//######### INITIAL VERIFICATIONS #############
 			// Verify V1 apps are downloaded on Cluster Manager and Deployer
@@ -167,23 +170,23 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are downloaded on Monitoring Console
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Saving current V1 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment)
 
 			// Verify V1 apps are copied to location
 			allPodNames := podNames
@@ -192,23 +195,23 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify V1 apps are copied on Indexers and Search Heads
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify V2 apps are copied on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, true)
 
 			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App List: %s) ", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
 
 			// Verify V1 apps are installed on Indexers and Search Heads
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Search Heads and Indexers pods: %s", appVersion, allPodNames))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// Verify V1 apps are installed on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -240,52 +243,52 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			//############ FINAL VERIFICATIONS ############
 			// Verify V2 apps are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify bundle push status and compare bundle hash with previous V1 bundle hash
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify V2 apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on C3 pods", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
 			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Cluster Manager and Deployer)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
 
 			// Verify V2 apps are updated on Search Heads and Indexers
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Search Heads and Indexers pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			// Verify V2 apps are updated on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -342,11 +345,11 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy Monitoring Console
 			testenvInstance.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testenvInstance.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -374,23 +377,23 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########### INITIAL VERIFICATIONS ###########
 			// Verify V2 apps are downloaded on Cluster Manager and Deployer
@@ -398,23 +401,23 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V2 apps are downloaded on Monitoring Console
 			initContDownloadLocationMCPod := "/init-apps/" + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Saving current V2 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment)
 
 			// Verify V2 apps are copied to location
 			allPodNames := podNames
@@ -423,23 +426,23 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify V2 apps are copied on Indexers and Search Heads
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
 
 			// Verify V2 apps are copied on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
 
 			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
 
 			// Verify V2 apps are installed on Indexers and Search Heads
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
 
 			// Verify V2 apps are installed on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
@@ -471,52 +474,52 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########### FINAL VERIFICATIONS #############
 			// Verify V1 apps are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Monitoring Console", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, initContDownloadLocationMCPod)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify V1 apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on C3 pods", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
 
 			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and Deployer (therefore not installed on Cluster Manager and Deployer)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
 
 			// Verify V1 apps are downgraded on Search Heads and Indexers
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on Search Heads and Indexers pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// Verify V1 apps are downgraded on Monitoring Console
 			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on Monitoring Console pod", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 		})
 	})
@@ -575,20 +578,20 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//########## INITIAL VERIFICATIONS ############
 			// Verify V1 apps are downloaded on Cluster Manager and Deployer
@@ -596,33 +599,33 @@ var _ = Describe("c3appfw test", func() {
 			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info("Verify bundle push status")
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps are copied to correct location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on all pods", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify apps are installed on C3
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed cluster-wide", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//#############  SCALING UP ###################
 			// Get instance of current Search Head Cluster CR with latest config
 			shcName := deployment.GetName() + "-shc"
 			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
+			err = deployment.GetInstance(ctx, shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale up Search Head Cluster
@@ -632,16 +635,16 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update Replicas of Search Head Cluster
 			shc.Spec.Replicas = int32(scaledSHReplicas)
-			err = deployment.UpdateCR(shc)
+			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale up Search Head Cluster")
 
 			// Ensure Search Head Cluster scales up and go to ScalingUp phase
-			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingUp)
 
 			// Get instance of current Indexer CR with latest config
 			idxcName := deployment.GetName() + "-idxc"
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(idxcName, idxc)
+			err = deployment.GetInstance(ctx, idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas := idxc.Spec.Replicas
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
@@ -649,49 +652,49 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update Replicas of Indexer Cluster
 			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
-			err = deployment.UpdateCR(idxc)
+			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed to scale up Indexer Cluster")
 
 			// Ensure Indexer Cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
 
 			// Ensure Indexer Cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Verify New Indexer On Cluster Manager
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
 			testenvInstance.Log.Info(fmt.Sprintf("Checking for New Indexer %s On Cluster Manager", indexerName))
-			Expect(testenv.CheckIndexerOnCM(deployment, indexerName)).To(Equal(true))
+			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//########## SCALING UP VERIFICATIONS #########
 			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
 			testenvInstance.Log.Info("Verify bundle push status after scaling up")
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
 
 			// Verify V1 apps are copied to location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location after scaling up Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling up of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify V1 apps are installed on C3
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Indexers and Search Heads after scaling up", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
+			err = deployment.GetInstance(ctx, shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Scale down Search Head Cluster
@@ -701,14 +704,14 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update Replicas of Search Head Cluster
 			shc.Spec.Replicas = int32(scaledSHReplicas)
-			err = deployment.UpdateCR(shc)
+			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale down Search Head Cluster")
 
 			// Ensure Search Head Cluster scales down and go to ScalingDown phase
-			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingDown)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingDown)
 
 			// Get instance of current Indexer CR with latest config
-			err = deployment.GetInstance(idxcName, idxc)
+			err = deployment.GetInstance(ctx, idxcName, idxc)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 			defaultIndexerReplicas = idxc.Spec.Replicas
 			scaledIndexerReplicas = defaultIndexerReplicas - 1
@@ -716,39 +719,39 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update Replicas of Indexer Cluster
 			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
-			err = deployment.UpdateCR(idxc)
+			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed to Scale down Indexer Cluster")
 
 			// Ensure Indexer Cluster scales down and go to ScalingDown phase
-			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingDown, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingDown, idxcName)
 
 			// Ensure Indexer Cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//######## SCALING DOWN VERIFICATIONS #########
 			// Verify bundle push status
 			testenvInstance.Log.Info("Verify bundle push status after scaling down")
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), int(scaledSHReplicas))
 
 			// Verify apps are copied to correct location
 			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Verify apps are installed cluster-wide after scaling down
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 		})
 	})
@@ -799,20 +802,20 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			indexerReplicas := 3
 			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//############## INITIAL VERIFICATION ##########
 			// Verify V1 apps are downloaded
@@ -821,21 +824,21 @@ var _ = Describe("c3appfw test", func() {
 			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V1 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Cluster Manager and on Deployer (/etc/apps/)", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			// Verify V1 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
 
 			// Verify V1 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -858,35 +861,35 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//########### UPGRADE VERIFICATIONS ###########
 			// Verify V2 apps are downloaded on Cluster Manager and Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Cluster Manager", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are downloaded on Deployer", appVersion))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify V2 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Cluster Manager and on Deployer (/etc/apps/)", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
 			// Verify V2 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 
 			// Verify V2 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})
 
@@ -928,13 +931,13 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
 			testenvInstance.Log.Info("Deploy Cluster Manager")
-			_, err = deployment.DeployClusterMaster(deployment.GetName(), "", "", "")
+			_, err = deployment.DeployClusterMaster(ctx, deployment.GetName(), "", "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the Indexer Cluster
 			testenvInstance.Log.Info("Deploy Single Site Indexer Cluster")
 			indexerReplicas := 3
-			_, err = deployment.DeployIndexerCluster(deployment.GetName()+"-idxc", deployment.GetName(), indexerReplicas, deployment.GetName(), "")
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", deployment.GetName(), indexerReplicas, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Deploy the Search Head Cluster
@@ -957,31 +960,31 @@ var _ = Describe("c3appfw test", func() {
 				Replicas:           3,
 				AppFrameworkConfig: appFrameworkSpecShc,
 			}
-			_, err = deployment.DeploySearchHeadClusterWithGivenSpec(deployment.GetName()+"-shc", shSpec)
+			_, err = deployment.DeploySearchHeadClusterWithGivenSpec(ctx, deployment.GetName()+"-shc", shSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//################## VERIFICATIONS #############
 			// Verify ES is downloaded
 			testenvInstance.Log.Info("Verify ES app is downloaded on Deployer")
 			initContDownloadLocation := "/init-apps/" + appSourceName
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appFileList, initContDownloadLocation)
 
 			// Verify ES app is installed locally on Deployer
 			testenvInstance.Log.Info("Verify ES app is installed locally on Deployer")
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, true, "disabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), deployerPod, esApp, true, "disabled", false, false)
 
 			// Verify ES is installed on Search Heads
 			testenvInstance.Log.Info("Verify ES app is installed on Search Heads")
@@ -990,7 +993,7 @@ var _ = Describe("c3appfw test", func() {
 				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
 				podNames = append(podNames, string(sh))
 			}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, esApp, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, esApp, true, "enabled", false, true)
 		})
 	})
 
@@ -1087,57 +1090,57 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//############ INITIAL VERIFICATIONS ##########
 			// Verify V1 apps with local scope are downloaded
 			initContDownloadLocationLocalIdxc := "/init-apps/" + appSourceNameLocalIdxc
 			initContDownloadLocationLocalShc := "/init-apps/" + appSourceNameLocalShc
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Cluster Manager (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Search Head cluster (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
 
 			// Verify V1 apps with cluster scope are downloaded
 			initContDownloadLocationClusterIdxc := "/init-apps/" + appSourceNameClusterIdxc
 			initContDownloadLocationClusterShc := "/init-apps/" + appSourceNameClusterShc
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Cluster Manager (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Search Head cluster (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Saving current V1 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment)
 
 			// Verify apps with local scope are installed locally on Cluster Manager and on Deployer
 			localPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
 			// Verify apps with cluster scope are installed on Indexers
 			clusterPodNames := []string{}
 			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are installed on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -1169,42 +1172,42 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//########## UPGRADE VERIFICATION #############
 			// Verify apps with local scope are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Cluster Manager (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Search Head cluster (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
 
 			// Verify apps with cluster scope are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Cluster Manager (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Search Head cluster (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps with local scope are upgraded locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are upgraded locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
 
 			// Verify apps with cluster scope are upgraded on Indexers
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are upgraded on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
 		})
 	})
 
@@ -1301,57 +1304,57 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//############# INITIAL VERIFICATION ##########
 			// Verify V2 apps with local scope are downloaded
 			initContDownloadLocationLocalIdxc := "/init-apps/" + appSourceNameLocalIdxc
 			initContDownloadLocationLocalShc := "/init-apps/" + appSourceNameLocalShc
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Cluster Manager (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Search Head cluster (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
 
 			// Verify V1 apps with cluster scope are downloaded
 			initContDownloadLocationClusterIdxc := "/init-apps/" + appSourceNameClusterIdxc
 			initContDownloadLocationClusterShc := "/init-apps/" + appSourceNameClusterShc
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Cluster Manager (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Search Head cluster (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Saving current V2 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment)
 
 			// Verify apps with local scope are installed locally on Cluster Manager and on Deployer
 			localPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
 
 			// Verify apps with cluster scope are installed on Indexers
 			clusterPodNames := []string{}
 			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are installed on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
@@ -1387,42 +1390,42 @@ var _ = Describe("c3appfw test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			//########## DOWNGRADE VERIFICATION ###########
 			// Verify apps with local scope are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Cluster Manager (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downloaded on Search Head cluster (App list: %s)", appVersion, localappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, localappFileList, initContDownloadLocationLocalShc)
 
 			// Verify apps with cluster scope are downloaded
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Cluster Manager (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterIdxc)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downloaded on Search Head cluster (App list: %s)", appVersion, clusterappFileList))
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, clusterappFileList, initContDownloadLocationClusterShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps with local scope are downgraded locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are downgraded locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
 
 			// Verify apps with cluster scope are downgraded on Indexers
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are downgraded on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 		})
 	})
 
@@ -1477,41 +1480,41 @@ var _ = Describe("c3appfw test", func() {
 			testenvInstance.Log.Info("Create Single Site Indexer Cluster and Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			err = deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify apps are downloaded
 			initContDownloadLocationIdxc := "/init-apps/" + appSourceNameIdxc
 			initContDownloadLocationShc := "/init-apps/" + appSourceNameShc
 			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
-			testenv.VerifyAppsDownloadedByInitContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appFileList, initContDownloadLocationIdxc)
+			testenv.VerifyAppsDownloadedByInitContainer(ctx, deployment, testenvInstance, testenvInstance.GetName(), []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}, appFileList, initContDownloadLocationShc)
 
 			// Verify bundle push status
 			testenvInstance.Log.Info("Verify bundle push status")
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Verify apps are copied to location
 			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
 			testenvInstance.Log.Info("Verify apps are copied to correct location")
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
 
 			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
 			testenvInstance.Log.Info("Verify apps are NOT copied to /etc/apps on Cluster Manager and Deployer")
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
 
 			// Get Indexers and Search Heads pod names
 			podNames := []string{}
@@ -1520,7 +1523,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify apps are installed on Indexers and Search Heads
 			testenvInstance.Log.Info("Verify apps are installed on Indexers and Search Heads")
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, true)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, true)
 		})
 	})
 })

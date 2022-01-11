@@ -14,6 +14,7 @@
 package licensemanager
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 	var s3TestDir string
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -59,47 +61,47 @@ var _ = Describe("Licensemanager test", func() {
 			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
 
 			mcRef := deployment.GetName()
-			err = deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, mcRef)
+			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Verify LM is configured on indexers
 			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
 			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
 			indexerPodName = fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(deployment, indexerPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, indexerPodName)
 
 			// Verify LM is configured on SHs
 			searchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 1)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
-			testenv.VerifyLMConfiguredOnPod(deployment, searchHeadPodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
 
 			// Verify LM Configured on Monitoring Console
 			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 		})
 	})
 
@@ -185,19 +187,19 @@ var _ = Describe("Licensemanager test", func() {
 			}
 
 			// Deploy the LM with App Framework
-			_, err = deployment.DeployLicenseManagerWithGivenSpec(deployment.GetName(), spec)
+			_, err = deployment.DeployLicenseManagerWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy LM with App framework")
 
 			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			podName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
 
 			// Verify apps are installed on LM
 			lmPodName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV1, false, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV1, false, "enabled", false, false)
 
 			// Delete files uploaded to S3
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
@@ -220,13 +222,13 @@ var _ = Describe("Licensemanager test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)
 
 			// Verify apps are installed on LM
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV2, true, "enabled", true, false)
 
 			// Delete files uploaded to S3
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)

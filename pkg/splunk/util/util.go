@@ -76,12 +76,12 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 }
 
 // CreateResource creates a new Kubernetes resource using the REST API.
-func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
-	err := client.Create(context.TODO(), obj)
+	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
 		scopedLog.Error(err, "Failed to create resource")
@@ -94,11 +94,11 @@ func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject)
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
-func UpdateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("UpdateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Update(context.TODO(), obj)
+	err := client.Update(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
 		scopedLog.Error(err, "Failed to update resource")
@@ -111,11 +111,11 @@ func UpdateResource(client splcommon.ControllerClient, obj splcommon.MetaObject)
 }
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
-func DeleteResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("DeleteResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Delete(context.TODO(), obj)
+	err := client.Delete(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
 		scopedLog.Error(err, "Failed to delete resource")
@@ -139,12 +139,12 @@ func generateHECToken() []byte {
 }
 
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: podName}
-	err := c.Get(context.TODO(), namespacedName, &pod)
+	err := c.Get(ctx, namespacedName, &pod)
 	if err != nil {
 		return "", "", err
 	}

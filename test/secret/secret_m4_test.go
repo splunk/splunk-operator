@@ -14,6 +14,7 @@
 package secret
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -26,6 +27,7 @@ import (
 var _ = Describe("Secret Test for M4 SVA", func() {
 
 	var deployment *testenv.Deployment
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -62,38 +64,38 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			siteCount := 3
 			mcName := deployment.GetName()
-			err = deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, mcName)
+			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenvInstance.Log.Info("Checkin RF SF before secret change")
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
-			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
 			// Test 1
@@ -109,51 +111,51 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			modifedValue := testenv.RandomDNSName(10)
 			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
-			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
+			err = testenv.ModifySecretObject(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify RF SF is met
 			testenvInstance.Log.Info("Checkin RF SF after secret change")
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(deployment, testenvInstance, secretObjectNames, updatedSecretData, true)
+			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testenvInstance, secretObjectNames, updatedSecretData, true)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			verificationPods := testenv.DumpGetPods(testenvInstance.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySecretsOnPods(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
-			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
 			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 		})
 	})
 })

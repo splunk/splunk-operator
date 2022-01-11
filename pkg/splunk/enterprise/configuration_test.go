@@ -52,6 +52,7 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 }
 
 func TestGetSplunkService(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -61,7 +62,7 @@ func TestGetSplunkService(t *testing.T) {
 
 	test := func(instanceType InstanceType, isHeadless bool, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
 		}
 		configTester(t, fmt.Sprintf("getSplunkService(\"%s\",%t)", instanceType, isHeadless), f, want)
 	}
@@ -104,6 +105,8 @@ func TestGetSplunkDefaults(t *testing.T) {
 }
 
 func TestGetService(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -125,7 +128,7 @@ func TestGetService(t *testing.T) {
 
 	test := func(instanceType InstanceType, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
 		}
 		configTester(t, "getSplunkService()", f, want)
 	}
@@ -1004,6 +1007,8 @@ maxGlobalRawDataSizeMB = 61440
 }
 
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1038,7 +1043,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	}
 
 	// Missing secret object should return an error
-	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged := AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if err == nil {
 		t.Errorf("Missing secret object should return an error. keyChangedFlag: %t", keysChanged)
 	} else if keysChanged {
@@ -1047,17 +1052,17 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// First time secret version reference should be updated
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-scret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1068,14 +1073,14 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	resourceVersion := "3434"
 	secret.SetResourceVersion(resourceVersion)
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated, ok := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
 
 	// No change on the secret object should return false
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
@@ -1083,7 +1088,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// Empty volume list should return false
 	cr.Spec.SmartStore.VolList = nil
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if keysChanged {
 		t.Errorf("Empty volume should not report a key change")
 	}

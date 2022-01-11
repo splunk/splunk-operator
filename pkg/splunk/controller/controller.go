@@ -38,7 +38,7 @@ type SplunkController interface {
 	GetWatchTypes() []client.Object
 
 	// Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-	Reconcile(client.Client, splcommon.MetaObject) (reconcile.Result, error)
+	Reconcile(ctx context.Context, client client.Client, instance splcommon.MetaObject) (reconcile.Result, error)
 }
 
 // AddToManager adds a specific Splunk Controller to the Manager.
@@ -117,7 +117,7 @@ func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Reque
 	instance.SetGroupVersionKind(gvk)
 
 	// call Reconcile method defined for the controller
-	result, err := r.splctrl.Reconcile(r.client, instance)
+	result, err := r.splctrl.Reconcile(ctx, r.client, instance)
 
 	// log what happens next
 	if err != nil {

@@ -519,9 +519,10 @@ func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulS
 	// initialize client
 	c := NewMockClient()
 	c.AddObjects(initObjects)
+	ctx := context.TODO()
 
 	// test update
-	gotPhase, err := mgr.Update(c, statefulSet, desiredReplicas)
+	gotPhase, err := mgr.Update(ctx, c, statefulSet, desiredReplicas)
 	if (err == nil && wantError != nil) ||
 		(err != nil && wantError == nil) ||
 		(err != nil && wantError != nil && errors.Is(err, wantError)) {

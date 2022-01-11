@@ -69,7 +69,7 @@ func (ctrl MockController) GetWatchTypes() []client.Object {
 }
 
 // Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-func (ctrl MockController) Reconcile(client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
+func (ctrl MockController) Reconcile(ctx context.Context, client client.Client, cr splcommon.MetaObject) (reconcile.Result, error) {
 	ctrl.state.reconcileCalls++
 	return ctrl.state.reconcileResult, ctrl.state.reconcileError
 }

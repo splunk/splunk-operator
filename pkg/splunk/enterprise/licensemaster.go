@@ -52,7 +52,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -66,7 +66,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	}()
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
+	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
 		return result, err
 	}
@@ -74,12 +74,12 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -87,31 +87,31 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}
 
 	// create or update a service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, false))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update statefulset
-	statefulSet, err := getLicenseManagerStatefulSet(client, cr)
+	statefulSet, err := getLicenseManagerStatefulSet(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := mgr.Update(client, statefulSet, 1)
+	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
 		return result, err
 	}
@@ -121,12 +121,12 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
 			if err != nil {
 				return result, err
 			}
@@ -153,14 +153,14 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 }
 
 // getLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getLicenseManagerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, 1, []corev1.EnvVar{})
+func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
 	}
 
 	// Setup App framework init containers
-	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }

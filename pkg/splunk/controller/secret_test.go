@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 )
 
 func TestApplySecret(t *testing.T) {
+	ctx := context.TODO()
 	// Re-concile tester
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-secrets"},
@@ -42,7 +44,7 @@ func TestApplySecret(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Data = map[string][]byte{"a": {'1', '2'}}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySecret(c, cr.(*corev1.Secret))
+		_, err := ApplySecret(ctx, c, cr.(*corev1.Secret))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile, false)
@@ -52,7 +54,7 @@ func TestApplySecret(t *testing.T) {
 
 	// Test create
 	current.Data = map[string][]byte{"a": {'2', '1'}}
-	retr, err := ApplySecret(c, &current)
+	retr, err := ApplySecret(ctx, c, &current)
 	if err != nil {
 		t.Errorf("ApplySecret failed %s", err.Error())
 	}
@@ -63,7 +65,7 @@ func TestApplySecret(t *testing.T) {
 
 	// Test Update
 	retr.Data = map[string][]byte{"a": {'1', '2'}}
-	retr2, err := ApplySecret(c, retr)
+	retr2, err := ApplySecret(ctx, c, retr)
 	if err != nil {
 		t.Errorf("ApplySecret failed %s", err.Error())
 	}
@@ -73,7 +75,7 @@ func TestApplySecret(t *testing.T) {
 	}
 
 	// Negative testing
-	_, err = ApplySecret(c, nil)
+	_, err = ApplySecret(ctx, c, nil)
 	if err.Error() != splcommon.InvalidSecretObjectError {
 		t.Errorf("Didn't catch invalid secret object")
 	}

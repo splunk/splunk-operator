@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -30,6 +31,7 @@ import (
 )
 
 func TestApplyConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-defaults"},
 		{MetaName: "*v1.ConfigMap-test-defaults"},
@@ -45,13 +47,14 @@ func TestApplyConfigMap(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Data = map[string]string{"a": "b"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyConfigMap(c, cr.(*corev1.ConfigMap))
+		_, err := ApplyConfigMap(ctx, c, cr.(*corev1.ConfigMap))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestGetConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",
@@ -62,23 +65,24 @@ func TestGetConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
 
-	_, err := GetConfigMap(client, namespacedName)
+	_, err := GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error, when the configMap doesn't exist")
 	}
 
-	_, err = ApplyConfigMap(client, &current)
+	_, err = ApplyConfigMap(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
-	_, err = GetConfigMap(client, namespacedName)
+	_, err = GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Should not return an error, when the configMap exists")
 	}
 }
 
 func TestGetConfigMapResourceVersion(t *testing.T) {
+	ctx := context.TODO()
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",
@@ -89,28 +93,29 @@ func TestGetConfigMapResourceVersion(t *testing.T) {
 	client := spltest.NewMockClient()
 	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
 
-	_, err := GetConfigMap(client, namespacedName)
+	_, err := GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error, when the configMap doesn't exist")
 	}
 
-	_, err = GetConfigMapResourceVersion(client, namespacedName)
+	_, err = GetConfigMapResourceVersion(ctx, client, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error, when the configMap doesn't exist")
 	}
 
-	_, err = ApplyConfigMap(client, &current)
+	_, err = ApplyConfigMap(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
-	_, err = GetConfigMapResourceVersion(client, namespacedName)
+	_, err = GetConfigMapResourceVersion(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Should not return an error, when the configMap exists")
 	}
 }
 
 func TestGetMCConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",
@@ -130,23 +135,24 @@ func TestGetMCConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
 
-	_, err := GetMCConfigMap(client, &cr, namespacedName)
+	_, err := GetMCConfigMap(ctx, client, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Should never return an error as it should have created a empty configmap")
 	}
 
-	_, err = ApplyConfigMap(client, &current)
+	_, err = ApplyConfigMap(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
-	_, err = GetMCConfigMap(client, &cr, namespacedName)
+	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Should not return an error, when the configMap exists")
 	}
 }
 
 func TestSetConfigMapOwnerRef(t *testing.T) {
+	ctx := context.TODO()
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -163,31 +169,31 @@ func TestSetConfigMapOwnerRef(t *testing.T) {
 	}
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 
-	err := SetConfigMapOwnerRef(c, &cr, namespacedName)
+	err := SetConfigMapOwnerRef(ctx, c, &cr, namespacedName)
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 
 	// Create statefulset
-	err = splutil.CreateResource(c, &cr)
+	err = splutil.CreateResource(ctx, c, &cr)
 	if err != nil {
 		t.Errorf("Failed to create resource  statefulset %s", current.GetName())
 	}
 
 	//create configmap
-	_, err = ApplyConfigMap(c, &current)
+	_, err = ApplyConfigMap(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
 	// Test existing owner reference
-	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
+	err = SetConfigMapOwnerRef(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource configmap %s", current.GetName())
 	}
 
 	// Try adding same owner again
-	err = SetConfigMapOwnerRef(c, &cr, namespacedName)
+	err = SetConfigMapOwnerRef(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource configmap %s", current.GetName())
 	}

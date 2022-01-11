@@ -28,7 +28,7 @@ import (
 )
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
-func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
+func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
 	// Invalid secret object
 	if secret == nil {
 		return nil, errors.New(splcommon.InvalidSecretObjectError)
@@ -41,19 +41,19 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 	var result corev1.Secret
 
 	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
-	err := client.Get(context.TODO(), namespacedName, &result)
+	err := client.Get(ctx, namespacedName, &result)
 	if err == nil {
 		scopedLog.Info("Found existing Secret, update if needed")
 		if !reflect.DeepEqual(&result, secret) {
 			result = *secret
-			err = splutil.UpdateResource(client, &result)
+			err = splutil.UpdateResource(ctx, client, &result)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else if k8serrors.IsNotFound(err) {
 		scopedLog.Info("Didn't find secret, creating one")
-		err = splutil.CreateResource(client, secret)
+		err = splutil.CreateResource(ctx, client, secret)
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +61,7 @@ func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*cor
 	} else {
 		return nil, err
 	}
-	err = client.Get(context.TODO(), namespacedName, secret)
+	err = client.Get(ctx, namespacedName, secret)
 
 	return &result, err
 }

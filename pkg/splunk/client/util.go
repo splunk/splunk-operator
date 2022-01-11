@@ -15,6 +15,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -26,12 +27,12 @@ import (
 // Ideally this function should live in test package but due to
 // dependency of some variables in client package and to avoid
 // cyclic dependency this has to live here.
-func NewMockAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 	region := GetRegion(endpoint)
 
-	cl := fn(region, accessKeyID, secretAccessKey)
+	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("Failed to create an AWS S3 client")
 		return nil, err

@@ -27,7 +27,7 @@ import (
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
-func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (splcommon.Phase, error) {
+func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.Deployment) (splcommon.Phase, error) {
 	scopedLog := log.WithName("ApplyDeployment").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
@@ -35,9 +35,9 @@ func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current appsv1.Deployment
 
-	err := c.Get(context.TODO(), namespacedName, &current)
+	err := c.Get(ctx, namespacedName, &current)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return splcommon.PhasePending, splutil.CreateResource(c, revised)
+		return splcommon.PhasePending, splutil.CreateResource(ctx, c, revised)
 	} else if err != nil {
 		return splcommon.PhasePending, err
 	}
@@ -54,17 +54,17 @@ func ApplyDeployment(c splcommon.ControllerClient, revised *appsv1.Deployment) (
 		if *revised.Spec.Replicas < desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingUp, splutil.UpdateResource(c, revised)
+			return splcommon.PhaseScalingUp, splutil.UpdateResource(ctx, c, revised)
 		} else if *revised.Spec.Replicas > desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingDown, splutil.UpdateResource(c, revised)
+			return splcommon.PhaseScalingDown, splutil.UpdateResource(ctx, c, revised)
 		}
 	}
 
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
-		return splcommon.PhaseUpdating, splutil.UpdateResource(c, revised)
+		return splcommon.PhaseUpdating, splutil.UpdateResource(ctx, c, revised)
 	}
 
 	// check if updates are in progress

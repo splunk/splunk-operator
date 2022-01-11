@@ -14,6 +14,7 @@
 package secret
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -27,7 +28,7 @@ import (
 )
 
 var _ = Describe("Secret Test for SVA S1", func() {
-
+	ctx := context.TODO()
 	var deployment *testenv.Deployment
 
 	BeforeEach(func() {
@@ -65,25 +66,25 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Create standalone Deployment with License Manager
 			mcName := deployment.GetName()
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcName)
+			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
-			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
 			// Update Secret Value on Secret Object
@@ -92,41 +93,41 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			modifedValue := testenv.RandomDNSName(10)
 			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
-			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
+			err = testenv.ModifySecretObject(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(deployment, testenvInstance, secretObjectNames, updatedSecretData, true)
+			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testenvInstance, secretObjectNames, updatedSecretData, true)
 
 			// Once Pods are READY check each pod for updated secret keys
 			verificationPods := testenv.DumpGetPods(testenvInstance.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySecretsOnPods(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets on ServerConf on Pod
-			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
 			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
 
 		})
 	})
@@ -150,64 +151,64 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Create standalone Deployment with License Manager
 			mcName := deployment.GetName()
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcName)
+			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), deployment.GetName())
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
-			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
 			// Delete secret Object
-			err = testenv.DeleteSecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			err = testenv.DeleteSecretObject(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(deployment, testenvInstance, secretObjectNames, secretStruct.Data, false)
+			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testenvInstance, secretObjectNames, secretStruct.Data, false)
 
 			// Once Pods are READY check each pod for updated secret keys
 			verificationPods := testenv.DumpGetPods(testenvInstance.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySecretsOnPods(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets on ServerConf on Pod
-			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
 			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 		})
 	})
 
@@ -234,58 +235,58 @@ var _ = Describe("Secret Test for SVA S1", func() {
 					},
 				},
 			}
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), standaloneSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with MonitoringConsoleRef")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
-			secretStruct, err := testenv.GetSecretStruct(deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
 			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
 			// Delete secret by passing empty Data Map
-			err = testenv.ModifySecretObject(deployment, testenvInstance.GetName(), namespaceScopedSecretName, map[string][]byte{})
+			err = testenv.ModifySecretObject(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName, map[string][]byte{})
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(deployment, testenvInstance, secretObjectNames, secretStruct.Data, false)
+			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testenvInstance, secretObjectNames, secretStruct.Data, false)
 
 			// Once Pods are READY check each pod for updated secret keys
 			verificationPods := testenv.DumpGetPods(testenvInstance.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySecretsOnPods(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets on ServerConf on Pod
-			testenv.VerifySplunkServerConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Hec token on InputConf on Pod
 			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(deployment, testenvInstance, verificationPods, secretStruct.Data, false)
+			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testenvInstance, verificationPods, secretStruct.Data, false)
 		})
 	})
 })

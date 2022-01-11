@@ -29,7 +29,7 @@ import (
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
-func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
+func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
 	scopedLog := log.WithName("ApplyConfigMap").WithValues(
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
@@ -37,13 +37,13 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 	namespacedName := types.NamespacedName{Namespace: configMap.GetNamespace(), Name: configMap.GetName()}
 	var current corev1.ConfigMap
 
-	err := client.Get(context.TODO(), namespacedName, &current)
+	err := client.Get(ctx, namespacedName, &current)
 	var dataUpdated bool
 	if err == nil {
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
-			err = splutil.UpdateResource(client, &current)
+			err = splutil.UpdateResource(ctx, client, &current)
 			if err == nil {
 				dataUpdated = true
 			}
@@ -51,20 +51,20 @@ func ApplyConfigMap(client splcommon.ControllerClient, configMap *corev1.ConfigM
 			scopedLog.Info("No changes for ConfigMap")
 		}
 	} else if k8serrors.IsNotFound(err) {
-		err = splutil.CreateResource(client, configMap)
+		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true
 		}
 	}
-	err = client.Get(context.TODO(), namespacedName, configMap)
+	err = client.Get(ctx, namespacedName, configMap)
 
 	return dataUpdated, err
 }
 
 // GetConfigMap gets the ConfigMap resource in a given namespace
-func GetConfigMap(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
+func GetConfigMap(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
-	err := client.Get(context.TODO(), namespacedName, &configMap)
+	err := client.Get(ctx, namespacedName, &configMap)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ func GetConfigMap(client splcommon.ControllerClient, namespacedName types.Namesp
 }
 
 // GetConfigMapResourceVersion gets the Resource version of a configMap
-func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
-	configMap, err := GetConfigMap(client, namespacedName)
+func GetConfigMapResourceVersion(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName) (string, error) {
+	configMap, err := GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		return "", err
 	}
@@ -81,9 +81,9 @@ func GetConfigMapResourceVersion(client splcommon.ControllerClient, namespacedNa
 }
 
 // GetMCConfigMap gets the MC ConfigMap resource required for that MC
-func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
+func GetMCConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
-	err := client.Get(context.TODO(), namespacedName, &configMap)
+	err := client.Get(ctx, namespacedName, &configMap)
 	if err != nil && errors.IsNotFound(err) {
 		//if we don't find mc configmap create and return an empty configmap
 		//var configMap corev1.ConfigMap
@@ -94,14 +94,14 @@ func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 			},
 			Data: make(map[string]string),
 		}
-		err = splutil.CreateResource(client, &configMap)
+		err = splutil.CreateResource(ctx, client, &configMap)
 		if err != nil {
 			return nil, err
 		}
 	} else if err != nil {
 		return nil, err
 	}
-	err = SetConfigMapOwnerRef(client, cr, namespacedName)
+	err = SetConfigMapOwnerRef(ctx, client, cr, namespacedName)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +109,8 @@ func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 }
 
 // SetConfigMapOwnerRef sets owner references for configMap
-func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
-	configMap, err := GetConfigMap(client, namespacedName)
+func SetConfigMapOwnerRef(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
+	configMap, err := GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func SetConfigMapOwnerRef(client splcommon.ControllerClient, cr splcommon.MetaOb
 
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
-	return splutil.UpdateResource(client, configMap)
+	return splutil.UpdateResource(ctx, client, configMap)
 }
 
 // PrepareConfigMap prepares and returns a K8 ConfigMap object for the given data

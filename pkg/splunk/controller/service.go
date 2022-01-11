@@ -26,7 +26,7 @@ import (
 )
 
 // ApplyService creates or updates a Kubernetes Service
-func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) error {
+func ApplyService(ctx context.Context, client splcommon.ControllerClient, revised *corev1.Service) error {
 	scopedLog := log.WithName("ApplyService").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
@@ -34,9 +34,9 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current corev1.Service
 
-	err := client.Get(context.TODO(), namespacedName, &current)
+	err := client.Get(ctx, namespacedName, &current)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return splutil.CreateResource(client, revised)
+		return splutil.CreateResource(ctx, client, revised)
 	} else if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
 		scopedLog.Info("Updating existing Service")
-		return splutil.UpdateResource(client, revised)
+		return splutil.UpdateResource(ctx, client, revised)
 	}
 
 	// all is good!

@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -36,6 +37,7 @@ func init() {
 }
 
 func TestApplySplunkConfig(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -58,7 +60,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.SearchHeadCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
@@ -82,7 +84,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
 		return err
 	}
 	funcCalls = []spltest.MockFuncCall{
@@ -133,6 +135,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 }
 
 func TestApplySmartstoreConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -165,21 +168,21 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	test := func(client *spltest.MockClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplySmartstoreConfigMap(client, cr, smartstore)
+			configMap, _, err := ApplySmartstoreConfigMap(ctx, client, cr, smartstore)
 			configMap.Data["conftoken"] = "1601945361"
 			return configMap, err
 		}
@@ -190,13 +193,14 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
-	_, _, err = ApplySmartstoreConfigMap(client, &cr, &cr.Spec.SmartStore)
+	_, _, err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}
 }
 
 func TestApplyAppListingConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -259,7 +263,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
 	// set the status context
-	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+	initAppFrameWorkContext(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 
 	appsModified, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
 
@@ -269,7 +273,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, appsModified)
+			configMap, _, err := ApplyAppListingConfigMap(ctx, client, cr, appConf, appsSrcDeployStatus, appsModified)
 			// Make the config token as predictable
 			configMap.Data[appsUpdateToken] = "1601945361"
 			return configMap, err
@@ -285,7 +289,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	// Now test the Cluster manager stateful set, to validate the Pod updates with the app listing config map
 	cr.Kind = "ClusterMaster"
-	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err = splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
@@ -295,7 +299,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 			if err := validateClusterManagerSpec(&cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
-			return getClusterManagerStatefulSet(client, &cr)
+			return getClusterManagerStatefulSet(ctx, client, &cr)
 		}
 		configTester(t, fmt.Sprintf("getClusterManagerStatefulSet"), f, want)
 	}
@@ -309,6 +313,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 }
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -344,25 +349,25 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Test existing secret
-	err = splutil.SetSecretOwnerRef(client, secret.GetName(), &cr)
+	err = splutil.SetSecretOwnerRef(ctx, client, secret.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", secret.GetName())
 	}
 
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 
 	if err != nil {
 		t.Errorf("Couldn't Remove S3 Secret object references %v", err)
@@ -388,19 +393,20 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	}
 
 	// S3 secret owner reference removal, with non-existing secret objects
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret object referenced in the volume config doesn't exist")
 	}
 
 	// Smartstore volume config with non-existing secret objects
-	err = DeleteOwnerReferencesForResources(client, &cr, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret objects doesn't exist")
 	}
 }
 
 func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -418,18 +424,18 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-secret object, hence create that secret object
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Missing S3 access key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 access key should return an error")
 	}
@@ -437,14 +443,14 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 
 	// Missing S3 secret key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 secret key should return an error")
 	}
 
 	// When access key and secret keys are present, returned keys should not be empty. Also, should not return an error
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if accessKey == "" || secretKey == "" || err != nil {
 		t.Errorf("Missing S3 Keys / Error not expected, when the Secret object with the S3 specific keys are present")
 	}
@@ -793,6 +799,7 @@ func TestGetNextRequeueTime(t *testing.T) {
 }
 
 func TestValidateMonitoringConsoleRef(t *testing.T) {
+	ctx := context.TODO()
 	currentCM := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -850,13 +857,13 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	//create configmap
-	_, err := splctrl.ApplyConfigMap(client, &currentCM)
+	_, err := splctrl.ApplyConfigMap(ctx, client, &currentCM)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
 	// Create statefulset
-	err = splutil.CreateResource(client, current)
+	err = splutil.CreateResource(ctx, client, current)
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
@@ -869,7 +876,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
@@ -894,7 +901,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}

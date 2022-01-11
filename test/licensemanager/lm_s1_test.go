@@ -14,6 +14,7 @@
 package licensemanager
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -25,6 +26,7 @@ import (
 var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -54,29 +56,29 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Create standalone Deployment with License Manager
 			mcRef := deployment.GetName()
-			standalone, err := deployment.DeployStandaloneWithLM(deployment.GetName(), mcRef)
+			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Deploy Monitoring Console
-			mc, err := deployment.DeployMonitoringConsole(mcRef, deployment.GetName())
+			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)
 
 			// Verify LM Configured on Monitoring Console
 			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
-			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
+			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 		})
 	})
 })

@@ -15,6 +15,7 @@
 package client
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -62,22 +63,22 @@ func TestCheckIfVolumeExists(t *testing.T) {
 }
 
 func TestNewMockAWSS3Client(t *testing.T) {
-
+	ctx := context.TODO()
 	// Test 1. Test the valid case
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
-	_, err := NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
 	}
 
 	// Test 2. Test the invalid case by returning nil client
-	initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
 	}

@@ -15,6 +15,7 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -607,9 +608,9 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 }
 
 // ExecuteCommandOnPod execute command on given pod and return result
-func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (string, error) {
+func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
@@ -619,9 +620,9 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 }
 
 // GetConfigMap Gets the config map for a given k8 config map name
-func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
-	err := deployment.GetInstance(configMapName, configMap)
+	err := deployment.GetInstance(ctx, configMapName, configMap)
 	if err != nil {
 		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
 	}
@@ -679,14 +680,14 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 }
 
 // GetDirsOrFilesInPath returns subdirectory under given path on the given POD
-func GetDirsOrFilesInPath(deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
 	var cmd string
 	if dirOnly {
 		cmd = fmt.Sprintf("cd %s; ls -d */", path)
 	} else {
 		cmd = fmt.Sprintf("cd %s; ls ", path)
 	}
-	stdout, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 	if err != nil {
 		return nil, err
 	}

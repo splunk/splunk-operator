@@ -14,6 +14,7 @@
 package smoke
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -29,6 +30,7 @@ import (
 var _ = Describe("Smoke test", func() {
 
 	var deployment *testenv.Deployment
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -49,31 +51,31 @@ var _ = Describe("Smoke test", func() {
 	Context("Standalone deployment (S1)", func() {
 		It("smoke, basic, s1: can deploy a standalone instance", func() {
 
-			standalone, err := deployment.DeployStandalone(deployment.GetName(), "", "")
+			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
 
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, "")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 		})
 	})
 
@@ -81,23 +83,23 @@ var _ = Describe("Smoke test", func() {
 		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(deployment.GetName(), 1, siteCount, "")
+			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 		})
 	})
 
@@ -105,20 +107,20 @@ var _ = Describe("Smoke test", func() {
 		It("smoke, basic: can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
-			err := deployment.DeployMultisiteCluster(deployment.GetName(), 1, siteCount, "")
+			err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 		})
 	})
 
@@ -139,11 +141,11 @@ var _ = Describe("Smoke test", func() {
 			}
 
 			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), standaloneSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)

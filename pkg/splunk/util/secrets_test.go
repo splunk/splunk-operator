@@ -32,6 +32,7 @@ import (
 
 func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	c := spltest.NewMockClient()
+	ctx := context.TODO()
 
 	wantData := []byte{'1'}
 	// Create secret
@@ -44,7 +45,7 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 			"key1": wantData,
 		},
 	}
-	err := CreateResource(c, &current)
+	err := CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
@@ -81,13 +82,13 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 			},
 		},
 	}
-	err = CreateResource(c, pod)
+	err = CreateResource(ctx, c, pod)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
 
 	// Retrieve secret data from Pod
-	gotData, err := GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "key1")
+	gotData, err := GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
 	if err != nil {
 		t.Errorf("Couldn't get secret data from pod %s", pod.GetName())
 	}
@@ -98,26 +99,26 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data with empty secret token
-	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "")
+	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "")
 	if err.Error() != emptySecretTokenError {
 		t.Errorf("Didn't recognize empty secret token")
 	}
 
 	// Retrieve secret data with invalid secret token
-	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "random")
+	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "random")
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize invalid secret token")
 	}
 
 	// Empty data - Negative testing
 	current.Data = nil
-	err = UpdateResource(c, &current)
+	err = UpdateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Couldn't update secret %s", current.GetName())
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "key1")
+	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize nil secret data")
 	}
@@ -134,13 +135,13 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	}
 
 	// Update pod spec to remove the volume mount
-	err = UpdateResource(c, pod)
+	err = UpdateResource(ctx, c, pod)
 	if err != nil {
 		t.Errorf("Failed to update pod %s", pod.GetName())
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotData, err = GetSpecificSecretTokenFromPod(c, pod.GetName(), "test", "key1")
+	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
 	if err.Error() != emptyPodSpecVolumes {
 		t.Errorf("Didn't recognize empty pod spec volumes")
 	}
@@ -148,6 +149,7 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 
 func TestGetSecretFromPod(t *testing.T) {
 	c := spltest.NewMockClient()
+	ctx := context.TODO()
 
 	// Create secret
 	current := corev1.Secret{
@@ -159,7 +161,7 @@ func TestGetSecretFromPod(t *testing.T) {
 			"key1": {'1', '2', '3'},
 		},
 	}
-	err := CreateResource(c, &current)
+	err := CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
@@ -196,13 +198,13 @@ func TestGetSecretFromPod(t *testing.T) {
 			},
 		},
 	}
-	err = CreateResource(c, pod)
+	err = CreateResource(ctx, c, pod)
 	if err != nil {
 		t.Errorf("Failed to create pod %s", pod.GetName())
 	}
 
 	// Retrieve secret data from Pod
-	gotSecret, err := GetSecretFromPod(c, pod.GetName(), "test")
+	gotSecret, err := GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err != nil {
 		t.Errorf("Couldn't get secret data from pod %s", pod.GetName())
 	}
@@ -213,19 +215,19 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotSecret, err = GetSecretFromPod(c, "random", "test")
+	gotSecret, err = GetSecretFromPod(ctx, c, "random", "test")
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Didn't recognize non-existing pod %s", "random")
 	}
 
 	// Delete secret
-	err = DeleteResource(c, &current)
+	err = DeleteResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Couldn't delete secret %s", current.GetName())
 	}
 
 	// Non-existing secret data from non-existing pod
-	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
+	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != splcommon.SecretNotFoundError {
 		t.Errorf("Didn't recognize non-existing secret %s", "test")
 	}
@@ -242,13 +244,13 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Update pod spec to remove the volume mount
-	err = UpdateResource(c, pod)
+	err = UpdateResource(ctx, c, pod)
 	if err != nil {
 		t.Errorf("Failed to update pod %s", pod.GetName())
 	}
 
 	// Retrieve secret data from Pod
-	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
+	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != emptyPodSpecVolumes {
 		t.Errorf("Couldn't recognize empty pod spec volumes")
 	}
@@ -282,13 +284,13 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Update pod spec to remove the volume mount
-	err = UpdateResource(c, pod)
+	err = UpdateResource(ctx, c, pod)
 	if err != nil {
 		t.Errorf("Failed to update pod %s", pod.GetName())
 	}
 
 	// Retrieve secret data from Pod
-	gotSecret, err = GetSecretFromPod(c, pod.GetName(), "test")
+	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != emptySecretVolumeSource {
 		t.Errorf("Couldn't recognize empty pod spec volumes")
 	}
@@ -308,6 +310,7 @@ func TestGetSecretLabels(t *testing.T) {
 }
 
 func TestSetSecretOwnerRef(t *testing.T) {
+	ctx := context.TODO()
 	cr := TestResource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -327,30 +330,30 @@ func TestSetSecretOwnerRef(t *testing.T) {
 	}
 
 	// Negative testing non-existent secret
-	err := SetSecretOwnerRef(c, current.GetName(), &cr)
+	err := SetSecretOwnerRef(ctx, c, current.GetName(), &cr)
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect missing secret %s", current.GetName())
 	}
 
 	// Create secret
-	err = CreateResource(c, &current)
+	err = CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
 
 	// Test adding secret owner reference
-	err = SetSecretOwnerRef(c, current.GetName(), &cr)
+	err = SetSecretOwnerRef(ctx, c, current.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", current.GetName())
 	}
 
 	// Test existing secret owner reference
-	err = SetSecretOwnerRef(c, current.GetName(), &cr)
+	err = SetSecretOwnerRef(ctx, c, current.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't bail out once owner ref for secret %s is already set", current.GetName())
 	}
 
-	removedReferralCount, err := RemoveSecretOwnerRef(c, current.GetName(), &cr)
+	removedReferralCount, err := RemoveSecretOwnerRef(ctx, c, current.GetName(), &cr)
 
 	if removedReferralCount == 0 || err != nil {
 		t.Errorf("Didn't remove owner reference properly. %v", err)
@@ -358,6 +361,7 @@ func TestSetSecretOwnerRef(t *testing.T) {
 }
 
 func TestRemoveSecretOwnerRef(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := TestResource{
 		ObjectMeta: metav1.ObjectMeta{
@@ -366,7 +370,7 @@ func TestRemoveSecretOwnerRef(t *testing.T) {
 		},
 	}
 	// Test secret not found error condition
-	_, err := RemoveSecretOwnerRef(c, "testSecretName", &cr)
+	_, err := RemoveSecretOwnerRef(ctx, c, "testSecretName", &cr)
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't find secret not found error")
 	}
@@ -377,6 +381,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 	var err error
 	var secretList corev1.SecretList
 
+	ctx := context.TODO()
 	versionedSecretIdentifier := "vsi"
 	c := spltest.NewMockClient()
 	for i := 1; i <= splcommon.MinimumVersionedSecrets; i++ {
@@ -388,7 +393,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 			Data: make(map[string][]byte),
 		}
 
-		err = CreateResource(c, &current)
+		err = CreateResource(ctx, c, &current)
 		if err != nil {
 			t.Errorf("Failed to create secret %s", current.GetName())
 		}
@@ -401,7 +406,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 	c.ListObj = &secretList
 
 	// Remove unwanted secrets(length <= MinimumVersionedSecrets), no-op
-	err = RemoveUnwantedSecrets(c, versionedSecretIdentifier, "test")
+	err = RemoveUnwantedSecrets(ctx, c, versionedSecretIdentifier, "test")
 	if err != nil {
 		t.Errorf("Failed to remove unwanted secrets")
 	}
@@ -410,7 +415,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 	for i := 1; i <= splcommon.MinimumVersionedSecrets; i++ {
 		secretName := splcommon.GetVersionedSecretName(versionedSecretIdentifier, strconv.Itoa(i))
 		namespacedName := types.NamespacedName{Namespace: "test", Name: secretName}
-		err := c.Get(context.TODO(), namespacedName, &current)
+		err := c.Get(ctx, namespacedName, &current)
 		if err != nil {
 			t.Errorf("Didn't find secret %s, deleted incorrectly", secretName)
 		}
@@ -425,7 +430,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 		Data: make(map[string][]byte),
 	}
 
-	err = CreateResource(c, &current)
+	err = CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
@@ -440,14 +445,14 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 		Data: make(map[string][]byte),
 	}
 
-	err = CreateResource(c, &current)
+	err = CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create secret %s", current.GetName())
 	}
 	secretList.Items = append(secretList.Items, current)
 
 	// Remove unwanted secrets, removes v1
-	err = RemoveUnwantedSecrets(c, versionedSecretIdentifier, "test")
+	err = RemoveUnwantedSecrets(ctx, c, versionedSecretIdentifier, "test")
 	if err != nil {
 		t.Errorf("Failed to remove unwanted secrets")
 	}
@@ -456,7 +461,7 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 	for i := 1; i <= splcommon.MinimumVersionedSecrets+1; i++ {
 		secretName := splcommon.GetVersionedSecretName(versionedSecretIdentifier, strconv.Itoa(i))
 		namespacedName := types.NamespacedName{Namespace: "test", Name: secretName}
-		err := c.Get(context.TODO(), namespacedName, &current)
+		err := c.Get(ctx, namespacedName, &current)
 		if i == 1 {
 			if err == nil {
 				t.Errorf("Found secret %s, didn't delete unwanted secret", secretName)
@@ -468,11 +473,12 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 }
 
 func TestGetNamespaceScopedSecret(t *testing.T) {
+	ctx := context.TODO()
 	// Create namespace scoped secret
 	c := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(c, "test")
+	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -485,13 +491,13 @@ func TestGetNamespaceScopedSecret(t *testing.T) {
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := GetNamespaceScopedSecret(c, "test")
+		_, err := GetNamespaceScopedSecret(ctx, c, "test")
 		return err
 	}
 	spltest.ReconcileTester(t, "TestGetNamespaceScopedSecret", nil, nil, createCalls, updateCalls, reconcile, false, namespacescopedsecret)
 
 	// Look for secret in "test" namespace
-	retrievedSecret, err := GetNamespaceScopedSecret(c, "test")
+	retrievedSecret, err := GetNamespaceScopedSecret(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to retrieve secret")
 	}
@@ -501,7 +507,7 @@ func TestGetNamespaceScopedSecret(t *testing.T) {
 	}
 
 	// Negative testing - look for secret in "random" namespace(doesn't exist)
-	retrievedSecret, err = GetNamespaceScopedSecret(c, "random")
+	retrievedSecret, err = GetNamespaceScopedSecret(ctx, c, "random")
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Failed to detect secret in random namespace")
 	}
@@ -511,7 +517,6 @@ func TestGetVersionedSecretVersion(t *testing.T) {
 	var versionedSecretIdentifier, testSecretName string
 	versionedSecretIdentifier = "splunk-test"
 
-	// Test v1-10
 	for testVersion := 1; testVersion < 10; testVersion++ {
 		testSecretName = splcommon.GetVersionedSecretName(versionedSecretIdentifier, strconv.Itoa(testVersion))
 		version, err := GetVersionedSecretVersion(testSecretName, versionedSecretIdentifier)
@@ -554,6 +559,8 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 	var secretData map[string][]byte
 	versionedSecretIdentifier := "splunk-test"
 
+	ctx := context.TODO()
+
 	c := spltest.NewMockClient()
 
 	// Get newer version
@@ -571,7 +578,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 		},
 		Data: secretData,
 	}
-	err = CreateResource(c, &secretv1)
+	err = CreateResource(ctx, c, &secretv1)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -584,7 +591,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 		},
 		Data: secretData,
 	}
-	err = CreateResource(c, &secretv2)
+	err = CreateResource(ctx, c, &secretv2)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -614,7 +621,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 		},
 	}
 
-	latestVersionSecret, latestVersion, _ := GetExistingLatestVersionedSecret(c, "test", versionedSecretIdentifier, false)
+	latestVersionSecret, latestVersion, _ := GetExistingLatestVersionedSecret(ctx, c, "test", versionedSecretIdentifier, false)
 	if latestVersion == -1 {
 		t.Errorf("Didn't find secret correctly %d", latestVersion)
 	}
@@ -629,7 +636,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 
 	// Negative testing - no secrets in namespace
 	newc := spltest.NewMockClient()
-	latestVersionSecret, latestVersion, _ = GetExistingLatestVersionedSecret(newc, "test", versionedSecretIdentifier, false)
+	latestVersionSecret, latestVersion, _ = GetExistingLatestVersionedSecret(ctx, newc, "test", versionedSecretIdentifier, false)
 	if latestVersion != -1 || latestVersionSecret != nil {
 		t.Errorf("Didn't detect zero secrets in namespace condition")
 	}
@@ -638,6 +645,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 func TestGetLatestVersionedSecret(t *testing.T) {
 	versionedSecretIdentifier := "splunk-test"
 
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 
 	// Get newer version
@@ -648,13 +656,13 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	newversion++
 
 	// Create namespace scoped secret
-	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(c, "test")
+	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Creates v1
-	v1Secret, err := GetLatestVersionedSecret(c, nil, "test", versionedSecretIdentifier)
+	v1Secret, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -677,7 +685,7 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	}
 
 	// Retrieves v1 as there is no change in namespace scoped secret data
-	v1SecretRetr, err := GetLatestVersionedSecret(c, nil, "test", versionedSecretIdentifier)
+	v1SecretRetr, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -692,13 +700,13 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 
 	// Update namespace scoped secret with new admin password
 	namespacescopedsecret.Data["password"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
-	err = UpdateResource(c, namespacescopedsecret)
+	err = UpdateResource(context.TODO(), c, namespacescopedsecret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Creates v2, due to change in namespace scoped secret data
-	v2Secret, err := GetLatestVersionedSecret(c, nil, "test", versionedSecretIdentifier)
+	v2Secret, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -709,15 +717,16 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 }
 
 func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 
 	// Create a fully filled namespace scoped secrets object
-	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(c, "test")
+	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splunkReadableData, err := GetSplunkReadableNamespaceScopedSecretData(c, "test")
+	splunkReadableData, err := GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -736,7 +745,7 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := GetSplunkReadableNamespaceScopedSecretData(c, "test")
+		_, err := GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
 		return err
 	}
 
@@ -751,13 +760,14 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 	}
 
 	namespacescopedsecret.Data = secretData
-	err = UpdateResource(c, namespacescopedsecret)
+	err = UpdateResource(context.TODO(), c, namespacescopedsecret)
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped secret")
 	}
 }
 
 func TestApplySplunkSecret(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 
 	cr := TestResource{
@@ -771,13 +781,13 @@ func TestApplySplunkSecret(t *testing.T) {
 	secretName := splcommon.GetVersionedSecretName(versionedSecretIdentifier, splcommon.FirstVersion)
 
 	// Create a fully filled namespace scoped secrets object
-	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(c, "test")
+	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Get namespaced scoped secret data in splunk readable format
-	namespacescopedsecretData, err := GetSplunkReadableNamespaceScopedSecretData(c, "test")
+	namespacescopedsecretData, err := GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -790,7 +800,7 @@ func TestApplySplunkSecret(t *testing.T) {
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySplunkSecret(c, cr.(*TestResource), namespacescopedsecretData, secretName, "test")
+		_, err := ApplySplunkSecret(ctx, c, cr.(*TestResource), namespacescopedsecretData, secretName, "test")
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySplunkSecret", &cr, &cr, createCalls, updateCalls, reconcile, false, namespacescopedsecret)
@@ -803,7 +813,7 @@ func TestApplySplunkSecret(t *testing.T) {
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[1]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySplunkSecret(c, nil, nil, secretName, "test")
+		_, err := ApplySplunkSecret(ctx, c, nil, nil, secretName, "test")
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySplunkSecret", &cr, &cr, createCalls, updateCalls, reconcile, false, namespacescopedsecret)
@@ -824,19 +834,20 @@ func TestApplySplunkSecret(t *testing.T) {
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[1]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySplunkSecret(c, nil, nil, secretName, "test")
+		_, err := ApplySplunkSecret(ctx, c, nil, nil, secretName, "test")
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySplunkSecret", &cr, &cr, createCalls, updateCalls, reconcile, false, namespacescopedsecret, &v1Secret)
 }
 
 func TestApplyNamespaceScopedSecretObject(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyNamespaceScopedSecretObject(c, "test")
+		_, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 		return err
 	}
 
@@ -883,6 +894,7 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 }
 
 func TestGetNamespaceScopedSecretByName(t *testing.T) {
+	ctx := context.TODO()
 	cr := TestResource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -892,10 +904,10 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 
 	c := spltest.NewMockClient()
 
-	_, err := ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	secretName := splcommon.GetNamespaceScopedSecretName("test")
 
-	secret, err := GetSecretByName(c, &cr, secretName)
+	secret, err := GetSecretByName(ctx, c, &cr, secretName)
 	if secret == nil || err != nil {
 		t.Errorf(err.Error())
 	}

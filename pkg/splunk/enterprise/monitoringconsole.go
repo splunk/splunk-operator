@@ -61,7 +61,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -70,16 +70,16 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
 	defer func() {
-		client.Status().Update(context.TODO(), cr)
+		client.Status().Update(ctx, cr)
 		if err != nil {
 			scopedLog.Error(err, "Status update failed")
 		}
 	}()
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
+	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
-		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
 		return result, err
 	}
 
@@ -92,36 +92,36 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning("Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}
 
 	// create or update a headless service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
-		eventPublisher.Warning("ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update a regular service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
-		eventPublisher.Warning("ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update statefulset
-	statefulSet, err := getMonitoringConsoleStatefulSet(client, cr)
+	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning("getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
 		return result, err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := mgr.Update(client, statefulSet, 1)
+	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
-		eventPublisher.Warning("getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
 		return result, err
 	}
 	cr.Status.Phase = phase
@@ -151,11 +151,11 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 }
 
 // getMonitoringConsoleStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise monitoring console instances.
-func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	var monitoringConsoleConfigMap *corev1.ConfigMap
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
-	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}
@@ -172,14 +172,14 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *ente
 
 	//update podTemplate annotation with configMap resource version
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMap}
-	monitoringConsoleConfigMap, err = splctrl.GetMCConfigMap(client, cr, namespacedName)
+	monitoringConsoleConfigMap, err = splctrl.GetMCConfigMap(ctx, client, cr, namespacedName)
 	if err != nil {
 		return nil, err
 	}
 	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
 	// Setup App framework init containers
-	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
 }
 
@@ -195,13 +195,13 @@ func validateMonitoringConsoleSpec(cr *enterpriseApi.MonitoringConsole) error {
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
-func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
+func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
 
 	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
-	err := client.Get(context.TODO(), namespacedName, &current)
+	err := client.Get(ctx, namespacedName, &current)
 
 	if err == nil {
 		revised := current.DeepCopy()
@@ -215,7 +215,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		}
 		if !reflect.DeepEqual(revised.Data, current.Data) {
 			current.Data = revised.Data
-			err = splutil.UpdateResource(client, &current)
+			err = splutil.UpdateResource(ctx, client, &current)
 			if err != nil {
 				return nil, err
 			}
@@ -249,7 +249,7 @@ func ApplyMonitoringConsoleEnvConfigMap(client splcommon.ControllerClient, names
 		Namespace: namespace,
 	}
 
-	err = splutil.CreateResource(client, &current)
+	err = splutil.CreateResource(ctx, client, &current)
 	if err != nil {
 		return nil, err
 	}

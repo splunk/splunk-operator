@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
@@ -22,10 +23,10 @@ type IndexEntry struct {
 }
 
 // GetServiceDataIndexes returns output of services data indexes
-func GetServiceDataIndexes(deployment *Deployment, podName string) (DataIndexesResponse, error) {
+func GetServiceDataIndexes(ctx context.Context, deployment *Deployment, podName string) (DataIndexesResponse, error) {
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/data/indexes?output_mode=json"
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	restResponse := DataIndexesResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
@@ -40,8 +41,8 @@ func GetServiceDataIndexes(deployment *Deployment, podName string) (DataIndexesR
 }
 
 // GetIndexOnPod get list of indexes on given pod
-func GetIndexOnPod(deployment *Deployment, podName string, indexName string) (bool, IndexEntry) {
-	restResponse, err := GetServiceDataIndexes(deployment, podName)
+func GetIndexOnPod(ctx context.Context, deployment *Deployment, podName string, indexName string) (bool, IndexEntry) {
+	restResponse, err := GetServiceDataIndexes(ctx, deployment, podName)
 	indexData := IndexEntry{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse data/indexes response")
@@ -59,10 +60,10 @@ func GetIndexOnPod(deployment *Deployment, podName string, indexName string) (bo
 }
 
 // RestartSplunk Restart splunk inside the container
-func RestartSplunk(deployment *Deployment, podName string) bool {
+func RestartSplunk(ctx context.Context, deployment *Deployment, podName string) bool {
 	stdin := "/opt/splunk/bin/splunk restart -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false
@@ -72,10 +73,10 @@ func RestartSplunk(deployment *Deployment, podName string) bool {
 }
 
 // RollHotToWarm rolls hot buckets to warm for a given index and pod
-func RollHotToWarm(deployment *Deployment, podName string, indexName string) bool {
+func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, indexName string) bool {
 	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false

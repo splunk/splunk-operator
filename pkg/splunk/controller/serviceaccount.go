@@ -27,22 +27,22 @@ import (
 )
 
 // ApplyServiceAccount creates or updates a Kubernetes serviceAccount
-func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
+func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
 	scopedLog := log.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
 		"namespace", serviceAccount.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: serviceAccount.GetNamespace(), Name: serviceAccount.GetName()}
 	var current corev1.ServiceAccount
 
-	err := client.Get(context.TODO(), namespacedName, &current)
+	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
 		if !reflect.DeepEqual(serviceAccount, &current) {
 			scopedLog.Info("Updating service account")
 			current = *serviceAccount
-			err = splutil.UpdateResource(client, &current)
+			err = splutil.UpdateResource(ctx, client, &current)
 		}
 	} else if k8serrors.IsNotFound(err) {
-		err = splutil.CreateResource(client, serviceAccount)
+		err = splutil.CreateResource(ctx, client, serviceAccount)
 	} else if err != nil {
 		return err
 	}
@@ -51,9 +51,9 @@ func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *core
 }
 
 // GetServiceAccount gets the serviceAccount resource in a given namespace
-func GetServiceAccount(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ServiceAccount, error) {
+func GetServiceAccount(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ServiceAccount, error) {
 	var serviceAccount corev1.ServiceAccount
-	err := client.Get(context.TODO(), namespacedName, &serviceAccount)
+	err := client.Get(ctx, namespacedName, &serviceAccount)
 	if err != nil {
 		scopedLog := log.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
 			"namespace", namespacedName.Namespace, "error", err)

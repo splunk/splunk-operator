@@ -39,7 +39,7 @@ func newK8EventPublisher(client splcommon.ControllerClient, instance interface{}
 }
 
 // publishEvents adds events to k8s
-func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
+func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, message string) {
 	var name string
 	var namespace string
 	var event corev1.Event
@@ -88,7 +88,7 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 	scopedLog := log.WithName("PublishEvent").WithValues("name", name, "namespace", namespace)
 	scopedLog.Info("publishing event", "reason", event.Reason, "message", event.Message)
 
-	err := k.client.Create(context.TODO(), &event)
+	err := k.client.Create(ctx, &event)
 	if err != nil {
 		scopedLog.Error(err, "failed to record event, ignoring",
 			"reason", event.Reason, "message", event.Message, "error", err)
@@ -96,11 +96,11 @@ func (k *K8EventPublisher) publishEvent(eventType, reason, message string) {
 }
 
 // Normal publish normal events to k8s
-func (k *K8EventPublisher) Normal(reason, message string) {
-	k.publishEvent(corev1.EventTypeNormal, reason, message)
+func (k *K8EventPublisher) Normal(ctx context.Context, reason, message string) {
+	k.publishEvent(ctx, corev1.EventTypeNormal, reason, message)
 }
 
 // Warning publish warning events to k8s
-func (k *K8EventPublisher) Warning(reason, message string) {
-	k.publishEvent(corev1.EventTypeWarning, reason, message)
+func (k *K8EventPublisher) Warning(ctx context.Context, reason, message string) {
+	k.publishEvent(ctx, corev1.EventTypeWarning, reason, message)
 }

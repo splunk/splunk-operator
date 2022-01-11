@@ -15,6 +15,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -62,12 +63,12 @@ func GetRegion(endpoint string) string {
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientSession
-func InitAWSClientWrapper(region, accessKeyID, secretAccessKey string) interface{} {
-	return InitAWSClientSession(region, accessKeyID, secretAccessKey)
+func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	return InitAWSClientSession(ctx, region, accessKeyID, secretAccessKey)
 }
 
 // InitAWSClientSession initializes and returns a client session object
-func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
 	scopedLog := log.WithName("InitAWSClientSession")
 
 	// Enforcing minimum version TLS1.2
@@ -117,11 +118,11 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 	region := GetRegion(endpoint)
-	cl := fn(region, accessKeyID, secretAccessKey)
+	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("Failed to create an AWS S3 client")
 		return nil, err
@@ -142,7 +143,7 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 }
 
 // RegisterAWSS3Client will add the corresponding function pointer to the map
-func RegisterAWSS3Client() {
+func RegisterAWSS3Client(ctx context.Context) {
 	wrapperObject := GetS3ClientWrapper{GetS3Client: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
 	S3Clients["aws"] = wrapperObject
 }
@@ -163,7 +164,7 @@ func getTLSVersion(tr *http.Transport) string {
 }
 
 // GetAppsList get the list of apps from remote storage
-func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
+func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (S3Response, error) {
 	scopedLog := log.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
@@ -205,12 +206,12 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 }
 
 // GetInitContainerImage returns the initContainer image to be used with this s3 client
-func (awsclient *AWSS3Client) GetInitContainerImage() string {
+func (awsclient *AWSS3Client) GetInitContainerImage(ctx context.Context) string {
 	return ("amazon/aws-cli")
 }
 
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
-func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
+func (awsclient *AWSS3Client) GetInitContainerCmd(ctx context.Context, endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
 	s3AppSrcPath := filepath.Join(bucket, path) + "/"
 	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
 

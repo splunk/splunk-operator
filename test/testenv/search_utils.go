@@ -15,6 +15,7 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -59,7 +60,7 @@ type SearchJobResponseResults struct {
 }
 
 // PerformSearchSync performs a syncronous search within splunk and returns the search results
-func PerformSearchSync(podName string, search string, deployment *Deployment) (string, error) {
+func PerformSearchSync(ctx context.Context, podName string, search string, deployment *Deployment) (string, error) {
 	// Build the search curl command and send it to an instance
 	curlCmd := "curl -ks -u"
 	username := "admin"
@@ -68,7 +69,7 @@ func PerformSearchSync(podName string, search string, deployment *Deployment) (s
 
 	searchReq := fmt.Sprintf("%s %s:%s %s -d output_mode=json -d search=\"search %s\"", curlCmd, username, password, url, search)
 	command := []string{"/bin/sh"}
-	searchReqResp, stderr, err := deployment.PodExecCommand(podName, command, searchReq, false)
+	searchReqResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchReq, false)
 	_ = stderr
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command)
@@ -82,7 +83,7 @@ func PerformSearchSync(podName string, search string, deployment *Deployment) (s
 }
 
 // PerformSearchReq makes a search request for a search to be performed.  Returns a sid to be used to check for status and results
-func PerformSearchReq(podName string, search string, deployment *Deployment) (string, error) {
+func PerformSearchReq(ctx context.Context, podName string, search string, deployment *Deployment) (string, error) {
 	// Build the search curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"
@@ -93,7 +94,7 @@ func PerformSearchReq(podName string, search string, deployment *Deployment) (st
 
 	// Send search request to instance
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, searchReq, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchReq, false)
 	_ = stderr
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command)
@@ -114,7 +115,7 @@ func PerformSearchReq(podName string, search string, deployment *Deployment) (st
 }
 
 // GetSearchStatus checks the search status for a given <sid>
-func GetSearchStatus(podName string, sid string, deployment *Deployment) (*SearchJobStatusResponse, error) {
+func GetSearchStatus(ctx context.Context, podName string, sid string, deployment *Deployment) (*SearchJobStatusResponse, error) {
 	// Build search status request curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"
@@ -125,7 +126,7 @@ func GetSearchStatus(podName string, sid string, deployment *Deployment) (*Searc
 
 	// Send search status request to instance
 	command := []string{"/bin/sh"}
-	searchStatusResp, stderr, err := deployment.PodExecCommand(podName, command, searchStatusReq, false)
+	searchStatusResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchStatusReq, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command, "stderr", stderr)
 		return nil, err
@@ -142,7 +143,7 @@ func GetSearchStatus(podName string, sid string, deployment *Deployment) (*Searc
 }
 
 // GetSearchResults retrieve the results for a given <sid> once the search status isDone == true
-func GetSearchResults(podName string, sid string, deployment *Deployment) (string, error) {
+func GetSearchResults(ctx context.Context, podName string, sid string, deployment *Deployment) (string, error) {
 	// Build search results request curl command
 	curlCmd := "curl -ks -u"
 	url := "https://localhost:8089/services/search/jobs"
@@ -153,7 +154,7 @@ func GetSearchResults(podName string, sid string, deployment *Deployment) (strin
 
 	// Send search results request to instance
 	command := []string{"/bin/sh"}
-	searchResultsResp, stderr, err := deployment.PodExecCommand(podName, command, searchResultsReq, false)
+	searchResultsResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, searchResultsReq, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute cmd on pod", "pod", podName, "command", command, "stderr", stderr)
 		return "", err

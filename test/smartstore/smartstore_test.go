@@ -1,6 +1,7 @@
 package smartstore
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -11,7 +12,7 @@ import (
 )
 
 var _ = Describe("Smartstore test", func() {
-
+	ctx := context.TODO()
 	var deployment *testenv.Deployment
 
 	BeforeEach(func() {
@@ -53,29 +54,29 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			// Deploy Standalone
-			standalone, err := deployment.DeployStandaloneWithGivenSmartStoreSpec(deployment.GetName(), smartStoreSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSmartStoreSpec(ctx, deployment.GetName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			for indexName := range indexVolumeMap {
-				testenv.VerifyIndexFoundOnPod(deployment, podName, indexName)
+				testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 			}
 
 			// Ingest data to the index
 			for indexName := range indexVolumeMap {
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(logFile, indexName, podName, deployment)
+				testenv.IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
 			}
 
 			// Roll Hot Buckets on the test index by restarting splunk and check for index on S3
 			for indexName := range indexVolumeMap {
-				testenv.RollHotToWarm(deployment, podName, indexName)
-				testenv.VerifyIndexExistsOnS3(deployment, indexName, podName)
+				testenv.RollHotToWarm(ctx, deployment, podName, indexName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
 		})
 	})
@@ -100,29 +101,29 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			// Deploy Standalone with given smartstore spec
-			standalone, err := deployment.DeployStandaloneWithGivenSmartStoreSpec(deployment.GetName(), smartStoreSpec)
+			standalone, err := deployment.DeployStandaloneWithGivenSmartStoreSpec(ctx, deployment.GetName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Check index on pod
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyIndexFoundOnPod(deployment, podName, indexName)
+			testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 
 			// Check special index configs
-			testenv.VerifyIndexConfigsMatch(deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
+			testenv.VerifyIndexConfigsMatch(ctx, deployment, podName, indexName, specialConfig["MaxGlobalDataSizeMB"], specialConfig["MaxGlobalRawDataSizeMB"])
 
 			// Ingest data to the index
 			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 			testenv.CreateMockLogfile(logFile, 2000)
-			testenv.IngestFileViaMonitor(logFile, indexName, podName, deployment)
+			testenv.IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
 
 			// Roll Hot Buckets on the test index by restarting splunk
-			testenv.RollHotToWarm(deployment, podName, indexName)
+			testenv.RollHotToWarm(ctx, deployment, podName, indexName)
 
 			// Check for indexes on S3
-			testenv.VerifyIndexExistsOnS3(deployment, indexName, podName)
+			testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 
 			// Verify Cachemanager Values
 			serverConfPath := "/opt/splunk/etc/apps/splunk-operator/local/server.conf"
@@ -159,31 +160,31 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(deployment.GetName(), 1, siteCount, testenvInstance.GetIndexSecretName(), smartStoreSpec)
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testenvInstance.GetIndexSecretName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify MC Pod is Ready
 			// testenv.MCPodReady(testenvInstance.GetName(), deployment)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
 
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexFoundOnPod(deployment, podName, indexName)
+				testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, indexName)
 			}
 
 			// Ingest data to the index
@@ -191,19 +192,19 @@ var _ = Describe("Smartstore test", func() {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
 				testenv.CreateMockLogfile(logFile, 2000)
-				testenv.IngestFileViaMonitor(logFile, indexName, podName, deployment)
+				testenv.IngestFileViaMonitor(ctx, logFile, indexName, podName, deployment)
 			}
 
 			// Roll Hot Buckets on the test index per indexer
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.RollHotToWarm(deployment, podName, indexName)
+				testenv.RollHotToWarm(ctx, deployment, podName, indexName)
 			}
 
 			// Roll index buckets and Check for indexes on S3
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
-				testenv.VerifyIndexExistsOnS3(deployment, indexName, podName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
 		})
 	})

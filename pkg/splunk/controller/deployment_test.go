@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -50,7 +51,7 @@ func TestApplyDeployment(t *testing.T) {
 	}
 	wantPhaseNum := 0
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		gotPhase, err := ApplyDeployment(c, cr.(*appsv1.Deployment))
+		gotPhase, err := ApplyDeployment(context.TODO(), c, cr.(*appsv1.Deployment))
 		if gotPhase != wantPhases[wantPhaseNum] {
 			t.Errorf("TestApplyDeployment() got phase[%d] = %s; want %s", wantPhaseNum, gotPhase, wantPhases[wantPhaseNum])
 		}
@@ -96,7 +97,7 @@ func TestApplyDeployment(t *testing.T) {
 	current.Status.ReadyReplicas = 5
 	current.Status.UpdatedReplicas = 3
 	wantPhase := splcommon.PhaseUpdating
-	gotPhase, err := ApplyDeployment(c, &current)
+	gotPhase, err := ApplyDeployment(context.TODO(), c, &current)
 	if gotPhase != wantPhase {
 		t.Errorf("TestApplyDeployment() got phase = %s; want %s", gotPhase, wantPhase)
 	}
@@ -112,7 +113,7 @@ func TestApplyDeployment(t *testing.T) {
 	current.Status.ReadyReplicas = 3
 	current.Status.UpdatedReplicas = 5
 	wantPhase = splcommon.PhaseScalingUp
-	gotPhase, err = ApplyDeployment(c, &current)
+	gotPhase, err = ApplyDeployment(context.TODO(), c, &current)
 	if gotPhase != wantPhase {
 		t.Errorf("TestApplyDeployment() got phase = %s; want %s", gotPhase, wantPhase)
 	}

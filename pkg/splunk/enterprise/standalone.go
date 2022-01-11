@@ -47,7 +47,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(cr)
 	if err != nil {
-		eventPublisher.Warning("validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate standalone spec")
 		return result, err
 	}
@@ -57,14 +57,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
-		AreRemoteVolumeKeysChanged(client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
+		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
-			eventPublisher.Warning("AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
 			return result, err
 		}
 
-		_, _, err := ApplySmartstoreConfigMap(client, cr, &cr.Spec.SmartStore)
+		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
 		}
@@ -76,9 +76,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning("initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -86,30 +86,30 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 	defer func() {
-		client.Status().Update(context.TODO(), cr)
+		client.Status().Update(ctx, cr)
 		if err != nil {
-			eventPublisher.Warning("Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
 			scopedLog.Error(err, "Status update failed")
 		}
 	}()
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
+	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
 	if err != nil {
-		eventPublisher.Warning("ApplySplunkConfig", fmt.Sprintf("create/update configmap resource failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create/update configmap resource failed %s", err.Error()))
 		return result, err
 	}
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
-				eventPublisher.Warning("ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(client, cr, &cr.Spec.SmartStore)
+		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating
@@ -120,16 +120,16 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update a headless service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
 	if err != nil {
-		eventPublisher.Warning("ApplyService", fmt.Sprintf("create/update headless service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service failed %s", err.Error()))
 		return result, err
 	}
 
 	// create or update a regular service
-	err = splctrl.ApplyService(client, getSplunkService(cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
 	if err != nil {
-		eventPublisher.Warning("ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
 		return result, err
 	}
 
@@ -143,7 +143,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
-		isScalingUp, err := splctrl.IsStatefulSetScalingUp(client, cr, statefulsetName, cr.Spec.Replicas)
+		isScalingUp, err := splctrl.IsStatefulSetScalingUp(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
 		} else if isScalingUp {
@@ -156,33 +156,33 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			}
 
 			// Now apply the configMap will full app listing.
-			_, _, err = ApplyAppListingConfigMap(client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus, false)
+			_, _, err = ApplyAppListingConfigMap(ctx, client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus, false)
 			if err != nil {
-				eventPublisher.Warning("ApplyAppListingConfigMap", fmt.Sprintf("apply app list config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyAppListingConfigMap", fmt.Sprintf("apply app list config map failed %s", err.Error()))
 				return result, err
 			}
 		}
 	}
 
 	// create or update statefulset
-	statefulSet, err := getStandaloneStatefulSet(client, cr)
+	statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning("getStandaloneStatefulSet", fmt.Sprintf("get standalone status set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "getStandaloneStatefulSet", fmt.Sprintf("get standalone status set failed %s", err.Error()))
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
-		eventPublisher.Warning("validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
 		return result, err
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := mgr.Update(client, statefulSet, cr.Spec.Replicas)
+	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
-		eventPublisher.Warning("validateStandaloneSpec", fmt.Sprintf("update stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("update stateful set failed %s", err.Error()))
 
 		return result, err
 	}
@@ -192,15 +192,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.DeleteReferencesToAutomatedMCIfExists(client, cr, namespacedName)
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning("DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 			if err != nil {
-				eventPublisher.Warning("ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -226,21 +226,21 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}
 
-	smartStoreConfigMap := getSmartstoreConfigMap(client, cr, SplunkStandalone)
+	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
 
 	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
 	}
 
 	// Setup App framework init containers
-	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }

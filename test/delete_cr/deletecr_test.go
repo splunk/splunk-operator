@@ -15,6 +15,7 @@
 package deletecr
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 
@@ -34,6 +35,7 @@ func dumpGetPods(ns string) {
 var _ = Describe("DeleteCR test", func() {
 
 	var deployment *testenv.Deployment
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
@@ -54,20 +56,20 @@ var _ = Describe("DeleteCR test", func() {
 	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("deletecr: can deploy indexers and search head cluster", func() {
 
-			err := deployment.DeploySingleSiteCluster(deployment.GetName(), 3, true /*shc*/, "")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Verify no SH in disconnected status is present on CM
-			testenv.VerifyNoDisconnectedSHPresentOnCM(deployment, testenvInstance)
+			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testenvInstance)
 
 		})
 	})
