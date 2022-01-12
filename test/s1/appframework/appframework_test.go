@@ -1033,6 +1033,9 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework(MANUAL POLL) and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -1063,10 +1066,40 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Upload V1 apps to S3
+			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Monitoring Console
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpecMC,
+			}
+
+			// Deploy Monitoring Console
+			testenvInstance.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Upload V1 apps to S3
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1080,6 +1113,9 @@ var _ = Describe("s1appfw test", func() {
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1091,6 +1127,9 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
 
@@ -1099,8 +1138,14 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
+			// Verify App Download State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
+
 			// Verify App Copy State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhasePodCopy, appFileList)
+
+			// Verify App Copy State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Standalone
 			opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), standalone.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
@@ -1108,8 +1153,16 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathStandalone))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
+			// Verify Apps Deleted on Operator Pod for Monitoring Console
+			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathMonitoringConsole))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
+
 			// Verify App Install State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseInstall, appFileList)
+
+			// Verify App Install State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
 			downloadLocationStandalonePod := "/init-apps/" + appSourceName
@@ -1117,16 +1170,23 @@ var _ = Describe("s1appfw test", func() {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
-			// Verify Apps are copied to location
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on standalone(/etc/apps/)", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV1, true, true)
+			// Verify V1 apps are deleted on Monitoring Console Pod
+			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
+
+			// Verify V1 apps are copied to location
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Standalone and Monitoring Console", appVersion))
+			podNames := []string{standalonePodName, mcPodName}
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			//Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
-			//Verify Apps are installed
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed Locally on CM and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV1, true, "enabled", false, false)
+			// Verify V1 apps are installed
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Standalone and Monitoring Console", appVersion))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
 			//############### UPGRADE APPS ################
 
@@ -1137,8 +1197,13 @@ var _ = Describe("s1appfw test", func() {
 			//Upload new Versioned Apps to S3
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
+
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
@@ -1147,29 +1212,49 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 
 			appVersion = "V1"
 			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
+			// Verify App Download State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
+
 			// Verify App Copy State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhasePodCopy, appFileList)
+
+			// Verify App Copy State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Standalone
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathStandalone))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
+			// Verify Apps Deleted on Operator Pod for Monitoring Console
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathMonitoringConsole))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
+
 			// Verify App Install State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseInstall, appFileList)
+
+			// Verify App Install State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
+			// Verify V1 apps are deleted on Monitoring Console Pod
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
+
 			//Verify Apps are not updated
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not auto installed on standalone", "V2"))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV1, true, "enabled", false, false)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not auto installed on standalone and Monitoring Console", "V2"))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
 
 			// ############ ENABLE MANUAL POLL ############
 
@@ -1182,11 +1267,15 @@ var _ = Describe("s1appfw test", func() {
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
+			config.Data["MonitoringConsole"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
@@ -1194,37 +1283,54 @@ var _ = Describe("s1appfw test", func() {
 			//Verify config map set back to off after poll trigger
 			testenvInstance.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
-			Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
 
 			// Verify App Download State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
 
+			// Verify App Download State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
+
 			// Verify App Copy State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhasePodCopy, appFileList)
+
+			// Verify App Copy State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Standalone
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathStandalone))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
 
+			// Verify Apps Deleted on Operator Pod for Monitoring Console
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s Path %s", appVersion, opLocalAppPathMonitoringConsole))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
+
 			// Verify App Install State on Standalone CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseInstall, appFileList)
+
+			// Verify App Install State on Monitoring Console CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
+			// Verify V1 apps are deleted on Monitoring Console Pod
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
+
 			//Verify Apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on standalone(/etc/apps/)", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV2, true, true)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, true)
 
 			//Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
 
 			//Verify Apps are updated
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed Locally on standalone", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 		})
 	})
 })
