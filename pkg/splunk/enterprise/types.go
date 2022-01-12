@@ -28,6 +28,10 @@ const (
 	maxRecDuration time.Duration = 1<<63 - 1
 )
 
+const (
+	currentAfwVersion = enterpriseApi.AfwPhase3
+)
+
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
 type InstanceType string
 

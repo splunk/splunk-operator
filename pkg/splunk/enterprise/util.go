@@ -1895,3 +1895,92 @@ func handleAppFrameworkActivity(client splcommon.ControllerClient, cr splcommon.
 
 	return finalResult
 }
+
+// checkAndMigrateAppDeployStatus (if required) upgrades the appframework status context
+func checkAndMigrateAppDeployStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, afwStatusContext *enterpriseApi.AppDeploymentContext, afwConf *enterpriseApi.AppFrameworkSpec, isLocalScope bool) error {
+	// If needed, Migrate the app framework status
+	if isAppFrameworkMigrationNeeded(afwStatusContext) {
+		// Spec validation updates the status with some of the defaults, which may not be there in older app framework versions
+		err := ValidateAppFrameworkSpec(afwConf, afwStatusContext, isLocalScope)
+		if err != nil {
+			return err
+		}
+
+		if !migrateAfwStatus(client, cr, afwStatusContext) {
+			return fmt.Errorf("app framework migration failed")
+		}
+	}
+
+	return nil
+}
+
+// migrateAfwStatus migrates the appframework status context to the latest version
+func migrateAfwStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, afwStatusContext *enterpriseApi.AppDeploymentContext) bool {
+	scopedLog := log.WithName("migrateAfwStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Upgrade one version at a time
+	// Start with the lowest version, then move towards the latest
+	for afwStatusContext.Version < currentAfwVersion {
+		switch {
+		// Always start with the lowest version
+		case afwStatusContext.Version < enterpriseApi.AfwPhase3:
+			scopedLog.Info("Migrating the App framework", "old version", afwStatusContext.Version, "new version", enterpriseApi.AfwPhase3)
+			migrateAfwFromPhase2ToPhase3(client, cr, afwStatusContext)
+
+			// case: Add the higher versions below
+		}
+	}
+
+	// Update the new status
+	err := client.Status().Update(context.TODO(), cr)
+	if err != nil {
+		scopedLog.Error(err, "status update failed")
+	}
+
+	return err == nil
+}
+
+// migrateAfwFromPhase2ToPhase3 migrates app framework status from Phase-2 to Phase-3
+func migrateAfwFromPhase2ToPhase3(client splcommon.ControllerClient, cr splcommon.MetaObject, afwStatusContext *enterpriseApi.AppDeploymentContext) {
+	scopedLog := log.WithName("migrateAfwFromPhase2ToPhase3").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	sts := afwGetReleventStatefulsetByKind(cr, client)
+
+	for _, appSrcDeployInfo := range afwStatusContext.AppsSrcDeployStatus {
+		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
+		for i := range deployInfoList {
+			// Remove the special characters from Object hash
+			deployInfoList[i].ObjectHash = strings.Trim(deployInfoList[i].ObjectHash, "\"")
+
+			// If the app is already deleted, do not bother about the previous install state.
+			if deployInfoList[i].RepoState != enterpriseApi.RepoStateActive {
+				continue
+			}
+
+			// Set the PhaseInfo. Also, set the Aux Phase info, if applicable
+			if deployInfoList[i].DeployStatus == enterpriseApi.DeployStatusComplete {
+				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
+				deployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+
+				// Initialize the Aux Phase info with the install status
+				if *sts.Spec.Replicas > 1 {
+					deployInfoList[i].AuxPhaseInfo = make([]enterpriseApi.PhaseInfo, *sts.Spec.Replicas)
+					for auxIdx := range deployInfoList[i].AuxPhaseInfo {
+						deployInfoList[i].AuxPhaseInfo[auxIdx] = deployInfoList[i].PhaseInfo
+					}
+				}
+			} else {
+				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseDownload
+				deployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+			}
+		}
+	}
+
+	afwStatusContext.Version = enterpriseApi.AfwPhase3
+	scopedLog.Info("migration completed")
+}
+
+// isAppFrameworkMigrationNeeded confirms if the app framework version migration is needed
+func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeploymentContext) bool {
+	return afwStatusContext != nil && afwStatusContext.Version < currentAfwVersion && len(afwStatusContext.AppsSrcDeployStatus) > 0
+}

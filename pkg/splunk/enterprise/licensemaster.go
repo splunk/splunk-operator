@@ -46,6 +46,12 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		return result, err
 	}
 
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
+
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
