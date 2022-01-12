@@ -319,21 +319,23 @@ func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerRefer
 }
 
 // IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down
-func IsStatefulSetScalingUpOrDown(client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, error) {
+func IsStatefulSetScalingUpOrDown(client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, int32, error) {
 	scopedLog := log.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	var currentReplicas int32
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
 	current, err := GetStatefulSetByName(client, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
-		return enterpriseApi.StatefulSetNotScaling, err
+		return enterpriseApi.StatefulSetNotScaling, currentReplicas, err
 	}
 
-	if *current.Spec.Replicas < desiredReplicas {
-		return enterpriseApi.StatefulSetScalingUp, nil
-	} else if *current.Spec.Replicas > desiredReplicas {
-		return enterpriseApi.StatefulSetScalingDown, nil
+	currentReplicas = *current.Spec.Replicas
+	if currentReplicas < desiredReplicas {
+		return enterpriseApi.StatefulSetScalingUp, currentReplicas, nil
+	} else if currentReplicas > desiredReplicas {
+		return enterpriseApi.StatefulSetScalingDown, currentReplicas, nil
 	}
 
-	return enterpriseApi.StatefulSetNotScaling, nil
+	return enterpriseApi.StatefulSetNotScaling, currentReplicas, nil
 }

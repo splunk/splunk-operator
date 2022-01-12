@@ -1769,7 +1769,7 @@ func TestReleaseStorage(t *testing.T) {
 	}
 }
 
-func TestChangePhaseInfo(t *testing.T) {
+func TestAdjustAfwPhaseInfoForScaleup(t *testing.T) {
 	appSrcDeployStatus := make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
 
 	appDeployInfoList := []enterpriseApi.AppDeploymentInfo{
@@ -1777,26 +1777,9 @@ func TestChangePhaseInfo(t *testing.T) {
 			AppName:    "app1.tgz",
 			ObjectHash: "abcdef12345abcdef",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseDownload,
-				Status:     enterpriseApi.AppPkgDownloadPending,
+				Phase:      enterpriseApi.PhaseInstall,
+				Status:     enterpriseApi.AppPkgInstallComplete,
 				RetryCount: 2,
-			},
-			AuxPhaseInfo: []enterpriseApi.PhaseInfo{
-				{
-					Phase:      enterpriseApi.PhaseDownload,
-					Status:     enterpriseApi.AppPkgDownloadPending,
-					RetryCount: 2,
-				},
-				{
-					Phase:      enterpriseApi.PhaseDownload,
-					Status:     enterpriseApi.AppPkgDownloadPending,
-					RetryCount: 2,
-				},
-				{
-					Phase:      enterpriseApi.PhaseDownload,
-					Status:     enterpriseApi.AppPkgDownloadPending,
-					RetryCount: 2,
-				},
 			},
 		},
 	}
@@ -1805,10 +1788,18 @@ func TestChangePhaseInfo(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
-	changePhaseInfo(5, "appSrc1", appSrcDeployStatus)
+	// Since we are scaling from 1->5, pod-0 will be skipped for installation
+	// as it has up-to-date AuxPhaseInfo. We will update AuxPhaseInfo for other 4 replicas.
+	adjustAfwPhaseInfoForScaleup(1, 5, "appSrc1", appSrcDeployStatus)
 
 	if len(appDeployInfoList[0].AuxPhaseInfo) != 5 {
 		t.Errorf("changePhaseInfo should have increased the size of AuxPhaseInfo")
+	}
+
+	for i := 1; i < len(appDeployInfoList[0].AuxPhaseInfo); i++ {
+		if appDeployInfoList[0].AuxPhaseInfo[i].Phase != enterpriseApi.PhasePodCopy {
+			t.Errorf("AuxPhaseInfo phase should have been in PhasePodCopy")
+		}
 	}
 }
 

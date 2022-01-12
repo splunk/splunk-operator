@@ -150,7 +150,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
-		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(client, cr, statefulsetName, cr.Spec.Replicas)
+		isStatefulSetScaling, currentReplicas, err := splctrl.IsStatefulSetScalingUpOrDown(client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
 		}
@@ -163,7 +163,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
 				changeAppSrcDeployInfoStatus(appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
-				changePhaseInfo(cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				adjustAfwPhaseInfoForScaleup(currentReplicas, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
 		// if we are scaling down, just delete the state auxPhaseInfo entries

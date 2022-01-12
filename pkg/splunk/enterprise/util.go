@@ -886,23 +886,31 @@ func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map
 	return false
 }
 
-// updateAuxPhaseInfo updates the AuxPhaseInfo
-func updateAuxPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, desiredReplicas int32) {
+// resetAuxPhaseInfo resets the AuxPhaseInfo slices with desired phase and status
+func resetAuxPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, replicas int32, phase enterpriseApi.AppPhaseType, status enterpriseApi.AppPhaseStatusType) {
+	for i := 0; i < int(replicas); i++ {
+		appDeployInfo.AuxPhaseInfo[i].Phase = phase
+		appDeployInfo.AuxPhaseInfo[i].Status = status
+	}
+}
+
+// createAuxPhaseInfoForNewPods appends the new AuxPhaseInfo for new pods
+func createAuxPhaseInfoForNewPods(appDeployInfo *enterpriseApi.AppDeploymentInfo, desiredReplicas int32, phase enterpriseApi.AppPhaseType, status enterpriseApi.AppPhaseStatusType) {
 
 	auxPhaseInfoLen := len(appDeployInfo.AuxPhaseInfo)
 
 	for i := auxPhaseInfoLen; i < int(desiredReplicas); i++ {
 		phaseInfo := enterpriseApi.PhaseInfo{
-			Phase:      enterpriseApi.PhasePodCopy,
-			Status:     enterpriseApi.AppPkgPodCopyPending,
+			Phase:      phase,
+			Status:     status,
 			RetryCount: 0,
 		}
 		appDeployInfo.AuxPhaseInfo = append(appDeployInfo.AuxPhaseInfo, phaseInfo)
 	}
 }
 
-// changePhaseInfo changes PhaseInfo and AuxPhaseInfo for each app to desired state
-func changePhaseInfo(desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
+// adjustAfwPhaseInfoForScaleup changes PhaseInfo and AuxPhaseInfo for each app to desired state
+func adjustAfwPhaseInfoForScaleup(currentReplicas, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
 	scopedLog := log.WithName("changePhaseInfo")
 
 	if appSrcDeploymentInfo, ok := appSrcDeployStatus[appSrc]; ok {
@@ -913,16 +921,27 @@ func changePhaseInfo(desiredReplicas int32, appSrc string, appSrcDeployStatus ma
 				continue
 			}
 
+			// CSPL-1570: Set the AuxPhaseInfo to Install complete for all the existing pods.
+			// This is done so that we don't try to reinstall the app again on the existing pods.
+			if appDeployInfoList[idx].PhaseInfo.Phase == enterpriseApi.PhaseInstall &&
+				appDeployInfoList[idx].PhaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+				// Fill in the AuxPhaseInfo fields for current replicas
+				if len(appDeployInfoList[idx].AuxPhaseInfo) != 0 {
+					resetAuxPhaseInfo(&appDeployInfoList[idx], currentReplicas, enterpriseApi.PhaseInstall, enterpriseApi.AppPkgInstallComplete)
+				} else {
+					// if we started with replicas=1, then we would have AuxPhaseInfo=nil. Hence create AuxPhaseInfo for existing pods.
+					createAuxPhaseInfoForNewPods(&appDeployInfoList[idx], currentReplicas, enterpriseApi.PhaseInstall, enterpriseApi.AppPkgInstallComplete)
+				}
+			}
+
 			// set the phase to download
 			appDeployInfoList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
 
 			// set the status to download pending
 			appDeployInfoList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
 
-			if len(appDeployInfoList[idx].AuxPhaseInfo) != 0 {
-				// update the aux phase info
-				updateAuxPhaseInfo(&appDeployInfoList[idx], desiredReplicas)
-			}
+			createAuxPhaseInfoForNewPods(&appDeployInfoList[idx], desiredReplicas, enterpriseApi.PhasePodCopy, enterpriseApi.AppPkgPodCopyPending)
+
 		}
 	} else {
 		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
