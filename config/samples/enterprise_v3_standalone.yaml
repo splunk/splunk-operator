@@ -2,5 +2,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: standalone-sample
+  finalizers:  
+  - "enterprise.splunk.com/delete-pvc" 
 spec: {}
   # Add fields here

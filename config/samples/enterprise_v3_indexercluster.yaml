@@ -2,5 +2,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: indexercluster-sample
+  finalizers:  
+  - "enterprise.splunk.com/delete-pvc" 
 spec: {}
   # Add fields here
