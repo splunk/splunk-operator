@@ -390,12 +390,6 @@ To reinstate automatic polling, update the CR `appsRepoPollIntervalSeconds` sett
 
 NOTE: All CR's of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CR's of the same type before updating the polling interval. You can experience unexpected polling behavior if there are CRs configured with a mix of polling enabled and disabled.
 
-## Impact of livenessInitialDelaySeconds and readinessInitialDelaySeconds
-
-* Splunk Operator CRDs support the configuration of [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for both Liveliness (livenessInitialDelaySeconds) and Readiness (readinessInitialDelaySeconds) probes.
-* When the App Framework is NOT configured, default values are 300 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (for all CRs.)
-* When App Framework is configured, default values are 1800 seconds for livenessInitialDelaySeconds and 10 seconds for readinessInitialDelaySeconds (only for Deployer, Cluster Manager, Standalone, Monitoring Console and License Manager CRs). The higher value of livenessInitialDelaySeconds is to ensure sufficient time is allocated for installing most apps. This configuration can further be managed depending on the number & size of apps to be installed.
-
 ## App Framework Limitations
 
 The App Framework does not preview, analyze, verify versions, or enable Splunk Apps and Add-ons. The administrator is responsible for previewing the app or add-on contents, verifying the app is enabled, and that the app is supported with the version of Splunk Enterprise deployed in the containers. For Splunk app packaging specifications see [Package apps for Splunk Cloud or Splunk Enterprise](https://dev.splunk.com/enterprise/docs/releaseapps/packageapps/) in the Splunk Enterprise Developer documentation. The app archive files must end with .spl or .tgz; all other files are ignored.
