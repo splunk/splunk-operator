@@ -70,8 +70,6 @@ The App Framework calculates a checksum for each app or add-on archive file in t
 
 For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
-You can use the same approach for installing apps on License Manager using it's own CR.
-
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
 
