@@ -8,9 +8,11 @@ Utilizing the App Framework requires:
 
 * An Amazon S3 or S3-API-compliant remote object storage location. The App framework requires read-only access to the path used to host the apps.
 * The remote object storage credentials provided as a kubernetes secret, or in an IAM role.
-* Splunk apps and add-ons in a .tgz or .spl archive format.
+* Splunk apps and add-ons in a .tgz or .spl archive format.  
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. 
+
+Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
 ### How to use the App Framework on a Standalone CR
 
