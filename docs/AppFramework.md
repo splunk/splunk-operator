@@ -339,7 +339,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
 
 ### appsRepoPollIntervalSeconds
 
-The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage.  If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. 
+If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage. 
 
 When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).
 
