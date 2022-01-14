@@ -7,6 +7,7 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -154,4 +155,47 @@ func ResourceFailedPredicate() predicate.Predicate {
 		},
 	}
 	return err
+}
+
+// CrdChangedPredicate .
+func CrdChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*crdv1.CustomResourceDefinition); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj := e.ObjectNew.DeepCopyObject().(*crdv1.CustomResourceDefinition)
+			oldObj := e.ObjectOld.DeepCopyObject().(*crdv1.CustomResourceDefinition)
+			if !stringInSlice(newObj.Name, []string{"clustermasters.enterprise.splunk.com",
+				"indexerclusters.enterprise.splunk.com",
+				"licensemasters.enterprise.splunk.com",
+				"monitoringconsoles.enterprise.splunk.com",
+				"searchheadclusters.enterprise.splunk.com",
+				"standalones.enterprise.splunk.com"}) {
+				return false
+			}
+			return !cmp.Equal(newObj.Spec, oldObj.Spec)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
 }

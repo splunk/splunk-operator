@@ -26,6 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/pkg/errors"
+	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	common "github.com/splunk/splunk-operator/controllers/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,10 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
-	common "github.com/splunk/splunk-operator/controllers/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 const (
@@ -52,6 +52,7 @@ type StandaloneReconciler struct {
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=standalones/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -120,6 +121,7 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
+			common.CrdChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -141,6 +143,8 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
+		Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
+			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).
