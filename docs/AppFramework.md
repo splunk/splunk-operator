@@ -68,7 +68,7 @@ spec:
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use. 
 
-The App Framework calculates a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
 
 For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
