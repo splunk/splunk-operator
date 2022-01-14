@@ -160,9 +160,9 @@ This example describes the installation of apps on the Deployer and the Search H
 4. Copy your Splunk app or add-on archive files to the App Source.
    * In this example, the Splunk apps for the search heads are located at `bucket-app-framework-us-west-2/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework-us-west-2/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework-us-west-2/shcLoc-us/adminAppsLoc/`. Apps that need pre-configuration by the deployer before installing to the search heads (for example, Splunk Enterprise Security) are located at `bucket-app-framework-us-west-2/shcLoc-us/ESappsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
-5. Update the SearchHeadCluster CR specification and append the volume, App Source configuration, and scope.
+5. Update the SearchHeadCluster CR specification, and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
-      * For CR's where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads, set the `scope: clusterWithPreConfig`.
+      * For CR's where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads (for example, Splunk Enterprise Security,) set the `scope: clusterWithPreConfig`. The ClusterMaster and SearchHeadCluster CR's support the clusterWithPreConfig scope. 
       * For CR's where the Splunk Enterprise instance will deploy the apps without pre-configuration to search heads, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CR's support both cluster and local scopes. 
    * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder `ESappsLoc`, the Deployer will run a pre-configuration step before deploying those apps to the search heads.
 
