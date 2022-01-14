@@ -12,12 +12,6 @@ Utilizing the App Framework requires:
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. 
 
-#### What is required to upgrade to the latest App Framework?
-1. Upgrade the Operator to the latest release. The Operator pod will restart. The apps and add-ons already manged by the App Framework will remain deployed, and their status won't change. Any new apps, or changes to existing apps will be ignored.
-2. Update the Operator to add a persistent storage volume. The Operator pod will restart. 
-  * Example: `insert an example yaml to porvide a storage path to the operator pod`
-3. The App Framework will resume polling the remote object storage location for new or changed apps at the 'appsRepoPollIntervalSeconds' default.
-
 ### How to use the App Framework on a Standalone CR
 
 In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archive, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
