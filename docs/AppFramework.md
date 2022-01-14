@@ -77,7 +77,7 @@ For more information, see the [Description of App Framework Specification fields
 
 ### How to use the App Framework on Indexer Cluster
 
-This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, seting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
+This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, setting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
