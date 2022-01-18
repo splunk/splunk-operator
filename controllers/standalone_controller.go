@@ -29,7 +29,6 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
-	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -143,8 +142,8 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
-		Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
-			&handler.EnqueueRequestForObject{}).
+		/*Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
+		&handler.EnqueueRequestForObject{}).*/
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

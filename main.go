@@ -23,7 +23,6 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"go.uber.org/zap/zapcore"
-	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -38,6 +37,8 @@ import (
 	debug "github.com/splunk/splunk-operator/controllers/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
+
+	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
 var (
@@ -48,8 +49,8 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterprisev3.AddToScheme(scheme))
-	utilruntime.Must(extapi.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
 
 func main() {
