@@ -109,6 +109,9 @@ type PipelineWorker struct {
 
 	// waiter reference to inform the caller
 	waiter *sync.WaitGroup
+
+	// indicates a fan out worker
+	fanOut bool
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
