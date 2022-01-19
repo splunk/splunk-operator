@@ -398,6 +398,5 @@ The App Framework does not preview, analyze, verify versions, or enable Splunk A
 
 1. The App Framework has no support to remove an app or add-on once it’s been deployed. To disable an app, update the archive contents located in the App Source, and set the app.conf state to disabled.
 
-2. A cluster peer restart might be triggered by the contents of the Splunk apps deployed, but are not initiated by the App Framework.
+2. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster. 
 
-3. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster. 
