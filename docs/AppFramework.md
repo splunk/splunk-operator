@@ -68,12 +68,11 @@ spec:
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use. 
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
-For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
-
 
 ### How to use the App Framework on Indexer Cluster
 
@@ -136,9 +135,9 @@ The App Framework detects the Splunk app or add-on archive files available in th
 
 The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster peers. The cluster manager is responsible for deploying those apps to the cluster peers. The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
-For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
@@ -208,12 +207,11 @@ The App Framework detects the Splunk app or add-on archive files available in th
 
 The apps in the `searchApps` and `machineLearningApps` folders are deployed to the Deployer for use on the clustered search heads. The Deployer is responsible for deploying those apps to the search heads. The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
-For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
-
 
 ## Description of App Framework Specification fields
 The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework requires:
