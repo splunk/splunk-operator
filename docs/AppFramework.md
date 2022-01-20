@@ -10,7 +10,7 @@ Utilizing the App Framework requires:
 * The remote object storage credentials provided as a kubernetes secret, or in an IAM role.
 * Splunk apps and add-ons in a .tgz or .spl archive format.  
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
-* A persistent storage volume and path for the Operator Pod. 
+* A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
 
 Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
@@ -344,6 +344,100 @@ Here is a typical App framework configuration in a Custom Resource definition:
 If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage. 
 
 When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).
+
+## Add a persistent storage volume to the Operator pod
+
+1. Create the persistent volume used by the Operator pod to cache apps and add-ons:
+
+```yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: operator-volume-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: gp2
+```
+
+2. Associate the persistent volume with the Operator pod by updating the Operator configuration:
+
+```yaml
+volumes:
+- name: app-staging
+  persistentVolumeClaim:
+    claimName: operator-volume-claim
+```
+
+3. Mount the volume on the path:
+
+```yaml
+volumeMounts:
+- mountPath: /opt/splunk/appframework/
+  name: app-staging
+```
+
+A full example of the Operator configuration:
+
+```yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: operator-volume-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: gp2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: splunk-operator
+  template:
+    metadata:
+      labels:
+        name: splunk-operator
+    spec:
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: splunk-operator
+      containers:
+      - name: splunk-operator
+        image: "docker.io/splunk/splunk-operator:1.0.5"
+        volumeMounts:
+        - mountPath: /opt/splunk/appframework/
+          name: app-staging
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "splunk-operator"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: "docker.io/splunk/splunk:8.2.1-a2"
+
+      volumes:
+      - name: app-staging
+        persistentVolumeClaim:
+          claimName: operator-volume-claim
+```
 
 
 ## Manual initiation of app management
