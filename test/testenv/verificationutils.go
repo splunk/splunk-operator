@@ -841,14 +841,17 @@ func VerifyDeployerBundlePush(deployment *Deployment, testenvInstance *TestEnv, 
 }
 
 // VerifyNoPodReset verify that no pod reset during App install using phase3 framework
-func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestEnv, ns string, previousSplunkPodAge map[string]time.Duration) {
+func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
 	// Get current Age on all splunk pods and compare with previous
-	currentSplunkPodAge := DumpGetPodsLife(ns)
+	currentSplunkPodAge := GetPodsStartTime(ns)
 	for podName, currentpodAge := range currentSplunkPodAge {
 		// Only compare if the pod was present in previous pod iteration
-		if _, ok := previousSplunkPodAge[podName]; ok {
-			podReset := currentpodAge <= previousSplunkPodAge[podName]
-			gomega.Expect(podReset).To(gomega.Equal(false), "Pod reset was detected. Pod Name %s. Current Pod Age %d. Previous Pod Age %d", podName, currentpodAge, previousSplunkPodAge[podName])
+		if _, ok := podStartTimeMap[podName]; ok {
+			// Check if pod needs to be skipped
+			if !CheckStringInSlice(podToSkip, podName) {
+				podReset := currentpodAge.Equal(podStartTimeMap[podName])
+				gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+			}
 		}
 	}
 }
