@@ -19,7 +19,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strings"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -205,7 +204,9 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 // NOTE: This client will be helpful in UTs since we can create
 // our own mock client and pass it to the tests to work correctly.
 type PodExecClientImpl interface {
-	RunPodExecCommand(string) (string, string, error)
+	RunPodExecCommand(*remotecommand.StreamOptions, []string) (string, string, error)
+	SetTargetPodName(string)
+	GetTargetPodName() string
 }
 
 // blank assignment to implement PodExecClientImpl
@@ -228,10 +229,37 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 }
 
 // RunPodExecCommand runs the specific pod exec command
-func (podExecClient *PodExecClient) RunPodExecCommand(cmd string) (string, string, error) {
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(cmd),
-	}
+func (podExecClient *PodExecClient) RunPodExecCommand(streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
+	return PodExecCommand(podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+}
 
-	return PodExecCommand(podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+// SetTargetPodName sets the targetPodName field for podExecClient
+func (podExecClient *PodExecClient) SetTargetPodName(targetPodName string) {
+	podExecClient.targetPodName = targetPodName
+}
+
+// GetTargetPodName returns the target pod name
+func (podExecClient *PodExecClient) GetTargetPodName() string {
+	return podExecClient.targetPodName
+}
+
+var _ PodExecClientImpl = &MockPodExecClient{}
+
+// MockPodExecClient to mock the PodExecClient
+type MockPodExecClient struct {
+	StdOut string
+	StdErr string
+}
+
+// RunPodExecCommand returns the dummy values for mockPodExecClient
+func (mockPodExecClient *MockPodExecClient) RunPodExecCommand(*remotecommand.StreamOptions, []string) (string, string, error) {
+	return mockPodExecClient.StdOut, mockPodExecClient.StdErr, nil
+}
+
+// SetTargetPodName is a dummy function for mockPodExecClient
+func (mockPodExecClient *MockPodExecClient) SetTargetPodName(targetPodName string) {}
+
+// GetTargetPodName returns dummy target pod name for mockPodExecClient
+func (mockPodExecClient *MockPodExecClient) GetTargetPodName() string {
+	return ""
 }

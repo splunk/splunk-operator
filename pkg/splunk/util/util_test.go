@@ -189,9 +189,11 @@ func TestRunPodExecCommand(t *testing.T) {
 	targetPodName := "splunk-cm-cluster-master-0"
 	podExecClient := GetPodExecClient(c, &cr, targetPodName)
 	dummyCmd := "dummyCmd"
-	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(dummyCmd)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(dummyCmd),
+	}
+	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdOut != "" && stdErr != "" {
 		t.Errorf("expected stdOut and stdErr to be empty since it is a dummy podExec call")
 	}
-
 }

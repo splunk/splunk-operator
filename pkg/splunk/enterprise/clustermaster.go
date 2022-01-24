@@ -262,12 +262,13 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 
 	managerIdxcName := cr.GetName()
 	cmPodName := fmt.Sprintf("splunk-%s-%s-0", managerIdxcName, splcommon.ClusterManager)
-
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
-	stdOut, stdErr, err := splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+
+	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}

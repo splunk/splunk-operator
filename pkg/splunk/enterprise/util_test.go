@@ -1391,22 +1391,23 @@ func TestCopyFileToPod(t *testing.T) {
 	fileOnOperator := "/tmp/"
 	fileOnStandalonePod := "/init-apps/splunkFwdApps/COPYING"
 
+	podExecClient := splutil.GetPodExecClient(c, pod, pod.GetName())
 	// Test to detect invalid source file name
-	_, _, err := CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	_, _, err := CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid file name") {
 		t.Errorf("Unable to detect invalid source file name")
 	}
 
 	// Test to detect relative source file path
 	fileOnOperator = "tmp/networkIntelligence.spl"
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for source path") {
 		t.Errorf("Unable to reject relative source path")
 	}
 	fileOnOperator = "/tmp/networkIntelligence.spl"
 
 	// Test to reject if the source file doesn't exist
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "unable to get the info for file") {
 		t.Errorf("If file doesn't exist, should return an error")
 	}
@@ -1421,27 +1422,27 @@ func TestCopyFileToPod(t *testing.T) {
 
 	// Test to detect relative destination file path
 	fileOnStandalonePod = "init-apps/splunkFwdApps/COPYING"
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
 
+	// now replace the pod exec client with our mock client
+	var mockPodExecClient *splutil.MockPodExecClient = &splutil.MockPodExecClient{}
+
 	// If Pod destination path is directory, source file name is used, and should not cause an error
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/"
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
-	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
-	if err != nil && 1 == 0 {
+
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
+	if err != nil {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
 
 	//Proper source and destination paths should not return an error
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
-	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
-	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
-	if err != nil && 1 == 0 {
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
+	if err != nil {
 		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
 	}
 }
@@ -1586,9 +1587,18 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 
 	filePathOnPod := "/init-apps/splunkFwdApps/testApp.tgz"
 
-	fileExists := checkIfFileExistsOnPod(c, "testNameSpace", pod.GetName(), filePathOnPod)
+	var mockPodExecClient *splutil.MockPodExecClient = &splutil.MockPodExecClient{
+		StdErr: "dummyError",
+	}
+	fileExists := checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
 	if fileExists {
 		t.Errorf("When the file doesn't exist, should return false")
+	}
+
+	mockPodExecClient.StdErr = ""
+	fileExists = checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
+	if !fileExists {
+		t.Errorf("checkIfFileExistsOnPod should have returned true")
 	}
 }
 

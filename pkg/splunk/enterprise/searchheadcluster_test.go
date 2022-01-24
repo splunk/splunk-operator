@@ -415,22 +415,23 @@ func TestApplyShcSecret(t *testing.T) {
 		},
 	}
 
+	var mockPodExecClient *splutil.MockPodExecClient = &splutil.MockPodExecClient{}
 	// Set resource version as that of NS secret
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	// Change resource version and test
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -444,7 +445,7 @@ func TestApplyShcSecret(t *testing.T) {
 
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	// Test set again for shc_secret
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -459,7 +460,7 @@ func TestApplyShcSecret(t *testing.T) {
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	mgr.cr.Status.AdminSecretChanged[0] = false
 	// Test set again for admin password
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -479,7 +480,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") {
 		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
 	}
@@ -500,7 +501,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") {
 		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
 	}
@@ -513,7 +514,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, true)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}

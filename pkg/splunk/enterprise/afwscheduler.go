@@ -538,7 +538,9 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 
 	phaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhaseInstall)
 
-	if !checkIfFileExistsOnPod(worker.client, cr.GetNamespace(), worker.targetPodName, appPkgPathOnPod) {
+	podExecClient := splutil.GetPodExecClient(worker.client, worker.cr, worker.targetPodName)
+
+	if !checkIfFileExistsOnPod(cr, appPkgPathOnPod, podExecClient) {
 		scopedLog.Error(nil, "app pkg missing on Pod", "app pkg path", appPkgPathOnPod)
 		phaseInfo.Status = enterpriseApi.AppPkgMissingOnPodError
 
@@ -553,7 +555,11 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	}
 
-	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(command)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+
+	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
 		phaseInfo.RetryCount++
@@ -569,7 +575,8 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 	// Delete the app package from the target pod /init-apps/ location
 	// ToDo: sgontla: rename the "init-apps" to a different name, as the init-container is going away.
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
-	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(command)
+	streamOptions.Stdin = strings.NewReader(command)
+	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
@@ -582,7 +589,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 }
 
 // extractClusterScopedAppOnPod untars the given app package to the bundle push location
-func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, appPkgPathOnPod, appPkgLocalPath string) error {
+func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, appPkgPathOnPod, appPkgLocalPath string, podExecClient splutil.PodExecClientImpl) error {
 	cr := worker.cr
 	scopedLog := log.WithName("extractClusterScopedAppOnPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "app name", worker.appDeployInfo.AppName)
 
@@ -606,7 +613,7 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 		Stdin: strings.NewReader(command),
 	}
 
-	stdOut, stdErr, err := splutil.PodExecCommand(worker.client, worker.targetPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app package untar & delete failed", "stdout", stdOut, "stderr", stdErr)
 		return err
@@ -649,7 +656,9 @@ func runPodCopyWorker(worker *PipelineWorker, ch chan struct{}) {
 		return
 	}
 
-	stdOut, stdErr, err := CopyFileToPod(worker.client, cr.GetNamespace(), worker.targetPodName, appPkgLocalPath, appPkgPathOnPod)
+	// get the podExecClient to be used for copying file to pod
+	podExecClient := splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
+	stdOut, stdErr, err := CopyFileToPod(worker.client, cr.GetNamespace(), appPkgLocalPath, appPkgPathOnPod, podExecClient)
 	if err != nil {
 		phaseInfo.RetryCount++
 		scopedLog.Error(err, "app package pod copy failed", "stdout", stdOut, "stderr", stdErr, "retry count", phaseInfo.RetryCount)
@@ -657,7 +666,7 @@ func runPodCopyWorker(worker *PipelineWorker, ch chan struct{}) {
 	}
 
 	if appSrcScope == enterpriseApi.ScopeCluster {
-		err = extractClusterScopedAppOnPod(worker, appSrcScope, appPkgPathOnPod, appPkgLocalPath)
+		err = extractClusterScopedAppOnPod(worker, appSrcScope, appPkgPathOnPod, appPkgLocalPath, podExecClient)
 		if err != nil {
 			phaseInfo.RetryCount++
 			scopedLog.Error(err, "extracting the app package on pod failed", "retry count", phaseInfo.RetryCount)
@@ -1175,7 +1184,10 @@ func (shcPlaybookContext *SHCPlaybookContext) removeSHCBundlePushStatusFile() er
 	scopedLog := log.WithName("removeSHCBundlePushStatusFile").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext)
 
 	cmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
-	_, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(cmd)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(cmd),
+	}
+	_, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "unable to remove SHC Bundle Push status file")
 		// don't return error from here, so that we can retry cleaning the file in next run
@@ -1189,8 +1201,11 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
 
 	cmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(cmd),
+	}
 	// check the content of the status file
-	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(cmd)
+	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	// check if there is an error returned from running the pod exec command
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "checking the status of SHC Bundle Push failed", "stdout", stdOut, "stderr", stdErr)
@@ -1241,7 +1256,10 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush() error {
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
-	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(cmd)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(cmd),
+	}
+	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		err = fmt.Errorf("error while applying SHC Bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
 		return err
@@ -1306,7 +1324,10 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete() bool {
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
-	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(idxcShowClusterBundleStatusStr)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(idxcShowClusterBundleStatusStr),
+	}
+	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
 		return false
@@ -1325,7 +1346,10 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete() bool {
 // triggerBundlePush triggers the bundle push for indexer cluster
 func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush() error {
 	scopedLog := log.WithName("idxcPlaybookContext.triggerBundlePush()")
-	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(applyIdxcBundleCmdStr)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(applyIdxcBundleCmdStr),
+	}
+	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 
 	// If the error is due to a bundle which is already present, don't do anything.
 	// In the next reconcile we will mark it as bundle push complete

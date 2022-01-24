@@ -1627,8 +1627,8 @@ func extractFieldFromConfigMapData(fieldRegex, data string) string {
 }
 
 // checkIfFileExistsOnPod confirms if the given file path exits on a given Pod
-func checkIfFileExistsOnPod(c splcommon.ControllerClient, namespace string, podName string, filePath string) bool {
-	scopedLog := log.WithName("checkIfFileExistsOnPod").WithValues("podName", podName, "namespace", namespace).WithValues("filePath", filePath)
+func checkIfFileExistsOnPod(cr splcommon.MetaObject, filePath string, podExecClient splutil.PodExecClientImpl) bool {
+	scopedLog := log.WithName("checkIfFileExistsOnPod").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("filePath", filePath)
 	// Make sure the destination directory is existing
 	fPath := path.Clean(filePath)
 	command := fmt.Sprintf("test -f %s; echo -n $?", fPath)
@@ -1636,8 +1636,7 @@ func checkIfFileExistsOnPod(c splcommon.ControllerClient, namespace string, podN
 		Stdin: strings.NewReader(command),
 	}
 
-	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
-
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "error in checking the file availability on the Pod", "stdErr", stdErr, "stdOut", stdOut, "filePath", fPath)
 		return false
@@ -1648,8 +1647,8 @@ func checkIfFileExistsOnPod(c splcommon.ControllerClient, namespace string, podN
 }
 
 // CopyFileToPod copies a file from Operator Pod to any given Pod of a custom resource
-func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName string, srcPath string, destPath string) (string, string, error) {
-	scopedLog := log.WithName("CopyFileToPod").WithValues("podName", podName, "namespace", namespace).WithValues("srcPath", srcPath, "destPath", destPath)
+func CopyFileToPod(c splcommon.ControllerClient, namespace string, srcPath string, destPath string, podExecClient splutil.PodExecClientImpl) (string, string, error) {
+	scopedLog := log.WithName("CopyFileToPod").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", namespace).WithValues("srcPath", srcPath, "destPath", destPath)
 
 	var err error
 	reader, writer := io.Pipe()
@@ -1685,13 +1684,14 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 	// Make sure the destination directory is existing
 	destDir := path.Dir(destPath)
 	command := fmt.Sprintf("test -d %s; echo -n $?", destDir)
+
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
 
 	// If the Pod directory doesn't exist, do not try to create it. Instead throw an error
 	// Otherwise, in case of invalid dest path, we may end up creating too many invalid directories/files
-	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	dirTestResult, _ := strconv.Atoi(stdOut)
 	if dirTestResult != 0 {
 		return stdOut, stdErr, fmt.Errorf("directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
@@ -1713,11 +1713,9 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 		cmdArr = append(cmdArr, "-C", destDir)
 	}
 
-	streamOptions = &remotecommand.StreamOptions{
-		Stdin: reader,
-	}
+	streamOptions.Stdin = reader
 
-	return splutil.PodExecCommand(c, podName, namespace, cmdArr, streamOptions, false, false)
+	return podExecClient.RunPodExecCommand(streamOptions, cmdArr)
 }
 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
