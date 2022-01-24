@@ -12,7 +12,9 @@ Utilizing the App Framework requires:
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
 
-Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
+
+Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
 ### How to use the App Framework on a Standalone CR
 
