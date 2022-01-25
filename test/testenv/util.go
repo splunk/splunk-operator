@@ -764,9 +764,9 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 	return podNames
 }
 
-// DumpGetPodsLife prints and returns list of pods and thier respective life in the namespace
-func DumpGetPodsLife(ns string) map[string]time.Duration {
-	splunkPodsAge := make(map[string]time.Duration)
+// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
+func GetPodsStartTime(ns string) map[string]time.Time {
+	splunkPodsStartTime := make(map[string]time.Time)
 	splunkPods := DumpGetPods(ns)
 
 	for _, podName := range splunkPods {
@@ -777,8 +777,7 @@ func DumpGetPodsLife(ns string) map[string]time.Duration {
 			logf.Log.Error(err, "Failed to parse splunk pods")
 		}
 		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
-		podAge := time.Since(podStartTime)
-		splunkPodsAge[podName] = podAge
+		splunkPodsStartTime[podName] = podStartTime
 	}
-	return splunkPodsAge
+	return splunkPodsStartTime
 }
