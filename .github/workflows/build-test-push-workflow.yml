@@ -44,6 +44,8 @@ jobs:
         run: make test  
       - name: Run Code Coverage
         run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+      - name: Run Golang security checker
+        run: make code/sec
       - name: Upload Coverage artifacts
         uses: actions/upload-artifact@v2
         with:
