@@ -11,7 +11,7 @@ import (
 
 var pullPolicy = corev1.PullIfNotPresent
 
-// NewStandalone returns new Standalone instance with is config hash
+// NewStandalone returns new Standalone instance with its config hash
 func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 
 	c := &commonapi.Spec{
