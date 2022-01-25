@@ -7,6 +7,10 @@ metadata:
   namespace: system
 spec:
   template:
+    metadata:
+        labels:
+          control-plane: controller-manager
+          name: splunk-operator
     spec:
       containers:
       - name: kube-rbac-proxy
@@ -20,8 +24,10 @@ spec:
         - containerPort: 8443
           protocol: TCP
           name: https
-      - name: manager
-        args:
-        - "--health-probe-bind-address=:8081"
-        - "--metrics-bind-address=127.0.0.1:8080"
-        - "--leader-elect"
+        resources:
+          limits:
+            cpu: 10m
+            memory: 40Mi
+          requests:
+            cpu: 10m
+            memory: 40Mi

@@ -15,12 +15,16 @@ metadata:
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      #control-plane: controller-manager
+      name: splunk-operator
+  strategy: 
+    type: Recreate
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        #control-plane: controller-manager
+        name: splunk-operator
     spec:
       securityContext:
         runAsUser: 1001
