@@ -2695,7 +2695,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.DumpGetPodsLife(testenvInstance.GetName())
+			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############## INITIAL VERIFICATION ##########
 			// Verify App Download State on Cluster Manager CR
@@ -2745,7 +2745,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
 
 			//Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
 
 			// Verify V1 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
@@ -2854,7 +2854,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.DumpGetPodsLife(testenvInstance.GetName())
+			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
 
@@ -2906,7 +2906,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
 
 			//Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge)
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
 
 			// Verify V2 apps are installed locally on Cluster Manager and on Deployer
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
