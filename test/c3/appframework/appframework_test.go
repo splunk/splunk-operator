@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -300,8 +299,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -642,8 +641,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1251,8 +1250,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1650,8 +1649,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -1959,8 +1958,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -2424,8 +2423,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -2440,6 +2439,9 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
+
+			appVersion = "V1"
+			appFileList = testenv.GetAppFileList(appListV1)
 
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -2460,7 +2462,6 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			appVersion = "V1"
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
@@ -2494,7 +2495,6 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
 
 			// Verify apps are not updated
-			appVersion = "V2"
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s are not updated", appVersion))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
@@ -2536,6 +2536,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############## UPGRADE VERIFICATIONS ############
+
+			appVersion = "V2"
+			appFileList = testenv.GetAppFileList(appListV2)
 
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -2769,8 +2772,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(deployment, testenvInstance)
@@ -2785,6 +2788,8 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
+			appVersion = "V1"
+			appFileList = testenv.GetAppFileList(appListV1)
 
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
@@ -2799,7 +2804,6 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
 
 			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			appVersion = "V1"
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
 
@@ -2860,6 +2864,9 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########### UPGRADE VERIFICATIONS ###########
+			appVersion = "V2"
+			appFileList = testenv.GetAppFileList(appListV2)
+
 			// Verify App Download State on Cluster Manager CR
 			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
 
