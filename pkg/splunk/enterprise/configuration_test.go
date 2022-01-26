@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
@@ -658,7 +659,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Name = ""
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source name is missing for AppSource at:") {
 		t.Errorf("Should not accept an app source with missing name ")
 	}
 
@@ -666,7 +667,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Name = "adminApps"
 	AppFramework.AppSources[0].Location = ""
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source location is missing for AppSource") {
 		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
@@ -681,6 +682,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
 	// Empty App Repo config should not cause an error
 	err = ValidateAppFrameworkSpec(nil, &appFrameworkContext, false)
@@ -713,39 +715,50 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("App Repo config without volume details should return error")
 	}
 
 	// Defaults with invalid volume reference should return error
+	tmpVolume := AppFramework.Defaults.VolName
 	AppFramework.Defaults.VolName = "UnknownVolume"
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Volume referred in the defaults should be a valid volume")
 	}
+	AppFramework.Defaults.VolName = tmpVolume
 
-	//Duplicate App Sources should return an error
-	tmpVolume := AppFramework.AppSources[1].VolName
+	//Duplicate App Source locations should return an error
+	tmpVolume = AppFramework.AppSources[1].VolName
 	tmpLocation := AppFramework.AppSources[1].Location
 
 	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
 	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "duplicate App Source configured") {
 		t.Errorf("Duplicate app sources should return an error")
+	}
+
+	// Duplicate App Source locations across different scopes should not return an error
+	tmpScope := AppFramework.AppSources[1].Scope
+	AppFramework.AppSources[1].Scope = enterpriseApi.ScopeCluster
+	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("App Sources with different app scopes can have duplicate paths, but failed with error: %v", err)
 	}
 
 	AppFramework.AppSources[1].VolName = tmpVolume
 	AppFramework.AppSources[1].Location = tmpLocation
+	AppFramework.AppSources[1].Scope = tmpScope
 
 	// Duplicate app sources names should cause an error
 	tmpAppSourceName := AppFramework.AppSources[1].Name
 	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "multiple app sources with the name adminApps is not allowed") {
 		t.Errorf("Failed to detect duplicate app source names")
 	}
 	AppFramework.AppSources[1].Name = tmpAppSourceName
@@ -756,7 +769,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = ""
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "volumeName is missing for App Source") {
 		t.Errorf("If no default volume, App Source with missing volume info should return an error")
 	}
 
@@ -764,14 +777,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
 	if err != nil {
-		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
+		t.Errorf("If default volume, App Source with missing volume should not return an error, but got error %v", err)
 	}
 
 	// Volume referenced from an index must be a valid volume
 	AppFramework.AppSources[0].VolName = "UnknownVolume"
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
 	AppFramework.AppSources[0].VolName = "msos_s2s3_vol"
@@ -779,14 +792,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeCluster
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for App Source") {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
 	}
 
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "should be either local or cluster or clusterWithPreConfig") {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
 
@@ -796,7 +809,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for defaults config. Only local scope is supported for this kind of CR") {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
@@ -804,7 +817,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "scope for defaults should be either local") {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
@@ -813,7 +826,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = ""
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source scope is missing for") {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeLocal
@@ -863,20 +876,20 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Invalid volume name in defaults should return an error
 	AppFramework.Defaults.VolName = "unknownVolume"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
 	AppFramework.VolList[0].Provider = "invalid-provider"
 	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
 }
