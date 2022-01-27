@@ -212,9 +212,10 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 				}
 			} else {
 				scopedLog.Info("Installation was already in progress for replica members")
+				scope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					phaseInfo := &appDeployInfo.AuxPhaseInfo[podID]
-					if !isPhaseInfoEligibleForSchedulerEntry(phaseInfo) {
+					if !isPhaseInfoEligibleForSchedulerEntry(scope, phaseInfo) {
 						continue
 					}
 
@@ -1433,12 +1434,18 @@ func checkAndUpdateAppFrameworkProgressFlag(afwPipeline *AppInstallPipeline) {
 }
 
 // isPhaseInfoEligibleForSchedulerEntry confirms if there is any pending work
-func isPhaseInfoEligibleForSchedulerEntry(phaseInfo *enterpriseApi.PhaseInfo) bool {
+func isPhaseInfoEligibleForSchedulerEntry(scope string, phaseInfo *enterpriseApi.PhaseInfo) bool {
 	if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
 		return false
 	}
 
+	// if an app is already install complete, do not schedule a worker
 	if phaseInfo.Phase == enterpriseApi.PhaseInstall && phaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+		return false
+	}
+
+	// For cluster scoped apps, if pod copy is complete, do not schedule a worker
+	if scope == enterpriseApi.ScopeCluster && phaseInfo.Phase == enterpriseApi.PhasePodCopy && phaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete {
 		return false
 	}
 
@@ -1478,10 +1485,11 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	scopedLog.Info("Creating pipeline workers for pending app packages")
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		scope := getAppSrcScope(appFrameworkConfig, appSrcName)
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
 			// Ignore any apps if there is no pending work
-			if !isPhaseInfoEligibleForSchedulerEntry(&deployInfoList[i].PhaseInfo) {
+			if !isPhaseInfoEligibleForSchedulerEntry(scope, &deployInfoList[i].PhaseInfo) {
 				continue
 			}
 
