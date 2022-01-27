@@ -393,6 +393,20 @@ func TestTransitionWorkerPhase(t *testing.T) {
 		},
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
 	c := spltest.NewMockClient()
 	ppln := initAppInstallPipeline(appDeployContext, c, &cr)
 
@@ -420,6 +434,8 @@ func TestTransitionWorkerPhase(t *testing.T) {
 					Status: enterpriseApi.AppPkgDownloadComplete,
 				},
 			},
+			afwConfig:  appFrameworkConfig,
+			appSrcName: appFrameworkConfig.AppSources[0].Name,
 		}
 	}
 
@@ -465,7 +481,9 @@ func TestTransitionWorkerPhase(t *testing.T) {
 				Status: enterpriseApi.AppPkgDownloadComplete,
 			},
 		},
-		fanOut: cr.TypeMeta.Kind == "Standalone",
+		fanOut:     cr.TypeMeta.Kind == "Standalone",
+		afwConfig:  appFrameworkConfig,
+		appSrcName: appFrameworkConfig.AppSources[0].Name,
 	}
 
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
@@ -985,21 +1003,42 @@ func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
 	}
 
 	// Should not be eligible once the max. retries are reached
-	if isPhaseInfoEligibleForSchedulerEntry(phaseInfo) {
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
 		t.Errorf("Should not be eligible once the max. retries reached")
 	}
 
 	phaseInfo.RetryCount = 0
-	// If the phase and status are not install complete, should return true
-	if !isPhaseInfoEligibleForSchedulerEntry(phaseInfo) {
-		t.Errorf("Should be eligible to run, when the install complete is not set")
+	// For local scope, if the phase and status are not install complete, should return true
+	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+		t.Errorf("Local scope: If the install is not complete, should be eligible to run")
 	}
 
-	// Once the install complete is set, should not be eligible to run
+	// For local scope, once the app is install complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhaseInstall
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	if isPhaseInfoEligibleForSchedulerEntry(phaseInfo) {
-		t.Errorf("Should not be eligible to run, when the install complete is set")
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+		t.Errorf("Local scope: When the install is complete, should not be eligible to run")
+	}
+
+	// For cluster scope, once the app is install complete, should not be eligible to run
+	phaseInfo.Phase = enterpriseApi.PhaseInstall
+	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: when the install is complete, should not be eligible to run")
+	}
+
+	// For cluster scope, once the podcopy is complete, should not be eligible to run
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: On podcopy complete, should not be eligible to run")
+	}
+
+	// For cluster scope, if the podCopy is not complete, should be able to run
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
+	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: If the pod copy is not complete, should be eligible to run")
 	}
 }
 
