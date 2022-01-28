@@ -69,16 +69,6 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 		}
 		testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		// CSPL-1532 - MC Resets after becoming READY. Remove the if block when bug is fixed.
-		if monitoringConsole.Status.Phase == splcommon.PhaseReady {
-			testenvInstance.Log.Info("After Monitoring Console Phase goes to Ready Phase in some instances it flips back to Pending/Updating. Adding Static Wait to avoid this situtaion")
-			time.Sleep(10 * time.Second)
-			err := deployment.GetInstance(ctx, mcName, monitoringConsole)
-			if err != nil {
-				return splcommon.PhaseError
-			}
-			testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
-		}
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
