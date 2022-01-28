@@ -52,7 +52,8 @@ func (c *MockHTTPClient) getHandlerKey(req *http.Request) string {
 // Do method for MockHTTPClient just tracks the requests that it receives
 func (c *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	c.GotRequests = append(c.GotRequests, req)
-	rsp, ok := c.Handlers[c.getHandlerKey(req)]
+	handlerKey := c.getHandlerKey(req)
+	rsp, ok := c.Handlers[handlerKey]
 	if !ok {
 		return nil, errors.New("NotFound")
 	}
