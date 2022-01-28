@@ -42,6 +42,9 @@ type MockHTTPClient struct {
 
 // getHandlerKey method for MockHTTPClient returns map key for a HTTP request
 func (c *MockHTTPClient) getHandlerKey(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s %s", req.Method, req.URL.String())
 }
 
