@@ -45,7 +45,8 @@ func (c *MockHTTPClient) getHandlerKey(req *http.Request) string {
 	if req == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s %s", req.Method, req.URL.String())
+	handler := fmt.Sprintf("%s %s", req.Method, req.URL.String())
+	return handler
 }
 
 // Do method for MockHTTPClient just tracks the requests that it receives
