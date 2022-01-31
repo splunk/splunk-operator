@@ -1,3 +1,4 @@
+#create new cluster manager custom resource 
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:

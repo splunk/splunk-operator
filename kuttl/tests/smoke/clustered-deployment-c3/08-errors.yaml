@@ -1,23 +1,20 @@
 ---
 apiVersion: enterprise.splunk.com/v3
-kind: IndexerCluster
-metadata:
-  name: test-idxc
-status:
-  phase: Ready
+kind: ClusterMaster
+name: test
 
 ---
 # check if stateful sets are created
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-test-idxc-indexer
+  name: splunk-test-cluster-master
 status:
-  replicas: 3
+  replicas: 1
 
 ---
 # check if stateful sets are created
 apiVersion: v1
 kind: Secret
 metadata: 
-  name: splunk-test-idxc-indexer-secret-v1
+  name: splunk-test-cluster-master-secret-v1

@@ -7,3 +7,7 @@ timeout: 1000
 startKIND: false
 artifactsDir: kuttl-artifacts
 kindNodeCache: false
+crdDir: config/crd/bases
+#commands:
+#  "make deploy IMG="docker.io/vivekbasappa/splunk-operator:1.1.0" - command: bash -c "make deploy IMG="docker.io/vivekbasappa/splunk-operator:1.1.0"
+#    background: true
