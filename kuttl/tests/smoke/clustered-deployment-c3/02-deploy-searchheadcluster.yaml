@@ -6,8 +6,7 @@ metadata:
     - "enterprise.splunk.com/delete-pvc"
 spec: 
   volumes: []
-  spec: 
-    imagePullPolicy: "IfNotPresent"
+  imagePullPolicy: "IfNotPresent"
   clusterMasterRef: 
     name: test
   licenseMasterRef: 

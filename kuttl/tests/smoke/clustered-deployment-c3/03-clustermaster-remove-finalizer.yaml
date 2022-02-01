@@ -5,6 +5,5 @@ metadata:
   finalizers: []
 spec: 
   volumes: []
-  spec: 
-    imagePullPolicy: "IfNotPresent"
+  imagePullPolicy: "IfNotPresent"
   defaults: ""

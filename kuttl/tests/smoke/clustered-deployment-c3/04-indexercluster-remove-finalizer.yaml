@@ -5,8 +5,7 @@ metadata:
   finalizers: []
 spec: 
   volumes: []
-  spec: 
-    imagePullPolicy: IfNotPresent
+  imagePullPolicy: IfNotPresent
   clusterMasterRef:
     name: test
   defaults: ""
