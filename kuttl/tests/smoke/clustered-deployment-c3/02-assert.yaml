@@ -34,15 +34,6 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-test-shc-search-head
-status:
-  replicas: 3
-
----
-# check if stateful sets are created
-apiVersion: apps/v1
-kind: StatefulSet
-metadata: 
   name: splunk-test-shc-deployer
 status:
   replicas: 1
