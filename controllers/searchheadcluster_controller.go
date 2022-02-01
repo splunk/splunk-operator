@@ -88,7 +88,7 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load standalone data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load search head cluster data")
 	}
 
 	// If the reconciliation is paused, requeue

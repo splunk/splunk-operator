@@ -87,7 +87,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load standalone data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
 	}
 
 	// If the reconciliation is paused, requeue

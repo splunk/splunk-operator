@@ -87,7 +87,7 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load standalone data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
 	// If the reconciliation is paused, requeue
