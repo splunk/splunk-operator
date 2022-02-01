@@ -1,14 +1,12 @@
 # Adds namespace to all resources.
-#namespace: splunk-operator 
 namespace: splunk-operator 
-#namespace: default
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-#namePrefix: splunk-operator-
+namePrefix: splunk-operator-
 
 # Labels to add to all resources and selectors.
 commonLabels:
@@ -77,39 +75,39 @@ vars:
 #    version: v1
 #    name: webhook-service
 
-patches:
-- target:
-    kind: Deployment
-    name: controller-manager
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: splunk-operator
-- target:
-    kind: ServiceAccount
-    name: controller-manager
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: splunk-operator
-- target:
-    kind: Service
-    name: controller-manager-service
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: splunk-operator-service
-- target:
-    kind: Role
-    name: manager-role
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: splunk:operator:namespace-manager
-- target:
-    kind: RoleBinding
-    name: manager-rolebinding
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: splunk:operator:namespace-manager
+#patches:
+#- target:
+#    kind: Deployment
+#    name: controller-manager
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator
+#- target:
+#    kind: ServiceAccount
+#    name: controller-manager
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator
+#- target:
+#    kind: Service
+#    name: controller-manager-service
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk-operator-service
+#- target:
+#    kind: Role
+#    name: manager-role
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk:operator:namespace-manager
+#- target:
+#    kind: RoleBinding
+#    name: manager-rolebinding
+#  patch: |-
+#    - op: replace
+#      path: /metadata/name
+#      value: splunk:operator:namespace-manager

@@ -15,7 +15,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      #control-plane: controller-manager
+      control-plane: controller-manager
       name: splunk-operator
   strategy: 
     type: Recreate
@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       labels:
-        #control-plane: controller-manager
+        control-plane: controller-manager
         name: splunk-operator
     spec:
       securityContext:
