@@ -8,5 +8,4 @@ spec:
   imagePullPolicy: IfNotPresent
   clusterMasterRef:
     name: test
-  defaults: ""
   replicas: 3
