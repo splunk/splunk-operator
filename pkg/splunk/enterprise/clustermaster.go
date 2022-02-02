@@ -257,17 +257,14 @@ func getClusterManagerStatefulSet(client splcommon.ControllerClient, cr *enterpr
 }
 
 // CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	managerIdxcName := cr.GetName()
-	cmPodName := fmt.Sprintf("splunk-%s-%s-0", managerIdxcName, splcommon.ClusterManager)
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
 
-	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
@@ -311,7 +308,9 @@ func PerformCmBundlePush(c splcommon.ControllerClient, cr *enterpriseApi.Cluster
 	// for the configMap update to the Pod before proceeding for the manager apps
 	// bundle push.
 
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, cr)
+	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), splcommon.ClusterManager)
+	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
+	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, cr, podExecClient)
 	if err != nil {
 		return err
 	}

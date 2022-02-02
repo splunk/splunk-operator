@@ -242,24 +242,3 @@ func (podExecClient *PodExecClient) SetTargetPodName(targetPodName string) {
 func (podExecClient *PodExecClient) GetTargetPodName() string {
 	return podExecClient.targetPodName
 }
-
-var _ PodExecClientImpl = &MockPodExecClient{}
-
-// MockPodExecClient to mock the PodExecClient
-type MockPodExecClient struct {
-	StdOut string
-	StdErr string
-}
-
-// RunPodExecCommand returns the dummy values for mockPodExecClient
-func (mockPodExecClient *MockPodExecClient) RunPodExecCommand(*remotecommand.StreamOptions, []string) (string, string, error) {
-	return mockPodExecClient.StdOut, mockPodExecClient.StdErr, nil
-}
-
-// SetTargetPodName is a dummy function for mockPodExecClient
-func (mockPodExecClient *MockPodExecClient) SetTargetPodName(targetPodName string) {}
-
-// GetTargetPodName returns dummy target pod name for mockPodExecClient
-func (mockPodExecClient *MockPodExecClient) GetTargetPodName() string {
-	return ""
-}

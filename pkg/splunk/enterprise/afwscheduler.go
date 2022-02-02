@@ -538,9 +538,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 
 	phaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhaseInstall)
 
-	podExecClient := splutil.GetPodExecClient(worker.client, worker.cr, worker.targetPodName)
-
-	if !checkIfFileExistsOnPod(cr, appPkgPathOnPod, podExecClient) {
+	if !checkIfFileExistsOnPod(cr, appPkgPathOnPod, ctx.podExecClient) {
 		scopedLog.Error(nil, "app pkg missing on Pod", "app pkg path", appPkgPathOnPod)
 		phaseInfo.Status = enterpriseApi.AppPkgMissingOnPodError
 
@@ -594,6 +592,8 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 	scopedLog := log.WithName("extractClusterScopedAppOnPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "app name", worker.appDeployInfo.AppName)
 
 	var clusterAppsPath string
+	var stdOut, stdErr string
+	var err error
 	kind := worker.cr.GroupVersionKind().Kind
 	if kind == "SearchHeadCluster" {
 		clusterAppsPath = "/opt/splunk/etc/shcluster/apps/"
@@ -602,7 +602,7 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 	} else {
 		// Do not return an error
 		scopedLog.Error(nil, "app extraction should not be called", "kind", kind)
-		return nil
+		return err
 	}
 
 	// untar the package to the cluster apps location, then delete it
@@ -613,9 +613,9 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 		Stdin: strings.NewReader(command),
 	}
 
-	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
+	stdOut, stdErr, err = podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
-		scopedLog.Error(err, "app package untar & delete failed", "stdout", stdOut, "stderr", stdErr)
+		err = fmt.Errorf("app package untar & delete failed with stdErr = %s, stdOut=%s, err=%v", stdErr, stdOut, err)
 		return err
 	}
 
@@ -624,7 +624,7 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 	// Note:- local scoped app packages are removed once the installation is complete for entire statefulset
 	deleteAppPkgFromOperator(worker)
 
-	return nil
+	return err
 }
 
 // runPodCopyWorker runs one pod copy worker
@@ -1181,19 +1181,19 @@ func getClusterScopePlaybookContext(client splcommon.ControllerClient, cr splcom
 
 // removeSHCBundlePushStatusFile removes the SHC Bundle status file from deployer pod
 func (shcPlaybookContext *SHCPlaybookContext) removeSHCBundlePushStatusFile() error {
-	scopedLog := log.WithName("removeSHCBundlePushStatusFile").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext)
+	var err error
 
 	cmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(cmd),
 	}
+
 	_, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
-	if err != nil || stdErr != "" {
-		scopedLog.Error(err, "unable to remove SHC Bundle Push status file")
-		// don't return error from here, so that we can retry cleaning the file in next run
-		return err
+	if stdErr != "" || err != nil {
+		err = fmt.Errorf("unable to remove SHC Bundle Push status file due to stdErr=%s, err=%v", stdErr, err)
 	}
-	return nil
+
+	return err
 }
 
 // isBundlePushComplete checks whether the SHC bundle push is complete or still pending
@@ -1206,9 +1206,8 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 	}
 	// check the content of the status file
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
-	// check if there is an error returned from running the pod exec command
 	if err != nil || stdErr != "" {
-		scopedLog.Error(err, "checking the status of SHC Bundle Push failed", "stdout", stdOut, "stderr", stdErr)
+		err = fmt.Errorf("checking the status of SHC Bundle Push failed, stdOut=%s, stdErr=%s, err=%v", stdOut, stdErr, err)
 		// reset the bundle push state to Pending, so that we retry again.
 		setBundlePushState(shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushPending)
 
@@ -1246,6 +1245,10 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 	err = shcPlaybookContext.removeSHCBundlePushStatusFile()
 	if err != nil {
 		scopedLog.Error(err, "removing SHC Bundle Push status file failed, will retry again.")
+
+		// reset the state to BundlePushInProgress so that we can check the status of file again.
+		setBundlePushState(shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
+
 		// don't return error from here, so that we can retry cleaning the file in next run
 		return false, nil
 	}
@@ -1307,6 +1310,7 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 		err = shcPlaybookContext.triggerBundlePush()
 		if err != nil {
 			scopedLog.Error(err, "failed to apply SHC Bundle")
+			return err
 		}
 
 		scopedLog.Info("SHC Bundle Push is in progress")
