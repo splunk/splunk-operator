@@ -45,9 +45,7 @@ const (
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
-	/*l := zap.LoggerTo(ginkgo.GinkgoWriter)
-	l.WithName("util")
-	logf.SetLogger(l) */
+	
 }
 
 // RandomDNSName returns a random string that is a valid DNS name
