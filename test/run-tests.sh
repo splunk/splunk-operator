@@ -67,7 +67,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "wait for operator pod to be ready..."
-kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=300s -n splunk-operator
+kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
 if [ $? -ne 0 ]; then
   echo "Operator installation not ready..."
   exit 1
