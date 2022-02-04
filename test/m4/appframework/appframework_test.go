@@ -221,19 +221,19 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -562,19 +562,19 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -866,13 +866,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
@@ -1195,13 +1195,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
@@ -1468,19 +1468,19 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -1853,13 +1853,13 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := "/init-apps/" + appSourceVolumeNameIdxc
+			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
 			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
 
 			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShc
+			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
 			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)

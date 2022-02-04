@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -481,140 +480,6 @@ func getS3ClientMgr(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 		getS3Client:     GetRemoteStorageClient,
 	}
 	return s3ClientMgr, nil
-}
-
-// ApplyAppListingConfigMap creates the configMap  with two entries:
-// (1) app-list-local.yaml
-// (2) app-list-cluster.yaml
-// Once the configMap is mounted on the Pod, Ansible handles the apps listed in these files
-// ToDo: Deletes to be handled for phase-3
-func ApplyAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, appsModified bool) (*corev1.ConfigMap, bool, error) {
-
-	var err error
-	var crKind string
-	var configMapDataChanged bool
-	crKind = cr.GetObjectKind().GroupVersionKind().Kind
-
-	scopedLog := log.WithName("ApplyAppListingConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	mapAppListing := make(map[string]string)
-
-	// Locally scoped apps for CM/Deployer require the latest splunk-ansible with apps_location_local.  Prior to this,
-	// there was no method to install local apps for these roles.  If the apps_location_local variable is not available,
-	// it will be ignored and revert back to no locally scoped apps for CM/Deployer.
-	yamlConfIdcHeader := fmt.Sprintf(`splunk:
-  app_paths_install:
-    idxc:`)
-
-	yamlConfShcHeader := fmt.Sprintf(`splunk:
-  app_paths_install:
-    shc:`)
-
-	yamlConfLocalHeader := fmt.Sprintf(`splunk:
-  app_paths_install:
-    default:`)
-
-	// Used for apps requiring pre-configuration before installing on the cluster
-	// Example: Splunk Enterprise Security App
-	yamlClusterAppsWithPreConfHeader := fmt.Sprintf(`splunk:
-  apps_location:`)
-
-	var localAppsConf, clusterAppsConf string
-	if crKind == "ClusterMaster" {
-		clusterAppsConf = yamlConfIdcHeader
-	} else if crKind == "SearchHeadCluster" {
-		clusterAppsConf = yamlConfShcHeader
-	} else {
-		clusterAppsConf = ""
-	}
-
-	localAppsConf = yamlConfLocalHeader
-	clusterAppsWithPreConf := yamlClusterAppsWithPreConfHeader
-
-	var mapKeys []string
-
-	// Map order is not guaranteed, so use the sorted keys to go through the map entries
-	for appSrc := range appsSrcDeployStatus {
-		mapKeys = append(mapKeys, appSrc)
-	}
-	sort.Strings(mapKeys)
-
-	for _, appSrc := range mapKeys {
-		appDeployList := appsSrcDeployStatus[appSrc].AppDeploymentInfoList
-
-		switch scope := getAppSrcScope(appConf, appSrc); scope {
-		case enterpriseApi.ScopeLocal:
-			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
-					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
-					localAppsConf = fmt.Sprintf(`%s
-      - "/init-apps/%s/%s"`, localAppsConf, appSrc, appDeployList[idx].AppName)
-				}
-			}
-
-		case enterpriseApi.ScopeCluster:
-			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
-					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
-					clusterAppsConf = fmt.Sprintf(`%s
-      - "/init-apps/%s/%s"`, clusterAppsConf, appSrc, appDeployList[idx].AppName)
-				}
-			}
-
-		case enterpriseApi.ScopeClusterWithPreConfig:
-			for idx := range appDeployList {
-				if appDeployList[idx].DeployStatus == enterpriseApi.DeployStatusPending &&
-					appDeployList[idx].RepoState == enterpriseApi.RepoStateActive {
-					clusterAppsWithPreConf = fmt.Sprintf(`%s
-      - "/init-apps/%s/%s"`, clusterAppsWithPreConf, appSrc, appDeployList[idx].AppName)
-				}
-			}
-
-		default:
-			scopedLog.Error(nil, "Invalid scope detected")
-		}
-	}
-
-	// Don't update the configMap if there is nothing to write.
-	if localAppsConf != yamlConfLocalHeader {
-		mapAppListing["app-list-local.yaml"] = localAppsConf
-	}
-
-	if clusterAppsConf != yamlConfIdcHeader && clusterAppsConf != yamlConfShcHeader && clusterAppsConf != "" {
-		mapAppListing["app-list-cluster.yaml"] = clusterAppsConf
-	}
-
-	if clusterAppsWithPreConf != yamlClusterAppsWithPreConfHeader {
-		mapAppListing["app-list-cluster-with-pre-config.yaml"] = clusterAppsWithPreConf
-	}
-	// Create App list config map
-	configMapName := GetSplunkAppsConfigMapName(cr.GetName(), crKind)
-	appListingConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapAppListing)
-
-	appListingConfigMap.SetOwnerReferences(append(appListingConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-
-	if len(appListingConfigMap.Data) > 0 {
-		if appsModified {
-			// App packages are modified, reset configmap to ensure a new resourceVersion
-			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
-			savedData := appListingConfigMap.Data
-			appListingConfigMap.Data = make(map[string]string)
-			_, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
-			if err != nil {
-				scopedLog.Error(err, "failed reset of configmap", "configMapName", configMapName)
-			}
-			appListingConfigMap.Data = savedData
-		}
-
-		configMapDataChanged, err = splctrl.ApplyConfigMap(client, appListingConfigMap)
-
-		if err != nil {
-			return nil, configMapDataChanged, err
-		}
-	}
-
-	return appListingConfigMap, configMapDataChanged, nil
 }
 
 // getAppPackageLocalDir returns the Operator volume directory for a given app package
@@ -1173,26 +1038,17 @@ func markAppsStatusToComplete(client splcommon.ControllerClient, cr splcommon.Me
 		changeAppSrcDeployInfoStatus(appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
 	}
 
-	// ToDo: For now disabling the configMap reset, as it causes unnecessary pod resets due to annotations change
-	// Now that all the apps are deployed. Update the same in the App listing configMap
-	// _, _, err = ApplyAppListingConfigMap(client, cr, appConf, appSrcDeploymentStatus)
-	// if err != nil {
-	// 	return err
-	// }
-
 	scopedLog.Info("Marked the App deployment status to complete")
 	// ToDo: Caller of this API also needs to set "IsDeploymentInProgress = false" once after completing this function call for all the app sources
 
 	return err
 }
 
-// setupAppInitContainers creates the necessary shared volume and init containers to download all
-// app packages in the appSources configured and make them locally available to the Splunk instance.
-func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
-	scopedLog := log.WithName("setupAppInitContainers")
-	// Create shared volume and init containers for App Framework
+// setupAppsStagingVolume creates the necessary volume on the Splunk pods, for the operator to copy all app packages in the appSources configured and make them locally available to the Splunk instance.
+func setupAppsStagingVolume(client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
+	// Create apps staging volume for App Framework
 	if len(appFrameworkConfig.AppSources) > 0 {
-		// Create volume to shared between init and Splunk container to contain downloaded apps
+		// Create volume to on Splunk container to contain apps copied from Splunk Operator pod
 		emptyVolumeSource := corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		}
@@ -1204,7 +1060,7 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, initVol)
 
-		// Add init apps mount to Splunk container
+		// Add apps staging mount to Splunk container
 		initVolumeSpec := corev1.VolumeMount{
 			Name:      appVolumeMntName,
 			MountPath: appBktMnt,
@@ -1212,89 +1068,6 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 
 		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
 		podTemplateSpec.Spec.Containers[0].VolumeMounts = append(podTemplateSpec.Spec.Containers[0].VolumeMounts, initVolumeSpec)
-
-		// Add app framework init containers per app source and attach the init volume
-		for i, appSrc := range appFrameworkConfig.AppSources {
-			// Get volume info from appSrc
-
-			var volSpecPos int
-			var err error
-			if appSrc.VolName != "" {
-				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appSrc.VolName)
-			} else {
-				volSpecPos, err = splclient.CheckIfVolumeExists(appFrameworkConfig.VolList, appFrameworkConfig.Defaults.VolName)
-			}
-
-			if err != nil {
-				// Invalid appFramework config.  This shouldn't happen
-				scopedLog.Info("Invalid appSrc volume spec, moving to the next one", "appSrc.VolName", appSrc.VolName, "err", err)
-				continue
-			}
-			appRepoVol := appFrameworkConfig.VolList[volSpecPos]
-
-			s3ClientWrapper := splclient.S3Clients[appRepoVol.Provider]
-			initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr()
-			// Use the provider name to get the corresponding function pointer
-			s3Client, err := GetRemoteStorageClient(client, cr, appFrameworkConfig, &appRepoVol, appSrc.Location, initFunc)
-			if err != nil {
-				// move on to the next appSource if we are not able to get the required client
-				scopedLog.Info("Invalid Remote Storage Client", "appRepoVol.Name", appRepoVol.Name, "err", err)
-				continue
-			}
-
-			// Prepare app source/repo values
-			appBkt := appRepoVol.Path
-			appS3Endpoint := appRepoVol.Endpoint
-			appSecretRef := appRepoVol.SecretRef
-			appSrcName := appSrc.Name
-			appSrcPath := appSrc.Location
-			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
-			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
-
-			initEnv := []corev1.EnvVar{}
-			if appSecretRef != "" {
-				initEnv = append(initEnv, corev1.EnvVar{
-					Name: "AWS_ACCESS_KEY_ID",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: appSecretRef,
-							},
-							Key: s3AccessKey,
-						},
-					},
-				})
-				initEnv = append(initEnv, corev1.EnvVar{
-					Name: "AWS_SECRET_ACCESS_KEY",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: appSecretRef,
-							},
-							Key: s3SecretKey,
-						},
-					},
-				})
-			}
-
-			// Setup init container
-			initContainerSpec := corev1.Container{
-				Image:           s3Client.Client.GetInitContainerImage(),
-				ImagePullPolicy: "IfNotPresent",
-				Name:            initContainerName,
-				Args:            s3Client.Client.GetInitContainerCmd(appS3Endpoint, appBkt, appSrcPath, appSrcName, appBktMnt),
-				Env:             initEnv,
-			}
-
-			// Add mount to initContainer, same mount used for Splunk instance container as well
-			initContainerSpec.VolumeMounts = []corev1.VolumeMount{
-				{
-					Name:      appVolumeMntName,
-					MountPath: appBktMnt,
-				},
-			}
-			podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, initContainerSpec)
-		}
 	}
 }
 
@@ -1422,7 +1195,6 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 
 		appStatusContext.IsDeploymentInProgress = true
 		var sourceToAppsList map[string]splclient.S3Response
-		appsModified := false
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
@@ -1442,12 +1214,6 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			_, err = handleAppRepoChanges(client, cr, appStatusContext, sourceToAppsList, appFrameworkConf)
 			if err != nil {
 				scopedLog.Error(err, "Unable to use the App list retrieved from the remote storage")
-				return err
-			}
-
-			// TODO: gaurav, this needs to be removed eventually in favor of downloading apps locally
-			_, _, err = ApplyAppListingConfigMap(client, cr, appFrameworkConf, appStatusContext.AppsSrcDeployStatus, appsModified)
-			if err != nil {
 				return err
 			}
 
@@ -1682,19 +1448,17 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 		return "", "", fmt.Errorf("relative paths are not supported for dest path: %s", destPath)
 	}
 
-	// Make sure the destination directory is existing
+	// Create the destination directory
 	destDir := path.Dir(destPath)
-	command := fmt.Sprintf("test -d %s; echo -n $?", destDir)
+	command := fmt.Sprintf("mkdir -p %s", destDir)
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
 
-	// If the Pod directory doesn't exist, do not try to create it. Instead throw an error
-	// Otherwise, in case of invalid dest path, we may end up creating too many invalid directories/files
+	// Throw an error if we are not able to create the destination directory where we wish to copy the app package
 	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
-	dirTestResult, _ := strconv.Atoi(stdOut)
-	if dirTestResult != 0 {
-		return stdOut, stdErr, fmt.Errorf("directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
+	if stdErr != "" || err != nil {
+		return stdOut, stdErr, fmt.Errorf("unable to create directory on Pod. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
 	}
 
 	go func() {

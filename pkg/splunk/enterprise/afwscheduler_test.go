@@ -1461,7 +1461,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	}
 
 	srcPath := "/opt/splunk/operator/app1.tgz"
-	dstPath := "/init-apps/xyz/app1.tgz"
+	dstPath := fmt.Sprintf("/%s/xyz/app1.tgz", appVolumeMntName)
 
 	// Calling with wrong scope should just return, without error
 	err := extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeLocal, dstPath, srcPath)

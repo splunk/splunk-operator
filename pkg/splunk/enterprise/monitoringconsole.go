@@ -158,8 +158,8 @@ func getMonitoringConsoleStatefulSet(client splcommon.ControllerClient, cr *ente
 	}
 	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
-	// Setup App framework init containers
-	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
 }
 

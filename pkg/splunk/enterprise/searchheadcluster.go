@@ -580,8 +580,8 @@ func getDeployerStatefulSet(client splcommon.ControllerClient, cr *enterpriseApi
 		return ss, err
 	}
 
-	// Setup App framework init containers
-	setupAppInitContainers(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }

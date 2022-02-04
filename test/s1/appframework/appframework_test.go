@@ -200,13 +200,13 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
-			downloadLocationStandalonePod := "/init-apps/" + appSourceName
+			downloadLocationStandalonePod := testenv.AppStagingLocOnPod + appSourceName
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -440,13 +440,13 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
-			downloadLocationStandalonePod := "/init-apps/" + appSourceName
+			downloadLocationStandalonePod := testenv.AppStagingLocOnPod + appSourceName
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -691,13 +691,13 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
-			downloadLocationStandalonePod := "/init-apps/" + appSourceName
+			downloadLocationStandalonePod := testenv.AppStagingLocOnPod + appSourceName
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
@@ -920,7 +920,7 @@ var _ = Describe("s1appfw test", func() {
 			//################## VERIFICATION #############
 			// Verify ES app is downloaded
 			testenvInstance.Log.Info("Verify ES app is downloaded on Standalone")
-			initContDownloadLocation := "/init-apps/" + appSourceName
+			initContDownloadLocation := testenv.AppStagingLocOnPod + appSourceName
 			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info("Verify Apps are downloaded on Pod", "version", appVersion, "Pod Name", podName)
 			testenv.VerifyAppsDownloadedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{podName}, appFileList, initContDownloadLocation)
@@ -1010,7 +1010,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
-			downloadLocationStandalonePod := "/init-apps/" + appSourceName
+			downloadLocationStandalonePod := testenv.AppStagingLocOnPod + appSourceName
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
@@ -1165,13 +1165,13 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppListPhase(deployment, testenvInstance, mcName, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
 
 			// Verify V1 apps are deleted on Standalone Pod
-			downloadLocationStandalonePod := "/init-apps/" + appSourceName
+			downloadLocationStandalonePod := testenv.AppStagingLocOnPod + appSourceName
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Standalone pod %s", appVersion, standalonePodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appFileList, downloadLocationStandalonePod)
 
 			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := "/init-apps/" + appSourceNameMC
+			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
 			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
 			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
