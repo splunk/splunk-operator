@@ -2917,4 +2917,328 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
 		})
 	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Split Applist into clusterlist and local list
+			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
+			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
+			   ######### INITIAL VERIFICATIONS #############
+			   * Verify Apps are Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify bundle push is successful
+			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
+			   ############### UPGRADE APPS ################
+			   * Upload V2 apps on S3
+			   * Wait for all C3 pods to be ready
+			   ############ FINAL VERIFICATIONS ############
+			   * Verify Apps are Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify bundle push is successful
+			   * Verify V2 apps are copied and upgraded on Monitoring Console and on Search Heads and Indexers pods
+			*/
+
+			//################## SETUP ####################
+			// Split Applist into 2 lists for local and cluster install
+			appVersion := "V1"
+			appListLocal := appListV1[len(appListV1)/2:]
+			appListCluster := appListV1[:len(appListV1)/2]
+
+			// Upload appListLocal list of apps to S3 (to be used for local install) for Idxc
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			s3TestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			localappFileList := testenv.GetAppFileList(appListLocal)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload appListLocal list of apps to S3 (to be used for local install) for Shc
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			s3TestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			s3TestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			clusterappFileList := testenv.GetAppFileList(appListCluster)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			s3TestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec
+			appSourceNameLocalIdxc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appSourceNameLocalShc := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appSourceNameClusterIdxc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameClusterShc := "appframework-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxcLocal := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShcLocal := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxcCluster := "appframework-test-volume-idxc-cluster-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
+
+			// Create App framework Spec for Cluster manager with scope local and append cluster scope
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
+			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+				VolName: appSourceVolumeNameIdxcCluster,
+				Scope:   enterpriseApi.ScopeCluster,
+			}
+			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
+			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
+
+			// Create App framework Spec for Search head cluster with scope local and append cluster scope
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
+			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
+				VolName: appSourceVolumeNameShcCluster,
+				Scope:   enterpriseApi.ScopeCluster,
+			}
+			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, s3TestDirShcCluster, appSourceClusterDefaultSpec)}
+			appFrameworkSpecShc.AppSources = append(appFrameworkSpecShc.AppSources, appSourceSpecCluster...)
+
+			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
+			testenvInstance.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
+			indexerReplicas := 3
+			shReplicas := 3
+			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+
+			//############ INITIAL VERIFICATIONS ##########
+			// Verify App Download State on Cluster Manager CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseDownload, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseDownload, clusterappFileList)
+
+			//Verify App Download State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseDownload, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseDownload, clusterappFileList)
+
+			// Verify App Copy State on Cluster Manager CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhasePodCopy, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhasePodCopy, clusterappFileList)
+
+			//Verify App Copy State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhasePodCopy, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhasePodCopy, clusterappFileList)
+
+			// Verify Apps Deleted on Operator Pod for Cluster Manager
+			opLocalAppPathClusterManagerLocalInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameLocalIdxc)
+			opLocalAppPathClusterManagerClusterInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameClusterIdxc)
+			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathClusterManagerLocalInstall)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathClusterManagerClusterInstall)
+
+			// Verify Apps Deleted on Operator Pod for Search Head Cluster
+			opLocalAppPathSearchHeadClusterLocalInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameLocalShc)
+			opLocalAppPathSearchHeadClusterClusterInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameClusterShc)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathSearchHeadClusterLocalInstall)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathSearchHeadClusterClusterInstall)
+
+			// Verify App Install State on Cluster Manager CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseInstall, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseInstall, clusterappFileList)
+
+			//Verify App Install State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseInstall, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseInstall, clusterappFileList)
+
+			// Verify apps are deleted on Cluster Manager Pod
+			localDownloadLocationClusterManager := "/init-apps/" + appSourceVolumeNameIdxcLocal
+			clusterDownloadLocationClusterManager := "/init-apps/" + appSourceVolumeNameIdxcCluster
+			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager Pod pod %s", appVersion, clusterManagerPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, localappFileList, localDownloadLocationClusterManager)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, clusterappFileList, clusterDownloadLocationClusterManager)
+
+			// Verify apps are deleted on Search Head Cluster
+			localDownloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShcLocal
+			clusterDownloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShcCluster
+			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, localappFileList, localDownloadLocationSearchHeadCluster)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, clusterappFileList, clusterDownloadLocationSearchHeadCluster)
+
+			// Verify bundle push status
+			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, "")
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+
+			// Saving current V1 bundle hash for future comparison
+			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
+
+			// Verify apps with local scope are installed locally on Cluster Manager and on Deployer
+			localPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are installed locally on Cluster Manager and Deployer", appVersion))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
+
+			// Verify apps with cluster scope are installed on Indexers
+			clusterPodNames := []string{}
+			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
+			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are installed on Indexers and Search Heads", appVersion))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
+
+			//############### UPGRADE APPS ################
+			// Delete apps on S3
+			testenvInstance.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// Upload appListLocal list of V2 apps to S3 (to be used for local install)
+			appVersion = "V2"
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			localappFileList = testenv.GetAppFileList(appListLocal)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
+			clusterappFileList = testenv.GetAppFileList(appListCluster)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// ############ ENABLE MANUAL POLL ############
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err := testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
+
+			// ########## Verify Manual Poll config map disabled after the poll is triggered #################
+
+			// Verify config map set back to off after poll trigger
+			testenvInstance.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
+			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+
+			//########## UPGRADE VERIFICATION #############
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseDownload, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseDownload, clusterappFileList)
+
+			//Verify App Download State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseDownload, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseDownload, clusterappFileList)
+
+			// Verify App Copy State on Cluster Manager CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhasePodCopy, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhasePodCopy, clusterappFileList)
+
+			//Verify App Copy State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhasePodCopy, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhasePodCopy, clusterappFileList)
+
+			// Verify Apps Deleted on Operator Pod for Cluster Manager
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathClusterManagerLocalInstall)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathClusterManagerClusterInstall)
+
+			// Verify Apps Deleted on Operator Pod for Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathSearchHeadClusterLocalInstall)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathSearchHeadClusterClusterInstall)
+
+			// Verify App Install State on Cluster Manager CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseInstall, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseInstall, clusterappFileList)
+
+			//Verify App Install State on Search Head Cluster CR
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseInstall, localappFileList)
+			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseInstall, clusterappFileList)
+
+			// Verify apps are deleted on Cluster Manager Pod
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, localappFileList, localDownloadLocationClusterManager)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, clusterappFileList, clusterDownloadLocationClusterManager)
+
+			// Verify apps are deleted on Search Head Cluster
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, localappFileList, localDownloadLocationSearchHeadCluster)
+			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, clusterappFileList, clusterDownloadLocationSearchHeadCluster)
+
+			// Verify bundle push status
+			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
+			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
+			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
+
+			//Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
+
+			// Verify apps with local scope are upgraded locally on Cluster Manager and on Deployer
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are upgraded locally on Cluster Manager and Deployer", appVersion))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
+
+			// Verify apps with cluster scope are upgraded on Indexers
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are upgraded on Indexers and Search Heads", appVersion))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
+		})
+	})
 })
