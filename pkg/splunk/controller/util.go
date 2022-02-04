@@ -78,6 +78,15 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
 
+	// check for changes in ServiceAccount
+	if splcommon.CompareByMarshall(current.ServiceAccountName, revised.ServiceAccountName) {
+		scopedLog.Info("Pod service account differs",
+			"current", current.ServiceAccountName,
+			"revised", revised.ServiceAccountName)
+		current.ServiceAccountName = revised.ServiceAccountName
+		result = true
+	}
+
 	// check for changes in Affinity
 	if splcommon.CompareByMarshall(current.Affinity, revised.Affinity) {
 		scopedLog.Info("Pod Affinity differs",
