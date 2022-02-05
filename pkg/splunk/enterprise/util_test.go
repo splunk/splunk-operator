@@ -1431,7 +1431,7 @@ func TestCopyFileToPod(t *testing.T) {
 	podExecCommands := []string{
 		"test -d",
 	}
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
 		{
 			StdOut: "22",
 			StdErr: "",
@@ -1439,28 +1439,28 @@ func TestCopyFileToPod(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnCtxts...)
 
 	// If Pod destination path is directory, source file name is used, and should not cause an error
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/"
 
 	// This should cause an error since stdOut != 0
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClientHandler)
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err == nil {
 		t.Errorf("CopyFileToPod should have returned error")
 	}
 
-	mockPodExecClients[0].StdOut = ""
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClientHandler)
+	mockPodExecReturnCtxts[0].StdOut = ""
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
 	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
 
 	// Proper source and destination paths should not return an error
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClientHandler)
+	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
 	}
@@ -1609,7 +1609,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	podExecCommands := []string{
 		"test -f",
 	}
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
 			StdOut: "",
 			StdErr: "dummyError",
@@ -1617,17 +1617,17 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
-	fileExists := checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClientHandler)
+	fileExists := checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
 	if fileExists {
 		t.Errorf("When the file doesn't exist, should return false")
 	}
 
-	mockPodExecClients[0].StdErr = ""
-	fileExists = checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClientHandler)
+	mockPodExecReturnContexts[0].StdErr = ""
+	fileExists = checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
 	if !fileExists {
 		t.Errorf("checkIfFileExistsOnPod should have returned true")
 	}

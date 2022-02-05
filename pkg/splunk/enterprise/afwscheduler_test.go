@@ -1490,45 +1490,45 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 		"tar -xzf",
 	}
 
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
 			StdOut: "",
 			StdErr: "",
 		},
 	}
 
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
 	// Calling with wrong scope should just return, without error
-	err := extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeLocal, dstPath, srcPath, mockPodExecClientHandler)
+	err := extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeLocal, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
 	}
 
 	// CR kind other than SearchHeadCluster or Cluster Master should just return without an error
 	// Calling with wrong scope should just return, without error
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClientHandler)
+	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
 	}
 
 	// Calling with correct params should not cause an error
 	cr.TypeMeta.Kind = "ClusterMaster"
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClientHandler)
+	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with correct parameters should not cause an error, but got error %v", err)
 	}
 
 	// now just introduce a StdErr so that we cover the error scenario too
-	mockPodExecClients[0].StdErr = "dummy error"
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClientHandler)
+	mockPodExecReturnContexts[0].StdErr = "dummy error"
+	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err == nil {
 		t.Errorf("extractClusterScopedAppOnPod should have returned error since mockPodExecClient returns error")
 	}
 
 	// just check if we received the required podExecClient
-	mockPodExecClientHandler.CheckPodExecClients(t, "extractClusterScopedAppOnPod")
+	mockPodExecClient.CheckPodExecCommands(t, "extractClusterScopedAppOnPod")
 }
 
 func TestRunPodCopyWorker(t *testing.T) {
@@ -1847,7 +1847,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		applyIdxcBundleCmdStr,
 		idxcShowClusterBundleStatusStr,
 	}
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		// this is for applying the cluster bundle
 		{
 			StdOut: "",
@@ -1860,10 +1860,10 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
-	playbookContext = getClusterScopePlaybookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClientHandler)
+	playbookContext = getClusterScopePlaybookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
@@ -1872,21 +1872,21 @@ func TestIDXCRunPlaybook(t *testing.T) {
 
 	// test the case where we try to push same bundle again
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	mockPodExecClients[0].StdErr = idxcBundleAlreadyPresentStr
+	mockPodExecReturnContexts[0].StdErr = idxcBundleAlreadyPresentStr
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
 	}
 
 	// test the case where bundle push is still in progress
-	mockPodExecClients[1].StdErr = ""
+	mockPodExecReturnContexts[1].StdErr = ""
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
 	}
 
 	// test the case where bundle push is complete
-	mockPodExecClients[1].StdOut = "cluster_status=None"
+	mockPodExecReturnContexts[1].StdOut = "cluster_status=None"
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
@@ -1894,7 +1894,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 
 	// now test the error scenario where we did not get OK in stdErr
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	mockPodExecClients[0].StdErr = ""
+	mockPodExecReturnContexts[0].StdErr = ""
 	err = playbookContext.runPlaybook()
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error since we did not get desired output")
@@ -1907,7 +1907,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		t.Errorf("runPlaybook() should have returned error since we passed invalud bundle push state")
 	}
 
-	mockPodExecClients[1].StdOut = ""
+	mockPodExecReturnContexts[1].StdOut = ""
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	idxcplaybookContext := playbookContext.(*IdxcPlaybookContext)
 	// invalid scenario, where stdOut!="cluster_status=None"
@@ -1916,19 +1916,19 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	}
 
 	// invalid scenario, where stdErr != ""
-	mockPodExecClients[1].StdErr = "error"
+	mockPodExecReturnContexts[1].StdErr = "error"
 	if idxcplaybookContext.isBundlePushComplete() {
 		t.Errorf("isBundlePushComplete() should have returned false since we did not get desried stdOut.")
 	}
 
 	// valid scenario where bundle push is complete
-	mockPodExecClients[1].StdErr = ""
-	mockPodExecClients[1].StdOut = "cluster_status=None"
+	mockPodExecReturnContexts[1].StdErr = ""
+	mockPodExecReturnContexts[1].StdOut = "cluster_status=None"
 	if !idxcplaybookContext.isBundlePushComplete() {
 		t.Errorf("isBundlePushComplete() should not have returned false.")
 	}
 
-	mockPodExecClientHandler.CheckPodExecClients(t, "idxcPlayBookContext")
+	mockPodExecClient.CheckPodExecCommands(t, "idxcPlayBookContext")
 }
 
 func TestSHCRunPlaybook(t *testing.T) {
@@ -1985,7 +1985,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 		fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile),
 	}
 
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		// this is for issuing bundle push command
 		{
 			StdOut: shcBundlePushCompleteStr,
@@ -2005,25 +2005,25 @@ func TestSHCRunPlaybook(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
 	// Test1: just for the sake of code coverage, pass invalid kind to get nil context
-	playbookContext := getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, "InvalidKind", mockPodExecClientHandler)
+	playbookContext := getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, "InvalidKind", mockPodExecClient)
 	if playbookContext != nil {
 		t.Errorf("playbookContext should be nil here since we passed invalid kind")
 	}
 
 	// Test2: invalid scenario where we get error while applying SHC bundle push
-	playbookContext = getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, kind, mockPodExecClientHandler)
+	playbookContext = getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 	err := playbookContext.runPlaybook()
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
 		t.Errorf("runPlaybook() should not have returned error, err=%v; expected bundle push state=Bundle push Pending, got=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
 	}
 
 	// Test3: valid scenario where bundle push state moves from Pending -> In Progress
-	mockPodExecClients[0].Err = nil
+	mockPodExecReturnContexts[0].Err = nil
 	err = playbookContext.runPlaybook()
 	if err != nil {
 		t.Errorf("runPlaybook() should not have returned error, err=%v", err)
@@ -2037,7 +2037,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 	// Test5: Invalid scenario where checking the status file returned error but removing it is successful
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
-	mockPodExecClients[2].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = ""
 	err = playbookContext.runPlaybook()
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
 		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
@@ -2045,14 +2045,14 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 	// Test6: Bundle push is still in progress since stdOut = ""
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
-	mockPodExecClients[1].StdErr = ""
+	mockPodExecReturnContexts[1].StdErr = ""
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
 	}
 
 	// Test7: Bundle push is still in progress since stdOut != shcBundlePushCompleteStr
-	mockPodExecClients[1].StdOut = "Error while deploying apps"
+	mockPodExecReturnContexts[1].StdOut = "Error while deploying apps"
 	err = playbookContext.runPlaybook()
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
 		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
@@ -2060,8 +2060,8 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 	// Test8: SHC status file should have the desired SHC bundle push complete message in it now. But removing the status file
 	// will have an error hence we won't mark the whole bundle push state as complete yet.
-	mockPodExecClients[1].StdOut = shcBundlePushCompleteStr
-	mockPodExecClients[2].StdErr = "some dummy error"
+	mockPodExecReturnContexts[1].StdOut = shcBundlePushCompleteStr
+	mockPodExecReturnContexts[2].StdErr = "some dummy error"
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
@@ -2069,7 +2069,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 	}
 
 	// Test9: now removing the bundle push status file should return success and hence the bundle push should be complete now.
-	mockPodExecClients[2].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = ""
 	err = playbookContext.runPlaybook()
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
 		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v,  got bundle push state=%s, expected shc bundle push state=Bundle Push Complete", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
@@ -2082,7 +2082,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 		t.Errorf("runPlaybook() should have returned error since we passed invalid bundle push state")
 	}
 
-	mockPodExecClientHandler.CheckPodExecClients(t, "shcPlayBookContext.runPlayBook")
+	mockPodExecClient.CheckPodExecCommands(t, "shcPlayBookContext.runPlayBook")
 }
 
 func TestRunLocalScopedPlaybook(t *testing.T) {
@@ -2156,7 +2156,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		"rm -f",
 	}
 
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		// this is for testing if file is present on pod
 		{
 			StdOut: "",
@@ -2176,9 +2176,9 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// now replace the pod exec client with our mock client
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
 	// Just make the lint conversion checks happy
 	var client splcommon.ControllerClient = getConvertedClient(c)
@@ -2204,7 +2204,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 			waiter:    &waiter,
 		},
 		sem:           make(chan struct{}, 1),
-		podExecClient: mockPodExecClientHandler,
+		podExecClient: mockPodExecClient,
 	}
 
 	// Test1: checkIfFileExistsOnPod returns error
@@ -2216,7 +2216,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// Test2: checkIfFileExistsOnPod passes but install command returns error
-	mockPodExecClients[0].Err = nil
+	mockPodExecReturnContexts[0].Err = nil
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook()
@@ -2225,7 +2225,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// Test3: install command passes but removing app package from pod returns error
-	mockPodExecClients[1].StdErr = ""
+	mockPodExecReturnContexts[1].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook()
@@ -2234,7 +2234,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// Test4: successful scenario where everything succeeds
-	mockPodExecClients[2].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook()
@@ -2242,7 +2242,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("runPlayBook should not have returned error. err=%s", err.Error())
 	}
 
-	mockPodExecClientHandler.CheckPodExecClients(t, "localInstallCtxt.runPlayBook")
+	mockPodExecClient.CheckPodExecCommands(t, "localInstallCtxt.runPlayBook")
 }
 
 func TestDeleteAppPkgFromOperator(t *testing.T) {

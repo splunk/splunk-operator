@@ -425,7 +425,7 @@ func TestApplyShcSecret(t *testing.T) {
 		"/opt/splunk/bin/splunk edit shcluster-config",
 		"opt/splunk/bin/splunk cmd splunkd rest",
 	}
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
 			StdOut: "",
 			StdErr: "",
@@ -438,37 +438,37 @@ func TestApplyShcSecret(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 	// Set resource version as that of NS secret
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	// Change resource version and test
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err == nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
-	mockPodExecClients[0].Err = nil
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	mockPodExecReturnContexts[0].Err = nil
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err == nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 
 	mgr.cr.Status.ShcSecretChanged[0] = false
-	mockPodExecClients[1].Err = nil
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	mockPodExecReturnContexts[1].Err = nil
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
 	mockSplunkClient.CheckRequests(t, method)
 
 	// Don't set as it is set already
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -482,7 +482,7 @@ func TestApplyShcSecret(t *testing.T) {
 
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	// Test set again for shc_secret
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -497,7 +497,7 @@ func TestApplyShcSecret(t *testing.T) {
 	mgr.cr.Status.ShcSecretChanged[0] = false
 	mgr.cr.Status.AdminSecretChanged[0] = false
 	// Test set again for admin password
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}
@@ -517,7 +517,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") {
 		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
 	}
@@ -538,7 +538,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") {
 		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
 	}
@@ -551,7 +551,7 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyShcSecret(mgr, 1, mockPodExecClientHandler)
+	err = ApplyShcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply shc secret %s", err.Error())
 	}

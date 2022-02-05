@@ -977,7 +977,7 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 		Data: map[string]string{"a": "b"},
 	}
 
-	mockPodExecClients := []*spltest.MockPodExecClient{
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{
 			StdOut: "",
 			StdErr: "",
@@ -985,25 +985,25 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 		},
 	}
 
-	var mockPodExecClientHandler *spltest.MockPodExecClientHandler = &spltest.MockPodExecClientHandler{}
-	mockPodExecClientHandler.AddPodExecClients(podExecCommands, mockPodExecClients...)
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
 
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClientHandler)
+	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
 	if err == nil {
 		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error")
 	}
 
-	mockPodExecClients[0].Err = nil
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClientHandler)
+	mockPodExecReturnContexts[0].Err = nil
+	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
 	if err == nil {
 		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
 	}
 
 	c.AddObject(&smartstoreConfigMap)
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClientHandler)
+	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
 	if err != nil {
 		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
 	}
 
-	mockPodExecClientHandler.CheckPodExecClients(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
+	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
 }
