@@ -19,7 +19,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +34,37 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestIsFanOutApplicableToCR(t *testing.T) {
+	// Fan out is always applicable for Standalone case
+	crStdln := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+	}
+
+	if !isFanOutApplicableToCR(crStdln) {
+		t.Errorf("For Standalone, fanout is always applicable")
+	}
+
+	// Fan out is not applicable for ClusterMaster
+	crClusterMaster := &enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+	}
+
+	if isFanOutApplicableToCR(crClusterMaster) {
+		t.Errorf("For ClusterMaster, fanout is not applicable")
+	}
+
+	// When the CR kind is not "Standalone", fanout is not applicable
+	crUnknownKind := &enterpriseApi.Standalone{}
+	if isFanOutApplicableToCR(crUnknownKind) {
+		t.Errorf("For the CR with otherthan Standalone, should return false ")
+	}
+
+}
 
 func TestCreateAndAddPipelineWorker(t *testing.T) {
 	appDeployInfo := &enterpriseApi.AppDeploymentInfo{
@@ -61,7 +91,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 		},
 	}
 
-	statefulSetName := "splunk-stand1-standalone"
+	statefulSetName := "splunk-stack1-standalone"
 	var replicas int32 = 32
 
 	sts := &appsv1.StatefulSet{
@@ -111,19 +141,6 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 
 	appSrcName := appFrameworkConfig.AppSources[0].Name
 	var statefulSet *appsv1.StatefulSet = &appsv1.StatefulSet{}
-	worker := &PipelineWorker{
-		appDeployInfo: appDeployInfo,
-		appSrcName:    appSrcName,
-		targetPodName: podName,
-		afwConfig:     appFrameworkConfig,
-		client:        client,
-		cr:            &cr,
-		sts:           statefulSet,
-	}
-
-	if !reflect.DeepEqual(worker, createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)) {
-		t.Errorf("Expected and Returned objects are not the same")
-	}
 
 	// Test for createAndAddPipelineWorker
 	afwPpln := initAppInstallPipeline(&appFrameworkContext, client, &cr)
@@ -132,6 +149,90 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	if len(afwPpln.pplnPhases[enterpriseApi.PhaseDownload].q) != 1 {
 		t.Errorf("Unable to add a worker to the pipeline phase")
 	}
+}
+
+func TestMakeWorkerInActive(t *testing.T) {
+	worker := &PipelineWorker{
+		isActive: true,
+		waiter:   &sync.WaitGroup{},
+	}
+
+	makeWorkerInActive(worker)
+
+	if worker.isActive || worker.waiter != nil {
+		t.Errorf("Failed to reest the worker")
+	}
+}
+
+func TestCreateFanOutWorker(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
+	// create statefulset for the cluster master
+	statefulSetName := "splunk-stack1-standalone"
+	var replicas int32 = 1
+
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	worker := &PipelineWorker{
+		cr: &cr,
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "app1.tgz",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:      enterpriseApi.PhaseInstall,
+				Status:     enterpriseApi.AppPkgInstallComplete,
+				RetryCount: 0,
+			},
+			ObjectHash: "abcd1234abcd",
+		},
+		sts:        sts,
+		appSrcName: appFrameworkConfig.AppSources[0].Name,
+		afwConfig:  appFrameworkConfig,
+		fanOut:     false,
+	}
+
+	fanOutWorker := createFanOutWorker(worker, 0)
+
+	if fanOutWorker == nil {
+		t.Errorf("Unable to create a fanout worker")
+	}
+
+	if fanOutWorker.fanOut {
+		t.Errorf("FanOut flag should be false on the new worker")
+	}
+	if fanOutWorker.targetPodName != "splunk-stack1-standalone-0" {
+		t.Errorf("Unexpected pod name: %v", fanOutWorker.targetPodName)
+	}
+
 }
 
 func TestGetApplicablePodNameForAppFramework(t *testing.T) {
@@ -292,6 +393,20 @@ func TestTransitionWorkerPhase(t *testing.T) {
 		},
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+
 	c := spltest.NewMockClient()
 	ppln := initAppInstallPipeline(appDeployContext, c, &cr)
 
@@ -319,6 +434,8 @@ func TestTransitionWorkerPhase(t *testing.T) {
 					Status: enterpriseApi.AppPkgDownloadComplete,
 				},
 			},
+			afwConfig:  appFrameworkConfig,
+			appSrcName: appFrameworkConfig.AppSources[0].Name,
 		}
 	}
 
@@ -354,6 +471,21 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
 	cr.TypeMeta.Kind = "Standalone"
 	replicas = 5
+	workerList[0] = &PipelineWorker{
+		sts: sts,
+		cr:  &cr,
+		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+			AppName: "app1.tgz",
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:  enterpriseApi.PhaseDownload,
+				Status: enterpriseApi.AppPkgDownloadComplete,
+			},
+		},
+		fanOut:     cr.TypeMeta.Kind == "Standalone",
+		afwConfig:  appFrameworkConfig,
+		appSrcName: appFrameworkConfig.AppSources[0].Name,
+	}
+
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
 	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas) {
@@ -573,6 +705,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 			},
 			afwConfig: &cr.Spec.AppFrameworkConfig,
 			client:    client,
+			fanOut:    cr.GetObjectKind().GroupVersionKind().Kind == "Standalone",
 		}
 	}
 
@@ -602,8 +735,12 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	// add the worker to the pod copy phase
 	worker.appDeployInfo.PhaseInfo.RetryCount = 0
 	worker.isActive = false
-	worker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhasePodCopy
-	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
+	worker.fanOut = false
+	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo,
+		enterpriseApi.PhaseInfo{
+			Phase:  enterpriseApi.PhasePodCopy,
+			Status: enterpriseApi.AppPkgPodCopyPending,
+		})
 	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = append(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q, workerList...)
 
 	go ppln.podCopyPhaseManager()
@@ -625,8 +762,12 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	// add the worker to the install phase
 	worker.appDeployInfo.PhaseInfo.RetryCount = 0
 	worker.isActive = false
-	worker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
-	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallPending
+	worker.fanOut = false
+	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo,
+		enterpriseApi.PhaseInfo{
+			Phase:  enterpriseApi.PhaseInstall,
+			Status: enterpriseApi.AppPkgInstallPending,
+		})
 	ppln.pplnPhases[enterpriseApi.PhaseInstall].q = append(ppln.pplnPhases[enterpriseApi.PhaseInstall].q, workerList...)
 
 	// Start the install phase manager
@@ -766,9 +907,138 @@ func TestNeedToUseAuxPhaseInfo(t *testing.T) {
 	}
 
 	*sts.Spec.Replicas = 1
-	// When replica count is 1, no need to use aux phase info
-	if needToUseAuxPhaseInfo(worker, enterpriseApi.PhasePodCopy) {
+	// Irrespective of the replica member count, aux. phase info should be used for any phase other than download
+	if !needToUseAuxPhaseInfo(worker, enterpriseApi.PhasePodCopy) {
 		t.Errorf("Suggesting Aux phase info, when it is not needed")
+	}
+}
+
+func TestSetPhaseStatusToPending(t *testing.T) {
+	phaseInfo := &enterpriseApi.PhaseInfo{
+		Phase: enterpriseApi.PhaseDownload,
+	}
+
+	setPhaseStatusToPending(phaseInfo)
+	if phaseInfo.Status != enterpriseApi.AppPkgDownloadPending {
+		t.Errorf("Expected status %v, but set to: %v", enterpriseApi.AppPkgDownloadPending, phaseInfo.Status)
+	}
+
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	setPhaseStatusToPending(phaseInfo)
+	if phaseInfo.Status != enterpriseApi.AppPkgPodCopyPending {
+		t.Errorf("Expected status %v, but set to: %v", enterpriseApi.AppPkgPodCopyPending, phaseInfo.Status)
+	}
+
+	phaseInfo.Phase = enterpriseApi.PhaseInstall
+	setPhaseStatusToPending(phaseInfo)
+	if phaseInfo.Status != enterpriseApi.AppPkgInstallPending {
+		t.Errorf("Expected status %v, but set to: %v", enterpriseApi.AppPkgInstallPending, phaseInfo.Status)
+	}
+}
+
+func TestIsPhaseStatusComplete(t *testing.T) {
+	phaseInfo := &enterpriseApi.PhaseInfo{
+		Phase: enterpriseApi.PhaseDownload,
+	}
+
+	// incomplete phaseInfo should always return false
+	if isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the status is not set, should return false")
+	}
+
+	phaseInfo = &enterpriseApi.PhaseInfo{
+		Status: enterpriseApi.AppPkgDownloadPending,
+	}
+	if isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the phase is invalid, should return false")
+	}
+
+	// If the status is not complete, should return false
+	phaseInfo.Phase = enterpriseApi.PhaseDownload
+	if isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the status is not complete, should return false")
+	}
+
+	// When the status is complete, should return true
+	phaseInfo.Status = enterpriseApi.AppPkgDownloadComplete
+	if !isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the status is complete, should return true")
+	}
+
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+	if !isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the status is complete, should return true")
+	}
+
+	phaseInfo.Phase = enterpriseApi.PhaseInstall
+	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	if !isPhaseStatusComplete(phaseInfo) {
+		t.Errorf("When the status is complete, should return true")
+	}
+}
+
+func TestIsPhaseMaxRetriesReached(t *testing.T) {
+	phaseInfo := &enterpriseApi.PhaseInfo{
+		RetryCount: 1,
+	}
+
+	// should return false, when the retries are not maxed out
+	if isPhaseMaxRetriesReached(phaseInfo) {
+		t.Errorf("Should return false, when the max retries are not reached")
+	}
+
+	// should return true, whe the max. retries are reached
+	phaseInfo.RetryCount = pipelinePhaseMaxRetryCount
+	if !isPhaseMaxRetriesReached(phaseInfo) {
+		t.Errorf("Should return true, when the max retries reached")
+	}
+}
+
+func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
+	phaseInfo := &enterpriseApi.PhaseInfo{
+		Phase:      enterpriseApi.PhaseDownload,
+		Status:     enterpriseApi.AppPkgDownloadComplete,
+		RetryCount: pipelinePhaseMaxRetryCount + 1,
+	}
+
+	// Should not be eligible once the max. retries are reached
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+		t.Errorf("Should not be eligible once the max. retries reached")
+	}
+
+	phaseInfo.RetryCount = 0
+	// For local scope, if the phase and status are not install complete, should return true
+	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+		t.Errorf("Local scope: If the install is not complete, should be eligible to run")
+	}
+
+	// For local scope, once the app is install complete, should not be eligible to run
+	phaseInfo.Phase = enterpriseApi.PhaseInstall
+	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+		t.Errorf("Local scope: When the install is complete, should not be eligible to run")
+	}
+
+	// For cluster scope, once the app is install complete, should not be eligible to run
+	phaseInfo.Phase = enterpriseApi.PhaseInstall
+	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: when the install is complete, should not be eligible to run")
+	}
+
+	// For cluster scope, once the podcopy is complete, should not be eligible to run
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
+	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: On podcopy complete, should not be eligible to run")
+	}
+
+	// For cluster scope, if the podCopy is not complete, should be able to run
+	phaseInfo.Phase = enterpriseApi.PhasePodCopy
+	phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
+	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+		t.Errorf("Cluster scope: If the pod copy is not complete, should be eligible to run")
 	}
 }
 
@@ -1334,7 +1604,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	downloadPhaseWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go pplnPhase.scheduleDownloads(ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
 	for _, downloadWorker := range pplnPhase.q {
@@ -1348,7 +1618,7 @@ func TestScheduleDownloads(t *testing.T) {
 	downloadPhaseWaiter.Add(1)
 	close(ppln.sigTerm)
 	// schedule the download threads to do actual download work
-	go pplnPhase.scheduleDownloads(ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
 }
@@ -2371,26 +2641,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		},
 	}
 
-	// create statefulset for the cluster master
-	statefulSetName := "splunk-stack1-standalone"
-	var replicas int32 = 1
-
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      statefulSetName,
-			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-		},
-	}
-
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(client, sts)
-	if err != nil {
-		t.Errorf("unable to apply statefulset")
-	}
-
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-standalone-0",
@@ -2404,7 +2655,6 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 			ObjectHash: "abcd1234abcd",
 		},
 		client:     client,
-		sts:        sts,
 		appSrcName: appFrameworkConfig.AppSources[0].Name,
 		afwConfig:  appFrameworkConfig,
 	}
@@ -2419,7 +2669,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	appPkgLocalPath := getAppPackageLocalPath(worker)
 	appPkgLocalDir := path.Dir(appPkgLocalPath)
 
-	_, err = os.Stat(appPkgLocalDir)
+	_, err := os.Stat(appPkgLocalDir)
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(appPkgLocalDir, 0755)
 		if err != nil {
@@ -2436,57 +2686,32 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	}
 	defer os.Remove(appPkgLocalPath)
 
-	// If sts is not set, should clean the app pkg
-	tryAppPkgCleanupFromOperatorPod(worker)
+	// Standalone with only one replicas
+	// Case-1: App pkg should not be deleted, when the installation is not complete on the Pod.
+	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo, enterpriseApi.PhaseInfo{
+		Phase:  enterpriseApi.PhaseInstall,
+		Status: enterpriseApi.AppPkgInstallInProgress})
 
-	_, err = os.Stat(appPkgLocalPath)
-	if err == nil || !os.IsNotExist(err) {
-		t.Errorf("When the STS is nil, file should be removed")
-	}
-
-	// For standalone with replica count of 1, app package should be cleaned from the Operator
 	_, err = os.Create(appPkgLocalPath)
 	if err != nil {
 		t.Errorf("Unable to create the local package file, error: %v", err)
 	}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
-	_, err = os.Stat(appPkgLocalPath)
-	if err == nil || !os.IsNotExist(err) {
-		t.Errorf("app pkg should be removed if the replica count is 1")
-	}
-
-	// Test cases with the Standalone replicas > 1
-	// Standalone with replicas > 1 should return false, unless the app installed on all the pods
-	_, err = os.Create(appPkgLocalPath)
-	if err != nil {
-		t.Errorf("Unable to create the local package file, error: %v", err)
-	}
-
-	replicas = 5
-	_, err = splctrl.ApplyStatefulSet(client, sts)
-	if err != nil {
-		t.Errorf("unable to update the statefulset")
-	}
-
-	worker.appDeployInfo.AuxPhaseInfo = make([]enterpriseApi.PhaseInfo, replicas)
 	tryAppPkgCleanupFromOperatorPod(worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if os.IsNotExist(err) {
 		t.Errorf("App pkg should not be deleted when the install is not complete on all the Pods ")
 	}
 
-	// When all the app is installed on all the pods, should confirm app deletion from operator pod
+	// Case-2: When only one replica exists, should delete the app  package and also should set the main phase info to install
 	_, err = os.Create(appPkgLocalPath)
 	if err != nil {
 		t.Errorf("Unable to create the local package file, error: %v", err)
 	}
 
-	auxPhaseInfo := worker.appDeployInfo.AuxPhaseInfo
-	for i := range auxPhaseInfo {
-		auxPhaseInfo[i].Phase = enterpriseApi.PhaseInstall
-		auxPhaseInfo[i].Status = enterpriseApi.AppPkgInstallComplete
-	}
+	worker.appDeployInfo.AuxPhaseInfo[0] = enterpriseApi.PhaseInfo{
+		Phase:  enterpriseApi.PhaseInstall,
+		Status: enterpriseApi.AppPkgInstallComplete}
 
 	tryAppPkgCleanupFromOperatorPod(worker)
 	_, err = os.Stat(appPkgLocalPath)
@@ -2494,9 +2719,70 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
 	}
 
-	// When the apps are installed across all the pods, same should be updated int the PhaseInfo
 	if worker.appDeployInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall || worker.appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
 		t.Errorf("When app is installed on all the replica pods, same should be updated in the Phase info")
+	}
+
+	// Standalone with only multiple replicas
+	// Case-1: App pkg should not be deleted, when the installation is not complete on all the replica members.
+	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo, enterpriseApi.PhaseInfo{
+		Phase:  enterpriseApi.PhasePodCopy,
+		Status: enterpriseApi.AppPkgPodCopyComplete})
+
+	_, err = os.Create(appPkgLocalPath)
+	if err != nil {
+		t.Errorf("Unable to create the local package file, error: %v", err)
+	}
+
+	tryAppPkgCleanupFromOperatorPod(worker)
+	_, err = os.Stat(appPkgLocalPath)
+	if os.IsNotExist(err) {
+		t.Errorf("App pkg should not be deleted when the install is not complete on all the Pods ")
+	}
+
+	// Case-2: When all the install is complete on all the replica members, should delete the app  package and also should set the main phase info to install
+	_, err = os.Create(appPkgLocalPath)
+	if err != nil {
+		t.Errorf("Unable to create the local package file, error: %v", err)
+	}
+
+	worker.appDeployInfo.AuxPhaseInfo[1] = enterpriseApi.PhaseInfo{
+		Phase:  enterpriseApi.PhaseInstall,
+		Status: enterpriseApi.AppPkgInstallComplete}
+
+	tryAppPkgCleanupFromOperatorPod(worker)
+	_, err = os.Stat(appPkgLocalPath)
+	if err == nil || !os.IsNotExist(err) {
+		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
+	}
+
+	if worker.appDeployInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall || worker.appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+		t.Errorf("When app is installed on all the replica pods, same should be updated in the Phase info")
+	}
+
+	// For a CR, other than standalone, whenever the install is complete, should also delete the app pkg from operator pod
+	cr.TypeMeta.Kind = "ClusterMaster"
+	worker.appDeployInfo.AuxPhaseInfo = nil
+	appPkgLocalPath = getAppPackageLocalPath(worker)
+	appPkgLocalDir = path.Dir(appPkgLocalPath)
+
+	_, err = os.Stat(appPkgLocalDir)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(appPkgLocalDir, 0755)
+		if err != nil {
+			t.Errorf("Unable to create the directory, error: %v", err)
+		}
+	}
+
+	_, err = os.Create(appPkgLocalPath)
+	if err != nil {
+		t.Errorf("Unable to create the local package file, error: %v", err)
+	}
+
+	tryAppPkgCleanupFromOperatorPod(worker)
+	_, err = os.Stat(appPkgLocalPath)
+	if err == nil || !os.IsNotExist(err) {
+		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
 	}
 }
 
@@ -2630,14 +2916,75 @@ func TestInstallWorkerHandler(t *testing.T) {
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushComplete
 }
 
-// TODO: gaurav/subba, commenting this UT for now.
-// It needs to be revisited once we have all the glue logic for all pipelines
-// For now, just covers the podCopy related flow
-/*
-func TestAfwSchedulerEntry(t *testing.T) {
+func TestAfwYieldWatcher(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	afwPipeline := &AppInstallPipeline{}
+	afwPipeline.cr = &cr
+	afwPipeline.sigTerm = make(chan struct{})
+	afwPipeline.afwEntryTime = time.Now().Unix()
+
+	// add a waiter
+	afwPipeline.phaseWaiter.Add(1)
+
+	// When the pipeline is empty, should break
+	yieldTime := 300
+	afwPipeline.afwYieldWatcher(int64(yieldTime))
+	afwPipeline.phaseWaiter.Wait()
+
+	_, channelOpen := <-afwPipeline.sigTerm
+
+	// This test should also fail, if the yield is really not happening for 300 seconds
+	if channelOpen {
+		t.Errorf("When the pipelines are empty, should yield immediately")
+	}
+
+	// When the pipeline is not empty, should wait for the max. yield time.
+	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 1)
+	initPipelinePhase(afwPipeline, enterpriseApi.PhaseDownload)
+	afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].q = append(afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].q, &PipelineWorker{})
+	afwPipeline.sigTerm = make(chan struct{})
+	afwPipeline.afwEntryTime = time.Now().Unix()
+	currentTime := afwPipeline.afwEntryTime
+
+	// Add a waiter
+	afwPipeline.phaseWaiter.Add(1)
+	// When the pipeline is empty, should break
+	yieldTime = 10
+	afwPipeline.afwYieldWatcher(int64(yieldTime))
+	afwPipeline.phaseWaiter.Wait()
+
+	_, channelOpen = <-afwPipeline.sigTerm
+	if channelOpen {
+		t.Errorf("Channel should be closed by the time we reach hear, OR else, this test should have failed due to max. timeout")
+	}
+
+	yieldTimeSpent := time.Now().Unix() - currentTime
+	if yieldTimeSpent < int64(yieldTime) {
+		t.Errorf("When the pipelines are not empty, yield should happen only on timer expiry. Time spent by scheduler: %v", yieldTimeSpent)
+	}
+}
+
+// Following test doesn't have anything to test in particular.
+// When there are no workers pending, the scheduler should return immediately.
+// If the scheduler is blocked for an extended period of time, it should fail at infra level.
+func TestAfwSchedulerEntry(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -2664,93 +3011,34 @@ func TestAfwSchedulerEntry(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 10,
 	}
-	// Create 2 apps for each app source, a total of 6 apps
-	appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo, 3)
 
-	appSrcDeploymentInfo := enterpriseApi.AppSrcDeployInfo{}
+	statefulSetName := "splunk-stack1-standalone"
+	var replicas int32 = 32
 
-	appDeployInfo := enterpriseApi.AppDeploymentInfo{
-		AppName:    fmt.Sprintf("app1.tgz"),
-		ObjectHash: fmt.Sprintf("abcd1234abcd"),
-		PhaseInfo: enterpriseApi.PhaseInfo{
-			Phase:  enterpriseApi.PhaseDownload,
-			Status: enterpriseApi.AppPkgDownloadPending,
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      statefulSetName,
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
 		},
 	}
-	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, appDeployInfo)
-	appDeployContext.AppsSrcDeployStatus[appFrameworkConfig.AppSources[0].Name] = appSrcDeploymentInfo
 
-	appDeployContext.AppFrameworkConfig = *appFrameworkConfig
-
-	afwPipeline = nil
-	afwPipeline = initAppInstallPipeline(appDeployContext)
-
-	var schedulerWaiter sync.WaitGroup
-	defer schedulerWaiter.Wait()
-
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/"
-	defer func() {
-		splcommon.AppDownloadVolume = defaultVol
-	}()
-
-	appPkgFileName := appDeployInfo.AppName + "_" + strings.Trim(appDeployInfo.ObjectHash, "\"")
-
-	appSrcScope := appFrameworkConfig.AppSources[0].Scope
-	appPkgLocalDir := getAppPackageLocalPath(&cr, appSrcScope, appFrameworkConfig.AppSources[0].Name)
-	appPkgLocalPath := appPkgLocalDir + appPkgFileName
-
-	_, err := os.Stat(appPkgLocalDir)
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(appPkgLocalDir, 0755)
-		if err != nil {
-			t.Errorf("Unable to create the directory, error: %v", err)
-		}
+	client := spltest.NewMockClient()
+	_, err := splctrl.ApplyStatefulSet(client, sts)
+	if err != nil {
+		t.Errorf("unable to apply statefulset")
 	}
 
-	_, err = os.Stat(appPkgLocalPath)
-	if os.IsNotExist(err) {
-		_, err := os.Create(appPkgLocalPath)
-		if err != nil {
-			t.Errorf("Unable to create the local package file, error: %v", err)
-		}
+	startTime := time.Now().Unix()
+	afwSchedulerEntry(client, &cr, appDeployContext, appFrameworkConfig)
+	// Assuming the test is returning sooner, testing it for a 2 seconds value, which should be optimal for now
+	waitTime := time.Now().Unix() - startTime
+	if waitTime > 2 {
+		t.Errorf("For an empty pipeline, scheduler should return immediately, but spent: %v", waitTime)
 	}
-	defer os.Remove(appPkgLocalPath)
-
-	schedulerWaiter.Add(1)
-	go func() {
-		worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].msgChannel
-		worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadComplete
-		worker.isActive = false
-		// wait for the glue logic
-		//afwPipeline.pplnPhases[enterpriseApi.PhaseDownload].workerWaiter.Done()
-		schedulerWaiter.Done()
-	}()
-
-	// schedulerWaiter.Add(1)
-	// go func() {
-	// 	worker := <-afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].msgChannel
-	// 	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
-	// 	worker.isActive = false
-	// 	// wait for the glue logic
-	// 	//afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].workerWaiter.Done()
-	// 	schedulerWaiter.Done()
-	// }()
-
-	// schedulerWaiter.Add(1)
-	// go func() {
-	// 	worker := <-afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].msgChannel
-	// 	worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	// 	worker.isActive = false
-	// 	// wait for the glue logic
-	// 	// afwPipeline.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter.Done()
-	// 	schedulerWaiter.Done()
-	// }()
-
-	afwSchedulerEntry(c, &cr, appDeployContext, appFrameworkConfig)
 }
-*/

@@ -592,6 +592,10 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	var appFramworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
 	var err error
 
+	if appDeployContext.AppsSrcDeployStatus == nil {
+		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	}
+
 	var S3Response splclient.S3Response
 
 	// Test-1: Empty remoteObjectList Map should return an error
@@ -1775,7 +1779,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	for i := range appSrcDeploymentInfo.AppDeploymentInfoList {
 		appSrcDeploymentInfo.AppDeploymentInfoList[i] = enterpriseApi.AppDeploymentInfo{
 			AppName:      fmt.Sprintf("app%v.spl", i),
-			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v\"", i),
+			ObjectHash:   fmt.Sprintf("\"abcdef1234567890abcdef%v-%v\"", i, i),
 			DeployStatus: enterpriseApi.DeployStatusComplete,
 			RepoState:    enterpriseApi.RepoStateDeleted,
 		}
@@ -2002,4 +2006,29 @@ func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGetCleanObjectDigest(t *testing.T) {
+	// plain digest
+	var digests = []string{"\"b38a8f911e2b43982b71a979fe1d3c3f\"", "b38a8f911e2b43982b71a979fe1d3c3f"}
+	retDigest, err := getCleanObjectDigest(&digests[0])
+	if err != nil {
+		t.Errorf("Unable to clean the digest, error: %v", err)
+	}
+
+	if digests[1] != *retDigest {
+		t.Errorf("Converted digest value: %v is not equal to the expected digest value: %v", *retDigest, digests[1])
+	}
+
+	// digest in case of multi-part upload
+	digests = []string{"\"b38a8f911e2b43982b71a979fe1d3c3f-3\"", "b38a8f911e2b43982b71a979fe1d3c3f-3"}
+	retDigest, err = getCleanObjectDigest(&digests[0])
+	if err != nil {
+		t.Errorf("Unable to clean the digest, error: %v", err)
+	}
+
+	if digests[1] != *retDigest {
+		t.Errorf("Converted digest value: %v is not equal to the expected digest value: %v", *retDigest, digests[1])
+	}
+
 }

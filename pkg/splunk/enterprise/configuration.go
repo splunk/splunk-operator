@@ -950,6 +950,11 @@ refCount: %d`, status, numOfObjects+1)
 func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+		//Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
+		// interfere with the upgrade scenarios. So, if the AppsSrcDeployStatus is already allocated
+		// and the version is not `CurrentAfwVersion`, means it is migration scenario, and the migration logic should
+		// handle upgrading to the latest version.
+		appStatusContext.Version = enterpriseApi.LatestAfwVersion
 
 		_, err := createOrUpdateAppUpdateConfigMap(client, cr)
 		if err != nil {
@@ -1004,11 +1009,23 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 	return false
 }
 
+// isAppSourceScopeValid checks for valid app source
+func isAppSourceScopeValid(scope string) bool {
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig
+}
+
 // validateSplunkAppSources validates the App source config in App Framework spec
 func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
 
-	duplicateAppSourceStorageChecker := make(map[string]bool)
+	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
+	if !localScope {
+		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
+		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
+	}
+
 	duplicateAppSourceNameChecker := make(map[string]bool)
+
 	var vol string
 
 	// Make sure that all the App Sources are provided with the mandatory config values.
@@ -1039,30 +1056,36 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			vol = appFramework.Defaults.VolName
 		}
 
+		var scope string
 		if appSrc.Scope != "" {
 			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
 				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
 			}
 
-			if !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopeCluster || appSrc.Scope == enterpriseApi.ScopeClusterWithPreConfig) {
+			if !isAppSourceScopeValid(appSrc.Scope) {
 				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
 			}
-		} else if appFramework.Defaults.Scope == "" {
-			return fmt.Errorf("app Source scope is missing for: %s", appSrc.Name)
+
+			scope = appSrc.Scope
+		} else {
+			if appFramework.Defaults.Scope == "" {
+				return fmt.Errorf("app Source scope is missing for: %s", appSrc.Name)
+			}
+
+			scope = appFramework.Defaults.Scope
 		}
 
-		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
+		if _, ok := duplicateAppSourceStorageChecker[scope][vol+appSrc.Location]; ok {
 			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
-		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
-
+		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
 	}
 
 	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
 		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
-	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopeCluster && appFramework.Defaults.Scope != enterpriseApi.ScopeClusterWithPreConfig {
+	if appFramework.Defaults.Scope != "" && !isAppSourceScopeValid(appFramework.Defaults.Scope) {
 		return fmt.Errorf("scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
 

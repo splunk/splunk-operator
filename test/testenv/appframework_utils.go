@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
@@ -291,4 +292,22 @@ func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope
 	}
 
 	return appFrameworkSpec
+}
+
+// WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app
+func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+	startTime := time.Now()
+
+	for time.Since(startTime) <= time.Duration(2*time.Minute) {
+		for _, appName := range appList {
+			appDeploymentInfo, err := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "Failed to get app deployment info")
+			}
+			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall {
+				return
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
 }

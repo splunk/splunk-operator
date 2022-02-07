@@ -33,11 +33,24 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// createPipelineWorker creates a pipeline worker for an app package
-func createPipelineWorker(appDeployInfo *enterpriseApi.AppDeploymentInfo, appSrcName string, podName string,
-	appFrameworkConfig *enterpriseApi.AppFrameworkSpec, client splcommon.ControllerClient,
-	cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) *PipelineWorker {
-	return &PipelineWorker{
+// isFanOutApplicableToCR confirms if a given CR needs fanOut support
+func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		return true
+	default:
+		return false
+	}
+}
+
+// createAndAddPipelineWorker used to add a worker to the pipeline on reconcile re-entry
+func (ppln *AppInstallPipeline) createAndAddPipelineWorker(phase enterpriseApi.AppPhaseType, appDeployInfo *enterpriseApi.AppDeploymentInfo,
+	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec,
+	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) {
+
+	scopedLog := log.WithName("createAndAddPipelineWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	worker := &PipelineWorker{
 		appDeployInfo: appDeployInfo,
 		appSrcName:    appSrcName,
 		targetPodName: podName,
@@ -45,21 +58,12 @@ func createPipelineWorker(appDeployInfo *enterpriseApi.AppDeploymentInfo, appSrc
 		client:        client,
 		cr:            cr,
 		sts:           statefulSet,
+		fanOut:        isFanOutApplicableToCR(cr),
 	}
-}
 
-// createAndAddAWorker used to add a worker to the pipeline on reconcile re-entry
-func (ppln *AppInstallPipeline) createAndAddPipelineWorker(phase enterpriseApi.AppPhaseType, appDeployInfo *enterpriseApi.AppDeploymentInfo,
-	appSrcName string, podName string, appFrameworkConfig *enterpriseApi.AppFrameworkSpec,
-	client splcommon.ControllerClient, cr splcommon.MetaObject, statefulSet *appsv1.StatefulSet) {
+	scopedLog.Info("Created new worker", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase, "fan out", worker.fanOut)
 
-	scopedLog := log.WithName("createAndAddPipelineWorker").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	worker := createPipelineWorker(appDeployInfo, appSrcName, podName, appFrameworkConfig, client, cr, statefulSet)
-
-	if worker != nil {
-		scopedLog.Info("Created new worker", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase)
-		ppln.addWorkersToPipelinePhase(phase, worker)
-	}
+	ppln.addWorkersToPipelinePhase(phase, worker)
 }
 
 // getApplicablePodNameForAppFramework gets the Pod name relevant for the CR under work
@@ -129,26 +133,39 @@ func (ppln *AppInstallPipeline) deleteWorkerFromPipelinePhase(phaseID enterprise
 	return false
 }
 
-// setContextForNewPhase makes the worker ready for the new phase
-func setContextForNewPhase(worker *PipelineWorker, phaseInfo *enterpriseApi.PhaseInfo, nextPhase enterpriseApi.AppPhaseType) {
-	phaseInfo.Phase = nextPhase
+// setContextForNewPhase sets the PhaseInfo to new phase
+func setContextForNewPhase(phaseInfo *enterpriseApi.PhaseInfo, newPhase enterpriseApi.AppPhaseType) {
+	phaseInfo.Phase = newPhase
 	phaseInfo.RetryCount = 0
-	if nextPhase == enterpriseApi.PhaseDownload {
-		phaseInfo.Status = enterpriseApi.AppPkgDownloadPending
-	} else if nextPhase == enterpriseApi.PhasePodCopy {
-		phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
-	} else if nextPhase == enterpriseApi.PhaseInstall {
-		phaseInfo.Status = enterpriseApi.AppPkgInstallPending
-	}
+	setPhaseStatusToPending(phaseInfo)
+}
 
+// makeWorkerInActive removes any pipeline specific context from the worker
+func makeWorkerInActive(worker *PipelineWorker) {
 	worker.isActive = false
 	worker.waiter = nil
+}
+
+// createFanOutWorker creates a fan-out worker
+func createFanOutWorker(seedWorker *PipelineWorker, ordinalIdx int) *PipelineWorker {
+	if seedWorker == nil {
+		return nil
+	}
+
+	if int32(ordinalIdx) >= *seedWorker.sts.Spec.Replicas {
+		return nil
+	}
+
+	newWorker := &PipelineWorker{}
+	*newWorker = *seedWorker
+	newWorker.fanOut = false
+	newWorker.targetPodName = getApplicablePodNameForAppFramework(seedWorker.cr, ordinalIdx)
+	return newWorker
 }
 
 // transitionWorkerPhase transitions a worker to new phase, and deletes from the current phase
 // In the case of Standalone CR with multiple replicas, Fan-out `replicas` number of new workers
 func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, currentPhase, nextPhase enterpriseApi.AppPhaseType) {
-	kind := worker.cr.GetObjectKind().GroupVersionKind().Kind
 
 	scopedLog := log.WithName("transitionWorkerPhase").WithValues("name", worker.cr.GetName(), "namespace", worker.cr.GetNamespace(), "App name", worker.appDeployInfo.AppName, "digest", worker.appDeployInfo.ObjectHash, "pod name", worker.targetPodName, "current Phase", currentPhase, "next phase", nextPhase)
 
@@ -159,6 +176,9 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 		replicaCount = 1
 	}
 
+	// Disable the  existing worker, so that either it can be safely transitioned to new pipeline or can act as a base for fan-out workers
+	makeWorkerInActive(worker)
+
 	// For now Standalone is the only CR unique with multiple replicas that is applicable for the AFW
 	// If the replica count is more than 1, and if it is Standalone, when transitioning from
 	// download phase, create a separate worker for the Pod copy(which also transition to install worker)
@@ -167,23 +187,11 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 	// switches to download phase, once the download phase is complete, it will safely schedule a new pod copy worker,
 	// without affecting other pods.
 	appDeployInfo := worker.appDeployInfo
-	if replicaCount == 1 {
-		scopedLog.Info("Simple transition")
-
-		setContextForNewPhase(worker, &appDeployInfo.PhaseInfo, nextPhase)
-		ppln.addWorkersToPipelinePhase(nextPhase, worker)
-	} else if kind == "Standalone" {
-
-		// ToDo: sgontla: Strengthen this logic such that we don't depend the podName
-		if worker.targetPodName != "" {
-			podID, _ := getOrdinalValFromPodName(worker.targetPodName)
-			phaseInfo := &worker.appDeployInfo.AuxPhaseInfo[podID]
-			setContextForNewPhase(worker, phaseInfo, nextPhase)
-
-		} else if currentPhase == enterpriseApi.PhaseDownload {
+	if worker.fanOut {
+		scopedLog.Info("Fan-out transition")
+		if currentPhase == enterpriseApi.PhaseDownload {
 			// On a reconcile entry, processing the Standalone CR right after loading the appDeployContext from the CR status
-			var copyWorkers, installWorkers []*PipelineWorker
-			scopedLog.Info("Fan-out transition")
+			var podCopyWorkers, installWorkers []*PipelineWorker
 
 			// Seems like the download just finished. Allocate Phase info
 			if len(appDeployInfo.AuxPhaseInfo) == 0 {
@@ -192,56 +200,57 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 				appDeployInfo.AuxPhaseInfo = make([]enterpriseApi.PhaseInfo, replicaCount)
 
 				// Create a slice of corresponding worker nodes
-				copyWorkers = make([]*PipelineWorker, replicaCount)
+				podCopyWorkers = make([]*PipelineWorker, replicaCount)
 
 				//Create the Aux PhaseInfo for tracking all the Standalone Pods
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					// Create a new copy worker
-					copyWorkers[podID] = &PipelineWorker{}
-					*copyWorkers[podID] = *worker
-					copyWorkers[podID].targetPodName = getApplicablePodNameForAppFramework(worker.cr, podID)
+					podCopyWorkers[podID] = createFanOutWorker(worker, podID)
 
-					setContextForNewPhase(copyWorkers[podID], &appDeployInfo.AuxPhaseInfo[podID], enterpriseApi.PhasePodCopy)
+					setContextForNewPhase(&appDeployInfo.AuxPhaseInfo[podID], enterpriseApi.PhasePodCopy)
 					scopedLog.Info("Created a new fan-out pod copy worker", "pod name", worker.targetPodName)
 				}
 			} else {
 				scopedLog.Info("Installation was already in progress for replica members")
+				scope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					phaseInfo := &appDeployInfo.AuxPhaseInfo[podID]
+					if !isPhaseInfoEligibleForSchedulerEntry(scope, phaseInfo) {
+						continue
+					}
 
-					newWorker := &PipelineWorker{}
-					*newWorker = *worker
-					newWorker.targetPodName = getApplicablePodNameForAppFramework(worker.cr, podID)
-
-					if phaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
-						if phaseInfo.Phase == enterpriseApi.PhaseInstall {
-							// If the install is already complete for that app, nothing to be done
-							if phaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
-								scopedLog.Info("app already installed")
-								continue
-							} else {
-								scopedLog.Info("Created an install worker", "pod name", worker.targetPodName)
-								setContextForNewPhase(newWorker, phaseInfo, enterpriseApi.PhaseInstall)
-								installWorkers = append(installWorkers, newWorker)
-							}
-						} else if phaseInfo.Phase == enterpriseApi.PhasePodCopy {
-							scopedLog.Info("Created a pod copy worker", "pod name", worker.targetPodName)
-							setContextForNewPhase(newWorker, phaseInfo, enterpriseApi.PhasePodCopy)
-							copyWorkers = append(copyWorkers, newWorker)
-						} else {
-							scopedLog.Error(nil, "invalid phase info detected", "phase", phaseInfo.Phase, "phase status", phaseInfo.Status)
-						}
+					newWorker := createFanOutWorker(worker, podID)
+					// reset the phase status
+					setPhaseStatusToPending(phaseInfo)
+					if phaseInfo.Phase == enterpriseApi.PhaseInstall {
+						installWorkers = append(installWorkers, newWorker)
+					} else if phaseInfo.Phase == enterpriseApi.PhasePodCopy {
+						podCopyWorkers = append(podCopyWorkers, newWorker)
+					} else {
+						scopedLog.Error(nil, "invalid phase info detected", "phase", phaseInfo.Phase, "phase status", phaseInfo.Status)
 					}
 				}
-
 			}
 
-			ppln.addWorkersToPipelinePhase(enterpriseApi.PhasePodCopy, copyWorkers...)
+			ppln.addWorkersToPipelinePhase(enterpriseApi.PhasePodCopy, podCopyWorkers...)
 			ppln.addWorkersToPipelinePhase(enterpriseApi.PhaseInstall, installWorkers...)
 		} else {
 			scopedLog.Error(nil, "Invalid phase detected")
 		}
 
+	} else {
+		scopedLog.Info("Simple transition")
+		var phaseInfo *enterpriseApi.PhaseInfo
+
+		if isFanOutApplicableToCR(worker.cr) {
+			podID, _ := getOrdinalValFromPodName(worker.targetPodName)
+			phaseInfo = &worker.appDeployInfo.AuxPhaseInfo[podID]
+		} else {
+			phaseInfo = &appDeployInfo.PhaseInfo
+		}
+
+		setContextForNewPhase(phaseInfo, nextPhase)
+		ppln.addWorkersToPipelinePhase(nextPhase, worker)
 	}
 
 	// We have already moved the worker(s) to the required queue.
@@ -261,10 +270,12 @@ func checkIfWorkerIsEligibleForRun(worker *PipelineWorker, phaseInfo *enterprise
 }
 
 // needToUseAuxPhaseInfo confirms if aux phase info to be used
+// currently applicable only for Standalone deployment
 func needToUseAuxPhaseInfo(worker *PipelineWorker, phaseType enterpriseApi.AppPhaseType) bool {
-	if phaseType != enterpriseApi.PhaseDownload && worker.cr.GroupVersionKind().Kind == "Standalone" && worker.sts != nil && *worker.sts.Spec.Replicas > 1 {
+	if phaseType != enterpriseApi.PhaseDownload && isFanOutApplicableToCR(worker.cr) {
 		return true
 	}
+
 	return false
 }
 
@@ -363,10 +374,10 @@ func (downloadWorker *PipelineWorker) download(pplnPhase *PipelinePhase, s3Clien
 	scopedLog.Info("Finished downloading app")
 }
 
-// scheduleDownloads schedules the download workers to download app/s
-func (pplnPhase *PipelinePhase) scheduleDownloads(ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
+// downloadWorkerHandler schedules the download workers to download app/s
+func (pplnPhase *PipelinePhase) downloadWorkerHandler(ppln *AppInstallPipeline, maxWorkers uint64, scheduleDownloadsWaiter *sync.WaitGroup) {
 
-	scopedLog := log.WithName("scheduleDownloads")
+	scopedLog := log.WithName("downloadWorkerHandler")
 
 	// derive a counting semaphore from the channel to represent worker run pool
 	var downloadWorkersRunPool = make(chan struct{}, maxWorkers)
@@ -479,7 +490,7 @@ func (ppln *AppInstallPipeline) downloadPhaseManager() {
 
 	scheduleDownloadsWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go pplnPhase.scheduleDownloads(ppln, maxWorkers, scheduleDownloadsWaiter)
+	go pplnPhase.downloadWorkerHandler(ppln, maxWorkers, scheduleDownloadsWaiter)
 	defer func() {
 		ppln.shutdownPipelinePhase(string(enterpriseApi.PhaseDownload), pplnPhase, scheduleDownloadsWaiter)
 	}()
@@ -496,10 +507,10 @@ downloadPhase:
 		default:
 			for _, downloadWorker := range pplnPhase.q {
 				phaseInfo := getPhaseInfoByPhaseType(downloadWorker, enterpriseApi.PhaseDownload)
-				if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
+				if isPhaseMaxRetriesReached(phaseInfo) {
 					downloadWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, downloadWorker)
-				} else if downloadWorker.appDeployInfo.PhaseInfo.Status == enterpriseApi.AppPkgDownloadComplete {
+				} else if isPhaseStatusComplete(phaseInfo) {
 					ppln.transitionWorkerPhase(downloadWorker, enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 				} else if checkIfWorkerIsEligibleForRun(downloadWorker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 					downloadWorker.waiter = &pplnPhase.workerWaiter
@@ -629,7 +640,7 @@ func runPodCopyWorker(worker *PipelineWorker, ch chan struct{}) {
 		worker.waiter.Done()
 	}()
 
-	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
+	appPkgFileName := worker.appDeployInfo.AppName + "_" + worker.appDeployInfo.ObjectHash
 
 	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
 	appPkgLocalDir := getAppPackageLocalDir(cr, appSrcScope, worker.appSrcName)
@@ -746,10 +757,10 @@ podCopyPhase:
 		default:
 			for _, podCopyWorker := range pplnPhase.q {
 				phaseInfo := getPhaseInfoByPhaseType(podCopyWorker, enterpriseApi.PhasePodCopy)
-				if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
+				if isPhaseMaxRetriesReached(phaseInfo) {
 					podCopyWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, podCopyWorker)
-				} else if phaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete {
+				} else if isPhaseStatusComplete(phaseInfo) {
 					// For cluster scoped apps, just delete the worker. install handler will trigger the bundle push
 					if enterpriseApi.ScopeCluster != getAppSrcScope(podCopyWorker.afwConfig, podCopyWorker.appSrcName) {
 						ppln.transitionWorkerPhase(podCopyWorker, enterpriseApi.PhasePodCopy, enterpriseApi.PhaseInstall)
@@ -815,7 +826,7 @@ func isPendingClusterScopeWork(afwPipeline *AppInstallPipeline) bool {
 		return false
 	}
 
-	// There is no cluster scoped apps pending for bundle push
+	// There are no cluster scoped apps pending for bundle push
 	if afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage == enterpriseApi.BundlePushComplete || afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage == enterpriseApi.BundlePushUninitialized {
 		return false
 	}
@@ -840,13 +851,8 @@ func needToRunClusterScopedPlaybook(afwPipeline *AppInstallPipeline) bool {
 // tryAppPkgCleanupFromOperatorPod tries to change the app install status, also cleans the app pkg from Operator Pod
 func tryAppPkgCleanupFromOperatorPod(installWorker *PipelineWorker) {
 	scopedLog := log.WithName("tryAppPkgCleanupFromOperatorPod")
-	if installWorker.sts == nil {
-		scopedLog.Error(nil, "sts is missing", "cr", installWorker.cr.GetName(), "kind", installWorker.cr.GroupVersionKind().Kind, "app pkg", installWorker.appDeployInfo.AppName)
-		deleteAppPkgFromOperator(installWorker)
-		return
-	}
 
-	if *installWorker.sts.Spec.Replicas > 1 {
+	if isFanOutApplicableToCR(installWorker.cr) {
 		if isAppInstallationCompleteOnAllReplicas(installWorker.appDeployInfo.AuxPhaseInfo) {
 			scopedLog.Info("app pkg installed on all the pods", "app pkg", installWorker.appDeployInfo.AppName)
 			installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
@@ -976,10 +982,10 @@ installPhase:
 				}
 
 				phaseInfo := getPhaseInfoByPhaseType(installWorker, enterpriseApi.PhaseInstall)
-				if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
-					installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallError
+				if isPhaseMaxRetriesReached(phaseInfo) {
+					phaseInfo.Status = enterpriseApi.AppPkgInstallError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, installWorker)
-				} else if phaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+				} else if isPhaseStatusComplete(phaseInfo) {
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, installWorker)
 				} else if phaseInfo.Status == enterpriseApi.AppPkgMissingOnPodError {
 					ppln.transitionWorkerPhase(installWorker, enterpriseApi.PhaseInstall, enterpriseApi.PhasePodCopy)
@@ -1004,6 +1010,36 @@ installPhase:
 
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// resetPhaseStatusToPending sets the phase status to pending
+func setPhaseStatusToPending(phaseInfo *enterpriseApi.PhaseInfo) {
+	switch phaseInfo.Phase {
+	case enterpriseApi.PhaseDownload:
+		phaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+	case enterpriseApi.PhasePodCopy:
+		phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
+	case enterpriseApi.PhaseInstall:
+		phaseInfo.Status = enterpriseApi.AppPkgInstallPending
+	}
+}
+
+// isPhaseStatusComplete confirms if the given Phase status is complete or not
+func isPhaseStatusComplete(phaseInfo *enterpriseApi.PhaseInfo) bool {
+	switch phaseInfo.Phase {
+	case enterpriseApi.PhaseDownload:
+		return phaseInfo.Status == enterpriseApi.AppPkgDownloadComplete
+	case enterpriseApi.PhasePodCopy:
+		return phaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete
+	case enterpriseApi.PhaseInstall:
+		return phaseInfo.Status == enterpriseApi.AppPkgInstallComplete
+	default:
+		return false
+	}
+}
+
+func isPhaseMaxRetriesReached(phaseInfo *enterpriseApi.PhaseInfo) bool {
+	return phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount
 }
 
 // isPipelineEmpty checks if the pipeline is empty or not
@@ -1052,8 +1088,7 @@ func initPipelinePhase(afwPipeline *AppInstallPipeline, phase enterpriseApi.AppP
 	}
 }
 
-// initAppInstallPipeline creates the AFW scheduler pipeline
-// TBD: Do we need to make it singleton? For now leave it till we have the clarity on
+// initAppInstallPipeline creates the AFW scheduler pipelines
 func initAppInstallPipeline(appDeployContext *enterpriseApi.AppDeploymentContext, client splcommon.ControllerClient, cr splcommon.MetaObject) *AppInstallPipeline {
 
 	afwPipeline := &AppInstallPipeline{}
@@ -1395,6 +1430,25 @@ func checkAndUpdateAppFrameworkProgressFlag(afwPipeline *AppInstallPipeline) {
 	}
 }
 
+// isPhaseInfoEligibleForSchedulerEntry confirms if there is any pending work
+func isPhaseInfoEligibleForSchedulerEntry(scope string, phaseInfo *enterpriseApi.PhaseInfo) bool {
+	if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
+		return false
+	}
+
+	// if an app is already install complete, do not schedule a worker
+	if phaseInfo.Phase == enterpriseApi.PhaseInstall && phaseInfo.Status == enterpriseApi.AppPkgInstallComplete {
+		return false
+	}
+
+	// For cluster scoped apps, if pod copy is complete, do not schedule a worker
+	if scope == enterpriseApi.ScopeCluster && phaseInfo.Phase == enterpriseApi.PhasePodCopy && phaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete {
+		return false
+	}
+
+	return true
+}
+
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
 func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1428,40 +1482,17 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	scopedLog.Info("Creating pipeline workers for pending app packages")
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
+		scope := getAppSrcScope(appFrameworkConfig, appSrcName)
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
-			var pplnPhase enterpriseApi.AppPhaseType
-			var podName string
-
-			pplnPhase = ""
-			// Push All the Intermediatory work to the Pipeline phases and let the corresponding phase manager take care of them
-			if deployInfoList[i].PhaseInfo.RetryCount < pipelinePhaseMaxRetryCount {
-				phase := deployInfoList[i].PhaseInfo.Phase
-
-				switch phase {
-				case enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy:
-					pplnPhase = phase
-
-				case enterpriseApi.PhaseInstall:
-					if deployInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
-						pplnPhase = phase
-					}
-				}
+			// Ignore any apps if there is no pending work
+			if !isPhaseInfoEligibleForSchedulerEntry(scope, &deployInfoList[i].PhaseInfo) {
+				continue
 			}
 
-			// Ignore any other apps that are not in progress
-			podName = ""
-			if pplnPhase != "" {
-				// Don't worry about the standalone replicas at this time(auxPhaseInfo). Just queue it to the download phase, and
-				// let the download phase take care of it. Also, make sure not provide the podname at this time, so that the worker
-				// transision logic can fan-out new workers
-				// ToDo: sgontla: bring in a better alternative to strengthen this piece of code
-				sts := afwGetReleventStatefulsetByKind(cr, client)
-				if *sts.Spec.Replicas == 1 || cr.GroupVersionKind().Kind != "Standalone" {
-					podName = getApplicablePodNameForAppFramework(cr, 0)
-				}
-				afwPipeline.createAndAddPipelineWorker(pplnPhase, &deployInfoList[i], appSrcName, podName, appFrameworkConfig, client, cr, sts)
-			}
+			sts := afwGetReleventStatefulsetByKind(cr, client)
+			podName := getApplicablePodNameForAppFramework(cr, 0)
+			afwPipeline.createAndAddPipelineWorker(deployInfoList[i].PhaseInfo.Phase, &deployInfoList[i], appSrcName, podName, appFrameworkConfig, client, cr, sts)
 		}
 	}
 
@@ -1470,28 +1501,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	// while setting up the pipeline phases.
 	// Wait for the yield function to finish.
 	afwPipeline.phaseWaiter.Add(1)
-	go func(afwEntryTime int64) {
-		yieldTrigger := time.After(maxRunTimeBeforeAttemptingYield * time.Second)
-
-	yieldScheduler:
-		for {
-			select {
-			case <-yieldTrigger:
-				scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-afwEntryTime)
-				break yieldScheduler
-			default:
-				if afwPipeline.isPipelineEmpty() {
-					break yieldScheduler
-				}
-			}
-
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		// Trigger the pipeline termination by closing the channel
-		close(afwPipeline.sigTerm)
-		afwPipeline.phaseWaiter.Done()
-	}(afwPipeline.afwEntryTime)
+	go afwPipeline.afwYieldWatcher(maxRunTimeBeforeAttemptingYield)
 
 	scopedLog.Info("Waiting for the phase managers to finish")
 
@@ -1503,4 +1513,30 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	checkAndUpdateAppFrameworkProgressFlag(afwPipeline)
 
 	return needToRevisitAppFramework(afwPipeline), nil
+}
+
+// afwYieldWatcher issues termination request to the scheduler when the yield time expires or the pipelines become empty.
+func (ppln *AppInstallPipeline) afwYieldWatcher(maxTimeToYield int64) {
+	scopedLog := log.WithName("afwYieldWatcher").WithValues("name", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
+	yieldTrigger := time.After(time.Duration(maxTimeToYield) * time.Second)
+
+yieldScheduler:
+	for {
+		select {
+		case <-yieldTrigger:
+			scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-ppln.afwEntryTime)
+			break yieldScheduler
+		default:
+			if ppln.isPipelineEmpty() {
+				break yieldScheduler
+			}
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Trigger the pipeline termination by closing the channel
+	close(ppln.sigTerm)
+	ppln.phaseWaiter.Done()
+	scopedLog.Info("Termination issued")
 }

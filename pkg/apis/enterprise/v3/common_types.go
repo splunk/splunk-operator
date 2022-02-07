@@ -339,6 +339,9 @@ const (
 
 	// AfwPhase3 represents Phase-3 app framework
 	AfwPhase3
+
+	// LatestAfwVersion represents latest App framework version
+	LatestAfwVersion = AfwPhase3
 )
 
 // AppDeploymentContext for storing the Apps deployment information

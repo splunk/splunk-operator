@@ -880,11 +880,6 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 		}
 	}
 
-	// ToDo: Ideally, this check should go to the reconcile entry point once the glue logic in place.
-	if appDeployContext.AppsSrcDeployStatus == nil {
-		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
-	}
-
 	// 1. Check if the AppSrc is deleted in latest config, OR missing with the remote listing.
 	for appSrc, appSrcDeploymentInfo := range appDeployContext.AppsSrcDeployStatus {
 		// If the AppSrc is missing mark all the corresponding apps for deletion
@@ -913,7 +908,7 @@ func handleAppRepoChanges(client splcommon.ControllerClient, cr splcommon.MetaOb
 			for appIdx := range currentList {
 				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
-					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
+					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 				}
 			}
 		}
@@ -986,6 +981,8 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
 					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+					appList[idx].PhaseInfo.RetryCount = 0
+					appList[idx].AuxPhaseInfo = nil
 
 					// Make the state active for an app that was deleted earlier, and got activated again
 					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
@@ -1010,7 +1007,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 			appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseDownload
 			appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
 
-			// Add it to a seperate list so that we don't loop through the newly added entries
+			// Add it to a separate list so that we don't loop through the newly added entries
 			newAppInfoList = append(newAppInfoList, appDeployInfo)
 			appChangesDetected = true
 		}
@@ -1168,6 +1165,19 @@ func shouldCheckAppRepoStatus(client splcommon.ControllerClient, cr splcommon.Me
 	return false
 }
 
+// getCleanObjectDigest returns only hexa-decimal portion of a string
+// Ex. '\"b38a8f911e2b43982b71a979fe1d3c3f\"' is converted to b38a8f911e2b43982b71a979fe1d3c3f
+func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
+	// S3: In the case of multipart upload, '-' is an allowed character as part of the etag
+	reg, err := regexp.Compile("[^A-Fa-f0-9\\-]+")
+	if err != nil {
+		return nil, err
+	}
+
+	cleanObjectHash := reg.ReplaceAllString(*rawObjectDigest, "")
+	return &cleanObjectHash, nil
+}
+
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
 func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1205,8 +1215,18 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 		if len(sourceToAppsList) != len(appFrameworkConf.AppSources) {
 			scopedLog.Error(err, "Unable to get apps list, will retry in next reconcile...")
 		} else {
-
 			for _, appSource := range appFrameworkConf.AppSources {
+				// Clean-up for the object digest value
+				for i := range sourceToAppsList[appSource.Name].Objects {
+					cleanDigest, err := getCleanObjectDigest(sourceToAppsList[appSource.Name].Objects[i].Etag)
+					if err != nil {
+						scopedLog.Error(err, "unable to fetch clean object digest value", "Object Hash", sourceToAppsList[appSource.Name].Objects[i].Etag)
+						return err
+					}
+
+					sourceToAppsList[appSource.Name].Objects[i].Etag = cleanDigest
+				}
+
 				scopedLog.Info("Apps List retrieved from remote storage", "App Source", appSource.Name, "Content", sourceToAppsList[appSource.Name].Objects)
 			}
 
@@ -1684,12 +1704,15 @@ func migrateAfwStatus(client splcommon.ControllerClient, cr splcommon.MetaObject
 
 	// Upgrade one version at a time
 	// Start with the lowest version, then move towards the latest
-	for afwStatusContext.Version < currentAfwVersion {
+	for afwStatusContext.Version < enterpriseApi.LatestAfwVersion {
 		switch {
 		// Always start with the lowest version
 		case afwStatusContext.Version < enterpriseApi.AfwPhase3:
 			scopedLog.Info("Migrating the App framework", "old version", afwStatusContext.Version, "new version", enterpriseApi.AfwPhase3)
-			migrateAfwFromPhase2ToPhase3(client, cr, afwStatusContext)
+			err := migrateAfwFromPhase2ToPhase3(client, cr, afwStatusContext)
+			if err != nil {
+				return false
+			}
 
 			// case: Add the higher versions below
 		}
@@ -1705,7 +1728,7 @@ func migrateAfwStatus(client splcommon.ControllerClient, cr splcommon.MetaObject
 }
 
 // migrateAfwFromPhase2ToPhase3 migrates app framework status from Phase-2 to Phase-3
-func migrateAfwFromPhase2ToPhase3(client splcommon.ControllerClient, cr splcommon.MetaObject, afwStatusContext *enterpriseApi.AppDeploymentContext) {
+func migrateAfwFromPhase2ToPhase3(client splcommon.ControllerClient, cr splcommon.MetaObject, afwStatusContext *enterpriseApi.AppDeploymentContext) error {
 	scopedLog := log.WithName("migrateAfwFromPhase2ToPhase3").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	sts := afwGetReleventStatefulsetByKind(cr, client)
@@ -1714,7 +1737,12 @@ func migrateAfwFromPhase2ToPhase3(client splcommon.ControllerClient, cr splcommo
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 		for i := range deployInfoList {
 			// Remove the special characters from Object hash
-			deployInfoList[i].ObjectHash = strings.Trim(deployInfoList[i].ObjectHash, "\"")
+			cleanDigest, err := getCleanObjectDigest(&deployInfoList[i].ObjectHash)
+			if err != nil {
+				scopedLog.Error(err, "clean-up failed", "digest", deployInfoList[i].ObjectHash)
+				return err
+			}
+			deployInfoList[i].ObjectHash = *cleanDigest
 
 			// If the app is already deleted, do not bother about the previous install state.
 			if deployInfoList[i].RepoState != enterpriseApi.RepoStateActive {
@@ -1742,6 +1770,7 @@ func migrateAfwFromPhase2ToPhase3(client splcommon.ControllerClient, cr splcommo
 
 	afwStatusContext.Version = enterpriseApi.AfwPhase3
 	scopedLog.Info("migration completed")
+	return nil
 }
 
 // isAppFrameworkMigrationNeeded confirms if the app framework version migration is needed
