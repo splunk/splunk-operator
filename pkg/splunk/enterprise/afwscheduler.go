@@ -1519,7 +1519,6 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 		podExecClient := splutil.GetPodExecClient(client, cr, podName)
 		appsPathOnPod := filepath.Join(appBktMnt, appSrcName)
 		// create the dir on Splunk pod/s where app/s will be copied from operator pod
-		// TODO: gaurav - change this API to use new PodExecClient
 		err = createDirOnSplunkPods(cr, *sts.Spec.Replicas, appsPathOnPod, podExecClient)
 		if err != nil {
 			scopedLog.Error(err, "unable to create directory on splunk pod")

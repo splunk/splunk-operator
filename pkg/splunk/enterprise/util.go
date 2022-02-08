@@ -1432,7 +1432,6 @@ func checkIfFileExistsOnPod(cr splcommon.MetaObject, filePath string, podExecCli
 	return fileTestResult == 0
 }
 
-// TODO: gaurav - change this API to use new podExecClient
 // createDirOnSplunkPods creates the required directory for the pod/s
 func createDirOnSplunkPods(cr splcommon.MetaObject, replicas int32, path string, podExecClient splutil.PodExecClientImpl) error {
 	var err error
