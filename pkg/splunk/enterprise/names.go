@@ -65,7 +65,7 @@ const (
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
-	shcBundlePushStatusCheckFile = "/apps-staging-volume/.shcluster_bundle_status.txt"
+	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
 
 	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
 
@@ -98,10 +98,10 @@ const (
 	protoTCP   = "tcp"
 
 	// Volume name for splunk containers to store apps temporarily
-	appVolumeMntName = "apps-staging-volume"
+	appVolumeMntName = "operator-staging"
 
 	// Mount location on splunk pod for the app package volume
-	appBktMnt = "/apps-staging-volume/"
+	appBktMnt = "/operator-staging/appframework/"
 
 	// Time delay involved in installating the Splunk Apps.
 	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation

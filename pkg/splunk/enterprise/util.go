@@ -1060,7 +1060,7 @@ func setupAppsStagingVolume(client splcommon.ControllerClient, cr splcommon.Meta
 		// Add apps staging mount to Splunk container
 		initVolumeSpec := corev1.VolumeMount{
 			Name:      appVolumeMntName,
-			MountPath: appBktMnt,
+			MountPath: fmt.Sprintf("/%s/", appVolumeMntName),
 		}
 
 		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
@@ -1433,6 +1433,31 @@ func checkIfFileExistsOnPod(c splcommon.ControllerClient, namespace string, podN
 	return fileTestResult == 0
 }
 
+// TODO: gaurav - change this API to use new podExecClient
+// createDirOnSplunkPods creates the required directory for the pod/s
+func createDirOnSplunkPods(c splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, path string) error {
+	var err error
+	var stdOut, stdErr string
+	command := fmt.Sprintf("mkdir -p %s", path)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+
+	// create the directory on each replica pod
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		// get the target pod name
+		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
+
+		// Throw an error if we are not able to create the destination directory where we wish to copy the app package
+		stdOut, stdErr, err = splutil.PodExecCommand(c, podName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+		if stdErr != "" || err != nil {
+			err = fmt.Errorf("unable to create directory on Pod at path=%s. stdout: %s, stdErr: %s, err: %s", path, stdOut, stdErr, err)
+			break
+		}
+	}
+	return err
+}
+
 // CopyFileToPod copies a file from Operator Pod to any given Pod of a custom resource
 func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName string, srcPath string, destPath string) (string, string, error) {
 	scopedLog := log.WithName("CopyFileToPod").WithValues("podName", podName, "namespace", namespace).WithValues("srcPath", srcPath, "destPath", destPath)
@@ -1468,17 +1493,19 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, podName strin
 		return "", "", fmt.Errorf("relative paths are not supported for dest path: %s", destPath)
 	}
 
-	// Create the destination directory
+	// Make sure the destination directory is existing
 	destDir := path.Dir(destPath)
-	command := fmt.Sprintf("mkdir -p %s", destDir)
+	command := fmt.Sprintf("test -d %s; echo -n $?", destDir)
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
 
-	// Throw an error if we are not able to create the destination directory where we wish to copy the app package
+	// If the Pod directory doesn't exist, do not try to create it. Instead throw an error
+	// Otherwise, in case of invalid dest path, we may end up creating too many invalid directories/files
 	stdOut, stdErr, err := splutil.PodExecCommand(c, podName, namespace, []string{"/bin/sh"}, streamOptions, false, false)
-	if stdErr != "" || err != nil {
-		return stdOut, stdErr, fmt.Errorf("unable to create directory on Pod. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
+	dirTestResult, _ := strconv.Atoi(stdOut)
+	if dirTestResult != 0 {
+		return stdOut, stdErr, fmt.Errorf("directory on Pod doesn't exist. stdout: %s, stdErr: %s, err: %s", stdOut, stdErr, err)
 	}
 
 	go func() {

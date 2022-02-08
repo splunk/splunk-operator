@@ -1233,6 +1233,32 @@ refCount: 1`)
 	}
 }
 
+func TestCreateDirOnSplunkPods(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+		},
+	}
+
+	// create the mock client
+	c := spltest.NewMockClient()
+
+	path := "/operator-staging/appframework/admin/"
+
+	// TODO: gaurav - change this once the actual API uses podExecClient
+	err := createDirOnSplunkPods(c, &cr, cr.Spec.Replicas, path)
+	if err == nil {
+		t.Errorf("createDirOnSplunkPods should have returned error since there is no actual pod")
+	}
+}
+
 func TestCopyFileToPod(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1272,7 +1298,7 @@ func TestCopyFileToPod(t *testing.T) {
 	c.AddObject(pod)
 
 	fileOnOperator := "/tmp/"
-	fileOnStandalonePod := fmt.Sprintf("/%s/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod := fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	// Test to detect invalid source file name
 	_, _, err := CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
@@ -1303,22 +1329,22 @@ func TestCopyFileToPod(t *testing.T) {
 	}
 
 	// Test to detect relative destination file path
-	fileOnStandalonePod = fmt.Sprintf("%s/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
-	fileOnStandalonePod = fmt.Sprintf("/%s/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	// If Pod destination path is directory, source file name is used, and should not cause an error
-	fileOnStandalonePod = fmt.Sprintf("/%s/splunkFwdApps/", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/", appVolumeMntName)
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
 	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
 	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
 	if err != nil && 1 == 0 {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
-	fileOnStandalonePod = fmt.Sprintf("/%s/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	//Proper source and destination paths should not return an error
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
@@ -1467,7 +1493,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	// Add object
 	c.AddObject(pod)
 
-	filePathOnPod := fmt.Sprintf("/%s/splunkFwdApps/testApp.tgz", appVolumeMntName)
+	filePathOnPod := fmt.Sprintf("/%s/appframework/splunkFwdApps/testApp.tgz", appVolumeMntName)
 
 	fileExists := checkIfFileExistsOnPod(c, "testNameSpace", pod.GetName(), filePathOnPod)
 	if fileExists {
