@@ -245,9 +245,9 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.StandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo, testenvInstance)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
-			// Verify MC is Ready and stays in ready state
+			// Vrify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Check Standalone is configure in MC Config Map
@@ -267,7 +267,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
