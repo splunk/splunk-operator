@@ -147,7 +147,10 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		} else {
 			result.Requeue = false
 		}
+	} else if cr.Status.Phase == splcommon.PhasePending {
+		result.Requeue = false
 	}
+
 	if !result.Requeue {
 		return reconcile.Result{}, nil
 	}
@@ -203,7 +206,7 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 
 	var current corev1.ConfigMap
 
-	configMap := GetSplunkMonitoringconsoleConfigMapName(namespace, SplunkMonitoringConsole)
+	configMap := GetSplunkMonitoringconsoleConfigMapName(monitoringConsoleRef, SplunkMonitoringConsole)
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: configMap}
 	err := client.Get(ctx, namespacedName, &current)
 

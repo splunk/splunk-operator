@@ -82,6 +82,9 @@ func (d *Deployment) Teardown() error {
 	podNames := DumpGetPods(d.testenv.GetName())
 	podNames = append(podNames, GetOperatorPodName(d.testenv.GetName()))
 	for _, podName := range podNames {
+		if len(podName) == 0 {
+			continue
+		}
 		output, err := exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 		if err != nil {
 			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))

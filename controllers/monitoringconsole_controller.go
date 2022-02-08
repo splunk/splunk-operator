@@ -135,8 +135,8 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.MonitoringConsole{},
 			}).
-		/*Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
-		&handler.EnqueueRequestForObject{}).*/
+		Watches(&source.Kind{Type: &enterprisev3.Standalone{}},
+			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).
