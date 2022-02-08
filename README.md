@@ -108,10 +108,10 @@ Other make targets include (more info below):
 * `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project
 * `make lint`: runs the `golint` utility on all `*.go` source files in this project
-* `make bundle-build`: generates `splunk-operator-bundle` bundle container image for OLM example `make bundle-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
-* `make bundle-push`: push OLM bundle docker image to given repository example `make bundle-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
-* `make catalog-build`: generates `splunk-operator-catalog` catalog container image example `make catalog-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
-* `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/vivekbasappa/splunk-operator:1.1.0`
+* `make bundle-build`: generates `splunk-operator-bundle` bundle container image for OLM example `make bundle-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
+* `make bundle-push`: push OLM bundle docker image to given repository example `make bundle-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
+* `make catalog-build`: generates `splunk-operator-catalog` catalog container image example `make catalog-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
+* `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
 
 ## Running the Splunk Operator
 
