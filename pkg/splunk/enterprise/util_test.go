@@ -198,127 +198,6 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	}
 }
 
-func TestApplyAppListingConfigMap(t *testing.T) {
-	cr := enterpriseApi.ClusterMaster{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "example",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterMasterSpec{
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws"},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeCluster},
-					},
-					{Name: "appsWithPreConfigRequired",
-						Location: "repoForAppsWithPreConfigRequired",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   "clusterWithPreConfig"},
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	var S3Response splclient.S3Response
-
-	remoteObjListMap := make(map[string]splclient.S3Response)
-
-	// Fill appSrc adminApps
-	startAppPathAndName := "adminCategoryOne.tgz"
-	S3Response.Objects = createRemoteObjectList("b41d8cd98f00", startAppPathAndName, 2322, nil, 10)
-	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[0].Name] = S3Response
-
-	startAppPathAndName = "securityCategoryOne.tgz"
-	S3Response.Objects = createRemoteObjectList("c41d8cd98f00", startAppPathAndName, 3322, nil, 10)
-	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[1].Name] = S3Response
-
-	startAppPathAndName = "appWithPreConfigReqOne.tgz"
-	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 4322, nil, 10)
-	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
-
-	// set the status context
-	initAppFrameWorkContext(client, &cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
-
-	appsModified, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
-
-	if err != nil {
-		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
-	}
-
-	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, want string) {
-		f := func() (interface{}, error) {
-			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, appsModified)
-			// Make the config token as predictable
-			configMap.Data[appsUpdateToken] = "1601945361"
-			return configMap, err
-		}
-		configTester(t, "(ApplyAppListingConfigMap)", f, want)
-	}
-
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"app-list-cluster-with-pre-config.yaml":"splunk:\n  apps_location:\n      - \"/init-apps/appsWithPreConfigRequired/1_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/2_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/3_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/4_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/5_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/6_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/7_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/8_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/9_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/10_appWithPreConfigReqOne.tgz\"","app-list-cluster.yaml":"splunk:\n  app_paths_install:\n    idxc:\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
-
-	// Make sure that the App Listing configMap works fine for SearchHeadCluster
-	cr.Kind = "SearchHeadCluster"
-	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-searchheadcluster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"SearchHeadCluster","name":"example","uid":"","controller":true}]},"data":{"app-list-cluster-with-pre-config.yaml":"splunk:\n  apps_location:\n      - \"/init-apps/appsWithPreConfigRequired/1_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/2_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/3_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/4_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/5_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/6_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/7_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/8_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/9_appWithPreConfigReqOne.tgz\"\n      - \"/init-apps/appsWithPreConfigRequired/10_appWithPreConfigReqOne.tgz\"","app-list-cluster.yaml":"splunk:\n  app_paths_install:\n    shc:\n      - \"/init-apps/securityApps/1_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/2_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/3_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/4_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/5_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/6_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/7_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/8_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/9_securityCategoryOne.tgz\"\n      - \"/init-apps/securityApps/10_securityCategoryOne.tgz\"","app-list-local.yaml":"splunk:\n  app_paths_install:\n    default:\n      - \"/init-apps/adminApps/1_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/2_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/3_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/4_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/5_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/6_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/7_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/8_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/9_adminCategoryOne.tgz\"\n      - \"/init-apps/adminApps/10_adminCategoryOne.tgz\"","appsUpdateToken":"1601945361"}}`)
-
-	// Now test the Cluster manager stateful set, to validate the Pod updates with the app listing config map
-	cr.Kind = "ClusterMaster"
-	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
-	if err != nil {
-		t.Errorf("Failed to create namespace scoped object")
-	}
-
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
-
-	// ToDo: sgontla: phase-2 cleanup
-	// testStsWithAppListVolMounts := func(want string) {
-	// 	f := func() (interface{}, error) {
-	// 		if err := validateClusterManagerSpec(&cr); err != nil {
-	// 			t.Errorf("validateClusterManagerSpec() returned error: %v", err)
-	// 		}
-	// 		return getClusterManagerStatefulSet(client, &cr)
-	// 	}
-	// 	configTester(t, "getClusterManagerStatefulSet", f, want)
-	// }
-
-	// testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)
-
-	// // Test to ensure that the Applisting config map is empty after the apps are installed successfully
-	// markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-	// testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"appsUpdateToken":"1601945361"}}`)
-
-}
-
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1354,6 +1233,32 @@ refCount: 1`)
 	}
 }
 
+func TestCreateDirOnSplunkPods(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+		},
+	}
+
+	// create the mock client
+	c := spltest.NewMockClient()
+
+	path := "/operator-staging/appframework/admin/"
+
+	// TODO: gaurav - change this once the actual API uses podExecClient
+	err := createDirOnSplunkPods(c, &cr, cr.Spec.Replicas, path)
+	if err == nil {
+		t.Errorf("createDirOnSplunkPods should have returned error since there is no actual pod")
+	}
+}
+
 func TestCopyFileToPod(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1393,7 +1298,7 @@ func TestCopyFileToPod(t *testing.T) {
 	c.AddObject(pod)
 
 	fileOnOperator := "/tmp/"
-	fileOnStandalonePod := "/init-apps/splunkFwdApps/COPYING"
+	fileOnStandalonePod := fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	// Test to detect invalid source file name
 	_, _, err := CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
@@ -1424,22 +1329,22 @@ func TestCopyFileToPod(t *testing.T) {
 	}
 
 	// Test to detect relative destination file path
-	fileOnStandalonePod = "init-apps/splunkFwdApps/COPYING"
+	fileOnStandalonePod = fmt.Sprintf("%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
-	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	// If Pod destination path is directory, source file name is used, and should not cause an error
-	fileOnStandalonePod = "/init-apps/splunkFwdApps/"
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/", appVolumeMntName)
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
 	// PodExec command fails, as there is no real Pod here. Bypassing the error check for now, just to have enough code coverage.
 	// Need to fix this later, once the PodExec can accommodate the UT flow for a non-existing Pod.
 	if err != nil && 1 == 0 {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
-	fileOnStandalonePod = "/init-apps/splunkFwdApps/COPYING"
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	//Proper source and destination paths should not return an error
 	_, _, err = CopyFileToPod(c, pod.GetNamespace(), pod.GetName(), fileOnOperator, fileOnStandalonePod)
@@ -1588,7 +1493,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	// Add object
 	c.AddObject(pod)
 
-	filePathOnPod := "/init-apps/splunkFwdApps/testApp.tgz"
+	filePathOnPod := fmt.Sprintf("/%s/appframework/splunkFwdApps/testApp.tgz", appVolumeMntName)
 
 	fileExists := checkIfFileExistsOnPod(c, "testNameSpace", pod.GetName(), filePathOnPod)
 	if fileExists {

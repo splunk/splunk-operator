@@ -48,6 +48,9 @@ var AppLocationV1 = "appframework/v1apps/"
 // AppLocationV2 Location of apps on S3 for V2 Apps
 var AppLocationV2 = "appframework/v2apps/"
 
+// AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
+var AppStagingLocOnPod = "/operator-staging/appframework/"
+
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
 func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterpriseApi.AppSourceDefaultSpec) enterpriseApi.AppSourceSpec {
 	return enterpriseApi.AppSourceSpec{

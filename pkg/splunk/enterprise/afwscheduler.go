@@ -544,7 +544,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
 
-	// if appsrc is "appSrc1", then appPkgPathOnPod is /init-apps/appSrc1/app1.tgz_abcd1234
+	// if appsrc is "appSrc1", then appPkgPathOnPod is /operator-staging/appframework/appSrc1/app1.tgz_abcd1234
 	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
 
 	phaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhaseInstall)
@@ -577,8 +577,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
 	phaseInfo.RetryCount = 0
 
-	// Delete the app package from the target pod /init-apps/ location
-	// ToDo: sgontla: rename the "init-apps" to a different name, as the init-container is going away.
+	// Delete the app package from the target pod /operator-staging/appframework/ location
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
 	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(command)
 	if stdErr != "" || err != nil {
@@ -647,8 +646,6 @@ func runPodCopyWorker(worker *PipelineWorker, ch chan struct{}) {
 	appPkgLocalDir := getAppPackageLocalDir(cr, appSrcScope, worker.appSrcName)
 	appPkgLocalPath := appPkgLocalDir + appPkgFileName
 
-	// ToDo: sgontla: Don't do redundant checks for the directory existence here.
-	// Handle it only once, even before getting into the scheduler, once there is clarity for cspl-1296
 	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
 
 	phaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhasePodCopy)
@@ -1487,14 +1484,25 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 		scope := getAppSrcScope(appFrameworkConfig, appSrcName)
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
+
+		sts := afwGetReleventStatefulsetByKind(cr, client)
+		podName := getApplicablePodNameForAppFramework(cr, 0)
+
+		appsPathOnPod := filepath.Join(appBktMnt, appSrcName)
+		// create the dir on Splunk pod/s where app/s will be copied from operator pod
+		// TODO: gaurav - change this API to use new PodExecClient
+		err = createDirOnSplunkPods(client, cr, *sts.Spec.Replicas, appsPathOnPod)
+		if err != nil {
+			scopedLog.Error(err, "unable to create directory on splunk pod")
+			// break from here and let yield logic take care of everything
+			break
+		}
+
 		for i := range deployInfoList {
 			// Ignore any apps if there is no pending work
 			if !isPhaseInfoEligibleForSchedulerEntry(scope, &deployInfoList[i].PhaseInfo) {
 				continue
 			}
-
-			sts := afwGetReleventStatefulsetByKind(cr, client)
-			podName := getApplicablePodNameForAppFramework(cr, 0)
 			afwPipeline.createAndAddPipelineWorker(deployInfoList[i].PhaseInfo.Phase, &deployInfoList[i], appSrcName, podName, appFrameworkConfig, client, cr, sts)
 		}
 	}
