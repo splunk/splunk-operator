@@ -19,7 +19,7 @@ removeCRDs() {
 			echo "try to create namespace $NAMESPACE incase no longer exist"
 			kubectl create namespace $NAMESPACE 
 			## get list of CRs in each namespace
-			CRS=$(kubectl get -n $NAMESPACE $CRD | tail -n +2 | sed 's/\s.*//g')
+			CRS=$(kubectl get -n $NAMESPACE $CRD | tail -n +2 | awk '{ print $1 }')
 			for CR in $CRS
 			do
 				echo "Patch and Remove CR: $CRD $CR in namespace $NAMESPACE"
