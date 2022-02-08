@@ -349,6 +349,8 @@ When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework wil
 
 ## Add a persistent storage volume to the Operator pod
 
+Note:- If the persistent storage volume is not configured for the Operator, by default, the App Framework uses the main memory(RAM) as the staging area for app package downloads. In order to avoid pressure on the main memory, it is strongly advised to use a persistent volume for the operator pod.
+
 1. Create the persistent volume used by the Operator pod to cache apps and add-ons:
 
 ```yaml
@@ -468,7 +470,7 @@ metadata:
   name: splunk-manual-app-update
   namespace: default
   ownerReferences:
-  - apiVersion: enterprise.splunk.com/v2
+  - apiVersion: enterprise.splunk.com/v3
     controller: false
     kind: Standalone
     name: s1

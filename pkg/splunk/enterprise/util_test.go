@@ -1551,9 +1551,18 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 		afwConfig: &cr.Spec.AppFrameworkConfig,
 	}
 
-	expectedAppPkgLocalPath := "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
+	// When there is no explicit volume configured, should use the temp location, as set by the initStorageTracker()
+	expectedAppPkgLocalPath := "/tmp/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	calculatedAppPkgLocalPath := getAppPackageLocalPath(worker)
 
+	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
+		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
+	}
+
+	// When the explicit volume is set for the app framework, that path should be used for the app package location
+	splcommon.AppDownloadVolume = "/opt/splunk/appframework"
+	calculatedAppPkgLocalPath = getAppPackageLocalPath(worker)
+	expectedAppPkgLocalPath = "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
 	}
@@ -1564,11 +1573,10 @@ func TestInitStorageTracker(t *testing.T) {
 		t.Errorf("operatorResourceTracker should be initialized as part of the enterprise package init()")
 	}
 
-	// When the volume is not configured, should return an error
-	splcommon.AppDownloadVolume = "/non-existingDir"
+	// When the volume is not configured, should use a temporary location from main memory
 	err := initStorageTracker()
-	if err == nil {
-		t.Errorf("When the volume doesn't exist, should return an error")
+	if err != nil {
+		t.Errorf("When the volume doesn't exist, should fall back to the temp location of the app framework")
 	}
 
 	// When the volume exists, should not return an error

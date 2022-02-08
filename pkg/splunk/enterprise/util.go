@@ -408,11 +408,22 @@ func getAvailableDiskSpace() (uint64, error) {
 
 	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
-		scopedLog.Error(err, "unable to get the info about disk space for volume")
-	} else {
-		availDiskSpace = stat.Bavail * uint64(stat.Bsize)
-		scopedLog.Info("current available disk space in GB", "availableDiskSpace(GB)", availDiskSpace/1024/1024/1024)
+		scopedLog.Error(err, "There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir)
+		splcommon.AppDownloadVolume = TmpAppDownloadDir
+		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the directory %s", splcommon.AppDownloadVolume)
+			return 0, err
+		}
 	}
+
+	err = syscall.Statfs(splcommon.AppDownloadVolume, &stat)
+	if err != nil {
+		return 0, err
+	}
+
+	availDiskSpace = stat.Bavail * uint64(stat.Bsize)
+	scopedLog.Info("current available disk space in GB", "availableDiskSpace(GB)", availDiskSpace/1024/1024/1024)
 
 	return availDiskSpace, err
 }

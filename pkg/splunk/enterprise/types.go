@@ -56,6 +56,9 @@ const (
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
+
+	// TmpAppDownloadDir is the Operator directory for app framework, when there is no explicit volume specified
+	TmpAppDownloadDir string = "/tmp/appframework/"
 )
 
 const (
