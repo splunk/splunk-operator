@@ -149,6 +149,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = false
 		}
 	}
+
 	if !result.Requeue {
 		return reconcile.Result{}, nil
 	}

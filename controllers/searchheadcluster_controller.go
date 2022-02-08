@@ -114,7 +114,6 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
-			common.CrdChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -136,8 +135,6 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.SearchHeadCluster{},
 			}).
-		/*Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
-		&handler.EnqueueRequestForObject{}).*/
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

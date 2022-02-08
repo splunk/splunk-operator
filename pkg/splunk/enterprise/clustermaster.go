@@ -199,7 +199,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 				result.Requeue = false
 			}
 		}
+	} else if cr.Status.Phase == splcommon.PhasePending {
+		result.Requeue = false
 	}
+
 	if !result.Requeue {
 		return reconcile.Result{}, nil
 	}
