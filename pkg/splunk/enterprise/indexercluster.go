@@ -161,8 +161,16 @@ func ApplyIndexerCluster(client splcommon.ControllerClient, cr *enterpriseApi.In
 			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
+			var managerIdxcName string
+			if len(cr.Spec.ClusterMasterRef.Name) > 0 {
+				managerIdxcName = cr.Spec.ClusterMasterRef.Name
+			} else {
+				return result, errors.New("empty cluster manager reference")
+			}
+			cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
+			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
 			// Disable maintenance mode
-			err = SetClusterMaintenanceMode(client, cr, false, false)
+			err = SetClusterMaintenanceMode(client, cr, false, cmPodName, podExecClient)
 			if err != nil {
 				return result, err
 			}
@@ -202,15 +210,8 @@ func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseAp
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
-func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, mock bool) error {
+func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, cmPodName string, podExecClient splutil.PodExecClientImpl) error {
 	// Retrieve admin password from Pod
-	var managerIdxcName string
-	if len(cr.Spec.ClusterMasterRef.Name) > 0 {
-		managerIdxcName = cr.Spec.ClusterMasterRef.Name
-	} else {
-		return errors.New("empty cluster manager reference")
-	}
-	cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(c, cmPodName, cr.GetNamespace(), "password")
 	if err != nil {
 		return err
@@ -226,11 +227,10 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.I
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(command),
 	}
-	_, _, err = splutil.PodExecCommand(c, cmPodName, cr.GetNamespace(), []string{"/bin/sh"}, streamOptions, false, false)
+
+	_, _, err = podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil {
-		if !mock {
-			return err
-		}
+		return err
 	}
 
 	// Set cluster manager maintenance mode
@@ -244,7 +244,7 @@ func SetClusterMaintenanceMode(c splcommon.ControllerClient, cr *enterpriseApi.I
 }
 
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
-func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) error {
+func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(mgr.c, mgr.cr.GetNamespace())
@@ -252,7 +252,7 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 		return err
 	}
 
-	scopedLog := log.WithName("ApplyIdxcSecret").WithValues("Desired replicas", replicas, "IdxcSecretChanged", mgr.cr.Status.IndexerSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "mock", mock)
+	scopedLog := log.WithName("ApplyIdxcSecret").WithValues("Desired replicas", replicas, "IdxcSecretChanged", mgr.cr.Status.IndexerSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion)
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
@@ -293,11 +293,19 @@ func ApplyIdxcSecret(mgr *indexerClusterPodManager, replicas int32, mock bool) e
 
 			// Enable maintenance mode
 			if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
-				err = SetClusterMaintenanceMode(mgr.c, mgr.cr, true, mock)
+				var managerIdxcName string
+				if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+					managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+				} else {
+					return errors.New("empty cluster manager reference")
+				}
+				cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
+				podExecClient.SetTargetPodName(cmPodName)
+				err = SetClusterMaintenanceMode(mgr.c, mgr.cr, true, cmPodName, podExecClient)
 				if err != nil {
 					return err
 				}
-				scopedLog.Info("Set Cm in maintenance mode")
+				scopedLog.Info("Set CM in maintenance mode")
 			}
 
 			// If idxc secret already changed, ignore
@@ -395,8 +403,11 @@ func (mgr *indexerClusterPodManager) Update(c splcommon.ControllerClient, statef
 		mgr.log.Error(err, "Cluster Manager is not ready yet")
 	}
 
+	// Get the podExecClient with empty targetPodName.
+	// This will be set inside ApplyIdxcSecret
+	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
 	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
-	err = ApplyIdxcSecret(mgr, desiredReplicas, false)
+	err = ApplyIdxcSecret(mgr, desiredReplicas, podExecClient)
 	if err != nil {
 		return splcommon.PhaseError, err
 	}

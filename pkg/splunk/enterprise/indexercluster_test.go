@@ -686,8 +686,34 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	}
 
 	cr.Spec.ClusterMasterRef.Name = cr.GetName()
+	cmPodName := pod.GetName()
+
+	podExecCommands := []string{
+		"maintenance-mode",
+	}
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+			Err:    fmt.Errorf("dummy error"),
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+
+	// Invalid scenario where enabling MM returned error
+	err = SetClusterMaintenanceMode(c, &cr, true, cmPodName, mockPodExecClient)
+	if err == nil {
+		t.Errorf("SetClusterMaintenanceMode should have returned error")
+	}
+	if cr.Status.MaintenanceMode != false {
+		t.Errorf("Couldn't disable cm maintenance mode %s", err.Error())
+	}
+
 	// Enable CM maintenance mode
-	err = SetClusterMaintenanceMode(c, &cr, true, true)
+	mockPodExecReturnContexts[0].Err = nil
+	err = SetClusterMaintenanceMode(c, &cr, true, cmPodName, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
 	}
@@ -697,28 +723,16 @@ func TestSetClusterMaintenanceMode(t *testing.T) {
 	}
 
 	// Disable CM maintenance mode
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
+	err = SetClusterMaintenanceMode(c, &cr, false, cmPodName, mockPodExecClient)
 	if err != nil {
-		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
+		t.Errorf("Couldn't disable cm maintenance mode %s", err.Error())
 	}
 
 	if cr.Status.MaintenanceMode != false {
-		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
+		t.Errorf("Couldn't disable cm maintenance mode %s", err.Error())
 	}
 
-	// Disable CM maintenance mode
-	cr.Spec.ClusterMasterRef.Name = "random"
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
-	if err.Error() != splcommon.PodNotFoundError {
-		t.Errorf("Couldn't enable cm maintenance mode %s", err.Error())
-	}
-
-	// Empty clusterMaster reference
-	cr.Spec.ClusterMasterRef.Name = ""
-	err = SetClusterMaintenanceMode(c, &cr, false, true)
-	if err.Error() != splcommon.EmptyClusterMasterRef {
-		t.Errorf("Couldn't detect empty Cluster Manager reference %s", err.Error())
-	}
+	mockPodExecClient.CheckPodExecCommands(t, "SetClusterMaintenanceMode")
 }
 
 func TestApplyIdxcSecret(t *testing.T) {
@@ -856,15 +870,38 @@ func TestApplyIdxcSecret(t *testing.T) {
 		},
 	}
 
+	podExecCommands := []string{
+		"maintenance-mode",
+	}
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+			Err:    fmt.Errorf("dummy error"),
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+
 	// Set resource version to that of NS secret
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
 
 	// Change resource version
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyIdxcSecret(mgr, 1, true)
+
+	// Invalid scenario where SetClusterMaintenanceMode would return error
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
+	if err == nil {
+		t.Errorf("ApplyIdxcSecret should have returned error")
+	}
+
+	// Valid scenario where SetClusterMaintenanceMode would not return error
+	mockPodExecReturnContexts[0].Err = nil
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -876,7 +913,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	if err != nil {
 		t.Errorf("Couldn't update resource")
 	}
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -888,7 +925,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 	// Test set again
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -904,7 +941,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 	mgr.cr.Spec.ClusterMasterRef.Name = ""
 	mgr.cr.Status.MaintenanceMode = false
 	mgr.cr.Status.IndexerSecretChanged = []bool{}
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != splcommon.EmptyClusterMasterRef {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -925,7 +962,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret) {
 		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
 	}
@@ -938,7 +975,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Couldn't apply idxc secret %s", err.Error())
 	}
@@ -950,7 +987,7 @@ func TestApplyIdxcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
-	err = ApplyIdxcSecret(mgr, 1, true)
+	err = ApplyIdxcSecret(mgr, 1, mockPodExecClient)
 	if err.Error() != fmt.Sprintf(splcommon.PodSecretNotFoundError, podName) {
 		t.Errorf("Couldn't recognize missing secret from Pod, error: %s", err.Error())
 	}

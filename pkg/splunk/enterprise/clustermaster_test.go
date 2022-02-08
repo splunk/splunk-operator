@@ -950,3 +950,58 @@ func TestGetClusterManagerList(t *testing.T) {
 		t.Errorf("Got wrong number of ClusterManager objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
+
+func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
+	cm := enterpriseApi.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "clustermaster",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	podExecCommands := []string{
+		"cat /mnt/splunk-operator/local/",
+	}
+
+	smartstoreConfigMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      splcommon.TestStack1ClusterManagerSmartStore,
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+			Err:    fmt.Errorf("dummy error"),
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+
+	err := CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
+	if err == nil {
+		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error")
+	}
+
+	mockPodExecReturnContexts[0].Err = nil
+	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
+	if err == nil {
+		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
+	}
+
+	c.AddObject(&smartstoreConfigMap)
+	err = CheckIfsmartstoreConfigMapUpdatedToPod(c, &cm, mockPodExecClient)
+	if err != nil {
+		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
+	}
+
+	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
+}
