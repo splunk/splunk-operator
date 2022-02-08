@@ -37,7 +37,6 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerServiceTestService},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerSecret},
-		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerConfigMapAppList},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 	}

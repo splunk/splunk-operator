@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
@@ -46,6 +47,9 @@ var AppLocationV1 = "appframework/v1apps/"
 
 // AppLocationV2 Location of apps on S3 for V2 Apps
 var AppLocationV2 = "appframework/v2apps/"
+
+// AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
+var AppStagingLocOnPod = "/operator-staging/appframework/"
 
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
 func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterpriseApi.AppSourceDefaultSpec) enterpriseApi.AppSourceSpec {
@@ -167,7 +171,7 @@ func GetAppDeploymentInfoStandalone(deployment *Deployment, testenvInstance *Tes
 	appInfoList := standalone.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
 		testenvInstance.Log.Info("Checking Standalone AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
-		if strings.Contains(appName, appDeploymentInfo.AppName) {
+		if strings.Contains(appName, appInfo.AppName) {
 			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Standalone Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
@@ -189,7 +193,7 @@ func GetAppDeploymentInfoMonitoringConsole(deployment *Deployment, testenvInstan
 	appInfoList := mc.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
 		testenvInstance.Log.Info("Checking Monitoring Console AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Monitoring Console Name", name, "AppDeploymentInfo", appInfo)
-		if strings.Contains(appName, appDeploymentInfo.AppName) {
+		if strings.Contains(appName, appInfo.AppName) {
 			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Monitoring Console Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
@@ -211,7 +215,7 @@ func GetAppDeploymentInfoClusterMaster(deployment *Deployment, testenvInstance *
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
 		testenvInstance.Log.Info("Checking Cluster Master AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
-		if strings.Contains(appName, appDeploymentInfo.AppName) {
+		if strings.Contains(appName, appInfo.AppName) {
 			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
@@ -233,7 +237,7 @@ func GetAppDeploymentInfoSearchHeadCluster(deployment *Deployment, testenvInstan
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
 		testenvInstance.Log.Info("Checking Search Head Cluster AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
-		if strings.Contains(appName, appDeploymentInfo.AppName) {
+		if strings.Contains(appName, appInfo.AppName) {
 			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
@@ -288,4 +292,22 @@ func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope
 	}
 
 	return appFrameworkSpec
+}
+
+// WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app
+func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+	startTime := time.Now()
+
+	for time.Since(startTime) <= time.Duration(2*time.Minute) {
+		for _, appName := range appList {
+			appDeploymentInfo, err := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "Failed to get app deployment info")
+			}
+			if appDeploymentInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall {
+				return
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
 }

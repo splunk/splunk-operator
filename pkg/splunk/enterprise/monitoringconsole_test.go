@@ -38,7 +38,6 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoringconsole-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
@@ -54,8 +53,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[7], funcCalls[9]}, "Update": {funcCalls[0], funcCalls[7]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9]}, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0], funcCalls[6]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8]}, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",

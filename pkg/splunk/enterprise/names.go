@@ -41,9 +41,6 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
-	// identifier
-	appListingTemplateStr = "splunk-%s-%s-app-list"
-
 	// init container name
 	initContainerTemplate = "%s-init-%d-%s"
 
@@ -62,19 +59,13 @@ const (
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
-	// ToDo: Used only for Phase-2, to be removed later
-	appListingRev = "appListingRev"
-
-	// Pod location for app related config
-	appConfLocationOnPod = "/mnt/app-listing/"
-
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
 	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
-	shcBundlePushStatusCheckFile = "/init-apps/.shcluster_bundle_status.txt"
+	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
 
 	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
 
@@ -106,11 +97,11 @@ const (
 	protoHTTPS = "https"
 	protoTCP   = "tcp"
 
-	// Volume name for shared volume between init and splunk containers
-	appVolumeMntName = "init-apps"
+	// Volume name for splunk containers to store apps temporarily
+	appVolumeMntName = "operator-staging"
 
-	// Mount location for the shared app package volume
-	appBktMnt = "/init-apps/"
+	// Mount location on splunk pod for the app package volume
+	appBktMnt = "/operator-staging/appframework/"
 
 	// Time delay involved in installating the Splunk Apps.
 	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
@@ -168,11 +159,6 @@ func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType Ins
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
 	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
-}
-
-// GetSplunkAppsConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
-func GetSplunkAppsConfigMapName(identifier string, crKind string) string {
-	return fmt.Sprintf(appListingTemplateStr, identifier, strings.ToLower(crKind))
 }
 
 // GetSplunkManualAppUpdateConfigMapName returns the manual app update configMap name for that namespace
