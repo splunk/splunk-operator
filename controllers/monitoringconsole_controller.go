@@ -137,6 +137,14 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}).
 		Watches(&source.Kind{Type: &enterprisev3.Standalone{}},
 			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.LicenseMaster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.IndexerCluster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.SearchHeadCluster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
+			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).
