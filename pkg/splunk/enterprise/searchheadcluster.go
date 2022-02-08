@@ -199,8 +199,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminSecretChanged = []bool{}
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
-	} else if cr.Status.Phase == splcommon.PhasePending {
-		result.Requeue = false
 	}
 	if !result.Requeue {
 		return reconcile.Result{}, nil

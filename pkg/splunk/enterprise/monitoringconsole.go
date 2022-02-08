@@ -147,8 +147,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		} else {
 			result.Requeue = false
 		}
-	} else if cr.Status.Phase == splcommon.PhasePending {
-		result.Requeue = false
 	}
 
 	if !result.Requeue {

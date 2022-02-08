@@ -191,7 +191,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
+		if !cr.Status.BundlePushTracker.NeedToPushMasterApps {
 			// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
 			if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
 				result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
@@ -199,8 +199,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 				result.Requeue = false
 			}
 		}
-	} else if cr.Status.Phase == splcommon.PhasePending {
-		result.Requeue = false
 	}
 
 	if !result.Requeue {
