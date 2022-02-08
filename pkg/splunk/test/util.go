@@ -21,7 +21,6 @@ package test
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -132,7 +131,7 @@ func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.
 	// check if the command is already added or not in the list of GotCmdList
 	var found bool
 	for i := range client.GotCmdList {
-		if reflect.DeepEqual(client.GotCmdList[i], command) {
+		if command == client.GotCmdList[i] {
 			found = true
 			break
 		}
