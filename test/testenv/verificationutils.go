@@ -441,6 +441,91 @@ func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, t
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
+// GetResourceVersion get resource version id
+func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, instance interface{}) string {
+	var newResourceVersion string
+	var err error
+
+		switch cr := instance.(type) {
+		case *enterpriseApi.Standalone:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		case *enterpriseApi.LicenseMaster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		case *enterpriseApi.IndexerCluster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		case *enterpriseApi.ClusterMaster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		case *enterpriseApi.MonitoringConsole:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		case *enterpriseApi.SearchHeadCluster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+		default:
+			return "-1"
+		}
+		if err != nil {
+			return "-1"
+		}
+		return newResourceVersion
+}
+
+// VerifyCustomResourceVersionChanged verify the version id
+func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, instance interface{}, resourceVersion string) {
+	var kind string
+	var newResourceVersion string
+	var name string
+	var err error
+
+	gomega.Eventually(func() string {
+		switch cr := instance.(type) {
+		case *enterpriseApi.Standalone:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.LicenseMaster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.IndexerCluster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.ClusterMaster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.MonitoringConsole:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.SearchHeadCluster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+			kind = cr.Kind
+			name = cr.Name
+		default:
+			return "-1"
+		}
+		if err != nil {
+			return "-1"
+		}
+		testenvInstance.Log.Info("Waiting for ", kind,  " CR status", "instance", name, "Not Expected", resourceVersion, " Actual Resource Version", newResourceVersion)
+		DumpGetPods(testenvInstance.GetName())
+		return newResourceVersion
+	}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(resourceVersion))
+}
+
+
 // VerifyCPULimits verifies value of CPU limits is as expected
 func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {
 	gomega.Eventually(func() bool {

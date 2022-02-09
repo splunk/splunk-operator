@@ -71,9 +71,11 @@ var _ = Describe("Monitoring Console test", func() {
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
 
 			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
@@ -95,8 +97,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testenvInstance)
 
-		    // Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -209,6 +212,9 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, standalonePods, mcName, true, false)
 
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Check Standalone Pod in MC Peer List
 			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, standalonePods, mcName, true, false)
@@ -244,8 +250,11 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for standalone two to be in READY status
 			testenv.StandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo, testenvInstance)
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Vrify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -260,14 +269,20 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Check standalone  instance in MC Peer list after adding new standalone")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, standalonePods, mcName, true, false)
 
+			// get revision number of the resource 
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Delete Standlone TWO of the standalone and ensure MC is updated
 			testenvInstance.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
 			deployment.GetInstance(ctx, standaloneTwoName, standaloneTwo)
 			err = deployment.DeleteCR(ctx, standaloneTwo)
 			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -348,6 +363,9 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, standalonePods, mcName, true, false)
 
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Scale Standalone instance
 			testenvInstance.Log.Info("Scaling Standalone CR")
 			scaledReplicaCount := 2
@@ -366,8 +384,11 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -477,6 +498,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure Indxer cluster scales up and go to ScalingUp phase
 			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
 
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Deploy Standalone Pod
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -502,8 +526,11 @@ var _ = Describe("Monitoring Console test", func() {
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
 			// Wait for MC to go to PENDING Phase
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -532,7 +559,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("monitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		FIt("monitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -561,7 +588,15 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
 			mcName := deployment.GetName()
-			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+
+			// Deploy Monitoring Console Pod
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -583,9 +618,6 @@ var _ = Describe("Monitoring Console test", func() {
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -597,6 +629,7 @@ var _ = Describe("Monitoring Console test", func() {
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, indexerPods, mcName, true, true)
 
+
 			// #################  Update Monitoring Console In Cluster Manager CR ##################################
 
 			mcTwoName := deployment.GetName() + "-two"
@@ -604,13 +637,19 @@ var _ = Describe("Monitoring Console test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, cm)
+
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(ctx, cm)
-
+			
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, cm, resourceVersion)
+
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -679,6 +718,7 @@ var _ = Describe("Monitoring Console test", func() {
 			shc.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to get update Monitoring Console in Search Head Cluster CRD")
+
 
 			// Ensure Search Head Cluster go to Ready Phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
@@ -807,12 +847,18 @@ var _ = Describe("Monitoring Console test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
+			// get revision number of the resource 
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, cm)
+
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(ctx, cm)
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, cm, resourceVersion)
+
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
