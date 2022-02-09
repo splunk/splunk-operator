@@ -95,8 +95,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testenvInstance)
 
-			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+		    // Wait for MC to go to Updating Phase
+			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -367,7 +367,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -503,7 +503,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
 
 			// Wait for MC to go to PENDING Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
+			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -610,7 +610,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
 			// Ensure Cluster Manager Goes to Updating Phase
-			//testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -812,7 +812,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
 			// Ensure Cluster Manager Goes to Updating Phase
-			//testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
