@@ -106,7 +106,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
 		err = mgr.verifyRFPeers(ctx, client)
 		if err != nil {
-			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peef failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peer failed %s", err.Error()))
 			return result, err
 		}
 	}
@@ -136,7 +136,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a regular service for indexer cluster (ingestion)
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service fro indexer cluster failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for indexer cluster failed %s", err.Error()))
 		return result, err
 	}
 
@@ -203,7 +203,10 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = true
 			return result, err
 		}
-	}
+	} /*else if cr.Status.Phase == splcommon.PhasePending {
+		result.Requeue = false
+	} */
+
 	if !result.Requeue {
 		return reconcile.Result{}, nil
 	}
@@ -426,7 +429,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
 		mgr.log.Error(err, "Indexer cluster is not ready")
-		return splcommon.PhasePending, nil
+		return splcommon.PhasePending, err
 	}
 
 	// manage scaling and updates

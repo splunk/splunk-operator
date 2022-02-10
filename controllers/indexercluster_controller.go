@@ -113,7 +113,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
-			common.CrdChangedPredicate(),
+			common.ClusterManagerChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -135,8 +135,11 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.IndexerCluster{},
 			}).
-		/*Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
-		&handler.EnqueueRequestForObject{}).*/
+		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: false,
+				OwnerType:    &enterprisev3.IndexerCluster{},
+			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

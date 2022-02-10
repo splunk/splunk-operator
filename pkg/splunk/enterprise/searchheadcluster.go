@@ -199,7 +199,10 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminSecretChanged = []bool{}
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
-	}
+	} /*else if cr.Status.Phase == splcommon.PhasePending {
+		result.Requeue = false
+	} */
+
 	if !result.Requeue {
 		return reconcile.Result{}, nil
 	}
@@ -396,7 +399,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
 		mgr.log.Error(err, "Search head cluster is not ready")
-		return splcommon.PhasePending, nil
+		return splcommon.PhasePending, err
 	}
 
 	// manage scaling and updates

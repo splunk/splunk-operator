@@ -191,6 +191,32 @@ func CrdChangedPredicate() predicate.Predicate {
 	return err
 }
 
+// ClusterManagerChangedPredicate .
+func ClusterManagerChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*enterprisev3.ClusterMaster); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj := e.ObjectNew.DeepCopyObject().(*enterprisev3.ClusterMaster)
+			oldObj := e.ObjectOld.DeepCopyObject().(*enterprisev3.ClusterMaster)
+			return !cmp.Equal(newObj.Status, oldObj.Status)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {

@@ -148,7 +148,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		} else {
 			result.Requeue = false
 		}
-	}
+	} /*else if cr.Status.Phase == splcommon.PhasePending {
+		result.Requeue = false
+	} */
 
 	if !result.Requeue {
 		return reconcile.Result{}, nil

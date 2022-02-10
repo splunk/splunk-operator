@@ -136,6 +136,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
+		testenvInstance.Log.Info("Check for Consistendy Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
@@ -157,6 +158,7 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(ctx, instanceName, idc)
+		testenvInstance.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 		return idc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
@@ -179,6 +181,7 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 	// In a steady state, cluster-manager should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+		testenvInstance.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		return cm.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
@@ -205,6 +208,7 @@ func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance 
 		// In a steady state, we should stay in Ready and not flip-flop around
 		gomega.Consistently(func() splcommon.Phase {
 			_ = deployment.GetInstance(ctx, instanceName, idc)
+			testenvInstance.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 			return idc.Status.Phase
 		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 	}
@@ -446,32 +450,32 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 	var newResourceVersion string
 	var err error
 
-		switch cr := instance.(type) {
-		case *enterpriseApi.Standalone:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		case *enterpriseApi.LicenseMaster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		case *enterpriseApi.IndexerCluster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		case *enterpriseApi.ClusterMaster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		case *enterpriseApi.MonitoringConsole:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		case *enterpriseApi.SearchHeadCluster:
-			err = deployment.GetInstance(ctx, cr.Name, cr)
-			newResourceVersion = cr.ResourceVersion
-		default:
-			return "-1"
-		}
-		if err != nil {
-			return "-1"
-		}
-		return newResourceVersion
+	switch cr := instance.(type) {
+	case *enterpriseApi.Standalone:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.LicenseMaster:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.IndexerCluster:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.ClusterMaster:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.MonitoringConsole:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.SearchHeadCluster:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
+	default:
+		return "-1"
+	}
+	if err != nil {
+		return "-1"
+	}
+	return newResourceVersion
 }
 
 // VerifyCustomResourceVersionChanged verify the version id
@@ -519,12 +523,11 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 		if err != nil {
 			return "-1"
 		}
-		testenvInstance.Log.Info("Waiting for ", kind,  " CR status", "instance", name, "Not Expected", resourceVersion, " Actual Resource Version", newResourceVersion)
+		testenvInstance.Log.Info("Waiting for ", kind, " CR status", "instance", name, "Not Expected", resourceVersion, " Actual Resource Version", newResourceVersion)
 		DumpGetPods(testenvInstance.GetName())
 		return newResourceVersion
 	}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(resourceVersion))
 }
-
 
 // VerifyCPULimits verifies value of CPU limits is as expected
 func VerifyCPULimits(deployment *Deployment, ns string, podName string, expectedCPULimits string) {

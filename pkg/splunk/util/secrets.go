@@ -443,11 +443,29 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		}
 
 		// Updated the secret if needed
+		// Added retry for 10 times as multiple controllers are tryting to update secret
+		// this code need to be fixed
 		if updateNeeded {
-			err = UpdateResource(ctx, client, &current)
+			retryCnt := 10
+			data := current.Data
+			for retryCnt > 0 {
+				err = client.Get(ctx, namespacedName, &current)
+				if err != nil {
+					return nil, err
+				}
+				current.Data = data
+				err = UpdateResource(ctx, client, &current)
+				if err != nil || retryCnt > 0 {
+					retryCnt = -1
+					continue
+				} else {
+					break
+				}
+			}
 			if err != nil {
 				return nil, err
 			}
+			err = client.Get(ctx, namespacedName, &current)
 		}
 
 		return &current, nil
