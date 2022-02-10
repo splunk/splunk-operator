@@ -59,7 +59,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -304,7 +304,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -544,7 +544,7 @@ var _ = Describe("s1appfw test", func() {
 
 	// /CSPL-1639
 	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+		It("s1, integration, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -859,7 +859,7 @@ var _ = Describe("s1appfw test", func() {
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
 	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("s1, integration, appframeworks1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -933,7 +933,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1029,7 +1029,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+		It("s1, smoke, appframeworks1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################

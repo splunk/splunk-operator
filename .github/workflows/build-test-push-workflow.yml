@@ -128,8 +128,9 @@ jobs:
   smoke-tests:
     needs: vulnerability-scan
     strategy:
+      fail-fast: false
       matrix:
-        test: [basic, appframework, secret, monitoringconsole]
+        test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -232,9 +233,12 @@ jobs:
         id: smoketest
         run: |
           make int-test
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: | 
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs if Failure in Smoke Test
+      - name: Archive Pod Logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
