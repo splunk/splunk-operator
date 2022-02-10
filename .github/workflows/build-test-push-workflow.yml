@@ -235,6 +235,7 @@ jobs:
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs if Failure in Smoke Test
+        if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
