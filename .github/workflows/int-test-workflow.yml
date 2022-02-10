@@ -5,7 +5,7 @@ on:
       - develop
       - master
       - feature-appframework
-      - bugfix/race-condition-fix
+      - CSPL-1604
 jobs:
   int-tests:
     strategy:

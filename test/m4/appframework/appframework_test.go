@@ -1316,8 +1316,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	// CSPL-1604
-	XContext("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, appframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1642,8 +1641,6 @@ var _ = Describe("m4appfw test", func() {
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
-			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1656,11 +1653,29 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure Indexer cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
 
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
@@ -1759,7 +1774,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	// CSPL-1604
+	// CSPL-1647
 	XContext("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, appframeworkm4, appframework: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", func() {
 
@@ -2063,7 +2078,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	// CSPL-1604
+	// CSPL-1647
 	XContext("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("m4, integration, appframeworkm4, appframework: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
