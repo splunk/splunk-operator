@@ -399,7 +399,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
 		mgr.log.Error(err, "Search head cluster is not ready")
-		return splcommon.PhasePending, err
+		return splcommon.PhasePending, nil
 	}
 
 	// manage scaling and updates
