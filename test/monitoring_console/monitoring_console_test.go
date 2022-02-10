@@ -17,6 +17,7 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -542,6 +543,8 @@ var _ = Describe("Monitoring Console test", func() {
 			testenvInstance.Log.Info("Check standalone instance in MC Peer list")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testenvInstance, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, mcName, true, false)
 
+			time.Sleep(5 * time.Second)
+
 			// Verify all Search Head Members are configured on Monitoring Console
 			shPods = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas, false, 0)
 
@@ -559,7 +562,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		FIt("monitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("monitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
