@@ -1973,7 +1973,6 @@ var _ = Describe("m4appfw test", func() {
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1985,6 +1984,15 @@ var _ = Describe("m4appfw test", func() {
 
 			// Ensure Indexer cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
