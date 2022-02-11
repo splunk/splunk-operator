@@ -132,6 +132,7 @@ jobs:
   smoke-tests:
     needs: vulnerability-scan
     strategy:
+      fail-fast: false
       matrix:
         test: [basic, appframework, secret, monitoringconsole]
     runs-on: ubuntu-latest
@@ -153,6 +154,7 @@ jobs:
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
     steps:
       - name: Set Test Cluster Name
         run: | 
