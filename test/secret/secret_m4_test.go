@@ -90,6 +90,9 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Verify RF SF is met
 			testenvInstance.Log.Info("Checkin RF SF before secret change")
 			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
@@ -129,6 +132,9 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)

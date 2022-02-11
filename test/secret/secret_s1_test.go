@@ -83,6 +83,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
@@ -105,6 +108,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -168,6 +174,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
@@ -186,6 +195,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
@@ -249,6 +261,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
@@ -264,6 +279,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
