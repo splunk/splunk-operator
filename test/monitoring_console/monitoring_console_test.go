@@ -406,7 +406,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("monitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		FIt("monitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -434,6 +434,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
@@ -445,6 +448,12 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
@@ -488,7 +497,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Get instance of current Indexer CR with latest config
 			idxc := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(ctx, idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			Expect(err).To(Succeed(), "Failed to get instance  of Indexer Cluster")
 
 			// Update Replicas of Indexer Cluster
 			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
@@ -499,7 +508,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
 
 			// Deploy Standalone Pod
 			spec := enterpriseApi.StandaloneSpec{
@@ -597,6 +606,10 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
@@ -608,6 +621,12 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
@@ -637,7 +656,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, cm)
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testenvInstance, cm)
 
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
 			err = deployment.UpdateCR(ctx, cm)
