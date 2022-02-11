@@ -30,7 +30,6 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/remotecommand"
 )
 
 // isFanOutApplicableToCR confirms if a given CR needs fanOut support
@@ -564,9 +563,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	}
 
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	// if the app was already installed previously, then just mark it for install complete
@@ -583,7 +580,7 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 
 	// Delete the app package from the target pod /operator-staging/appframework/ location
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
-	streamOptions.Stdin = strings.NewReader(command)
+	streamOptions = splutil.NewStreamOptionsObject(command)
 	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
@@ -619,9 +616,7 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 	// ToDo: sgontla: cd, tar, and rm commands are trivial commands. packing together to avoid spanning multiple processes.
 	// A better alternative is to maintain a script (that can give us the status of each command that we can map into a logical error, and copy if when needed.). Alternatively, we can mount it through a configMap
 	command := fmt.Sprintf("cd %s; tar -xzf %s; rm -rf %s", clusterAppsPath, appPkgPathOnPod, appPkgPathOnPod)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err = podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
@@ -1216,9 +1211,7 @@ func (shcPlaybookContext *SHCPlaybookContext) removeSHCBundlePushStatusFile() er
 	var err error
 
 	cmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(cmd),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(cmd)
 
 	_, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
@@ -1233,9 +1226,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
 
 	cmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(cmd),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	// check the content of the status file
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
@@ -1291,9 +1282,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete() (bool, erro
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush() error {
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(cmd),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		err = fmt.Errorf("error while applying SHC Bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
@@ -1360,9 +1349,7 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete() bool {
 	scopedLog := log.WithName("isBundlePushComplete").WithValues("crName", idxcPlaybookContext.cr.GetName(), "namespace", idxcPlaybookContext.cr.GetNamespace())
 
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(idxcShowClusterBundleStatusStr),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
@@ -1382,9 +1369,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete() bool {
 // triggerBundlePush triggers the bundle push for indexer cluster
 func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush() error {
 	scopedLog := log.WithName("idxcPlaybookContext.triggerBundlePush()")
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(applyIdxcBundleCmdStr),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(applyIdxcBundleCmdStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 
 	// If the error is due to a bundle which is already present, don't do anything.

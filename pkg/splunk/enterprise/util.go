@@ -1429,9 +1429,7 @@ func checkIfFileExistsOnPod(cr splcommon.MetaObject, filePath string, podExecCli
 	// Make sure the destination directory is existing
 	fPath := path.Clean(filePath)
 	command := fmt.Sprintf("test -f %s; echo -n $?", fPath)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
@@ -1443,21 +1441,32 @@ func checkIfFileExistsOnPod(cr splcommon.MetaObject, filePath string, podExecCli
 	return fileTestResult == 0
 }
 
+// resetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
+func resetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
+	// convert Stdin of type io.Reader to strings.Reader type
+	stdInReader := streamOptions.Stdin.(*strings.Reader)
+
+	// reset the offset of the Reader
+	stdInReader.Reset(command)
+}
+
 // createDirOnSplunkPods creates the required directory for the pod/s
 func createDirOnSplunkPods(cr splcommon.MetaObject, replicas int32, path string, podExecClient splutil.PodExecClientImpl) error {
 	var err error
 	var stdOut, stdErr string
 
 	command := fmt.Sprintf("mkdir -p %s", path)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
-
+	streamOptions := splutil.NewStreamOptionsObject(command)
 	// create the directory on each replica pod
 	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
 		// get the target pod name
 		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
 		podExecClient.SetTargetPodName(podName)
+
+		// CSPL-1639: reset the Stdin so that reader pipe can read from the correct offset of the string reader.
+		// This is particularly needed in the cases where we are trying to run the same command across multiple pods
+		// and we need to clear the reader pipe so that we can read the read buffer from the correct offset again.
+		resetStringReader(streamOptions, command)
 
 		// Throw an error if we are not able to create the destination directory where we wish to copy the app package
 		stdOut, stdErr, err = podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
@@ -1508,9 +1517,7 @@ func CopyFileToPod(c splcommon.ControllerClient, namespace string, srcPath strin
 	destDir := path.Dir(destPath)
 	command := fmt.Sprintf("test -d %s; echo -n $?", destDir)
 
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	// If the Pod directory doesn't exist, do not try to create it. Instead throw an error
 	// Otherwise, in case of invalid dest path, we may end up creating too many invalid directories/files
