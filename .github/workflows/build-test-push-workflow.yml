@@ -134,7 +134,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [basic, appframework, secret, monitoringconsole]
+        test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -159,12 +159,6 @@ jobs:
       - name: Set Test Cluster Name
         run: | 
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-      - name: Set Test Cluster Nodes and Parallel Runs
-        run: >-
-          if [ ${{ matrix.test }} == "appframework" ]; then 
-            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
-          fi
       - name: Chekcout code
         uses: actions/checkout@v2  
       - name: Dotenv Action

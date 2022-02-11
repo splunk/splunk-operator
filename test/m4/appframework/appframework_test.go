@@ -67,7 +67,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("smoke, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
+		It("smoke, m4, appframework, appframeworkm4: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -302,7 +302,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
+		It("integration, m4, appframework, appframeworkm4: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -538,7 +538,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, appframework: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, m4, appframework, appframeworkm4: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -764,7 +764,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework)", func() {
-		It("integration, m4, appframework: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, m4, appframework, appframeworkm4: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################

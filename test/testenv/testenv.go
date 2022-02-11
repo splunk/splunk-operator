@@ -301,7 +301,7 @@ func (testenv *TestEnv) setup() error {
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
 
-	if testenv.SkipTeardown && testenv.debug == "True" {
+	if testenv.SkipTeardown {
 		testenv.Log.Info("testenv teardown is skipped!\n")
 		return nil
 	}
