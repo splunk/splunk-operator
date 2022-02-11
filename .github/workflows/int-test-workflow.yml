@@ -8,8 +8,9 @@ on:
 jobs:
   int-tests:
     strategy:
+      fail-fast: false
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
+        test: [appframeworks1, appframeworkc3, appframeworkm4, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -35,7 +36,7 @@ jobs:
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
-          if [ ${{ matrix.test }} == "appframework" ]; then 
+          if grep -q "appframework" <<< "${{ matrix.test }}"; then 
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
           fi
@@ -116,9 +117,13 @@ jobs:
       - name: Run Integration test
         run: |
           make int-test
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: | 
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs if Failure in Smoke Test
+      - name: Archive Pod Logs
+        if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
