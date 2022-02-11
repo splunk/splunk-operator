@@ -542,9 +542,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	// /CSPL-1639
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("s1, smoke, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
