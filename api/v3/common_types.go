@@ -27,7 +27,7 @@ const (
 	APIVersion = "enterprise.splunk.com/v3"
 
 	// TotalWorker concurrent workers to reconcile
-	TotalWorker int = 1
+	TotalWorker int = 5
 )
 
 // default all fields to being optional
