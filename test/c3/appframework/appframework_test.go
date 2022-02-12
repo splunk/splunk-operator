@@ -227,7 +227,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = nil
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
