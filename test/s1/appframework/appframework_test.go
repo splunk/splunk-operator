@@ -320,6 +320,9 @@ var _ = Describe("s1appfw test", func() {
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+
 			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V1"
 			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
@@ -336,6 +339,9 @@ var _ = Describe("s1appfw test", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
