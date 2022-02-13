@@ -36,7 +36,8 @@ function createCluster() {
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   
   if [ -z "${found}" ]; then
-    eksctl create cluster --ssh-access=true --ssh-public-key=${EKS_SSH_PUBLIC_KEY} --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge
+    #eksctl create cluster --ssh-access=true --ssh-public-key=${EKS_SSH_PUBLIC_KEY} --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge
+    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
