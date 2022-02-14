@@ -266,6 +266,7 @@ func (testenv *TestEnv) setup() error {
 		return err
 	}
 
+	/*
 	err = testenv.createRole()
 	if err != nil {
 		return err
@@ -280,7 +281,7 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
-
+	*/
 	// Create s3 secret object for index test
 	testenv.createIndexSecret()
 
@@ -298,7 +299,7 @@ func (testenv *TestEnv) setup() error {
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
 
-	if testenv.SkipTeardown {
+	if testenv.SkipTeardown && testenv.debug == "True" {
 		testenv.Log.Info("testenv teardown is skipped!\n")
 		return nil
 	}

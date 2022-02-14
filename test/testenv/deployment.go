@@ -102,7 +102,7 @@ func (d *Deployment) Teardown() error {
 		}
 	}
 
-	if d.testenv.SkipTeardown {
+	if d.testenv.SkipTeardown && d.testenv.debug == "True" {
 		d.testenv.Log.Info("deployment teardown is skipped!\n")
 		return nil
 	}
