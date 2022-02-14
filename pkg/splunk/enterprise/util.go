@@ -32,7 +32,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/remotecommand"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -1441,15 +1440,6 @@ func checkIfFileExistsOnPod(cr splcommon.MetaObject, filePath string, podExecCli
 	return fileTestResult == 0
 }
 
-// resetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
-func resetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
-	// convert Stdin of type io.Reader to strings.Reader type
-	stdInReader := streamOptions.Stdin.(*strings.Reader)
-
-	// reset the offset of the Reader
-	stdInReader.Reset(command)
-}
-
 // createDirOnSplunkPods creates the required directory for the pod/s
 func createDirOnSplunkPods(cr splcommon.MetaObject, replicas int32, path string, podExecClient splutil.PodExecClientImpl) error {
 	var err error
@@ -1466,7 +1456,7 @@ func createDirOnSplunkPods(cr splcommon.MetaObject, replicas int32, path string,
 		// CSPL-1639: reset the Stdin so that reader pipe can read from the correct offset of the string reader.
 		// This is particularly needed in the cases where we are trying to run the same command across multiple pods
 		// and we need to clear the reader pipe so that we can read the read buffer from the correct offset again.
-		resetStringReader(streamOptions, command)
+		splutil.ResetStringReader(streamOptions, command)
 
 		// Throw an error if we are not able to create the destination directory where we wish to copy the app package
 		stdOut, stdErr, err = podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
