@@ -18,14 +18,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -261,9 +259,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(c splcommon.ControllerClient, cr *en
 	scopedLog := log.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
-	streamOptions := &remotecommand.StreamOptions{
-		Stdin: strings.NewReader(command),
-	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {

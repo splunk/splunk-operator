@@ -19,6 +19,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -241,4 +242,20 @@ func (podExecClient *PodExecClient) SetTargetPodName(targetPodName string) {
 // GetTargetPodName returns the target pod name
 func (podExecClient *PodExecClient) GetTargetPodName() string {
 	return podExecClient.targetPodName
+}
+
+// NewStreamOptionsObject return a new streamoptions object for the given command
+func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
+	return &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+}
+
+// ResetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
+func ResetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
+	// convert Stdin of type io.Reader to strings.Reader type
+	stdInReader := streamOptions.Stdin.(*strings.Reader)
+
+	// reset the offset of the Reader
+	stdInReader.Reset(command)
 }

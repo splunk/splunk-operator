@@ -197,3 +197,32 @@ func TestRunPodExecCommand(t *testing.T) {
 		t.Errorf("expected stdOut and stdErr to be empty since it is a dummy podExec call")
 	}
 }
+
+func TestNewStreamOptionsObject(t *testing.T) {
+	command := "dummyCmd"
+
+	streamOptions := NewStreamOptionsObject(command)
+	var gotCmd string
+	streamOptionsCmd := streamOptions.Stdin.(*strings.Reader)
+	for i := 0; i < int(streamOptionsCmd.Size()); i++ {
+		cmd, _, _ := streamOptionsCmd.ReadRune()
+		gotCmd = gotCmd + string(cmd)
+	}
+
+	if gotCmd != command {
+		t.Errorf("got invalid command, expected: %s, got %s", command, gotCmd)
+	}
+}
+
+func TestGetSetTargetPodName(t *testing.T) {
+	podName := "pod-0"
+
+	var podExecClient PodExecClient = PodExecClient{}
+
+	podExecClient.SetTargetPodName(podName)
+
+	gotPodName := podExecClient.GetTargetPodName()
+	if gotPodName != podName {
+		t.Errorf("invalid targetPodName, expected: %s, got: %s", podName, gotPodName)
+	}
+}
