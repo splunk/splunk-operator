@@ -132,7 +132,7 @@ jobs:
   smoke-tests:
     needs: vulnerability-scan
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
     runs-on: ubuntu-latest
