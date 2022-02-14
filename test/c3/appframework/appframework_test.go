@@ -283,6 +283,9 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), indexerReplicas, clusterManagerBundleHash)
 			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
+			// Wait for the poll period for the apps to be downloaded
+			time.Sleep(5 * time.Minute)
+
 			// Verify V2 apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on C3 pods", appVersion))
 			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
