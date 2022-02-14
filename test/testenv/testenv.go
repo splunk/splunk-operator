@@ -265,7 +265,6 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
-
 	
 	err = testenv.createRole()
 	if err != nil {

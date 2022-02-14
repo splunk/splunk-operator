@@ -279,7 +279,7 @@ func newRole(name, ns string) *rbacv1.Role {
 			{
 				APIGroups: []string{""},
 				Resources: []string{"events"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"apps"},
