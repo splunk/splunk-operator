@@ -1,0 +1,8 @@
+
+To verify that splunk-operator has started, run:
+
+  kubectl --namespace={{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ .Release.Namespace }}"
+
+To view logs from splunk-operator:
+
+  kubectl --namespace={{ .Release.Namespace }} logs -l "app.kubernetes.io/name={{ .Release.Namespace }}"

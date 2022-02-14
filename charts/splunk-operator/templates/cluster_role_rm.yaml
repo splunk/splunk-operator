@@ -1,0 +1,38 @@
+---
+{{- if .Values.clusterScope }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+  name: {{ include "splunk-operator.serviceAccountName" . }}-rm
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+      - configmaps
+    verbs:
+      - create
+      - delete
+      - watch
+      - list
+      - get
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - statefulsets
+    verbs:
+      - list
+      - get
+      - watch
+  {{- end }}

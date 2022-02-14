@@ -1,0 +1,65 @@
+---
+{{- if .Values.clusterScope }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.serviceAccountName" . }}-nm
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - configmaps
+  - secrets
+  - pods
+  - pods/exec
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - '*'
+  - indexerclusters
+  - clustermasters
+  - licensemasters
+  - searchheadclusters
+  - standalones
+  verbs:
+  - '*'
+  {{- end }}

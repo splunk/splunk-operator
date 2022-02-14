@@ -1,0 +1,15 @@
+{{- if not .Values.clusterScope }}
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "splunk-operator.serviceAccountName" . }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "splunk-operator.serviceAccountName" . }}
+roleRef:
+  kind: Role
+  name: {{ include "splunk-operator.serviceAccountName" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
