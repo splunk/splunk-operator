@@ -11,7 +11,7 @@ if [[ -z "${EKS_VPC_PRIVATE_SUBNET_STRING}" ]]; then
 fi
 
 if [[ -z "${ECR_REPOSITORY}" ]]; then
-  echo "ECR_REPOSITORY not set. Chaning to env.sh value"
+  echo "ECR_REPOSITORY not set. Changing to env.sh value"
   export ECR_REPOSITORY="${PRIVATE_REGISTRY}"
 fi
 
