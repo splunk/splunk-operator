@@ -60,7 +60,8 @@ fi
 echo "Installing enterprise CRDs..."
 #echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
 #make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-kubectl apply -f ${topdir}/config/crd/bases
+#kubectl apply -f ${topdir}/config/crd/bases
+bin/kustomize build config/crd | kubectl apply -f -
 if [ $? -ne 0 ]; then
   echo "Unable to install the operator. Exiting..."
   exit 1
