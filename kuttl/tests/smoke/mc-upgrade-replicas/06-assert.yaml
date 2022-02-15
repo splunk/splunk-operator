@@ -1,0 +1,78 @@
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: example-idxc-site1
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-idxc-site1-indexer
+status:
+  replicas: 4
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-idxc-site1-indexer-secret-v1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-idxc-site1-indexer-0
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-idxc-site1-indexer-1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-idxc-site1-indexer-2
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-idxc-site1-indexer-3
+
+---
+# assert for clustre master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind:  MonitoringConsole
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-monitoring-console
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-monitoring-console-secret-v1
+

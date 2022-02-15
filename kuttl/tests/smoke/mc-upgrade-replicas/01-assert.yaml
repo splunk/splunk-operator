@@ -1,0 +1,25 @@
+---
+# assert for clustre master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind:  MonitoringConsole
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-monitoring-console
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-monitoring-console-secret-v1
+

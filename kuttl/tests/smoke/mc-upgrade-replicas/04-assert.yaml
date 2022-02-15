@@ -1,0 +1,60 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: example-shc
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-shc-deployer-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-shc-search-head-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-shc-search-head
+status:
+  replicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-shc-deployer
+status:
+  replicas: 1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-0
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-2
