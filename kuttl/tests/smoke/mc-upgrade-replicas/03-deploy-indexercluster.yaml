@@ -9,5 +9,5 @@ spec:
   volumes: []
   imagePullPolicy: IfNotPresent
   clusterMasterRef:
-    name: example
+    name: clustermaster
   replicas: 3
