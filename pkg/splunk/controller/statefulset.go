@@ -165,7 +165,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 				return splcommon.PhaseError, err
 			}
 			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(context.Background(), &pvc)
+			err = c.Delete(ctx, &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
 				return splcommon.PhaseError, err
