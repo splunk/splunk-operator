@@ -81,6 +81,7 @@ func TestApplyClusterManager(t *testing.T) {
 		_, err := ApplyClusterManager(c, cr.(*enterpriseApi.ClusterMaster))
 		return err
 	}
+	initGlobalResourceTracker()
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion

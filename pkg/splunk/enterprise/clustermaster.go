@@ -42,7 +42,8 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	namespace := cr.GetNamespace()
+	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", namespace)
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -52,6 +53,9 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 	if err != nil {
 		return result, err
 	}
+
+	// update the mutex map for global resource tracker
+	mux := getNamespaceScopedMutex(namespace)
 
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
@@ -96,7 +100,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, &mux)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -123,7 +127,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterManager)
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterManager, &mux)
 			if err != nil {
 				return result, err
 			}

@@ -5,6 +5,7 @@ on:
       - develop
       - master
       - feature-appframework
+      - bugfix/race-condition-fix
 jobs:
   int-tests:
     strategy:

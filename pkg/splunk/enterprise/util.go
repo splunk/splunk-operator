@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,10 +56,25 @@ var operatorResourceTracker *globalResourceTracker = nil
 
 // initialize operator level context
 func init() {
-	operatorResourceTracker = &globalResourceTracker{}
+	initGlobalResourceTracker()
+}
+
+func initGlobalResourceTracker() error {
+	operatorResourceTracker = &globalResourceTracker{
+		mutexMap: make(map[string]sync.Mutex),
+	}
 
 	// initialize the storage tracker
-	initStorageTracker()
+	return initStorageTracker()
+}
+
+// getNamespaceScopedMutex returns the mutex for the given namespace
+func getNamespaceScopedMutex(namespace string) sync.Mutex {
+	if _, ok := operatorResourceTracker.mutexMap[namespace]; !ok {
+		var mutex sync.Mutex
+		operatorResourceTracker.mutexMap[namespace] = mutex
+	}
+	return operatorResourceTracker.mutexMap[namespace]
 }
 
 func initStorageTracker() error {
@@ -1189,7 +1205,7 @@ func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 }
 
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
-func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
+func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext, mux *sync.Mutex) error {
 	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error
@@ -1197,7 +1213,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 	// This is done to prevent the null pointer dereference in case when
 	// operator crashes and comes back up and the status of app context was updated
 	// to match the spec in the previous run.
-	err = initAppFrameWorkContext(client, cr, appFrameworkConf, appStatusContext)
+	err = initAppFrameWorkContext(client, cr, appFrameworkConf, appStatusContext, mux)
 	if err != nil {
 		scopedLog.Error(err, "Unable initialize app framework")
 		return err
@@ -1255,6 +1271,7 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 			SetLastAppInfoCheckTime(appStatusContext)
 		} else {
 			var status string
+
 			configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 			configMap, err := splctrl.GetConfigMap(client, namespacedName)
@@ -1289,7 +1306,7 @@ refCount: %d`, status, numOfObjects)
 
 			configMap.Data[kind] = configMapData
 
-			err = splutil.UpdateResource(client, configMap)
+			err = splutil.UpdateResourceLocked(client, configMap, mux)
 			if err != nil {
 				scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
 				return err
@@ -1339,7 +1356,7 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 }
 
 // UpdateOrRemoveEntryFromConfigMap removes/updates the entry for the CR type from the manual app update configMap
-func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
+func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, mux *sync.Mutex) error {
 	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
@@ -1372,7 +1389,9 @@ refCount: %d`, getManualUpdateStatus(c, cr, configMapName), numOfObjects)
 	}
 
 	// Update configMap now
-	err = splutil.UpdateResource(c, configMap)
+	// Make sure to call the locked version since this is a common resource
+	// shared among all the CRs in the namespace
+	err = splutil.UpdateResourceLocked(c, configMap, mux)
 	if err != nil {
 		scopedLog.Error(err, "Unable to update configMap", "name", namespacedName.Name)
 		return err

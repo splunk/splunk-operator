@@ -74,6 +74,9 @@ const (
 
 type globalResourceTracker struct {
 	storage *storageTracker
+
+	// map of namespace:mutex, so that we can serialize create/update to resources in a namespace
+	mutexMap map[string]sync.Mutex
 }
 
 type storageTracker struct {

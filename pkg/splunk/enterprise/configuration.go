@@ -20,6 +20,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -815,7 +816,7 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 }
 
 // ApplyManualAppUpdateConfigMap applies the manual app update config map
-func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
+func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string, mux *sync.Mutex) (*corev1.ConfigMap, error) {
 
 	scopedLog := log.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -840,13 +841,13 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
-		err = splutil.CreateResource(client, configMap)
+		err = splutil.CreateResourceLocked(client, configMap, mux)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
-		err = splutil.UpdateResource(client, configMap)
+		err = splutil.UpdateResourceLocked(client, configMap, mux)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
@@ -891,10 +892,10 @@ func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.Met
 }
 
 // createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
-func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
+func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, mux *sync.Mutex) (*corev1.ConfigMap, error) {
 	scopedLog := log.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	crKindMap := make(map[string]string)
+	var crKindMap map[string]string
 	var configMapData, status string
 	var configMap *corev1.ConfigMap
 	var err error
@@ -926,6 +927,9 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	// prepare the configMap data OR
 	// initialize the configMap data for this CR type,
 	// if it did not exist before
+	if crKindMap == nil {
+		crKindMap = make(map[string]string)
+	}
 	if _, ok := crKindMap[kind]; !ok {
 		status = "off"
 	} else {
@@ -937,7 +941,7 @@ refCount: %d`, status, numOfObjects+1)
 	crKindMap[kind] = configMapData
 
 	// Create/update the configMap to store the values of manual trigger per CR kind.
-	configMap, err = ApplyManualAppUpdateConfigMap(client, cr, crKindMap)
+	configMap, err = ApplyManualAppUpdateConfigMap(client, cr, crKindMap, mux)
 	if err != nil {
 		scopedLog.Error(err, "Create/update configMap for app update failed")
 		return configMap, err
@@ -947,7 +951,7 @@ refCount: %d`, status, numOfObjects+1)
 }
 
 // initAppFrameWorkContext used to initialize the appframework context
-func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
+func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext, mux *sync.Mutex) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 		//Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
@@ -956,7 +960,7 @@ func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.Met
 		// handle upgrading to the latest version.
 		appStatusContext.Version = enterpriseApi.LatestAfwVersion
 
-		_, err := createOrUpdateAppUpdateConfigMap(client, cr)
+		_, err := createOrUpdateAppUpdateConfigMap(client, cr, mux)
 		if err != nil {
 			return err
 		}
