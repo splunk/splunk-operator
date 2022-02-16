@@ -76,6 +76,7 @@ type StandaloneReconciler struct {
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "Standalone")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)

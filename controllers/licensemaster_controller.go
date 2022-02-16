@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -70,6 +71,7 @@ type LicenseMasterReconciler struct {
 func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("licensemaster", req.NamespacedName)

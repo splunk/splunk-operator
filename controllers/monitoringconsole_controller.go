@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -70,7 +71,7 @@ type MonitoringConsoleReconciler struct {
 func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "MonitoringConsole")).Inc()
-
+	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("monitoringconsole", req.NamespacedName)
 	reqLogger.Info("start")

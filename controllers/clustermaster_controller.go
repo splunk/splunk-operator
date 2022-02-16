@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -70,6 +71,7 @@ type ClusterMasterReconciler struct {
 func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "ClusterMaster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
@@ -141,4 +143,13 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).
 		Complete(r)
+}
+
+// recordInstrumentionData Record api profiling information to prometheus
+func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
+	metricLabels := getPrometheusLabels(req, name)
+	metricLabels[labelModuleName] = module
+	metricLabels[labelMethodName] = name
+	value := float64(time.Since(start) / time.Millisecond)
+	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
 }
