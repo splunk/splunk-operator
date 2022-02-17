@@ -20,6 +20,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -899,7 +900,10 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	var configMap *corev1.ConfigMap
 	var err error
 	var numOfObjects int
+	var mux sync.Mutex
 
+	mux.Lock()
+	defer mux.Unlock()
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())

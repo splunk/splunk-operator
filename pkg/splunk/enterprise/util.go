@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -1254,7 +1255,11 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 		if isAppRepoPollingEnabled(appStatusContext) {
 			SetLastAppInfoCheckTime(appStatusContext)
 		} else {
+			var mux sync.Mutex
 			var status string
+
+			mux.Lock()
+			defer mux.Unlock()
 			configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 			configMap, err := splctrl.GetConfigMap(client, namespacedName)
@@ -1342,6 +1347,10 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	var mux sync.Mutex
+
+	mux.Lock()
+	defer mux.Unlock()
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(c, namespacedName)
