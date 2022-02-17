@@ -5,6 +5,7 @@ metadata:
   name: example-shc
 status:
   phase: Ready
+  readyReplicas: 4
 
 ---
 # check if stateful sets are created
@@ -51,6 +52,9 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-shc-search-head-1
+status:
+  phase: Running
+
 
 ---
 # check if Pods sets are created
@@ -58,6 +62,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-shc-search-head-2
+status:
+  phase: Running
 
 ---
 # check if Pods sets are created
@@ -65,6 +71,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-shc-search-head-3
+status:
+  phase: Running
 
 ---
 # assert for clustre master custom resource to be ready

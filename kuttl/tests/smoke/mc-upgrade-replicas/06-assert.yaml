@@ -6,6 +6,7 @@ metadata:
   name: example-idxc-site1
 status:
   phase: Ready
+  readyReplicas: 4
 
 ---
 # check if stateful sets are created
@@ -29,6 +30,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-idxc-site1-indexer-0
+status:
+  phase: Running
 
 ---
 # check if Pods sets are created
@@ -36,6 +39,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-idxc-site1-indexer-1
+status:
+  phase: Running
 
 ---
 # check if Pods sets are created
@@ -43,6 +48,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-idxc-site1-indexer-2
+status:
+  phase: Running
 
 ---
 # check if Pods sets are created
@@ -50,6 +57,8 @@ apiVersion: v1
 kind: Pod
 metadata: 
   name: splunk-example-idxc-site1-indexer-3
+status:
+  phase: Running
 
 ---
 # assert for clustre master custom resource to be ready
