@@ -18,6 +18,7 @@ package testenv
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -270,6 +271,8 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
 	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
+	pdata, _ := json.Marshal(indexer)
+	d.testenv.Log.Info("indexer cluster spec", "cr", pdata)
 	deployed, err := d.deployCR(ctx, name, indexer)
 	if err != nil {
 		return nil, err
@@ -673,6 +676,10 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		},
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
+
+	pdata, _ := json.Marshal(cmSpec)
+	d.testenv.Log.Info("cluster master spec", "cr", pdata)
+
 	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
 		return err
@@ -703,6 +710,10 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
+
+	pdata, _ = json.Marshal(shSpec)
+	d.testenv.Log.Info("Search head Spec", "cr", pdata)
+
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {
