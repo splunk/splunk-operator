@@ -892,7 +892,12 @@ func setupAppInitContainers(client splcommon.ControllerClient, cr splcommon.Meta
 			appSrcScope := getAppSrcScope(appFrameworkConfig, appSrc.Name)
 			initContainerName := strings.ToLower(fmt.Sprintf(initContainerTemplate, appSrcName, i, appSrcScope))
 
-			initEnv := []corev1.EnvVar{}
+			initEnv := []corev1.EnvVar{
+				{
+					Name:  "HOME",
+					Value: appBktMnt,
+				},
+			}
 			if appSecretRef != "" {
 				initEnv = append(initEnv, corev1.EnvVar{
 					Name: "AWS_ACCESS_KEY_ID",
