@@ -153,23 +153,23 @@ func DeployerBundlePushstatus(ctx context.Context, deployment *Deployment, ns st
 		logf.Log.Error(err, "vivek shcluster - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 		stdin = "ls -ltR /init-apps/"
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		logf.Log.Error(err, "vivek init-apps - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek init-apps - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 0)
 		stdin = "ls -lt /opt/splunk/etc/apps/"
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		logf.Log.Error(err, "vivek shcluster-head-0 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-0 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 1)
 		stdin = "ls -lt /opt/splunk/etc/apps/"
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		logf.Log.Error(err, "vivek shcluster-head-1 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-1 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 2)
 		stdin = "ls -lt /opt/splunk/etc/apps/"
-		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		logf.Log.Error(err, "vivek shcluster-head-2 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-2 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	}
 
