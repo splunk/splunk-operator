@@ -133,6 +133,7 @@ func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef st
 			return nil, err
 		}
 		licenseMaster = name
+
 	}
 	if mcRef != "" {
 		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
@@ -154,6 +155,7 @@ func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, l
 	if err != nil {
 		return nil, err
 	}
+	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -237,6 +239,9 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	LicenseManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.LicenseMaster), err
 }
 
@@ -253,6 +258,10 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, licenseMaste
 	if err != nil {
 		return nil, err
 	}
+
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -264,6 +273,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -277,6 +289,8 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	IndexersReady(ctx, d, d.testenv, 1)
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
 
@@ -290,6 +304,10 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterM
 		}
 	}
 	deployed, err := d.deployCR(ctx, name, sh)
+	if err != nil {
+		return deployed.(*enterpriseApi.SearchHeadCluster), err
+	}
+	SearchHeadClusterReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
