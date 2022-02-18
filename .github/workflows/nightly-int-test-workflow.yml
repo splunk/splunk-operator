@@ -6,7 +6,7 @@ jobs:
   int-tests:
     strategy:
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
+        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemanager]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -46,12 +46,12 @@ jobs:
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
-          version: 'v1.16.13'
+          version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v2
       - name: Install AWS CLI
         run: |
-          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle-1.20.8.zip" -o "awscli-bundle.zip"
+          curl "${{ steps.dotenv.outputs.AWSCLI_URL}}" -o "awscli-bundle.zip"
           unzip awscli-bundle.zip
           sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
           aws --version
@@ -134,6 +134,8 @@ jobs:
       TAG: edge
     steps:
     - uses: actions/checkout@v2
+      with:
+          ref: develop
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359

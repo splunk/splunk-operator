@@ -84,7 +84,7 @@ jobs:
 
     - name: Update Operator Version in version.go
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_operator_version }}"
         replace: "${{ github.event.inputs.new_operator_version }}"
@@ -92,7 +92,7 @@ jobs:
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
         replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
@@ -101,7 +101,7 @@ jobs:
 
     - name: Update Splunk Operator Install URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator"
         replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator"
@@ -110,7 +110,7 @@ jobs:
 
     - name: Update Splunk Operator VERSION in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_operator_version }} or later"
         replace: "${{ github.event.inputs.new_operator_version }} or later"
@@ -119,7 +119,7 @@ jobs:
 
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
@@ -127,7 +127,7 @@ jobs:
 
     - name: Update Splunk Enterprise image in DOCS
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }} or later"
         replace: "${{ github.event.inputs.new_enterprise_version }} or later"
@@ -146,7 +146,7 @@ jobs:
         docker images
 
     - name: Update Operator Image name in Release Folder
-      uses: jacobtomlinson/gha-find-replace@b76729678e8d52dadb12e0e16454a93e301a919d
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
         replace: "splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}"
