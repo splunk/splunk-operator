@@ -134,7 +134,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        test: [basic, appframework, secret, monitoringconsole] 
+        test: [smoke, s1, c3, m4, secret, monitoring_console] 
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -142,7 +142,9 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
-      TEST_FOCUS: "${{ matrix.test }}"
+      #TEST_FOCUS: "${{ matrix.test }}"
+      TEST_DIRECTORY: "${{ matrix.test }}"
+      TEST_FOCUS: smoke
       # This regex matches any string not containing smoke keyword
       TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_CLUSTER_PLATFORM: eks
@@ -157,8 +159,12 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
     steps:
       - name: Set Test Cluster Name
-        run: | 
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+        run: >-
+          if [ ${{ matrix.test }} == "monitoring_console" ]; then 
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-monitoringconsole-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          else
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          fi
       - name: Chekcout code
         uses: actions/checkout@v2  
       - name: Dotenv Action
