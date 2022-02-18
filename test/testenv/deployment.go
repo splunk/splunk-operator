@@ -284,13 +284,14 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
 	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
 	pdata, _ := json.Marshal(indexer)
-	d.testenv.Log.Info("indexer cluster spec", "cr", pdata)
+	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
 	if err != nil {
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	IndexersReady(ctx, d, d.testenv, 1)
+	SingleSiteIndexersReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
 
