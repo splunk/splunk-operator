@@ -48,7 +48,7 @@ const (
 	defaultSplunkImage   = "splunk/splunk:latest"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 3000
+	defaultTestTimeout = 6000
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second
@@ -265,7 +265,7 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
-	
+
 	err = testenv.createRole()
 	if err != nil {
 		return err
@@ -280,7 +280,7 @@ func (testenv *TestEnv) setup() error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Create s3 secret object for index test
 	testenv.createIndexSecret()
 
