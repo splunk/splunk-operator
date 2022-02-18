@@ -58,9 +58,9 @@ type MockPodExecReturnContext struct {
 
 // MockPodExecClient mocks the PodExecClient
 type MockPodExecClient struct {
-	client             splcommon.ControllerClient
-	cr                 splcommon.MetaObject
-	targetPodName      string
+	Client             splcommon.ControllerClient
+	Cr                 splcommon.MetaObject
+	TargetPodName      string
 	WantCmdList        []string
 	GotCmdList         []string
 	MockReturnContexts map[string]*MockPodExecReturnContext
@@ -104,6 +104,11 @@ func (client *MockPodExecClient) CheckPodExecCommands(t *testing.T, testMethod s
 	}
 }
 
+// GetCR returns the CR from the MockPodExecClient
+func (client *MockPodExecClient) GetCR() splcommon.MetaObject {
+	return client.Cr
+}
+
 // RunPodExecCommand returns the dummy values for mockPodExecClient
 func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
 
@@ -145,10 +150,10 @@ func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.
 
 // SetTargetPodName sets the targetPodName for MockPodExecClient
 func (client *MockPodExecClient) SetTargetPodName(targetPodName string) {
-	client.targetPodName = targetPodName
+	client.TargetPodName = targetPodName
 }
 
 // GetTargetPodName returns dummy target pod name for mockPodExecClient
 func (client *MockPodExecClient) GetTargetPodName() string {
-	return client.targetPodName
+	return client.TargetPodName
 }

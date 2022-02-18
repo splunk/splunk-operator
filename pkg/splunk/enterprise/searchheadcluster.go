@@ -206,7 +206,9 @@ func ApplySearchHeadCluster(client splcommon.ControllerClient, cr *enterpriseApi
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
 		// Update the requeue result as needed by the app framework
-		result = *finalResult
+		if finalResult != nil {
+			result = *finalResult
+		}
 	}
 	return result, nil
 }

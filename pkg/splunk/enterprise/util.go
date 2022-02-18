@@ -1604,7 +1604,7 @@ func setInstallStateForClusterScopedApps(appDeployContext *enterpriseApi.AppDepl
 				deployInfoList[i].PhaseInfo.Phase = enterpriseApi.PhaseInstall
 				deployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
 				scopedLog.Info("Cluster scoped app installed", "app name", deployInfoList[i].AppName, "digest", deployInfoList[i].ObjectHash)
-			} else {
+			} else if deployInfoList[i].PhaseInfo.Phase != enterpriseApi.PhaseInstall || deployInfoList[i].PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
 				scopedLog.Error(nil, "app missing from bundle push", "app name", deployInfoList[i].AppName, "digest", deployInfoList[i].ObjectHash, "phase", deployInfoList[i].PhaseInfo.Phase, "status", deployInfoList[i].PhaseInfo.Status)
 			}
 		}
