@@ -58,22 +58,22 @@ fi
 
 # Install the CRDs
 echo "Installing enterprise CRDs..."
-#echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
-#make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
+echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
 #kubectl apply -f ${topdir}/config/crd/bases
-make kustomize
-bin/kustomize build config/crd | kubectl apply -f -
+#make kustomize
+#bin/kustomize build config/crd | kubectl apply -f -
 if [ $? -ne 0 ]; then
   echo "Unable to install the operator. Exiting..."
   exit 1
 fi
 
-#echo "wait for operator pod to be ready..."
-#kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
-#if [ $? -ne 0 ]; then
-#  echo "Operator installation not ready..."
-#  exit 1
-#fi
+echo "wait for operator pod to be ready..."
+kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
+if [ $? -ne 0 ]; then
+  echo "Operator installation not ready..."
+  exit 1
+fi
 
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
@@ -145,7 +145,7 @@ echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 #ginkgo -v --trace --failFast -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-ginkgo -v --trace --failFast -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v --trace --failFast -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/c3/appframework -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
 
 #make undeploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
 #kubectl apply -f ${topdir}/deploy/crds
