@@ -150,7 +150,7 @@ func DeployerBundlePushstatus(ctx context.Context, deployment *Deployment, ns st
 	if len(appBundlePush) == 0 {
 		stdin = "ls -lt /opt/splunk/etc/shcluster/apps/"
 		stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-		logf.Log.Error(err, "vivek shcluster - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+		logf.Log.Info("vivek shcluster - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 		stdin = "ls -ltR /init-apps/"
 		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
