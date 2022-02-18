@@ -200,7 +200,7 @@ var _ = Describe("c3appfw test", func() {
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)...)
 
-			time.Sleep(10 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Verify V1 apps are copied on Indexers and Search Heads
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Indexers and Search Heads", appVersion))
@@ -252,7 +252,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -286,7 +286,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyDeployerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Verify V2 apps are copied to location
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on C3 pods", appVersion))
@@ -497,7 +497,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -886,7 +886,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -1197,7 +1197,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
@@ -1415,7 +1415,7 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
