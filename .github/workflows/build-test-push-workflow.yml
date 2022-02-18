@@ -134,7 +134,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        test: [appframework ]
+        test: [basic, appframework, secret, monitoringconsole] 
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
