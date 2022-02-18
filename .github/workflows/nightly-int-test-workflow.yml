@@ -5,8 +5,9 @@ on:
 jobs:
   int-tests:
     strategy:
+      fail-fast: false
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
+        test: [appframeworks1, appframeworkc3, appframeworkm4, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
