@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -135,6 +136,18 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 		},
 	}
 	test(splcommon.TestGetLMStatefulSetT5)
+
+	// Configure OnDelete statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+	test(splcommon.TestGetLMStatefulSetT5)
+
+	// Configure invalid statefulSet updateStrategy, should re-use Ondelete
+	cr.Spec.UpdateStrategy = "Fake"
+	test(splcommon.TestGetLMStatefulSetT5)
+
+	// Configure RollingUpdate statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+	test(splcommon.TestGetLMStatefulSetT6)
 
 }
 

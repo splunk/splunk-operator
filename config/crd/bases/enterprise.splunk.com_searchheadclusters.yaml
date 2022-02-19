@@ -1814,6 +1814,11 @@ spec:
                       type: string
                   type: object
                 type: array
+              updateStrategy:
+                description: UpdateStrategy is the updateStrategy used by the statefulsets
+                  deployed by the CRD. If not specified uses the default updateStrategy
+                  'onDelete' as per https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
+                type: string
               varVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:

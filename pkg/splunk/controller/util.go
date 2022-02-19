@@ -18,6 +18,7 @@ package controller
 import (
 	"reflect"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,6 +34,24 @@ var log = logf.Log.WithName("splunk.reconcile")
 
 // simple stdout logger, used for debugging
 //var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
+
+// MergeStatefulSetUpdates looks for material differences between a statefulset's current
+// config and a revised config. It merges material changes from revised to
+// current. This enables us to minimize updates. It returns true if there
+// are material differences between them, or false otherwise.
+func MergeStatefulSetUpdates(current *appsv1.StatefulSetSpec, revised *appsv1.StatefulSetSpec, name string) bool {
+	scopedLog := log.WithName("MergeStatefulSetUpdates").WithValues("name", name)
+
+	result := false
+
+	// Compare updateStrategy's
+	if !reflect.DeepEqual(current.UpdateStrategy, revised.UpdateStrategy) {
+		scopedLog.Info("StatefulSet updateStrategy's difer", "current", current.UpdateStrategy, "revised", revised.UpdateStrategy)
+		current.UpdateStrategy = revised.UpdateStrategy
+		result = true
+	}
+	return result
+}
 
 // MergePodUpdates looks for material differences between a Pod's current
 // config and a revised config. It merges material changes from revised to

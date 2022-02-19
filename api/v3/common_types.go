@@ -16,6 +16,7 @@
 package v3
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -120,6 +121,11 @@ type CommonSplunkSpec struct {
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
 	ServiceAccount string `json:"serviceAccount"`
+
+	// UpdateStrategy is the updateStrategy used by the statefulsets deployed by the CRD.
+	// If not specified uses the default updateStrategy 'onDelete' as per
+	// https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
+	UpdateStrategy appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy"`
 
 	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
 	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
