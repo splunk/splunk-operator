@@ -9,9 +9,10 @@ on:
 jobs:
   int-tests:
     strategy:
+      fail-fast: false
       matrix:
         # test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
-        test: [smoke, s1, c3, m4, secret, monitoring_console, smartstore, scaling_test, licensemanager, curstom_resource_crud] 
+        test: [smoke, s1, c3, m4, secret, monitoring_console, smartstore, scaling_test, licensemanager, custom_resource_crud] 
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -40,7 +41,7 @@ jobs:
             echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-monitoringconsole-$GITHUB_RUN_ID" >> $GITHUB_ENV
           elif [ ${{ matrix.test }} == "scaling_test" ]; then 
             echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-scaling-$GITHUB_RUN_ID" >> $GITHUB_ENV
-          elif [ ${{ matrix.test }} == "curstom_resource_crud" ]; then 
+          elif [ ${{ matrix.test }} == "custom_resource_crud" ]; then 
             echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-crcrud-$GITHUB_RUN_ID" >> $GITHUB_ENV
           else
             echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV

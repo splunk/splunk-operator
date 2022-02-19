@@ -132,7 +132,7 @@ jobs:
   smoke-tests:
     needs: vulnerability-scan
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         test: [smoke, s1, c3, m4, secret, monitoring_console] 
     runs-on: ubuntu-latest
