@@ -5,11 +5,13 @@ on:
       - develop
       - master
       - sdk-upgrade-1-15
+      - update-test-selection-logic
 jobs:
   int-tests:
     strategy:
       matrix:
-        test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
+        # test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
+        test: [smoke, s1, c3, m4, secret, monitoring_console, smartstore, scaling_test, licensemanager, curstom_resource_crud] 
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -17,7 +19,9 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
-      TEST_FOCUS: "${{ matrix.test }}"
+      #TEST_FOCUS: "${{ matrix.test }}"
+      TEST_DIRECTORY: "${{ matrix.test }}"
+      TEST_FOCUS: integration
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: eks
@@ -31,13 +35,15 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
     steps:
       - name: Set Test Cluster Name
-        run: | 
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-      - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
-          if [ ${{ matrix.test }} == "appframework" ]; then 
-            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
+          if [ ${{ matrix.test }} == "monitoring_console" ]; then 
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-monitoringconsole-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          elif [ ${{ matrix.test }} == "scaling_test" ]; then 
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-scaling-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          elif [ ${{ matrix.test }} == "curstom_resource_crud" ]; then 
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-crcrud-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          else
+            echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
           fi
       - name: Checkcout code
         uses: actions/checkout@v2   
