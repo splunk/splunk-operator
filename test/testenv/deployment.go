@@ -291,7 +291,7 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	SingleSiteIndexersReady(ctx, d, d.testenv)
+	//SingleSiteIndexersReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
@@ -309,7 +309,7 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterM
 	if err != nil {
 		return deployed.(*enterpriseApi.SearchHeadCluster), err
 	}
-	SearchHeadClusterReady(ctx, d, d.testenv)
+	//SearchHeadClusterReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
