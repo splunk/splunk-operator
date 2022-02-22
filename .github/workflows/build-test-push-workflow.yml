@@ -137,7 +137,7 @@ jobs:
         test: [basic, appframework, secret, monitoringconsole] 
     runs-on: ubuntu-latest
     env:
-      CLUSTER_NODES: 2
+      CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:8.2.3.3
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
