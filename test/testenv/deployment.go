@@ -166,6 +166,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	if err != nil {
 		return nil, err
 	}
+	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -645,6 +646,8 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name 
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
