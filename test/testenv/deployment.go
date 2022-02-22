@@ -275,7 +275,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
+	//ClusterManagerReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
