@@ -1021,7 +1021,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 		configmap := &corev1.ConfigMap{}
 		err = client.Get(ctx, namespacedName, configmap)
 		if err == nil && len(configmap.Data) == 0 {
-			appStatusContext.IsDeploymentInProgress = false 
+			appStatusContext.IsDeploymentInProgress = false
 		}
 		// ends here
 
