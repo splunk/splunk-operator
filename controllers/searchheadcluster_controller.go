@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	common "github.com/splunk/splunk-operator/controllers/common"
@@ -71,6 +72,7 @@ type SearchHeadClusterReconciler struct {
 func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "SearchHeadCluster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("searchheadcluster", req.NamespacedName)

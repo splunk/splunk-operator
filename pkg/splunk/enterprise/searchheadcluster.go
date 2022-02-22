@@ -90,6 +90,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -203,9 +205,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		result.Requeue = false
 	} */
 
-	if !result.Requeue {
+	/*if !result.Requeue {
 		return reconcile.Result{}, nil
-	}
+	} */
 	return result, nil
 }
 

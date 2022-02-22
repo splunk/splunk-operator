@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -70,6 +71,7 @@ type IndexerClusterReconciler struct {
 func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "IndexerCluster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)

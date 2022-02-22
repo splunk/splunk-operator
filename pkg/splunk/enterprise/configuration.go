@@ -18,14 +18,14 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"sort"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sort"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -385,42 +385,55 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		labels[k] = v
 	}
 
-	// create statefulset configuration
-	statefulSet := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StatefulSet",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
-			Namespace: cr.GetNamespace(),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectLabels,
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := client.Get(ctx, namespacedName, statefulSet)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if k8serrors.IsNotFound(err) {
+		// create statefulset configuration
+		statefulSet = &appsv1.StatefulSet{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StatefulSet",
+				APIVersion: "apps/v1",
 			},
-			ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
-			Replicas:            &replicas,
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+				Namespace: cr.GetNamespace(),
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
-					Annotations: annotations,
-				},
-				Spec: corev1.PodSpec{
-					Affinity:      affinity,
-					Tolerations:   spec.Tolerations,
-					SchedulerName: spec.SchedulerName,
-					Containers: []corev1.Container{
-						{
-							Image:           spec.Image,
-							ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
-							Name:            "splunk",
-							Ports:           ports,
-						},
+		}
+	}
+
+	statefulSet.Spec = appsv1.StatefulSetSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: selectLabels,
+		},
+		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
+		Replicas:            &replicas,
+		PodManagementPolicy: appsv1.ParallelPodManagement,
+		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.OnDeleteStatefulSetStrategyType,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      labels,
+				Annotations: annotations,
+			},
+			Spec: corev1.PodSpec{
+				Affinity:      affinity,
+				Tolerations:   spec.Tolerations,
+				SchedulerName: spec.SchedulerName,
+				Containers: []corev1.Container{
+					{
+						Image:           spec.Image,
+						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+						Name:            "splunk",
+						Ports:           ports,
 					},
 				},
 			},
@@ -428,7 +441,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// Add storage volumes
-	err := addStorageVolumes(cr, spec, statefulSet, labels)
+	err = addStorageVolumes(cr, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
 	}

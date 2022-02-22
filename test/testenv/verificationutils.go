@@ -854,11 +854,13 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 		deployerAppPushStatus := DeployerBundlePushstatus(ctx, deployment, ns)
 		if len(deployerAppPushStatus) == 0 {
 			testenvInstance.Log.Info("Bundle push not complete on all pods")
+			DumpGetPods(testenvInstance.GetName())
 			return false
 		}
 		for appName, val := range deployerAppPushStatus {
 			if val < replicas {
 				testenvInstance.Log.Info("Bundle push not complete on all pods for", "AppName", appName)
+				DumpGetPods(testenvInstance.GetName())
 				return false
 			}
 		}

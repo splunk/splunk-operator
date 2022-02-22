@@ -1,0 +1,142 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: example-shc
+status:
+  phase: Ready
+  readyReplicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-shc-deployer-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-shc-search-head-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-shc-search-head
+status:
+  replicas: 3
+ 
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-shc-deployer
+status:
+  replicas: 1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-0
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-1
+
+---
+# check if Pods sets are created
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: splunk-example-shc-search-head-2
+
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: example-idxc-site1
+status:
+  phase: Ready
+  readyReplicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-idxc-site1-indexer
+status:
+  replicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-idxc-site1-indexer-secret-v1
+
+---
+# assert for clustre master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: clustermaster
+status:
+  phase: Ready
+  readyReplicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-clustermaster-cluster-master
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-clustermaster-cluster-master-secret-v1
+
+---
+# assert for clustre master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind:  MonitoringConsole
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+status:
+  phase: Ready
+  readyReplicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-example-monitoring-console
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-example-monitoring-console-secret-v1

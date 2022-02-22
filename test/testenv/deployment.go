@@ -18,6 +18,7 @@ package testenv
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -132,6 +133,7 @@ func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef st
 			return nil, err
 		}
 		licenseMaster = name
+
 	}
 	if mcRef != "" {
 		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
@@ -153,6 +155,7 @@ func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, l
 	if err != nil {
 		return nil, err
 	}
+	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -163,6 +166,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	if err != nil {
 		return nil, err
 	}
+	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -236,6 +240,9 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	LicenseManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.LicenseMaster), err
 }
 
@@ -252,6 +259,10 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, licenseMaste
 	if err != nil {
 		return nil, err
 	}
+
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -263,6 +274,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	//ClusterManagerReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -270,10 +284,15 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
 	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
+	pdata, _ := json.Marshal(indexer)
+	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	//SingleSiteIndexersReady(ctx, d, d.testenv)
+
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
 
@@ -287,6 +306,10 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterM
 		}
 	}
 	deployed, err := d.deployCR(ctx, name, sh)
+	if err != nil {
+		return deployed.(*enterpriseApi.SearchHeadCluster), err
+	}
+	//SearchHeadClusterReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
@@ -427,6 +450,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		return err
 	}
 
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
@@ -438,6 +463,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		if err != nil {
 			return err
 		}
+		//IndexersReady(ctx, d, d.testenv, site)
 	}
 
 	siteDefaults := fmt.Sprintf(`splunk:
@@ -448,6 +474,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 	if err != nil {
 		return err
 	}
+	//SearchHeadClusterReady(ctx, d, d.testenv)
 
 	return nil
 }
@@ -623,6 +650,8 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name 
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -673,6 +702,10 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		},
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
+
+	pdata, _ := json.Marshal(cmSpec)
+	d.testenv.Log.Info("cluster master spec", "cr", pdata)
+
 	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
 		return err
@@ -703,6 +736,10 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
+
+	pdata, _ = json.Marshal(shSpec)
+	d.testenv.Log.Info("Search head Spec", "cr", pdata)
+
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {

@@ -134,12 +134,12 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        test: [basic, appframework, secret, monitoringconsole]
+        test: [basic, appframework, secret, monitoringconsole] 
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
+      SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:8.2.3.3
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -232,9 +232,13 @@ jobs:
         id: smoketest
         run: |
           make int-test
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: | 
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs if Failure in Smoke Test
+        if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"

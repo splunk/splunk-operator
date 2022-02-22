@@ -220,7 +220,7 @@ var _ = Describe("Licensemanager test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// Wait for LM to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)

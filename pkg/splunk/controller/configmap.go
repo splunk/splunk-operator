@@ -45,20 +45,21 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			err = splutil.UpdateResource(ctx, client, &current)
-			if err == nil {
-				dataUpdated = true
+			if err != nil {
+				return dataUpdated, err
 			}
+			err = client.Get(ctx, namespacedName, configMap)
+			dataUpdated = true
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
 	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
-		if err == nil {
-			dataUpdated = true
+		if err != nil {
+			return dataUpdated, err
 		}
+		dataUpdated = true
 	}
-	err = client.Get(ctx, namespacedName, configMap)
-
 	return dataUpdated, err
 }
 
@@ -105,7 +106,7 @@ func GetMCConfigMap(ctx context.Context, client splcommon.ControllerClient, cr s
 	if err != nil {
 		return nil, err
 	}
-	err = client.Get(context.TODO(), namespacedName, &configMap)
+	err = client.Get(ctx, namespacedName, &configMap)
 	if err != nil {
 		return nil, err
 	}

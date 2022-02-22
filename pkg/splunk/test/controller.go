@@ -586,7 +586,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	// test update
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
-	updateCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
 
@@ -608,6 +608,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
+	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
@@ -625,7 +626,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], funcCalls[0], pvcCalls[0], pvcCalls[1]},
 		"Update": {funcCalls[0]},
 		"Delete": pvcCalls,
 	}
@@ -675,6 +676,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	methodPlus = fmt.Sprintf("%s(%s)", method, "All pods ready")
 
 	getPodCalls["List"] = []MockFuncCall{listmockCall[0]}
+
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, getPodCalls, nil, current, pod)
 
 	// test pod not ready

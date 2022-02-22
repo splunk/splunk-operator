@@ -147,6 +147,32 @@ func DeployerBundlePushstatus(ctx context.Context, deployment *Deployment, ns st
 			return make(map[string]int)
 		}
 	}
+	if len(appBundlePush) == 0 {
+		stdin = "ls -lt /opt/splunk/etc/shcluster/apps/"
+		stdout, stderr, _ := deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+		stdin = "ls -ltR /init-apps/"
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek init-apps - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 0)
+		stdin = "ls -lt /opt/splunk/etc/apps/"
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-0 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 1)
+		stdin = "ls -lt /opt/splunk/etc/apps/"
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-1 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+		podName = fmt.Sprintf(SearchHeadPod, deployment.GetName(), 2)
+		stdin = "ls -lt /opt/splunk/etc/apps/"
+		stdout, stderr, _ = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		logf.Log.Info("vivek shcluster-head-2 - Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+
+	}
+
 	logf.Log.Info("App bundle push info for deployer", podName, appBundlePush)
 	return appBundlePush
 }

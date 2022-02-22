@@ -26,7 +26,7 @@ var _ = Describe("Standalone Controller", func() {
 	)
 
 	BeforeEach(func() {
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 	})
 
 	AfterEach(func() {
@@ -67,7 +67,7 @@ func CreateStandlaone(name string, namespace string, status splcommon.Phase) *en
 	}
 	ssSpec = testutils.NewStandalone(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	By("Expecting Standalone custom resource to be created successfully")
 	ss := &enterprisev3.Standalone{}
@@ -76,7 +76,7 @@ func CreateStandlaone(name string, namespace string, status splcommon.Phase) *en
 		if status != "" {
 			ss.Status.Phase = status
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())

@@ -63,12 +63,12 @@ echo "Installing enterprise CRDs..."
 #kubectl apply -f ${topdir}/config/crd/bases
 make kustomize
 bin/kustomize build config/crd | kubectl apply -f -
-if [ $? -ne 0 ]; then
-  echo "Unable to install the operator. Exiting..."
-  exit 1
-fi
+#if [ $? -ne 0 ]; then
+#  echo "Unable to install the operator. Exiting..."
+#  exit 1
+#fi
 
-#echo "wait for operator pod to be ready..."
+echo "wait for operator pod to be ready..."
 #kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
 #if [ $? -ne 0 ]; then
 #  echo "Operator installation not ready..."

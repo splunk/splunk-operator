@@ -40,6 +40,11 @@ func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient,
 			scopedLog.Info("Updating service account")
 			current = *serviceAccount
 			err = splutil.UpdateResource(ctx, client, &current)
+			if err != nil {
+				return err
+			}
+			// after update get the latest resource
+			err = client.Get(ctx, namespacedName, &current)
 		}
 	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, serviceAccount)

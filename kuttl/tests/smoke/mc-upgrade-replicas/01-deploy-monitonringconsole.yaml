@@ -1,0 +1,7 @@
+#create new cluster manager custom resource 
+apiVersion: enterprise.splunk.com/v3
+kind:  MonitoringConsole
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc

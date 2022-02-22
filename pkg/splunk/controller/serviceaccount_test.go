@@ -26,8 +26,11 @@ import (
 
 func TestApplyServiceAccount(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.ServiceAccount-test-defaults"}}
+	updateFunCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.ServiceAccount-test-defaults"},
+		{MetaName: "*v1.ServiceAccount-test-defaults"}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFunCalls, "Update": funcCalls}
 	current := corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",

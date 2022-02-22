@@ -49,7 +49,14 @@ func ApplyService(ctx context.Context, client splcommon.ControllerClient, revise
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
 		scopedLog.Info("Updating existing Service")
-		return splutil.UpdateResource(ctx, client, revised)
+		err = splutil.UpdateResource(ctx, client, revised)
+		if err != nil {
+			return err
+		}
+		err = client.Get(ctx, namespacedName, revised)
+		if err != nil {
+			return err
+		}
 	}
 
 	// all is good!

@@ -95,7 +95,14 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 		// this updates the desired state template, but doesn't actually modify any pods
 		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods
-		return splcommon.PhaseUpdating, splutil.UpdateResource(ctx, c, revised)
+
+		err = splutil.UpdateResource(ctx, c, revised)
+		if err != nil {
+			return splcommon.PhaseUpdating, err
+		}
+		// always pass the latest resource back to caller
+		err = c.Get(ctx, namespacedName, revised)
+		return splcommon.PhaseUpdating, err
 	}
 
 	// scaling and pod updates are handled by UpdateStatefulSetPods
@@ -147,6 +154,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return splcommon.PhaseScalingDown, nil
 		}
 
+		// always get the latest resource before updating it
+		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: statefulSet.GetName()}
+		err = c.Get(ctx, namespacedName, statefulSet)
+		if err != nil {
+			return splcommon.PhaseUpdating, err
+		}
+
 		// scale down statefulset to terminate pod
 		scopedLog.Info("Scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
@@ -169,7 +183,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 				return splcommon.PhaseError, err
 			}
 			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(context.Background(), &pvc)
+			err = c.Delete(ctx, &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
 				return splcommon.PhaseError, err
