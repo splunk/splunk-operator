@@ -450,6 +450,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		return err
 	}
 
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
@@ -461,7 +463,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		if err != nil {
 			return err
 		}
+		IndexersReady(ctx, d, d.testenv, site)
 	}
+
 
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
@@ -471,6 +475,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 	if err != nil {
 		return err
 	}
+	SearchHeadClusterReady(ctx, d, d.testenv)
 
 	return nil
 }

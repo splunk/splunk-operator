@@ -12,7 +12,7 @@ jobs:
         test: [appframework, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
-      CLUSTER_NODES: 1
+      CLUSTER_NODES: 2
       CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
