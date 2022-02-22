@@ -58,22 +58,22 @@ fi
 
 # Install the CRDs
 echo "Installing enterprise CRDs..."
-echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
-make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
+#echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+#make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE}
 #kubectl apply -f ${topdir}/config/crd/bases
-#make kustomize
-#bin/kustomize build config/crd | kubectl apply -f -
-if [ $? -ne 0 ]; then
-  echo "Unable to install the operator. Exiting..."
-  exit 1
-fi
+make kustomize
+bin/kustomize build config/crd | kubectl apply -f -
+#if [ $? -ne 0 ]; then
+#  echo "Unable to install the operator. Exiting..."
+#  exit 1
+#fi
 
 echo "wait for operator pod to be ready..."
-kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
-if [ $? -ne 0 ]; then
-  echo "Operator installation not ready..."
-  exit 1
-fi
+#kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
+#if [ $? -ne 0 ]; then
+#  echo "Operator installation not ready..."
+#  exit 1
+#fi
 
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
