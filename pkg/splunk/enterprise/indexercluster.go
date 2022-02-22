@@ -80,7 +80,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("apply splunk configuration failed %s", err.Error()))
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -207,9 +208,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		result.Requeue = false
 	} */
 
-	if !result.Requeue {
+	/*if !result.Requeue {
 		return reconcile.Result{}, nil
-	}
+	} */
 	return result, nil
 }
 
