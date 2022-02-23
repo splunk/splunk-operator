@@ -169,8 +169,10 @@ var _ = Describe("s1appfw test", func() {
 			// ############ INITIAL VERIFICATION ###########
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{StandaloneInfo: standaloneAppSourceInfo, McInfo: mcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			// ############## UPGRADE APPS #################
 			// Delete apps on S3
@@ -204,7 +206,7 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 
@@ -315,8 +317,10 @@ var _ = Describe("s1appfw test", func() {
 			//############ INITIAL VERIFICATION ###########
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{StandaloneInfo: standaloneAppSourceInfo, McInfo: mcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
 
 			// ############# DOWNGRADE APPS ################
 			// Delete apps on S3
@@ -350,7 +354,7 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## DOWNGRADE VERIFICATION ###########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 
@@ -474,8 +478,10 @@ var _ = Describe("s1appfw test", func() {
 			scaledReplicaCount := 2
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrReplicas: scaledReplicaCount}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{StandaloneInfo: standaloneAppSourceInfo, McInfo: mcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			//############### SCALING UP ##################
 			// Scale up Standalone instance
@@ -499,7 +505,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########### SCALING UP VERIFICATION #########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "up")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "up")
 
 			//############## SCALING DOWN #################
 			// Scale down Standalone instance
@@ -523,7 +529,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			//########### SCALING DOWN VERIFICATION #######
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "down")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "down")
 		})
 	})
 
@@ -664,8 +670,9 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
-			crsInfo := testenv.CrsInfo{StandaloneInfo: standaloneAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 
@@ -776,8 +783,9 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
-			crsInfo := testenv.CrsInfo{StandaloneInfo: standaloneAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			//############### UPGRADE APPS ################
 
@@ -809,7 +817,7 @@ var _ = Describe("s1appfw test", func() {
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			// ############ ENABLE MANUAL POLL ############
 			appVersion = "V2"
@@ -840,7 +848,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 })

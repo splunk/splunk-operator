@@ -176,8 +176,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo, McInfo: mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -227,7 +230,7 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ FINAL VERIFICATIONS ############
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
@@ -349,8 +352,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo, McInfo: mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_save", "", "")
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
@@ -400,7 +406,7 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### FINAL VERIFICATIONS #############
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
@@ -493,8 +499,10 @@ var _ = Describe("c3appfw test", func() {
 			//########## INITIAL VERIFICATIONS ############
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
 
 			//#############  SCALING UP ###################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -546,7 +554,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//########## SCALING UP VERIFICATIONS #########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "up")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "up")
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -592,7 +600,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//######## SCALING DOWN VERIFICATIONS #########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "down")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "down")
 		})
 	})
 
@@ -671,10 +679,12 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############## INITIAL VERIFICATIONS ##########
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: indexerReplicas}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -712,7 +722,7 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### UPGRADE VERIFICATIONS ###########
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 
@@ -942,8 +952,10 @@ var _ = Describe("c3appfw test", func() {
 			//############ INITIAL VERIFICATIONS ##########
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceNameLocal: appSourceNameLocalIdxc, CrAppSourceVolumeNameLocal: appSourceVolumeNameIdxcLocal, CrAppSourceNameCluster: appSourceNameClusterIdxc, CrAppSourceVolumeNameCluster: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceNameLocal: appSourceNameLocalShc, CrAppSourceVolumeNameLocal: appSourceVolumeNameShcLocal, CrAppSourceNameCluster: appSourceNameClusterShc, CrAppSourceVolumeNameCluster: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -990,7 +1002,7 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATION #############
-			testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
@@ -1117,8 +1129,10 @@ var _ = Describe("c3appfw test", func() {
 			//############ INITIAL VERIFICATIONS ##########
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceNameLocal: appSourceNameLocalIdxc, CrAppSourceVolumeNameLocal: appSourceVolumeNameIdxcLocal, CrAppSourceNameCluster: appSourceNameClusterIdxc, CrAppSourceVolumeNameCluster: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceNameLocal: appSourceNameLocalShc, CrAppSourceVolumeNameLocal: appSourceVolumeNameShcLocal, CrAppSourceNameCluster: appSourceNameClusterShc, CrAppSourceVolumeNameCluster: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
@@ -1169,7 +1183,7 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATION #############
-			testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
@@ -1251,8 +1265,10 @@ var _ = Describe("c3appfw test", func() {
 			//  ############### VERIFICATIONS ###############
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
 		})
 	})
 
@@ -1374,8 +1390,11 @@ var _ = Describe("c3appfw test", func() {
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo, McInfo: mcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", "", "")
 
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1420,7 +1439,7 @@ var _ = Describe("c3appfw test", func() {
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "bundle_save", clusterManagerBundleHash, "")
 
 			// ############ ENABLE MANUAL POLL ############
 			testenvInstance.Log.Info("Get config map for triggering manual update")
@@ -1457,7 +1476,7 @@ var _ = Describe("c3appfw test", func() {
 			// ############## UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 
 		})
 	})
@@ -1544,8 +1563,10 @@ var _ = Describe("c3appfw test", func() {
 			//############## INITIAL VERIFICATION ##########
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1582,7 +1603,7 @@ var _ = Describe("c3appfw test", func() {
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV1, nil, splunkPodAge, "skip", "", "")
 
 			// ############ ENABLE MANUAL POLL ############
 			testenvInstance.Log.Info("Get config map for triggering manual update")
@@ -1619,7 +1640,7 @@ var _ = Describe("c3appfw test", func() {
 			//########### UPGRADE VERIFICATIONS ###########
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.Verifications(deployment, testenvInstance, crsInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appFileList, nil, appVersion, appListV2, nil, splunkPodAge, "skip", "", "")
 		})
 	})
 
@@ -1747,8 +1768,10 @@ var _ = Describe("c3appfw test", func() {
 			//############ INITIAL VERIFICATIONS ##########
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceNameLocal: appSourceNameLocalIdxc, CrAppSourceVolumeNameLocal: appSourceVolumeNameIdxcLocal, CrAppSourceNameCluster: appSourceNameClusterIdxc, CrAppSourceVolumeNameCluster: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceNameLocal: appSourceNameLocalShc, CrAppSourceVolumeNameLocal: appSourceVolumeNameShcLocal, CrAppSourceNameCluster: appSourceNameClusterShc, CrAppSourceVolumeNameCluster: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas}
-			crsInfo := testenv.CrsInfo{CmInfo: cmAppSourceInfo, ShcInfo: shcAppSourceInfo}
-			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
+			allAppSourceInfo := []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			clusterManagerBundleHash := testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_save", "", "")
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -1814,7 +1837,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
-			testenv.Verifications(deployment, testenvInstance, crsInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
+			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, localappFileList, clusterappFileList, appVersion, appListLocal, appListCluster, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 })
