@@ -71,6 +71,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -152,9 +154,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		result.Requeue = false
 	} */
 
-	if !result.Requeue {
+	/*if !result.Requeue {
 		return reconcile.Result{}, nil
-	}
+	} */
 	return result, nil
 }
 

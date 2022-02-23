@@ -69,11 +69,11 @@ bin/kustomize build config/crd | kubectl apply -f -
 #fi
 
 echo "wait for operator pod to be ready..."
-kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
-if [ $? -ne 0 ]; then
-  echo "Operator installation not ready..."
-  exit 1
-fi
+#kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=500s -n splunk-operator
+#if [ $? -ne 0 ]; then
+#  echo "Operator installation not ready..."
+#  exit 1
+#fi
 
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then

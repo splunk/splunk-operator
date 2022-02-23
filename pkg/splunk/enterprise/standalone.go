@@ -99,7 +99,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create/update configmap resource failed %s", err.Error()))
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -225,9 +226,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		result.Requeue = false
 	} */
 
-	if !result.Requeue {
+	/*if !result.Requeue {
 		return reconcile.Result{}, nil
-	}
+	} */
 	return result, nil
 }
 

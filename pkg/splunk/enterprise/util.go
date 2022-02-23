@@ -351,6 +351,7 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	if len(appListingConfigMap.Data) > 0 {
 		if appsModified {
+			scopedLog.Info("Vivek AppList modified new configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
 			// App packages are modified, reset configmap to ensure a new resourceVersion
 			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
 			savedData := appListingConfigMap.Data
@@ -361,14 +362,15 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 			}
 			appListingConfigMap.Data = savedData
 		}
-
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
 		if err != nil {
 			return nil, configMapDataChanged, err
 		}
 	}
+	scopedLog.Info("Vivek app moified", "configMapName", configMapName, "appModified", appsModified, "Data", appListingConfigMap.Data)
 
+	scopedLog.Info("Vivek AppList configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
 	return appListingConfigMap, configMapDataChanged, nil
 }
 
@@ -421,14 +423,19 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 	if err != nil {
+		scopedLog.Error(err, "config map create/update failed", "error", err.Error())
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
 		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
-
+		// TODO FIXME Vivek
+		// adding a second delay just to make sure the first config update is complete
+		// this is temporary solution until we create idempotency for configmap
+		time.Sleep(1 * time.Second)
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 		if err != nil {
+			scopedLog.Error(err, "config map update failed", "error", err.Error())
 			return nil, configMapDataChanged, err
 		}
 	}
@@ -997,7 +1004,8 @@ func GetNextRequeueTime(ctx context.Context, appRepoPollInterval, lastCheckTime 
 }
 
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
-func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
+func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+	appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -1010,6 +1018,18 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 
 	//check if the apps need to be downloaded from remote storage
 	if HasAppRepoCheckTimerExpired(ctx, appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+
+		// TODO FIXME Vivek temporary fix, need to work with the team to find the solution
+		// starts here
+		configMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GroupVersionKind().Kind)
+		namespacedName := types.NamespacedName{Name: configMapName, Namespace: cr.GetNamespace()}
+		configmap := &corev1.ConfigMap{}
+		err = client.Get(ctx, namespacedName, configmap)
+		if err == nil && len(configmap.Data) == 0 {
+			appStatusContext.IsDeploymentInProgress = false
+		}
+		// ends here
+
 		if appStatusContext.IsDeploymentInProgress {
 			scopedLog.Info("App installation is already in progress. Not checking for any latest app repo changes")
 			return nil

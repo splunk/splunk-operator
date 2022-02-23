@@ -36,8 +36,12 @@ import (
 func TestApplyStatefulSet(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"}}
+	getFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": getFuncCalls, "Update": funcCalls}
 	var replicas int32 = 1
 	current := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{

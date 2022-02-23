@@ -166,6 +166,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	if err != nil {
 		return nil, err
 	}
+	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -274,7 +275,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
+	//ClusterManagerReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
@@ -290,7 +291,7 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	SingleSiteIndexersReady(ctx, d, d.testenv)
+	//SingleSiteIndexersReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
@@ -308,7 +309,7 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterM
 	if err != nil {
 		return deployed.(*enterpriseApi.SearchHeadCluster), err
 	}
-	SearchHeadClusterReady(ctx, d, d.testenv)
+	//SearchHeadClusterReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.SearchHeadCluster), err
 }
 
@@ -449,6 +450,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		return err
 	}
 
+	ClusterManagerReady(ctx, d, d.testenv)
+
 	// Deploy indexer sites
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
@@ -460,6 +463,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		if err != nil {
 			return err
 		}
+		//IndexersReady(ctx, d, d.testenv, site)
 	}
 
 	siteDefaults := fmt.Sprintf(`splunk:
@@ -470,6 +474,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 	if err != nil {
 		return err
 	}
+	//SearchHeadClusterReady(ctx, d, d.testenv)
 
 	return nil
 }
@@ -645,6 +650,8 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name 
 	if err != nil {
 		return nil, err
 	}
+	// Verify standalone goes to ready state
+	ClusterManagerReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
