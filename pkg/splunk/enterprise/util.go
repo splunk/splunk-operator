@@ -423,14 +423,19 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 	if err != nil {
+		scopedLog.Error(err, "config map create/update failed", "error", err.Error())
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
 		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
-
+		// TODO FIXME Vivek
+		// adding a second delay just to make sure the first config update is complete
+		// this is temporary solution until we create idempotency for configmap
+		time.Sleep(1 * time.Second)
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 		if err != nil {
+			scopedLog.Error(err, "config map update failed", "error", err.Error())
 			return nil, configMapDataChanged, err
 		}
 	}
