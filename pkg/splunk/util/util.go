@@ -208,6 +208,7 @@ type PodExecClientImpl interface {
 	RunPodExecCommand(*remotecommand.StreamOptions, []string) (string, string, error)
 	SetTargetPodName(string)
 	GetTargetPodName() string
+	GetCR() splcommon.MetaObject
 }
 
 // blank assignment to implement PodExecClientImpl
@@ -242,6 +243,11 @@ func (podExecClient *PodExecClient) SetTargetPodName(targetPodName string) {
 // GetTargetPodName returns the target pod name
 func (podExecClient *PodExecClient) GetTargetPodName() string {
 	return podExecClient.targetPodName
+}
+
+// GetCR returns the CR from the PodExecClient
+func (podExecClient *PodExecClient) GetCR() splcommon.MetaObject {
+	return podExecClient.cr
 }
 
 // NewStreamOptionsObject return a new streamoptions object for the given command
