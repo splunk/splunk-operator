@@ -36,19 +36,15 @@ var AppInfo = map[string]map[string]string{
 
 //AppSourceInfo holds info related to app sources
 type AppSourceInfo struct {
-	CrKind                       string
-	CrName                       string
-	CrAppSourceName              string
-	CrAppSourceNameLocal         string
-	CrAppSourceNameCluster       string
-	CrAppSourceVolumeName        string
-	CrAppSourceVolumeNameLocal   string
-	CrAppSourceVolumeNameCluster string
-	CrPod                        []string
-	CrAppScope                   string
-	CrReplicas                   int
-	CrSiteCount                  int
-	CrMultisite                  bool
+	CrKind                string
+	CrName                string
+	CrAppSourceName       string
+	CrAppSourceVolumeName string
+	CrPod                 []string
+	CrAppScope            string
+	CrReplicas            int
+	CrSiteCount           int
+	CrMultisite           bool
 }
 
 //BasicApps Apps that require no restart to be installed
@@ -331,7 +327,7 @@ func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name s
 }
 
 // Verifications will perform several verifications needed between the different steps of App Framework tests
-func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, appFileList []string, appFileList2 []string, appVersion string, appList []string, appList2 []string, splunkPodAge map[string]time.Time, status string, clusterManagerBundleHash string, scaling string) string {
+func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, appFileList []string, appFileList2ndScopeCluster []string, appVersion string, appList []string, appList2ndScopeCluster []string, splunkPodAge map[string]time.Time, status string, clusterManagerBundleHash string, scaling string) string {
 	/* Function Steps
 	 * Verify apps 'download' state for all CRs
 	 * Verify apps 'podCopy' state for all CRs
@@ -346,30 +342,16 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	// Verify apps 'Download' state for all CRs
 	phase := enterpriseApi.PhaseDownload
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterMaster" {
-			testenvInstance.Log.Info("Verify apps 'download' state on Cluster Manager CR")
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
+		if appSource.CrKind == "ClusterMaster" || appSource.CrKind == "SearchHeadCluster" {
+			testenvInstance.Log.Info("Verify apps 'download' state on %v CR", appSource.CrKind)
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil && appSource.CrAppScope == "cluster" {
+				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList2ndScopeCluster)
 			} else {
 				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 			}
 		}
-		if appSource.CrKind == "SearchHeadCluster" {
-			testenvInstance.Log.Info("Verify apps 'download' state on Search Head Cluster CR")
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
-			} else {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-			}
-		}
-		if appSource.CrKind == "Standalone" {
-			testenvInstance.Log.Info("Verify apps 'download' state on Standalone CR")
-			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-		}
-		if appSource.CrKind == "MonitoringConsole" {
-			testenvInstance.Log.Info("Verify apps 'download' state on Monitoring Console CR")
+		if appSource.CrKind == "Standalone" || appSource.CrKind == "MonitoringConsole" {
+			testenvInstance.Log.Info("Verify apps 'download' state on %v CR", appSource.CrKind)
 			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 		}
 	}
@@ -377,30 +359,16 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	// Verify apps 'PodCopy' state for all CRs
 	phase = enterpriseApi.PhasePodCopy
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterMaster" {
-			testenvInstance.Log.Info("Verify apps 'podCopy' state on Cluster Manager CR")
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
+		if appSource.CrKind == "ClusterMaster" || appSource.CrKind == "SearchHeadCluster" {
+			testenvInstance.Log.Info("Verify apps 'PodCopy' state on %v CR", appSource.CrKind)
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil && appSource.CrAppScope == "cluster" {
+				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList2ndScopeCluster)
 			} else {
 				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 			}
 		}
-		if appSource.CrKind == "SearchHeadCluster" {
-			testenvInstance.Log.Info("Verify apps 'podCopy' state on Search Head Cluster CR")
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
-			} else {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-			}
-		}
-		if appSource.CrKind == "Standalone" {
-			testenvInstance.Log.Info("Verify apps 'podCopy' state on Standalone CR")
-			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-		}
-		if appSource.CrKind == "MonitoringConsole" {
-			testenvInstance.Log.Info("Verify apps 'podCopy' state on Monitoring Console CR")
+		if appSource.CrKind == "Standalone" || appSource.CrKind == "MonitoringConsole" {
+			testenvInstance.Log.Info("Verify apps 'PodCopy' state on %v CR", appSource.CrKind)
 			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 		}
 	}
@@ -408,13 +376,11 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	// Verify apps packages are deleted from the operator pod for all CRs
 	opPod := GetOperatorPodName(testenvInstance.GetName())
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterMaster" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for Cluster Manager", appVersion))
-			if appFileList2 != nil && appList2 != nil {
-				opPathLocal := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeLocal, appSource.CrAppSourceNameLocal)
-				opPathCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeCluster, appSource.CrAppSourceNameCluster)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPathLocal)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList2, opPathCluster)
+		if appSource.CrKind == "ClusterMaster" || appSource.CrKind == "SearchHeadCluster" {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for %v", appVersion, appSource.CrKind))
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil && appSource.CrAppScope == "cluster" {
+				opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeCluster, appSource.CrAppSourceName)
+				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList2ndScopeCluster, opPath)
 			} else if appSource.CrAppScope == "cluster" {
 				opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeCluster, appSource.CrAppSourceName)
 				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
@@ -423,28 +389,8 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
 			}
 		}
-		if appSource.CrKind == "SearchHeadCluster" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for Search Head Cluster", appVersion))
-			if appFileList2 != nil && appList2 != nil {
-				opPathLocal := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeLocal, appSource.CrAppSourceNameLocal)
-				opPathCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeCluster, appSource.CrAppSourceNameCluster)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPathLocal)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList2, opPathCluster)
-			} else if appSource.CrAppScope == "cluster" {
-				opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeCluster, appSource.CrAppSourceName)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
-			} else if appSource.CrAppScope == "local" {
-				opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeLocal, appSource.CrAppSourceName)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
-			}
-		}
-		if appSource.CrKind == "Standalone" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for Standalone", appVersion))
-			opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeLocal, appSource.CrAppSourceName)
-			VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
-		}
-		if appSource.CrKind == "MonitoringConsole" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for Monitoring Console", appVersion))
+		if appSource.CrKind == "Standalone" || appSource.CrKind == "MonitoringConsole" {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for %v", appVersion, appSource.CrKind))
 			opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), enterpriseApi.ScopeLocal, appSource.CrAppSourceName)
 			VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opPath)
 		}
@@ -453,30 +399,16 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	// Verify apps 'install' state for all CRs
 	phase = enterpriseApi.PhaseInstall
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterMaster" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps 'install' state on Cluster Manager CR", appVersion))
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
+		if appSource.CrKind == "ClusterMaster" || appSource.CrKind == "SearchHeadCluster" {
+			testenvInstance.Log.Info("Verify apps 'install' state on %v CR", appSource.CrKind)
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil && appSource.CrAppScope == "cluster" {
+				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList2ndScopeCluster)
 			} else {
 				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 			}
 		}
-		if appSource.CrName == "SearchHeadCluster" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps 'install' state on Search Head Cluster CR", appVersion))
-			if appFileList2 != nil && appList2 != nil {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameLocal, phase, appFileList)
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceNameCluster, phase, appFileList2)
-			} else {
-				VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-			}
-		}
-		if appSource.CrName == "Standalone" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps 'install' state on Standalone CR", appVersion))
-			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
-		}
-		if appSource.CrName == "MonitoringConsole" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps 'install' state on Monitoring Console CR", appVersion))
+		if appSource.CrKind == "Standalone" || appSource.CrKind == "MonitoringConsole" {
+			testenvInstance.Log.Info("Verify apps 'install' state on %v CR", appSource.CrKind)
 			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appFileList)
 		}
 	}
@@ -485,12 +417,14 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	for _, appSource := range appSource {
 		if appSource.CrKind == "ClusterMaster" {
 			clusterManagerPodName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-			if appFileList2 != nil && appList2 != nil {
-				cmLocalDownload := "/init-apps/" + appSource.CrAppSourceVolumeNameLocal
-				cmClusterDownload := "/init-apps/" + appSource.CrAppSourceVolumeNameCluster
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil {
+				cmDownload := "/init-apps/" + appSource.CrAppSourceVolumeName
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, cmLocalDownload)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList2, cmClusterDownload)
+				if appSource.CrAppScope == "cluster" {
+					VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList2ndScopeCluster, cmDownload)
+				} else {
+					VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, cmDownload)
+				}
 			} else {
 				cmDownloadLocation := "/init-apps/" + appSource.CrAppSourceVolumeName
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
@@ -499,12 +433,14 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 		}
 		if appSource.CrKind == "SearchHeadCluster" {
 			deployerPodName := fmt.Sprintf(DeployerPod, deployment.GetName())
-			if appFileList2 != nil && appList2 != nil {
-				shcLocalDownload := "/init-apps/" + appSource.CrAppSourceVolumeNameLocal
-				shcClusterDownload := "/init-apps/" + appSource.CrAppSourceVolumeNameCluster
+			if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil {
+				shcDownload := "/init-apps/" + appSource.CrAppSourceVolumeName
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on Deployer pod %s", appVersion, deployerPodName))
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, shcLocalDownload)
-				VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList2, shcClusterDownload)
+				if appSource.CrAppScope == "cluster" {
+					VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList2ndScopeCluster, shcDownload)
+				} else {
+					VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, shcDownload)
+				}
 			} else {
 				shcDownloadLocation := "/init-apps/" + appSource.CrAppSourceVolumeName
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on Deployer pod %s", appVersion, deployerPodName))
@@ -559,7 +495,7 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	}
 
 	// Verify apps are copied to correct location on all CRs
-	if appFileList2 == nil && appList2 == nil {
+	if appFileList2ndScopeCluster == nil && appList2ndScopeCluster == nil {
 		for _, appSource := range appSource {
 			if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == "local" {
 				allPodNames := []string{fmt.Sprintf(ClusterManagerPod, deployment.GetName())}
@@ -575,7 +511,11 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 				allPodNames := []string{fmt.Sprintf(ClusterManagerPod, deployment.GetName())}
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on Cluster Manager (App List: %s)", appVersion, appFileList))
 				VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appList, false, false)
-				allPodNames = append(allPodNames, GeneratePodNameSlice(IndexerPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
+				if appSource.CrMultisite {
+					allPodNames = append(allPodNames, GeneratePodNameSlice(MultiSiteIndexerPod, deployment.GetName(), 1, true, appSource.CrReplicas)...)
+				} else {
+					allPodNames = append(allPodNames, GeneratePodNameSlice(IndexerPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
+				}
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied to /etc/apps/ on Indexers", appVersion))
 				VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appList, true, true)
 			}
@@ -633,16 +573,20 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	} else if appVersion == "V2" {
 		checkupdated = true
 	}
-	if appFileList2 != nil && appList2 != nil {
+	if appFileList2ndScopeCluster != nil && appList2ndScopeCluster != nil {
 		for _, appSource := range appSource {
 			if appSource.CrKind == "ClusterMaster" {
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are installed locally on Cluster Manager", appVersion))
 				cmPod := []string{fmt.Sprintf(ClusterManagerPod, deployment.GetName())}
 				VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), cmPod, appList, true, "enabled", checkupdated, false)
 				clusterPodNames := []string{}
-				clusterPodNames = append(clusterPodNames, GeneratePodNameSlice(IndexerPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
+				if appSource.CrMultisite {
+					clusterPodNames = append(clusterPodNames, GeneratePodNameSlice(MultiSiteIndexerPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
+				} else {
+					clusterPodNames = append(clusterPodNames, GeneratePodNameSlice(IndexerPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
+				}
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are installed on Indexers", appVersion))
-				VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appList2, true, "enabled", checkupdated, true)
+				VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appList2ndScopeCluster, true, "enabled", checkupdated, true)
 			} else if appSource.CrKind == "SearchHeadCluster" {
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are installed locally on Deployer", appVersion))
 				deployerPod := []string{fmt.Sprintf(DeployerPod, deployment.GetName())}
@@ -650,7 +594,7 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 				shcPodNames := []string{}
 				shcPodNames = append(shcPodNames, GeneratePodNameSlice(SearchHeadPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
 				testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are installed on Search Heads", appVersion))
-				VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), shcPodNames, appList2, true, "enabled", checkupdated, true)
+				VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), shcPodNames, appList2ndScopeCluster, true, "enabled", checkupdated, true)
 			}
 		}
 	}
