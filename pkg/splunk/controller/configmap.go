@@ -49,7 +49,6 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			if err != nil {
 				return dataUpdated, err
 			}
-			err = client.Get(ctx, namespacedName, configMap)
 			dataUpdated = true
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
@@ -60,6 +59,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			dataUpdated = true
 		}
 	}
+	err = client.Get(ctx, namespacedName, configMap)
 	return dataUpdated, err
 }
 
