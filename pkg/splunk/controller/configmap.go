@@ -44,6 +44,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
+			current.OwnerReferences = configMap.OwnerReferences
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err != nil {
 				return dataUpdated, err
@@ -55,10 +56,9 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		}
 	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
-		if err != nil {
-			return dataUpdated, err
+		if err == nil {
+			dataUpdated = true
 		}
-		dataUpdated = true
 	}
 	return dataUpdated, err
 }
