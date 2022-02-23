@@ -363,9 +363,9 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 			appListingConfigMap.Data = savedData
 		}
 		// adding sleep here as the first call has completed but the result is not yet in the cache
-		// when the next Get is done, it gets data from cache and with the older resource version, when we do update 
+		// when the next Get is done, it gets data from cache and with the older resource version, when we do update
 		// on the call its going to fail as it do not contain latest resource version, as temporary fix i have added
-		// sleep 
+		// sleep
 		time.Sleep(1 * time.Second)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
@@ -1023,6 +1023,17 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 
 	//check if the apps need to be downloaded from remote storage
 	if HasAppRepoCheckTimerExpired(ctx, appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+
+		// TODO FIXME Vivek temporary fix, need to work with the team to find the solution
+		// starts here
+		configMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GroupVersionKind().Kind)
+		namespacedName := types.NamespacedName{Name: configMapName, Namespace: cr.GetNamespace()}
+		configmap := &corev1.ConfigMap{}
+		err = client.Get(ctx, namespacedName, configmap)
+		if err == nil && len(configmap.Data) == 0 {
+			appStatusContext.IsDeploymentInProgress = false
+		}
+		// ends here
 
 		if appStatusContext.IsDeploymentInProgress {
 			scopedLog.Info("App installation is already in progress. Not checking for any latest app repo changes")
