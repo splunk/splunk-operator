@@ -40,6 +40,7 @@ var _ = Describe("Ingest and Search Test", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "ingest-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

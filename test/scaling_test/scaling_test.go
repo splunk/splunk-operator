@@ -36,6 +36,7 @@ var _ = Describe("Scaling test", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "scaling-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

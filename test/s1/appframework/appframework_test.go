@@ -49,7 +49,7 @@ var _ = Describe("s1appfw test", func() {
 
 	BeforeEach(func() {
 		var err error
-
+		testSuiteName    = "s1appfw-" + testenv.RandomDNSName(3)
 		downloadDirV1 = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
 		downloadDirV2 = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
 

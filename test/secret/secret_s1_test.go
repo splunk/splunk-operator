@@ -35,6 +35,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "secret-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

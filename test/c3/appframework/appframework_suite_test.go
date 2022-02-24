@@ -54,7 +54,7 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
+	
 })
 
 var _ = AfterSuite(func() {

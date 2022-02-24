@@ -31,6 +31,7 @@ var _ = XDescribe("Example1", func() {
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "example-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

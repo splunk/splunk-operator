@@ -18,6 +18,7 @@ var _ = Describe("Smartstore test", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "smartstore-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

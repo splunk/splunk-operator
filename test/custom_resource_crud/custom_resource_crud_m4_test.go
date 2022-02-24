@@ -37,6 +37,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "crcrud-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 

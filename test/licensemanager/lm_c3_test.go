@@ -38,6 +38,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	BeforeEach(func() {
 		var err error
+		testSuiteName = "lm-" + testenv.RandomDNSName(3)
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
 
