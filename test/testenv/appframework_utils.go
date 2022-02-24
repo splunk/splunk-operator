@@ -142,7 +142,7 @@ func GetAppFileList(appList []string) []string {
 }
 
 // GenerateAppFrameworkSpec Generate Appframework spec
-func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
+func GenerateAppFrameworkSpec(testenvInstance *TestCaseEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
 
 	// Create App framework volume
 	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}

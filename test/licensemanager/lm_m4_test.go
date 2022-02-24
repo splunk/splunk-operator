@@ -26,22 +26,28 @@ import (
 
 var _ = Describe("Licensemanager test", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -53,7 +59,7 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
 			siteCount := 3
 			mcRef := deployment.GetName()
@@ -61,26 +67,26 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify LM is configured on indexers
 			indexerPodName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 0)

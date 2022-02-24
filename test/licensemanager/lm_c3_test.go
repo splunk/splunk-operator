@@ -31,23 +31,29 @@ import (
 
 var _ = Describe("Licensemanager test", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var s3TestDir string
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -59,30 +65,30 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
 			mcRef := deployment.GetName()
 			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify LM is configured on indexers
 			indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), 0)
@@ -141,11 +147,11 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
 			// Create App framework Spec
 			volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3")}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -173,7 +179,7 @@ var _ = Describe("Licensemanager test", func() {
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: testenvInstance.GetLMConfigMap(),
+										Name: testcaseEnvInst.GetLMConfigMap(),
 									},
 								},
 							},
@@ -192,15 +198,15 @@ var _ = Describe("Licensemanager test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy LM with App framework")
 
 			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			podName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), podName, appListV1, true, false)
 
 			// Verify apps are installed on LM
 			lmPodName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV1, false, "enabled", false, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), lmPodName, appListV1, false, "enabled", false, false)
 
 			// Delete files uploaded to S3
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
@@ -223,13 +229,13 @@ var _ = Describe("Licensemanager test", func() {
 			time.Sleep(2 * time.Minute)
 
 			// Wait for LM to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			testenv.VerifyAppsCopied(ctx, deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)
+			testenv.VerifyAppsCopied(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), podName, appListV2, true, false)
 
 			// Verify apps are installed on LM
-			testenv.VerifyAppInstalled(ctx, deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV2, true, "enabled", true, false)
+			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), lmPodName, appListV2, true, "enabled", true, false)
 
 			// Delete files uploaded to S3
 			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)

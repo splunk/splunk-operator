@@ -29,6 +29,7 @@ import (
 
 var _ = Describe("Crcrud test for SVA M4", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
 	var newCPULimits string
@@ -36,7 +37,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		defaultCPULimits = "4"
 		newCPULimits = "2"
@@ -46,10 +49,13 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -63,31 +69,31 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify CPU limits on Indexers before updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), podName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -106,21 +112,21 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Verify Indexer Cluster is updating
 			idxcName := deployment.GetName() + "-" + "site1"
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating, idxcName)
 
 			// Verify Indexers go to ready state
-			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify CPU limits after updating the CR
 			for i := 1; i <= siteCount; i++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), podName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, newCPULimits)
 			}
 		})
 	})

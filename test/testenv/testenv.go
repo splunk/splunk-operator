@@ -19,7 +19,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
@@ -239,10 +238,10 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		}
 	}()
 
-	if err := testenv.setup(); err != nil {
+	/*if err := testenv.setup(); err != nil {
 		// teardown() should still be invoked
 		return nil, err
-	}
+	} */
 
 	return testenv, nil
 }
@@ -614,6 +613,7 @@ func (testenv *TestEnv) GetIndexSecretName() string {
 	return testenv.s3IndexSecret
 }
 
+/*
 // NewDeployment creates a new deployment
 func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
@@ -624,6 +624,7 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 
 	return &d, nil
 }
+*/
 
 // GetLMConfigMap Return name of license config map
 func (testenv *TestEnv) GetLMConfigMap() string {

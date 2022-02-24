@@ -27,22 +27,28 @@ import (
 
 var _ = Describe("Secret Test for SVA C3", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -61,97 +67,97 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to download license file")
 
 			// Create License Config Map
-			testenvInstance.CreateLicenseConfigMap(licenseFilePath)
+			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
 			mcRef := deployment.GetName()
 			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testenvInstance, mc)
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Verify RF SF is met
-			testenvInstance.Log.Info("Checkin RF SF before secret change")
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Current Secrets Struct
-			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testenvInstance.GetName())
-			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName)
+			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
 			// Update Secret Value on Secret Object
-			testenvInstance.Log.Info("Data in secret object", "data", secretStruct.Data)
+			testcaseEnvInst.Log.Info("Data in secret object", "data", secretStruct.Data)
 			modifiedHecToken := testenv.GetRandomeHECToken()
 			modifedValue := testenv.RandomDNSName(10)
 			updatedSecretData := testenv.GetSecretDataMap(modifiedHecToken, modifedValue, modifedValue, modifedValue, modifedValue)
 
-			err = testenv.ModifySecretObject(ctx, deployment, testenvInstance.GetName(), namespaceScopedSecretName, updatedSecretData)
+			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testenvInstance)
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testenvInstance, mc, resourceVersion)
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenvInstance.Log.Info("Checkin RF SF after secret change")
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
-			secretObjectNames := testenv.GetVersionedSecretNames(testenvInstance.GetName(), 2)
+			secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
 
 			// Verify Secrets on versioned secret objects
-			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testenvInstance, secretObjectNames, updatedSecretData, true)
+			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testcaseEnvInst, secretObjectNames, updatedSecretData, true)
 
 			// Once Pods are READY check each pod for updated secret keys
-			verificationPods := testenv.DumpGetPods(testenvInstance.GetName())
+			verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
 
 			// Verify secrets on pods
-			testenv.VerifySecretsOnPods(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySecretsOnPods(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
 
 			// Verify Pass4SymmKey Secrets on ServerConf on MC, LM Pods
-			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkServerConfSecrets(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
 
 			// Verify Hec token on InputConf on Pod
-			testenv.VerifySplunkInputConfSecrets(deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkInputConfSecrets(deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
 
 			// Verify Secrets via api access on Pod
-			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testenvInstance, verificationPods, updatedSecretData, true)
+			testenv.VerifySplunkSecretViaAPI(ctx, deployment, testcaseEnvInst, verificationPods, updatedSecretData, true)
 		})
 	})
 })

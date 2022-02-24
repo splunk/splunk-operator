@@ -17,6 +17,7 @@ package deletecr
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -35,22 +36,28 @@ func dumpGetPods(ns string) {
 
 var _ = Describe("DeleteCR test", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -61,16 +68,16 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify no SH in disconnected status is present on CM
-			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testenvInstance)
+			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
 
 		})
 	})

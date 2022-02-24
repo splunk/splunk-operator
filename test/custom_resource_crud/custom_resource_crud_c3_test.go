@@ -30,6 +30,7 @@ import (
 
 var _ = Describe("Crcrud test for SVA C3", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
 	var newCPULimits string
@@ -39,7 +40,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		defaultCPULimits = "4"
 		newCPULimits = "2"
@@ -49,10 +52,13 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -65,29 +71,29 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify CPU limits on Indexers before updating the CR
 			indexerCount := 3
 			for i := 0; i < indexerCount; i++ {
 				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), indexerPodName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), indexerPodName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -103,22 +109,22 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Indexer Cluster is updating
 			idxcName := deployment.GetName() + "-idxc"
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating, idxcName)
 
 			// Verify Indexers go to ready state
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify CPU limits on Indexers after updating the CR
 			for i := 0; i < indexerCount; i++ {
 				indexerPodName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), indexerPodName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), indexerPodName, newCPULimits)
 			}
 
 			// Verify CPU limits on Search Heads before updating the CR
 			searchHeadCount := 3
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, defaultCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, defaultCPULimits)
 			}
 
 			// Change CPU limits to trigger CR update
@@ -134,18 +140,18 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
 
 			// Verify Search Head Cluster is updating
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testenvInstance, splcommon.PhaseUpdating)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
 
 			// Verify Search Head go to ready state
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), SearchHeadPodName, newCPULimits)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, newCPULimits)
 			}
 		})
 	})
@@ -159,35 +165,35 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify Search Heads PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-search-head", 3, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-search-head", 3, true, verificationTimeout)
 
 			// Verify Deployer PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-deployer", 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-deployer", 1, true, verificationTimeout)
 
 			// Verify Indexers PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, true, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
@@ -217,19 +223,19 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
 			// Verify Search Heads PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-search-head", 3, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-search-head", 3, false, verificationTimeout)
 
 			// Verify Deployer PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "shc-deployer", 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-deployer", 1, false, verificationTimeout)
 
 			// Verify Indexers PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "idxc-indexer", 3, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, false, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, splcommon.ClusterManager, 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, false, verificationTimeout)
 
 			// Verify Monitoring Console PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testenvInstance, "monitoring-console", 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "monitoring-console", 1, false, verificationTimeout)
 		})
 	})
 })

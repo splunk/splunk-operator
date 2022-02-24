@@ -43,7 +43,7 @@ import (
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
 type Deployment struct {
 	name              string
-	testenv           *TestEnv
+	testenv           *TestCaseEnv
 	cleanupFuncs      []cleanupFunc
 	testTimeoutInSecs time.Duration
 }

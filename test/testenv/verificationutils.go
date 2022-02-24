@@ -62,7 +62,7 @@ type PodDetailsStruct struct {
 }
 
 // VerifyMonitoringConsoleReady verify Monitoring Console CR is in Ready Status and does not flip-flop
-func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestEnv) {
+func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, mcName string, monitoringConsole *enterpriseApi.MonitoringConsole, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(ctx, mcName, monitoringConsole)
 		if err != nil {
@@ -81,7 +81,7 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 }
 
 // StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
-func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestEnv) {
+func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(ctx, deploymentName, standalone)
 		if err != nil {
@@ -100,7 +100,7 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 }
 
 // SearchHeadClusterReady verify SHC is in READY status and does not flip-flop
-func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	shc := &enterpriseApi.SearchHeadCluster{}
 	instanceName := fmt.Sprintf("%s-shc", deployment.GetName())
 	gomega.Eventually(func() splcommon.Phase {
@@ -142,7 +142,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 }
 
 // SingleSiteIndexersReady verify single site indexers go to ready state
-func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	idc := &enterpriseApi.IndexerCluster{}
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
 	gomega.Eventually(func() splcommon.Phase {
@@ -164,7 +164,7 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 }
 
 // ClusterManagerReady verify Cluster Manager Instance is in ready status
-func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	// Ensure that the cluster-manager goes to Ready phase
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
@@ -187,7 +187,7 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 }
 
 // IndexersReady verify indexers of all sites go to ready state
-func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, siteCount int) {
+func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, siteCount int) {
 	siteIndexerMap := map[string][]string{}
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
@@ -215,7 +215,7 @@ func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance 
 }
 
 // IndexerClusterMultisiteStatus verify indexer Cluster is configured as multisite
-func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, siteCount int) {
+func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, siteCount int) {
 	siteIndexerMap := map[string][]string{}
 	for site := 1; site <= siteCount; site++ {
 		siteName := fmt.Sprintf("site%d", site)
@@ -246,7 +246,7 @@ func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, 
 }
 
 // VerifyRFSFMet verify RF SF is met on cluster manager
-func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() bool {
 		rfSfStatus := CheckRFSF(ctx, deployment)
 		testenvInstance.Log.Info("Verifying RF SF is met", "Status", rfSfStatus)
@@ -255,7 +255,7 @@ func VerifyRFSFMet(ctx context.Context, deployment *Deployment, testenvInstance 
 }
 
 // VerifyNoDisconnectedSHPresentOnCM is present on cluster manager
-func VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Consistently(func() bool {
 		shStatus := CheckSearchHeadRemoved(ctx, deployment)
 		testenvInstance.Log.Info("Verifying no Search Head in DISCONNECTED state present on Cluster Manager", "Status", shStatus)
@@ -264,7 +264,7 @@ func VerifyNoDisconnectedSHPresentOnCM(ctx context.Context, deployment *Deployme
 }
 
 // VerifyNoSHCInNamespace verify no SHC is present in namespace
-func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
+func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() bool {
 		shcStatus := SHCInNamespace(testenvInstance.GetName())
 		testenvInstance.Log.Info("Verifying no Search Head Cluster is present in namespace", "Status", shcStatus)
@@ -273,7 +273,7 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestEnv) {
 }
 
 // LicenseManagerReady verify LM is in ready status and does not flip flop
-func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv) {
+func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	licenseMaster := &enterpriseApi.LicenseMaster{}
 
 	testenvInstance.Log.Info("Verifying License Manager becomes READY")
@@ -389,7 +389,7 @@ func VerifyConfOnPod(deployment *Deployment, namespace string, podName string, c
 }
 
 // VerifySearchHeadClusterPhase verify the phase of SHC matches given phase
-func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
+func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
 		shc := &enterpriseApi.SearchHeadCluster{}
 		shcName := deployment.GetName() + "-shc"
@@ -404,7 +404,7 @@ func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, t
 }
 
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
-func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase, idxcName string) {
+func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase splcommon.Phase, idxcName string) {
 	gomega.Eventually(func() splcommon.Phase {
 		idxc := &enterpriseApi.IndexerCluster{}
 		err := deployment.GetInstance(ctx, idxcName, idxc)
@@ -418,7 +418,7 @@ func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, test
 }
 
 // VerifyStandalonePhase verify the phase of Standalone CR
-func VerifyStandalonePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
+func VerifyStandalonePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
 		standalone := &enterpriseApi.Standalone{}
 		err := deployment.GetInstance(ctx, deployment.GetName(), standalone)
@@ -432,7 +432,7 @@ func VerifyStandalonePhase(ctx context.Context, deployment *Deployment, testenvI
 }
 
 // VerifyMonitoringConsolePhase verify the phase of Monitoring Console CR
-func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, crName string, phase splcommon.Phase) {
+func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, crName string, phase splcommon.Phase) {
 	gomega.Eventually(func() splcommon.Phase {
 		mc := &enterpriseApi.MonitoringConsole{}
 		err := deployment.GetInstance(ctx, crName, mc)
@@ -446,7 +446,7 @@ func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, t
 }
 
 // GetResourceVersion get resource version id
-func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, instance interface{}) string {
+func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, instance interface{}) string {
 	var newResourceVersion string
 	var err error
 
@@ -479,7 +479,7 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 }
 
 // VerifyCustomResourceVersionChanged verify the version id
-func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, instance interface{}, resourceVersion string) {
+func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, instance interface{}, resourceVersion string) {
 	var kind string
 	var newResourceVersion string
 	var name string
@@ -557,7 +557,7 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 }
 
 // VerifyClusterManagerPhase verify phase of cluster manager
-func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, phase splcommon.Phase) {
+func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase splcommon.Phase) {
 	cm := &enterpriseApi.ClusterMaster{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
@@ -573,7 +573,7 @@ func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, test
 
 // VerifySecretsOnPods Check whether the secret object info is mounted on given pods
 // Set match to true or false to indicate desired +ve or -ve match
-func VerifySecretsOnPods(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+func VerifySecretsOnPods(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, verificationPods []string, data map[string][]byte, match bool) {
 	for _, pod := range verificationPods {
 		for secretKey, secretValue := range data {
 			found := false
@@ -592,7 +592,7 @@ func VerifySecretsOnPods(ctx context.Context, deployment *Deployment, testenvIns
 
 // VerifySecretsOnSecretObjects Compare secret value on passed in map to value present on secret object.
 // Set match to true or false to indicate desired +ve or -ve match
-func VerifySecretsOnSecretObjects(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, secretObjectNames []string, data map[string][]byte, match bool) {
+func VerifySecretsOnSecretObjects(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, secretObjectNames []string, data map[string][]byte, match bool) {
 	for _, secretName := range secretObjectNames {
 		currentSecretData, err := GetSecretStruct(ctx, deployment, testenvInstance.GetName(), secretName)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get secret struct")
@@ -613,7 +613,7 @@ func VerifySecretsOnSecretObjects(ctx context.Context, deployment *Deployment, t
 
 // VerifySplunkServerConfSecrets Compare secret value on passed in map to value present on server.conf for given pods and secrets
 // Set match to true or false to indicate desired +ve or -ve match
-func VerifySplunkServerConfSecrets(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+func VerifySplunkServerConfSecrets(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, verificationPods []string, data map[string][]byte, match bool) {
 	for _, podName := range verificationPods {
 		keysToMatch := GetKeysToMatch(podName)
 		testenvInstance.Log.Info("Verificaton Keys Set", "Pod Name", podName, "Keys To Compare", keysToMatch)
@@ -636,7 +636,7 @@ func VerifySplunkServerConfSecrets(ctx context.Context, deployment *Deployment, 
 
 // VerifySplunkInputConfSecrets Compare secret value on passed in map to value present on input.conf for given indexer or standalone pods
 // Set match to true or false to indicate desired +ve or -ve match
-func VerifySplunkInputConfSecrets(deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+func VerifySplunkInputConfSecrets(deployment *Deployment, testenvInstance *TestCaseEnv, verificationPods []string, data map[string][]byte, match bool) {
 	secretName := "hec_token"
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
@@ -658,7 +658,7 @@ func VerifySplunkInputConfSecrets(deployment *Deployment, testenvInstance *TestE
 }
 
 // VerifySplunkSecretViaAPI check if keys can be used to access api i.e validate they are authentic
-func VerifySplunkSecretViaAPI(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, verificationPods []string, data map[string][]byte, match bool) {
+func VerifySplunkSecretViaAPI(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, verificationPods []string, data map[string][]byte, match bool) {
 	var keysToMatch []string
 	for _, podName := range verificationPods {
 		if strings.Contains(podName, "standalone") || strings.Contains(podName, "indexer") {
@@ -676,7 +676,7 @@ func VerifySplunkSecretViaAPI(ctx context.Context, deployment *Deployment, teste
 }
 
 // VerifyPVC verifies if PVC exists or not
-func VerifyPVC(deployment *Deployment, testenvInstance *TestEnv, ns string, pvcName string, expectedToExist bool, verificationTimeout time.Duration) {
+func VerifyPVC(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pvcName string, expectedToExist bool, verificationTimeout time.Duration) {
 	gomega.Eventually(func() bool {
 		pvcExists := false
 		pvcsList := DumpGetPvcs(testenvInstance.GetName())
@@ -692,7 +692,7 @@ func VerifyPVC(deployment *Deployment, testenvInstance *TestEnv, ns string, pvcN
 }
 
 // VerifyPVCsPerDeployment verifies for a given deployment if PVCs (etc and var) exists
-func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, deploymentType string, instances int, expectedtoExist bool, verificationTimeout time.Duration) {
+func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestCaseEnv, deploymentType string, instances int, expectedtoExist bool, verificationTimeout time.Duration) {
 	pvcKind := []string{"etc", "var"}
 	for i := 0; i < instances; i++ {
 		for _, pvcVolumeKind := range pvcKind {
@@ -703,7 +703,7 @@ func VerifyPVCsPerDeployment(deployment *Deployment, testenvInstance *TestEnv, d
 }
 
 // VerifyAppInstalled verify that app of specific version is installed. Method assumes that app is installed in all CR's in namespace
-func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
+func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, versionCheck bool, statusCheck string, checkupdated bool, clusterWideInstall bool) {
 	for _, podName := range pods {
 		for _, appName := range apps {
 			status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
@@ -747,7 +747,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
 	for _, podName := range pods {
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
@@ -765,7 +765,7 @@ func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstan
 }
 
 // VerifyAppsInFolder verify that apps are present in folder. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsInFolder(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
+func VerifyAppsInFolder(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podName string, apps []string, path string, checkAppDirectory bool) {
 	gomega.Eventually(func() bool {
 		// Using checkAppDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkAppDirecotry is FALSE
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, checkAppDirectory)
@@ -783,7 +783,7 @@ func VerifyAppsInFolder(ctx context.Context, deployment *Deployment, testenvInst
 }
 
 // VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container
-func VerifyAppsDownloadedByInitContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, path string) {
+func VerifyAppsDownloadedByInitContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
 	for _, podName := range pods {
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, false)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
@@ -796,7 +796,7 @@ func VerifyAppsDownloadedByInitContainer(ctx context.Context, deployment *Deploy
 }
 
 // VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
-func VerifyPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, pods []string, key string, mcName string, expected bool) {
+func VerifyPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, key string, mcName string, expected bool) {
 	// Get contents of MC config map
 	mcConfigMap, err := GetMCConfigMap(ctx, deployment, testenvInstance.GetName(), mcName)
 	gomega.Expect(err).To(gomega.Succeed(), "Unable to get MC config map")
@@ -807,7 +807,7 @@ func VerifyPodsInMCConfigMap(ctx context.Context, deployment *Deployment, testen
 }
 
 // VerifyPodsInMCConfigString checks if given pod names are present in given KEY of given MC's Config Map
-func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
+func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, pods []string, mcName string, expected bool, checkPodIP bool) {
 	for _, podName := range pods {
 		testenvInstance.Log.Info("Checking pod configured in MC POD Peers String", "Pod Name", podName)
 		var found bool
@@ -822,7 +822,7 @@ func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, tes
 }
 
 // VerifyClusterManagerBundlePush verify that bundle push was pushed on all indexers
-func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, replicas int, previousBundleHash string) {
+func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, replicas int, previousBundleHash string) {
 	gomega.Eventually(func() bool {
 		// Get Bundle status and check that each pod has successfully deployed the latest bundle
 		clusterMasterBundleStatus := ClusterManagerBundlePushstatus(ctx, deployment, previousBundleHash)
@@ -849,7 +849,7 @@ func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment,
 }
 
 // VerifyDeployerBundlePush verify that bundle push was pushed on all search heads
-func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestEnv, ns string, replicas int) {
+func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, replicas int) {
 	gomega.Eventually(func() bool {
 		deployerAppPushStatus := DeployerBundlePushstatus(ctx, deployment, ns)
 		if len(deployerAppPushStatus) == 0 {

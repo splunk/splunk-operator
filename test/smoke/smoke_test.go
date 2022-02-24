@@ -30,22 +30,28 @@ import (
 
 var _ = Describe("Smoke test", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -56,7 +62,7 @@ var _ = Describe("Smoke test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Verify standalone goes to ready state
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 		})
 	})
 
@@ -67,16 +73,16 @@ var _ = Describe("Smoke test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
 	})
 
@@ -88,19 +94,19 @@ var _ = Describe("Smoke test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testenvInstance)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
 	})
 
@@ -112,16 +118,16 @@ var _ = Describe("Smoke test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testenvInstance)
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
 	})
 
@@ -129,7 +135,7 @@ var _ = Describe("Smoke test", func() {
 		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
 			// Create Service Account
 			serviceAccountName := "smoke-service-account"
-			testenvInstance.CreateServiceAccount(serviceAccountName)
+			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			standaloneSpec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -146,11 +152,11 @@ var _ = Describe("Smoke test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Verify serviceAccount is configured on Pod
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testenvInstance.GetName(), standalonePodName, serviceAccountName)
+			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
 		})
 	})
 })
