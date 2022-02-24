@@ -128,8 +128,9 @@ jobs:
   smoke-tests:
     needs: vulnerability-scan
     strategy:
+      fail-fast: false
       matrix:
-        test: [basic, appframework, secret, monitoringconsole]
+        test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
