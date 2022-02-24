@@ -21,8 +21,7 @@ const (
 )
 
 var (
-
-	testSuiteName   = "smartstore-" + testenv.RandomDNSName(3)
+	testSuiteName = "smartstore-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point

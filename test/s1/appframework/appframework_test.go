@@ -17,6 +17,8 @@ package s1appfw
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -38,13 +40,36 @@ var _ = Describe("s1appfw test", func() {
 	var appSourceVolumeName string
 	var testenvInstance *testenv.TestEnv
 
+	var appListV1 []string
+	var appListV2 []string
+	var downloadDirV1 string
+	var downloadDirV2 string
+
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
 
+		downloadDirV1 = filepath.Join(currDir, "s1appfwV1-"+testenv.RandomDNSName(4))
+		downloadDirV2 = filepath.Join(currDir, "s1appfwV2-"+testenv.RandomDNSName(4))
+
 		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 		Expect(err).ToNot(HaveOccurred())
+
+		// Create a list of apps to upload to S3
+		appListV1 = testenv.BasicApps
+		appFileList := testenv.GetAppFileList(appListV1)
+
+		// Download V1 Apps from S3
+		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
+
+		// Create a list of apps to upload to S3 after poll period
+		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+		appFileList = testenv.GetAppFileList(appListV2)
+		// Download V2 Apps from S3
+		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
 
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
@@ -67,6 +92,12 @@ var _ = Describe("s1appfw test", func() {
 		if testenvInstance != nil {
 			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
+
+		// Delete locally downloaded app files
+		err := os.RemoveAll(downloadDirV1)
+		Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
+		err = os.RemoveAll(downloadDirV2)
+		Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {

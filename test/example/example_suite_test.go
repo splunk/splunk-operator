@@ -27,8 +27,7 @@ import (
 )
 
 var (
-
-	testSuiteName   = "example-" + testenv.RandomDNSName(3)
+	testSuiteName = "example-" + testenv.RandomDNSName(3)
 )
 
 func init() {

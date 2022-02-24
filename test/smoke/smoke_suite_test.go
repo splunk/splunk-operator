@@ -36,8 +36,7 @@ const (
 )
 
 var (
-	
-	testSuiteName   = "smoke-" + testenv.RandomDNSName(3)
+	testSuiteName = "smoke-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point
