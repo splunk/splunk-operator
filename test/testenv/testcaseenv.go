@@ -67,7 +67,7 @@ func NewTestCaseEnv(kubeClient client.Client, name, licenseFilePath string) (*Te
 		return nil, fmt.Errorf("name %s has exceeded 24 chars", name)
 	}
 
-	testcaseenv := &TestCaseEnv{
+	testenv := &TestCaseEnv{
 		kubeClient:         kubeClient,
 		name:               name,
 		namespace:          name,
@@ -81,109 +81,109 @@ func NewTestCaseEnv(kubeClient client.Client, name, licenseFilePath string) (*Te
 		debug:              os.Getenv("DEBUG"),
 	}
 
-	testcaseenv.Log = logf.Log.WithValues("testcaseenv", testcaseenv.name)
+	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)
 
-	if err := testcaseenv.setup(); err != nil {
+	if err := testenv.setup(); err != nil {
 		// teardown() should still be invoked
 		return nil, err
 	}
 
-	return testcaseenv, nil
+	return testenv, nil
 }
 
-//GetName returns the name of the testcaseenv
-func (testcaseenv *TestCaseEnv) GetName() string {
-	return testcaseenv.name
+//GetName returns the name of the testenv
+func (testenv *TestCaseEnv) GetName() string {
+	return testenv.name
 }
 
-func (testcaseenv *TestCaseEnv) setup() error {
-	testcaseenv.Log.Info("testcaseenv initializing.\n")
+func (testenv *TestCaseEnv) setup() error {
+	testenv.Log.Info("testenv initializing.\n")
 
 	var err error
-	err = testcaseenv.createNamespace()
+	err = testenv.createNamespace()
 	if err != nil {
 		return err
 	}
 
-	err = testcaseenv.createSA()
+	err = testenv.createSA()
 	if err != nil {
 		return err
 	}
 
 	// Create s3 secret object for index test
-	testcaseenv.createIndexSecret()
+	testenv.createIndexSecret()
 
-	if testcaseenv.licenseFilePath != "" {
-		err = testcaseenv.createLicenseConfigMap()
+	if testenv.licenseFilePath != "" {
+		err = testenv.createLicenseConfigMap()
 		if err != nil {
 			return err
 		}
 	}
-	testcaseenv.initialized = true
-	testcaseenv.Log.Info("testcaseenv initialized.\n", "namespace", testcaseenv.namespace)
+	testenv.initialized = true
+	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace)
 	return nil
 }
 
-// Teardown cleanup the resources use in this testcaseenv
-func (testcaseenv *TestCaseEnv) Teardown() error {
+// Teardown cleanup the resources use in this testenv
+func (testenv *TestCaseEnv) Teardown() error {
 
-	if testcaseenv.SkipTeardown && testcaseenv.debug == "True" {
-		testcaseenv.Log.Info("testcaseenv teardown is skipped!\n")
+	if testenv.SkipTeardown && testenv.debug == "True" {
+		testenv.Log.Info("testenv teardown is skipped!\n")
 		return nil
 	}
 
-	testcaseenv.initialized = false
+	testenv.initialized = false
 
-	for fn, err := testcaseenv.popCleanupFunc(); err == nil; fn, err = testcaseenv.popCleanupFunc() {
+	for fn, err := testenv.popCleanupFunc(); err == nil; fn, err = testenv.popCleanupFunc() {
 		cleanupErr := fn()
 		if cleanupErr != nil {
-			testcaseenv.Log.Error(cleanupErr, "CleanupFunc returns an error. Attempt to continue.\n")
+			testenv.Log.Error(cleanupErr, "CleanupFunc returns an error. Attempt to continue.\n")
 		}
 	}
 
-	testcaseenv.Log.Info("testcaseenv deleted.\n")
+	testenv.Log.Info("testenv deleted.\n")
 	return nil
 }
 
-func (testcaseenv *TestCaseEnv) pushCleanupFunc(fn cleanupFunc) {
-	testcaseenv.cleanupFuncs = append(testcaseenv.cleanupFuncs, fn)
+func (testenv *TestCaseEnv) pushCleanupFunc(fn cleanupFunc) {
+	testenv.cleanupFuncs = append(testenv.cleanupFuncs, fn)
 }
 
-func (testcaseenv *TestCaseEnv) popCleanupFunc() (cleanupFunc, error) {
-	if len(testcaseenv.cleanupFuncs) == 0 {
+func (testenv *TestCaseEnv) popCleanupFunc() (cleanupFunc, error) {
+	if len(testenv.cleanupFuncs) == 0 {
 		return nil, fmt.Errorf("cleanupFuncs is empty")
 	}
 
-	fn := testcaseenv.cleanupFuncs[len(testcaseenv.cleanupFuncs)-1]
-	testcaseenv.cleanupFuncs = testcaseenv.cleanupFuncs[:len(testcaseenv.cleanupFuncs)-1]
+	fn := testenv.cleanupFuncs[len(testenv.cleanupFuncs)-1]
+	testenv.cleanupFuncs = testenv.cleanupFuncs[:len(testenv.cleanupFuncs)-1]
 
 	return fn, nil
 }
 
-func (testcaseenv *TestCaseEnv) createNamespace() error {
+func (testenv *TestCaseEnv) createNamespace() error {
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: testcaseenv.namespace,
+			Name: testenv.namespace,
 		},
 	}
 
-	err := testcaseenv.GetKubeClient().Create(context.TODO(), namespace)
+	err := testenv.GetKubeClient().Create(context.TODO(), namespace)
 	if err != nil {
 		return err
 	}
 
-	// Cleanup the namespace when we teardown this testcaseenv
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), namespace)
+	// Cleanup the namespace when we teardown this testenv
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), namespace)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete namespace")
+			testenv.Log.Error(err, "Unable to delete namespace")
 			return err
 		}
 		if err = wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
-			key := client.ObjectKey{Name: testcaseenv.namespace, Namespace: testcaseenv.namespace}
+			key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
 			ns := &corev1.Namespace{}
-			err := testcaseenv.GetKubeClient().Get(context.TODO(), key, ns)
+			err := testenv.GetKubeClient().Get(context.TODO(), key, ns)
 			if errors.IsNotFound(err) {
 				return true, nil
 			}
@@ -193,7 +193,7 @@ func (testcaseenv *TestCaseEnv) createNamespace() error {
 
 			return true, nil
 		}); err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete namespace")
+			testenv.Log.Error(err, "Unable to delete namespace")
 			return err
 		}
 
@@ -201,9 +201,9 @@ func (testcaseenv *TestCaseEnv) createNamespace() error {
 	})
 
 	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
-		key := client.ObjectKey{Name: testcaseenv.namespace}
+		key := client.ObjectKey{Name: testenv.namespace}
 		ns := &corev1.Namespace{}
-		err := testcaseenv.GetKubeClient().Get(context.TODO(), key, ns)
+		err := testenv.GetKubeClient().Get(context.TODO(), key, ns)
 		if err != nil {
 			// Try again
 			if errors.IsNotFound(err) {
@@ -217,31 +217,31 @@ func (testcaseenv *TestCaseEnv) createNamespace() error {
 
 		return false, nil
 	}); err != nil {
-		testcaseenv.Log.Error(err, "Unable to get namespace")
+		testenv.Log.Error(err, "Unable to get namespace")
 		return err
 	}
 
 	return nil
 }
 
-func (testcaseenv *TestCaseEnv) createSA() error {
+func (testenv *TestCaseEnv) createSA() error {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      testcaseenv.serviceAccountName,
-			Namespace: testcaseenv.namespace,
+			Name:      testenv.serviceAccountName,
+			Namespace: testenv.namespace,
 		},
 	}
 
-	err := testcaseenv.GetKubeClient().Create(context.TODO(), sa)
+	err := testenv.GetKubeClient().Create(context.TODO(), sa)
 	if err != nil {
-		testcaseenv.Log.Error(err, "Unable to create service account")
+		testenv.Log.Error(err, "Unable to create service account")
 		return err
 	}
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), sa)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), sa)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete service account")
+			testenv.Log.Error(err, "Unable to delete service account")
 			return err
 		}
 		return nil
@@ -250,19 +250,19 @@ func (testcaseenv *TestCaseEnv) createSA() error {
 	return nil
 }
 
-func (testcaseenv *TestCaseEnv) createRole() error {
-	role := newRole(testcaseenv.roleName, testcaseenv.namespace)
+func (testenv *TestCaseEnv) createRole() error {
+	role := newRole(testenv.roleName, testenv.namespace)
 
-	err := testcaseenv.GetKubeClient().Create(context.TODO(), role)
+	err := testenv.GetKubeClient().Create(context.TODO(), role)
 	if err != nil {
-		testcaseenv.Log.Error(err, "Unable to create role")
+		testenv.Log.Error(err, "Unable to create role")
 		return err
 	}
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), role)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), role)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete role")
+			testenv.Log.Error(err, "Unable to delete role")
 			return err
 		}
 		return nil
@@ -271,19 +271,19 @@ func (testcaseenv *TestCaseEnv) createRole() error {
 	return nil
 }
 
-func (testcaseenv *TestCaseEnv) createRoleBinding() error {
-	binding := newRoleBinding(testcaseenv.roleBindingName, testcaseenv.serviceAccountName, testcaseenv.namespace, testcaseenv.roleName)
+func (testenv *TestCaseEnv) createRoleBinding() error {
+	binding := newRoleBinding(testenv.roleBindingName, testenv.serviceAccountName, testenv.namespace, testenv.roleName)
 
-	err := testcaseenv.GetKubeClient().Create(context.TODO(), binding)
+	err := testenv.GetKubeClient().Create(context.TODO(), binding)
 	if err != nil {
-		testcaseenv.Log.Error(err, "Unable to create rolebinding")
+		testenv.Log.Error(err, "Unable to create rolebinding")
 		return err
 	}
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), binding)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), binding)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete rolebinding")
+			testenv.Log.Error(err, "Unable to delete rolebinding")
 			return err
 		}
 		return nil
@@ -294,42 +294,42 @@ func (testcaseenv *TestCaseEnv) createRoleBinding() error {
 
 // CreateLicenseConfigMap sets the license file path and create config map.
 // Required if license file path is not present during TestCaseEnv initialization
-func (testcaseenv *TestCaseEnv) CreateLicenseConfigMap(path string) error {
-	testcaseenv.licenseFilePath = path
-	err := testcaseenv.createLicenseConfigMap()
+func (testenv *TestCaseEnv) CreateLicenseConfigMap(path string) error {
+	testenv.licenseFilePath = path
+	err := testenv.createLicenseConfigMap()
 	return err
 }
 
-func (testcaseenv *TestCaseEnv) createLicenseConfigMap() error {
-	lic, err := newLicenseConfigMap(testcaseenv.licenseCMName, testcaseenv.namespace, testcaseenv.licenseFilePath)
+func (testenv *TestCaseEnv) createLicenseConfigMap() error {
+	lic, err := newLicenseConfigMap(testenv.licenseCMName, testenv.namespace, testenv.licenseFilePath)
 	if err != nil {
 		return err
 	}
 
 	// Check if config map already exists
-	key := client.ObjectKey{Name: testcaseenv.namespace, Namespace: testcaseenv.namespace}
-	err = testcaseenv.GetKubeClient().Get(context.TODO(), key, lic)
+	key := client.ObjectKey{Name: testenv.namespace, Namespace: testenv.namespace}
+	err = testenv.GetKubeClient().Get(context.TODO(), key, lic)
 
 	if err != nil {
-		testcaseenv.Log.Info("No Existing license config map not found. Creating a new License Configmap", "Name", testcaseenv.namespace)
+		testenv.Log.Info("No Existing license config map not found. Creating a new License Configmap", "Name", testenv.namespace)
 	} else {
-		testcaseenv.Log.Info("Existing license config map found.", "License Config Map Name", testcaseenv.namespace)
+		testenv.Log.Info("Existing license config map found.", "License Config Map Name", testenv.namespace)
 		return nil
 	}
 
 	// Create a new licese config map
-	err = testcaseenv.GetKubeClient().Create(context.TODO(), lic)
+	err = testenv.GetKubeClient().Create(context.TODO(), lic)
 	if err != nil {
-		testcaseenv.Log.Error(err, "Unable to create license configmap")
+		testenv.Log.Error(err, "Unable to create license configmap")
 		return err
 	}
 
-	testcaseenv.Log.Info("New License Config Map created.", "License Config Map Name", testcaseenv.namespace)
+	testenv.Log.Info("New License Config Map created.", "License Config Map Name", testenv.namespace)
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), lic)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), lic)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete license configmap ")
+			testenv.Log.Error(err, "Unable to delete license configmap ")
 			return err
 		}
 		return nil
@@ -339,17 +339,17 @@ func (testcaseenv *TestCaseEnv) createLicenseConfigMap() error {
 }
 
 // CreateServiceAccount Create a service account with given name
-func (testcaseenv *TestCaseEnv) CreateServiceAccount(name string) error {
-	serviceAccountConfig := newServiceAccount(testcaseenv.namespace, name)
-	if err := testcaseenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
-		testcaseenv.Log.Error(err, "Unable to create service account")
+func (testenv *TestCaseEnv) CreateServiceAccount(name string) error {
+	serviceAccountConfig := newServiceAccount(testenv.namespace, name)
+	if err := testenv.GetKubeClient().Create(context.TODO(), serviceAccountConfig); err != nil {
+		testenv.Log.Error(err, "Unable to create service account")
 		return err
 	}
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), serviceAccountConfig)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete service account")
+			testenv.Log.Error(err, "Unable to delete service account")
 			return err
 		}
 		return nil
@@ -358,21 +358,21 @@ func (testcaseenv *TestCaseEnv) CreateServiceAccount(name string) error {
 }
 
 // CreateIndexSecret create secret object
-func (testcaseenv *TestCaseEnv) createIndexSecret() error {
-	secretName := testcaseenv.s3IndexSecret
-	ns := testcaseenv.namespace
+func (testenv *TestCaseEnv) createIndexSecret() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
 	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_ACCESS_KEY_ID")),
 		"s3_secret_key": []byte(os.Getenv("AWS_SECRET_ACCESS_KEY"))}
 	secret := newSecretSpec(ns, secretName, data)
-	if err := testcaseenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
-		testcaseenv.Log.Error(err, "Unable to create s3 index secret object")
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create s3 index secret object")
 		return err
 	}
 
-	testcaseenv.pushCleanupFunc(func() error {
-		err := testcaseenv.GetKubeClient().Delete(context.TODO(), secret)
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
 		if err != nil {
-			testcaseenv.Log.Error(err, "Unable to delete s3 index secret object")
+			testenv.Log.Error(err, "Unable to delete s3 index secret object")
 			return err
 		}
 		return nil
@@ -381,20 +381,20 @@ func (testcaseenv *TestCaseEnv) createIndexSecret() error {
 }
 
 // GetIndexSecretName return index secret object name
-func (testcaseenv *TestCaseEnv) GetIndexSecretName() string {
-	return testcaseenv.s3IndexSecret
+func (testenv *TestCaseEnv) GetIndexSecretName() string {
+	return testenv.s3IndexSecret
 }
 
 // GetLMConfigMap Return name of license config map
-func (testcaseenv *TestCaseEnv) GetLMConfigMap() string {
-	return testcaseenv.licenseCMName
+func (testenv *TestCaseEnv) GetLMConfigMap() string {
+	return testenv.licenseCMName
 }
 
 // NewDeployment creates a new deployment
-func (testcaseenv *TestCaseEnv) NewDeployment(name string) (*Deployment, error) {
+func (testenv *TestCaseEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
-		name:              testcaseenv.GetName() + "-" + name,
-		testenv:           testcaseenv,
+		name:              testenv.GetName() + "-" + name,
+		testenv:           testenv,
 		testTimeoutInSecs: time.Duration(specifiedTestTimeout) * time.Second,
 	}
 
