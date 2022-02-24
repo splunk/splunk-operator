@@ -351,7 +351,7 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	if len(appListingConfigMap.Data) > 0 {
 		if appsModified {
-			scopedLog.Info("Vivek AppList modified new configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
+			scopedLog.Info("Vivek AppList modified new configmpad empty config created", "configMapName", configMapName)
 			// App packages are modified, reset configmap to ensure a new resourceVersion
 			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
 			savedData := appListingConfigMap.Data
@@ -366,10 +366,12 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// when the next Get is done, it gets data from cache and with the older resource version, when we do update
 		// on the call its going to fail as it do not contain latest resource version, as temporary fix i have added
 		// sleep
+		scopedLog.Info("Vivek AppList modified new configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
 		time.Sleep(1 * time.Second)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
 		if err != nil {
+			scopedLog.Error(err, "error while updating configmap", "configMapName", configMapName, "error", err.Error())
 			return nil, configMapDataChanged, err
 		}
 	}
