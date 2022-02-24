@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
+	testSuiteName string
 	testDataS3Bucket = os.Getenv("TEST_BUCKET")
 	testS3Bucket     = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	s3AppDirV1       = testenv.AppLocationV1
@@ -54,7 +54,7 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-
+	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
 })
 
 var _ = AfterSuite(func() {

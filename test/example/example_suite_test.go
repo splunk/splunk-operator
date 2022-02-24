@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	testSuiteName = "example-" + testenv.RandomDNSName(3)
+	testSuiteName string
 )
 
 func init() {
@@ -43,6 +43,7 @@ func TestExampleSuite(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	testSuiteName = "example-" + testenv.RandomDNSName(3)
 
 })
 

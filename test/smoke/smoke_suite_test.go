@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	testSuiteName = "smoke-" + testenv.RandomDNSName(3)
+	testSuiteName string
 )
 
 // TestBasic is the main entry point
@@ -49,6 +49,7 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	testSuiteName = "smoke-" + testenv.RandomDNSName(3)
 
 })
 

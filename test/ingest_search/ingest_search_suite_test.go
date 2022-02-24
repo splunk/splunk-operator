@@ -35,7 +35,8 @@ const (
 )
 
 var (
-	testSuiteName = "ingest-" + testenv.RandomDNSName(3)
+
+	testSuiteName  string
 )
 
 // TestBasic is the main entry point
@@ -48,6 +49,7 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	testSuiteName = "ingest-" + testenv.RandomDNSName(3)
 })
 
 var _ = AfterSuite(func() {
