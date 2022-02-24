@@ -36,14 +36,9 @@ var _ = Describe("Ingest and Search Test", func() {
 	var deployment *testenv.Deployment
 	var firstLine string
 	ctx := context.TODO()
-	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error
-		testSuiteName = "ingest-" + testenv.RandomDNSName(3)
-		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-		Expect(err).ToNot(HaveOccurred())
-
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -55,9 +50,6 @@ var _ = Describe("Ingest and Search Test", func() {
 		}
 		if deployment != nil {
 			deployment.Teardown()
-		}
-		if testenvInstance != nil {
-			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 

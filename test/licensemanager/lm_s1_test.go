@@ -28,14 +28,9 @@ var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
-	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error
-		testSuiteName = "lm-" + testenv.RandomDNSName(3)
-		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-		Expect(err).ToNot(HaveOccurred())
-
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -47,9 +42,6 @@ var _ = Describe("Licensemanager test", func() {
 		}
 		if deployment != nil {
 			deployment.Teardown()
-		}
-		if testenvInstance != nil {
-			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 

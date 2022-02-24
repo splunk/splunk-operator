@@ -26,7 +26,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-func dumpGetPods(testenvInstance *testenv.TestEnv, ns string) {
+func dumpGetPods(ns string) {
 	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
 	for _, line := range strings.Split(string(output), "\n") {
 		testenvInstance.Log.Info(line)
@@ -37,14 +37,9 @@ var _ = Describe("DeleteCR test", func() {
 
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
-	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error
-		testSuiteName = "deletecr-" + testenv.RandomDNSName(3)
-		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-		Expect(err).ToNot(HaveOccurred())
-
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -56,9 +51,6 @@ var _ = Describe("DeleteCR test", func() {
 		}
 		if deployment != nil {
 			deployment.Teardown()
-		}
-		if testenvInstance != nil {
-			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 

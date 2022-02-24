@@ -21,7 +21,8 @@ const (
 )
 
 var (
- testSuiteName string
+	testenvInstance *testenv.TestEnv
+	testSuiteName   = "smartstore-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point
@@ -34,9 +35,13 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	testSuiteName = "smartstore-" + testenv.RandomDNSName(3)
+	var err error
+	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
-
+	if testenvInstance != nil {
+		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+	}
 })

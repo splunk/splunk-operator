@@ -27,7 +27,8 @@ import (
 )
 
 var (
-	testSuiteName string
+	testenvInstance *testenv.TestEnv
+	testSuiteName   = "example-" + testenv.RandomDNSName(3)
 )
 
 func init() {
@@ -43,9 +44,11 @@ func TestExampleSuite(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	testSuiteName = "example-" + testenv.RandomDNSName(3)
-
+	var err error
+	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
+	Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 })

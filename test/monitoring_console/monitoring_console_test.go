@@ -31,14 +31,10 @@ import (
 var _ = Describe("Monitoring Console test", func() {
 
 	var deployment *testenv.Deployment
-	var testenvInstance *testenv.TestEnv
 	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		testSuiteName = "mc-" + testenv.RandomDNSName(3)
-		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-		Expect(err).ToNot(HaveOccurred())
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -51,9 +47,6 @@ var _ = Describe("Monitoring Console test", func() {
 
 		if deployment != nil {
 			deployment.Teardown()
-		}
-		if testenvInstance != nil {
-			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
