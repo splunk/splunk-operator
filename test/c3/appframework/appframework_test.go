@@ -46,10 +46,7 @@ var _ = Describe("c3appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 
 		// Wait for cleanup to happend
-		Consistently(func() int {
-			return len(testenv.DumpGetPods(testenvInstance.GetName()))
-
-		}, ConsistentDuration, ConsistentPollInterval).Should(Equal(0))
+		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 
 	})
 

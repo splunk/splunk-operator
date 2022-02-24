@@ -53,10 +53,8 @@ var _ = Describe("m4appfw test", func() {
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
 
 		// Wait for cleanup to happend
-		Consistently(func() int {
-			return len(testenv.DumpGetPods(testenvInstance.GetName()))
+		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 
-		}, ConsistentDuration, ConsistentPollInterval).Should(Equal(0))
 	})
 
 	AfterEach(func() {
