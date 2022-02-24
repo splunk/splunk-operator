@@ -894,7 +894,7 @@ func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.Met
 func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 	scopedLog := log.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	var crKindMap map[string]string
+	crKindMap := make(map[string]string)
 	var configMapData, status string
 	var configMap *corev1.ConfigMap
 	var err error
@@ -926,9 +926,6 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	// prepare the configMap data OR
 	// initialize the configMap data for this CR type,
 	// if it did not exist before
-	if crKindMap == nil {
-		crKindMap = make(map[string]string)
-	}
 	if _, ok := crKindMap[kind]; !ok {
 		status = "off"
 	} else {
