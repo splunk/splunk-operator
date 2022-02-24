@@ -52,10 +52,14 @@ var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
+
+	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
+
 })

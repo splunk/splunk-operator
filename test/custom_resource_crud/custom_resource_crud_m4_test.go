@@ -36,6 +36,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 	BeforeEach(func() {
 		var err error
+		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+		Expect(err).ToNot(HaveOccurred())
+
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		defaultCPULimits = "4"
@@ -50,6 +53,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testenvInstance != nil {
+			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 

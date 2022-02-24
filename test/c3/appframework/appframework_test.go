@@ -45,6 +45,9 @@ var _ = Describe("c3appfw test", func() {
 
 	BeforeEach(func() {
 		var err error
+		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+		Expect(err).ToNot(HaveOccurred())
+
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -57,10 +60,11 @@ var _ = Describe("c3appfw test", func() {
 		if deployment != nil {
 			deployment.Teardown()
 		}
-		// Delete files uploaded to S3
-		if !testenvInstance.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+
+		if testenvInstance != nil {
+			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
+
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {

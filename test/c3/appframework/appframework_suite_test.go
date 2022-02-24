@@ -61,8 +61,6 @@ func TestBasic(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	var err error
-	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
 
 	// Create a list of apps to upload to S3
 	appListV1 = testenv.BasicApps
@@ -83,17 +81,10 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	// Delete locally downloaded app files
 	err := os.RemoveAll(downloadDirV1)
 	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
 	err = os.RemoveAll(downloadDirV2)
 	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
+
 })

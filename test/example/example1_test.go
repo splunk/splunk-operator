@@ -29,6 +29,7 @@ var _ = XDescribe("Example1", func() {
 
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
+
 		// Create a deployment for this test
 		deployment, _ = testenvInstance.NewDeployment(testenv.RandomDNSName(5))
 	})

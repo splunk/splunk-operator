@@ -32,6 +32,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
+		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+		Expect(err).ToNot(HaveOccurred())
+
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -43,6 +46,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 		}
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testenvInstance != nil {
+			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
