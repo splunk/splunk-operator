@@ -19,6 +19,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -29,6 +30,9 @@ var _ = XDescribe("Example1", func() {
 
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
+		var err error
+		testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
+		Expect(err).ToNot(HaveOccurred())
 
 		// Create a deployment for this test
 		deployment, _ = testenvInstance.NewDeployment(testenv.RandomDNSName(5))
@@ -36,6 +40,9 @@ var _ = XDescribe("Example1", func() {
 
 	AfterEach(func() {
 		deployment.Teardown()
+		if testenvInstance != nil {
+			Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+		}
 	})
 
 	// "It" spec
