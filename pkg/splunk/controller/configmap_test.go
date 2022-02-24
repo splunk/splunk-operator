@@ -35,7 +35,6 @@ func TestApplyConfigMap(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-defaults"},
-		{MetaName: "*v1.ConfigMap-test-defaults"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[0]}}
