@@ -36,9 +36,10 @@ const (
 )
 
 var (
-	testenvInstance *testenv.TestEnv
+
 	testSuiteName   = "deletecr-" + testenv.RandomDNSName(3)
 )
+
 
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {

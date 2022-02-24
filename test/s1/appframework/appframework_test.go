@@ -36,6 +36,7 @@ var _ = Describe("s1appfw test", func() {
 	var uploadedApps []string
 	var appSourceName string
 	var appSourceVolumeName string
+	var testenvInstance *testenv.TestEnv
 
 	ctx := context.TODO()
 

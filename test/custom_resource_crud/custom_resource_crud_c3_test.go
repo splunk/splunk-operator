@@ -34,6 +34,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	var defaultCPULimits string
 	var newCPULimits string
 	var verificationTimeout time.Duration
+	var testenvInstance *testenv.TestEnv
 
 	ctx := context.TODO()
 

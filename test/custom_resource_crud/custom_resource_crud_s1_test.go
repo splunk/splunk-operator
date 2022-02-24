@@ -32,6 +32,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	var defaultCPULimits string
 	var newCPULimits string
 	var ctx context.Context
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

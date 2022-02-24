@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	testenvInstance *testenv.TestEnv
+	
 	testSuiteName   = "smoke-" + testenv.RandomDNSName(3)
 )
 

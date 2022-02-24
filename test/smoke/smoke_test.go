@@ -31,6 +31,7 @@ import (
 var _ = Describe("Smoke test", func() {
 
 	var deployment *testenv.Deployment
+	var testenvInstance *testenv.TestEnv
 	ctx := context.TODO()
 
 	BeforeEach(func() {

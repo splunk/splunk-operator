@@ -36,6 +36,7 @@ var _ = Describe("Ingest and Search Test", func() {
 	var deployment *testenv.Deployment
 	var firstLine string
 	ctx := context.TODO()
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

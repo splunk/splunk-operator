@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	testenvInstance *testenv.TestEnv
+
 	testSuiteName   = "example-" + testenv.RandomDNSName(3)
 )
 

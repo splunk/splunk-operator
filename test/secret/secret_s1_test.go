@@ -31,6 +31,7 @@ import (
 var _ = Describe("Secret Test for SVA S1", func() {
 	ctx := context.TODO()
 	var deployment *testenv.Deployment
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

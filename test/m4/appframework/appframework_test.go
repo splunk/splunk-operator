@@ -39,6 +39,7 @@ var _ = Describe("m4appfw test", func() {
 	var s3TestDirIdxc string
 	var appSourceVolumeNameIdxc string
 	var appSourceVolumeNameShc string
+	var testenvInstance *testenv.TestEnv
 
 	ctx := context.TODO()
 

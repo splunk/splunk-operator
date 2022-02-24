@@ -26,7 +26,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-func dumpGetPods(ns string) {
+func dumpGetPods(testenvInstance *testenv.TestEnv, ns string) {
 	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
 	for _, line := range strings.Split(string(output), "\n") {
 		testenvInstance.Log.Info(line)
@@ -37,6 +37,7 @@ var _ = Describe("DeleteCR test", func() {
 
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

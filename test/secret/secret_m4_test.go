@@ -28,6 +28,7 @@ import (
 var _ = Describe("Secret Test for M4 SVA", func() {
 
 	var deployment *testenv.Deployment
+	var testenvInstance *testenv.TestEnv
 	ctx := context.TODO()
 
 	BeforeEach(func() {

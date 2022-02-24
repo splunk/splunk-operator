@@ -41,6 +41,8 @@ var _ = Describe("c3appfw test", func() {
 	var appSourceNameShc string
 	var uploadedApps []string
 
+	var testenvInstance *testenv.TestEnv
+
 	ctx := context.TODO()
 
 	BeforeEach(func() {

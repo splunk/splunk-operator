@@ -34,6 +34,7 @@ var _ = Describe("Licensemanager test", func() {
 	var deployment *testenv.Deployment
 	var s3TestDir string
 	ctx := context.TODO()
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

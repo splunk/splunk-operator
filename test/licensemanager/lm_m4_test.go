@@ -28,6 +28,7 @@ var _ = Describe("Licensemanager test", func() {
 
 	var deployment *testenv.Deployment
 	ctx := context.TODO()
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

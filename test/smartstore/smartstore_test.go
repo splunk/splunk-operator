@@ -14,6 +14,7 @@ import (
 var _ = Describe("Smartstore test", func() {
 	ctx := context.TODO()
 	var deployment *testenv.Deployment
+	var testenvInstance *testenv.TestEnv
 
 	BeforeEach(func() {
 		var err error

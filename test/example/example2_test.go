@@ -27,6 +27,7 @@ import (
 var _ = XDescribe("Example2", func() {
 
 	var deployment *testenv.Deployment
+	var testenvInstance *testenv.TestEnv
 
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
