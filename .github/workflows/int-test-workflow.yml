@@ -4,7 +4,7 @@ on:
     branches:
       - develop
       - master
-      - sdk-upgrade-1-15
+      - sdk-upgrade-1-15-clusterwide
 jobs:
   int-tests:
     strategy:
