@@ -19,6 +19,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
@@ -214,7 +215,9 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeAPIServer = cfg.Host
 	testenv.Log.Info("Using kube-apiserver\n", "kube-apiserver", cfg.Host)
 
-	//
+	
+	metricsPort := 9984 + rand.Intn(29999)
+	
 	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+ginkgoconfig.GinkgoConfig.ParallelNode)
 
 	kubeManager, err := manager.New(cfg, manager.Options{
