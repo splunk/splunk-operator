@@ -50,6 +50,12 @@ var _ = Describe("m4appfw test", func() {
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+
+		// Wait for cleanup to happend
+		Consistently(func() int {
+			return len(testenv.DumpGetPods(testenvInstance.GetName()))
+
+		}, ConsistentDuration, ConsistentPollInterval).Should(Equal(0))
 	})
 
 	AfterEach(func() {
