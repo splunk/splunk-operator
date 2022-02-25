@@ -36,6 +36,9 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		defaultCPULimits = "4"
 		newCPULimits = "2"
+
+		// Wait for cleanup to happend
+		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 	})
 
 	AfterEach(func() {
