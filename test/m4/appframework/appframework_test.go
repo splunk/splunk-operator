@@ -50,10 +50,6 @@ var _ = Describe("m4appfw test", func() {
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 		appSourceVolumeNameShc = "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-
-		// Wait for cleanup to happend
-		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
-
 	})
 
 	AfterEach(func() {

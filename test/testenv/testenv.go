@@ -677,7 +677,7 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 		testTimeoutInSecs: time.Duration(specifiedTestTimeout) * time.Second,
 	}
 
-	// Wait for cleanup to happen
+	// Wait for cleanup to happend
 	WaitForSplunkPodCleanup(&d, testenv)
 
 	return &d, nil
