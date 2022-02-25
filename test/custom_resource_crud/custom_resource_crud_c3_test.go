@@ -40,6 +40,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		defaultCPULimits = "4"
 		newCPULimits = "2"
 		verificationTimeout = 150 * time.Second
+
+		// Wait for cleanup to happend
+		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 	})
 
 	AfterEach(func() {

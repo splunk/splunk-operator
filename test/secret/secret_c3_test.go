@@ -31,6 +31,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 		var err error
 		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		// Wait for cleanup to happend
+		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 	})
 
 	AfterEach(func() {
