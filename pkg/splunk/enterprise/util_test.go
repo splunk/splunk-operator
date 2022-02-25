@@ -43,7 +43,6 @@ func TestApplySplunkConfig(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 		//{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}

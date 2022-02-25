@@ -21,7 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	errors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	//k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -38,28 +38,26 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 	namespacedName := types.NamespacedName{Namespace: configMap.GetNamespace(), Name: configMap.GetName()}
 	var current corev1.ConfigMap
 
-	err := client.Get(ctx, namespacedName, &current)
+	err := client.Get(context.TODO(), namespacedName, &current)
 	var dataUpdated bool
 	if err == nil {
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
-			current.OwnerReferences = configMap.OwnerReferences
 			err = splutil.UpdateResource(ctx, client, &current)
-			if err != nil {
-				return dataUpdated, err
+			if err == nil {
+				dataUpdated = true
 			}
-			dataUpdated = true
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
-	} else if k8serrors.IsNotFound(err) {
+	} else {
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true
 		}
 	}
-	err = client.Get(ctx, namespacedName, configMap)
+
 	return dataUpdated, err
 }
 
