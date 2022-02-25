@@ -193,7 +193,7 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
 			podName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV1, true, "local")
 
 			// Verify apps are installed on LM
 			lmPodName := []string{fmt.Sprintf(testenv.LicenseManagerPod, deployment.GetName(), 0)}
@@ -223,7 +223,7 @@ var _ = Describe("Licensemanager test", func() {
 			testenv.LicenseManagerReady(deployment, testenvInstance)
 
 			// Verify apps are copied at the correct location on LM (/etc/apps/)
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, false)
+			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podName, appListV2, true, "local")
 
 			// Verify apps are installed on LM
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), lmPodName, appListV2, true, "enabled", true, false)

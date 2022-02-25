@@ -668,11 +668,11 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, scope string) {
 	for _, podName := range pods {
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
-		if clusterWideInstall {
+		if scope == "cluster" {
 			if strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
 			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
