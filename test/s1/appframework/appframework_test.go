@@ -42,9 +42,6 @@ var _ = Describe("s1appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
-
-		// Wait for cleanup to happend
-		testenv.WaitForSplunkPodCleanup(deployment, testenvInstance)
 	})
 
 	AfterEach(func() {
