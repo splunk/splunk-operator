@@ -167,8 +167,8 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
@@ -206,6 +206,13 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ UPGRADE VERIFICATION ###########
+			standaloneAppSourceInfo.CrAppList = appListV2
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 		})
 	})
@@ -315,8 +322,8 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ INITIAL VERIFICATION ###########
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
@@ -354,6 +361,13 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## DOWNGRADE VERIFICATION ###########
+			standaloneAppSourceInfo.CrAppList = appListV1
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			mcAppSourceInfo.CrAppList = appListV1
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 		})
 	})
@@ -476,8 +490,8 @@ var _ = Describe("s1appfw test", func() {
 
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrReplicas: scaledReplicaCount}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
@@ -669,7 +683,7 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############### VERIFICATION ################
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
@@ -782,7 +796,7 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############### VERIFICATION ################
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: []string{testenv.StandalonePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
@@ -846,6 +860,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
+			standaloneAppSourceInfo.CrAppList = appListV2
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, standaloneAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 		})
 	})

@@ -173,9 +173,9 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//######### INITIAL VERIFICATIONS #############
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appFileList, CrAppFileList: appListV1, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appFileList, CrAppFileList: appListV1, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appFileList, CrAppFileList: appListV1}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -230,11 +230,21 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ FINAL VERIFICATIONS ############
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
-	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
@@ -349,9 +359,9 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### INITIAL VERIFICATIONS ###########
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appFileList, CrAppFileList: appListV1, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appFileList, CrAppFileList: appListV1, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -406,11 +416,21 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### FINAL VERIFICATIONS #############
+			cmAppSourceInfo.CrAppList = appListV1
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			shcAppSourceInfo.CrAppList = appListV1
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			mcAppSourceInfo.CrAppList = appListV1
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
-	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
@@ -497,8 +517,8 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATIONS ############
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -604,7 +624,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
@@ -679,8 +699,8 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############## INITIAL VERIFICATIONS ##########
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -722,6 +742,13 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### UPGRADE VERIFICATIONS ###########
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 		})
 	})
@@ -829,7 +856,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
 
 			/* Test Steps
@@ -950,10 +977,10 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
-			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
@@ -1006,11 +1033,24 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATION #############
+			cmAppSourceInfoLocal.CrAppList = appListV2
+			cmAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfoCluster.CrAppList = appListV2
+			cmAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoLocal.CrAppList = appListV2
+			shcAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoCluster.CrAppList = appListV2
+			shcAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoCluster)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
 
 			/* Test Steps
@@ -1131,10 +1171,10 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
-			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
@@ -1191,11 +1231,24 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATION #############
+			cmAppSourceInfoLocal.CrAppList = appListV1
+			cmAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV1)
+			cmAppSourceInfoCluster.CrAppList = appListV1
+			cmAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV1)
+			shcAppSourceInfoLocal.CrAppList = appListV1
+			shcAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV1)
+			shcAppSourceInfoCluster.CrAppList = appListV1
+			shcAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV1)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoCluster)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
 
 			/* Test Steps
@@ -1271,8 +1324,8 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//  ############### VERIFICATIONS ###############
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -1395,9 +1448,9 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//######### INITIAL VERIFICATIONS #############
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: []string{testenv.MonitoringConsolePod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -1446,7 +1499,6 @@ var _ = Describe("c3appfw test", func() {
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_save", clusterManagerBundleHash, "")
 
 			// ############ ENABLE MANUAL POLL ############
@@ -1482,10 +1534,17 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############## UPGRADE VERIFICATIONS ############
-			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, mcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
-
 		})
 	})
 
@@ -1569,8 +1628,8 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############## INITIAL VERIFICATION ##########
-			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
 			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
@@ -1609,8 +1668,6 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
-			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 
 			// ############ ENABLE MANUAL POLL ############
@@ -1646,8 +1703,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########### UPGRADE VERIFICATIONS ###########
-			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfo)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfo)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "skip", "", "")
 		})
 	})
@@ -1774,10 +1836,10 @@ var _ = Describe("c3appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
-			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
-			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
-			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: []string{testenv.ClusterManagerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: indexerReplicas, CrClusterPods: testenv.IndexerPod}
+			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
+			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: []string{testenv.DeployerPod}, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: shReplicas, CrClusterPods: testenv.SearchHeadPod}
 			allAppSourceInfo := []testenv.AppSourceInfo{}
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
 			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
@@ -1849,6 +1911,19 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
+			cmAppSourceInfoLocal.CrAppList = appListV2
+			cmAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfoCluster.CrAppList = appListV2
+			cmAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoLocal.CrAppList = appListV2
+			shcAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoCluster.CrAppList = appListV2
+			shcAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{}
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, cmAppSourceInfoCluster)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoLocal)
+			allAppSourceInfo = append(allAppSourceInfo, shcAppSourceInfoCluster)
 			testenv.Verifications(deployment, testenvInstance, allAppSourceInfo, appVersion, splunkPodAge, "bundle_compare", clusterManagerBundleHash, "")
 		})
 	})
