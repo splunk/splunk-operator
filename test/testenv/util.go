@@ -540,7 +540,7 @@ func GetOperatorPodName(ns string) string {
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		logf.Log.Info(line)
-		if strings.HasPrefix(line, "splunk-op") {
+		if strings.HasPrefix(line, "splunk-operator-controller-manager") {
 			splunkPods = strings.Fields(line)[0]
 			return splunkPods
 		}

@@ -81,7 +81,7 @@ func (d *Deployment) Teardown() error {
 
 	// Saving Operator and Splunk Pod Logs to File
 	podNames := DumpGetPods(d.testenv.GetName())
-	podNames = append(podNames, GetOperatorPodName(d.testenv.GetName()))
+	//podNames = append(podNames, GetOperatorPodName(d.testenv.GetName()))
 	for _, podName := range podNames {
 		if len(podName) == 0 {
 			continue
@@ -101,6 +101,25 @@ func (d *Deployment) Teardown() error {
 			}
 			logFile.Close()
 		}
+	}
+
+	// adding operator pod for each test case, currently this log contains previously run test case operator log
+	// we can enhance this to only collect log for this test case
+	podName := GetOperatorPodName("splunk-operator")
+	output, err := exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
+	if err != nil {
+		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get operator logs from Pod %s", podName))
+	} else {
+		logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
+		d.testenv.Log.Info("Writing %s Operator Pod logs to file %s ", podName, logFileName)
+		logFile, err := os.Create(logFileName)
+		if err != nil {
+			d.testenv.Log.Error(err, fmt.Sprintf("Failed to create operator log file %s", logFileName))
+		} else {
+			logFile.Write(output)
+			d.testenv.Log.Info(fmt.Sprintf("Finished writing %s opertor log to file %s", podName, logFileName))
+		}
+		logFile.Close()
 	}
 
 	if d.testenv.SkipTeardown && d.testenv.debug == "True" {
