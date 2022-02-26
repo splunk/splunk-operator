@@ -407,7 +407,6 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 
 	// Verify apps are copied to correct location on all CRs
 	for _, appSource := range appSource {
-		//allPodNames = appSource.CrPod
 		allPodNames := []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
 		if appSource.CrAppScope == "local" {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appVersion, appSource.CrKind, appSource.CrName))
@@ -428,7 +427,6 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 		checkupdated = true
 	}
 	for _, appSource := range appSource {
-		//allPodNames = appSource.CrPod
 		allPodNames := []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
 		if appSource.CrAppScope == "local" {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appVersion, appSource.CrKind, appSource.CrName, allPodNames))
