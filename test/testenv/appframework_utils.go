@@ -47,7 +47,7 @@ type AppSourceInfo struct {
 	CrReplicas            int
 	CrSiteCount           int
 	CrMultisite           bool
-	CrClusterPods         string
+	CrClusterPods         []string
 }
 
 //BasicApps Apps that require no restart to be installed
@@ -329,8 +329,8 @@ func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name s
 	}
 }
 
-// Verifications will perform several verifications needed between the different steps of App Framework tests
-func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, appVersion string, splunkPodAge map[string]time.Time, status string, clusterManagerBundleHash string, scaling string) string {
+// AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests
+func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, appVersion string, splunkPodAge map[string]time.Time, status string, clusterManagerBundleHash string) string {
 	/* Function Steps
 	 * Verify apps 'download' state for all CRs
 	 * Verify apps 'podCopy' state for all CRs
@@ -339,14 +339,13 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	 * Verify apps packages are deleted from the CR pods
 	 * Verify bundle push is successful
 	 * Verify apps are copied to correct location on CR pods
-	 * Verify no pods did reset
 	 * Verify apps are installed to correct location on CR pods
 	 */
-	// Verify apps 'Download' and 'PodCopy' states for all CRs
-	phases := []enterpriseApi.AppPhaseType{enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy}
-	for _, phase := range phases {
+
+	// Verify apps 'download' and 'podCopy' states for all CRs
+	for _, phase := range []enterpriseApi.AppPhaseType{enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy} {
 		for _, appSource := range appSource {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on %v CR", phase, appSource.CrKind))
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", phase, appSource.CrKind, appSource.CrName))
 			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appSource.CrAppFileList)
 		}
 	}
@@ -354,28 +353,21 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	// Verify apps packages are deleted from the operator pod for all CRs
 	opPod := GetOperatorPodName(testenvInstance.GetName())
 	for _, appSource := range appSource {
-		testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for %v", appVersion, appSource.CrKind))
+		testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appVersion, appSource.CrKind, appSource.CrName))
 		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
 		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appSource.CrAppFileList, opPath)
 	}
 
 	// Verify apps 'install' state for all CRs
-	phases = []enterpriseApi.AppPhaseType{enterpriseApi.PhaseInstall}
-	phase := phases[0]
 	for _, appSource := range appSource {
-		testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on %v CR", phase, appSource.CrKind))
-		VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appSource.CrAppFileList)
+		testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, appSource.CrKind, appSource.CrName))
+		VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, enterpriseApi.PhaseInstall, appSource.CrAppFileList)
 	}
 
 	// Verify apps packages are deleted from the CR pods
 	for _, appSource := range appSource {
 		podDownloadPath := "/init-apps/" + appSource.CrAppSourceVolumeName
-		var pod string
-		if appSource.CrKind == "MonitoringConsole" {
-			pod = fmt.Sprintf(appSource.CrPod[0], deployment.GetName(), 0)
-		} else {
-			pod = fmt.Sprintf(appSource.CrPod[0], deployment.GetName())
-		}
+		pod := fmt.Sprintf(appSource.CrPod[0], deployment.GetName())
 		testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appVersion, pod))
 		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{pod}, appSource.CrAppFileList, podDownloadPath)
 	}
@@ -414,48 +406,18 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	}
 
 	// Verify apps are copied to correct location on all CRs
-	var allPodNames []string
 	for _, appSource := range appSource {
-		if appSource.CrKind == "MonitoringConsole" {
-			allPodNames = []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName(), 0)}
-		} else {
-			allPodNames = []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
-		}
+		//allPodNames = appSource.CrPod
+		allPodNames := []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
 		if appSource.CrAppScope == "local" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ on %v pod", appVersion, appSource.CrPod))
-			if appSource.CrKind == "Standalone" && scaling == "up" {
-				allPodNames = append(allPodNames, fmt.Sprintf(appSource.CrPod[0], deployment.GetName(), 1))
-
-			}
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appVersion, appSource.CrKind, appSource.CrName))
 			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, appSource.CrAppScope)
 		} else {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appVersion, allPodNames))
 			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, false, appSource.CrAppScope)
-
-			allPodNames = append(allPodNames, GeneratePodNameSlice(appSource.CrClusterPods, deployment.GetName(), appSource.CrReplicas, false, 1)...)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appVersion, allPodNames))
 			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, appSource.CrAppScope)
 		}
-	}
-
-	// Verify no pods reset by checking the pod age
-	testenvInstance.Log.Info("Verify no pods reset by checking the pod age")
-	if scaling == "up" || scaling == "down" {
-		for _, appSource := range appSource {
-			if appSource.CrKind == "Standalone" {
-				// Excluding MC pod from list of pods to verify at it will reset after scaling
-				mcPodName := fmt.Sprintf(MonitoringConsolePod, appSource.CrName, 0)
-				VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, []string{mcPodName})
-			}
-			if appSource.CrKind == "SearchHeadCluster" {
-				// Excluding SHC pods from list of pods to verify at they will reset after scaling
-				shcPodNames := []string{fmt.Sprintf(DeployerPod, deployment.GetName())}
-				shcPodNames = append(shcPodNames, GeneratePodNameSlice(SearchHeadPod, deployment.GetName(), appSource.CrReplicas, false, 1)...)
-				VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, shcPodNames)
-			}
-		}
-	} else {
-		VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
 	}
 
 	// Verify apps are installed at correct location on the pods
@@ -465,23 +427,15 @@ func Verifications(deployment *Deployment, testenvInstance *TestEnv, appSource [
 	} else if appVersion == "V2" {
 		checkupdated = true
 	}
-
 	for _, appSource := range appSource {
-		if appSource.CrKind == "MonitoringConsole" {
-			allPodNames = []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName(), 0)}
-		} else {
-			allPodNames = []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
-		}
-
+		//allPodNames = appSource.CrPod
+		allPodNames := []string{fmt.Sprintf(appSource.CrPod[0], deployment.GetName())}
 		if appSource.CrAppScope == "local" {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on %v pod ", appVersion, allPodNames))
-			if appSource.CrKind == "Standalone" && scaling == "up" {
-				allPodNames = append(allPodNames, fmt.Sprintf(StandalonePod, deployment.GetName(), 1))
-			}
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appVersion, appSource.CrKind, appSource.CrName, allPodNames))
 			VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkupdated, false)
 		} else {
-			allPodNames = append(allPodNames, GeneratePodNameSlice(appSource.CrClusterPods, deployment.GetName(), appSource.CrReplicas, false, 1)...)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with '%v' scope are installed on %v pod", appVersion, appSource.CrAppScope, allPodNames))
+			allPodNames = appSource.CrClusterPods
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope for CR %s with name %s are installed on pods %s", appVersion, appSource.CrKind, appSource.CrName, allPodNames))
 			VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkupdated, true)
 		}
 	}
