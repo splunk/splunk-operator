@@ -62,7 +62,5 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 	} else {
 		return nil, err
 	}
-	err = client.Get(ctx, namespacedName, secret)
-
 	return &result, err
 }
