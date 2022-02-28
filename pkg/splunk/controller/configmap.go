@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	errors "k8s.io/apimachinery/pkg/api/errors"
+
 	//k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +53,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
-	} else {
+	} else if errors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true

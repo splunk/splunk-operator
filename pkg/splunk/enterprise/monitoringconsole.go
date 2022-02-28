@@ -60,17 +60,10 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
 	defer func() {
-		currentCr := &enterpriseApi.MonitoringConsole{}
-		namespacedName := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-		err := client.Get(ctx, namespacedName, currentCr)
+		client.Status().Update(ctx, cr)
 		if err != nil {
+			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
 			scopedLog.Error(err, "Status update failed")
-		} else {
-			currentCr.Status = cr.Status
-			client.Status().Update(ctx, currentCr)
-			if err != nil {
-				scopedLog.Error(err, "Status update failed")
-			}
 		}
 	}()
 
