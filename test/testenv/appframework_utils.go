@@ -332,12 +332,11 @@ func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name s
 // AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests
 func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, appVersion string, splunkPodAge map[string]time.Time, status string, clusterManagerBundleHash string) string {
 	/* Function Steps
-	 * Verify apps 'download' state for all CRs
-	 * Verify apps 'podCopy' state for all CRs
+	 * Verify apps 'download' and 'podCopy' states for all CRs
 	 * Verify apps packages are deleted from the operator pod for all CRs
 	 * Verify apps 'install' state for all CRs
 	 * Verify apps packages are deleted from the CR pods
-	 * Verify bundle push is successful
+	 * Verify bundle push status
 	 * Verify apps are copied to correct location on CR pods
 	 * Verify apps are installed to correct location on CR pods
 	 */
@@ -365,15 +364,9 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 	}
 
 	// Verify apps packages are deleted from the CR pods
-	var pod string
 	for _, appSource := range appSource {
 		podDownloadPath := "/init-apps/" + appSource.CrAppSourceVolumeName
-		if appSource.CrKind == "Standalone" {
-			pod = fmt.Sprintf(appSource.CrPod[0], deployment.GetName(), 0)
-		} else {
-			pod = fmt.Sprintf(appSource.CrPod[0], deployment.GetName())
-		}
-
+		pod := fmt.Sprintf(appSource.CrPod[0], deployment.GetName())
 		testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appVersion, pod))
 		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{pod}, appSource.CrAppFileList, podDownloadPath)
 	}
@@ -403,7 +396,7 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 	for _, appSource := range appSource {
 		if appSource.CrKind == "ClusterMaster" {
 			if status == "bundle_save" {
-				testenvInstance.Log.Info("Saving current bundle hash for future comparison")
+				testenvInstance.Log.Info("Saving current Cluster Manager bundle hash for future comparison")
 				clusterManagerBundleHash = GetClusterManagerBundleHash(deployment)
 			} else {
 				clusterManagerBundleHash = ""
@@ -420,6 +413,7 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 		} else {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appVersion, allPodNames))
 			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, false, appSource.CrAppScope)
+			allPodNames = appSource.CrClusterPods
 			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appVersion, allPodNames))
 			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, appSource.CrAppScope)
 		}

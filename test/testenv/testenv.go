@@ -70,6 +70,9 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
+	// Standalone1stPod Template String for standalone first pod
+	Standalone1stPod = "splunk-%s-standalone-0"
+
 	// LicenseManagerPod Template String for standalone pod
 	LicenseManagerPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
