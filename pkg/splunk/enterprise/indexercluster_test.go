@@ -639,7 +639,6 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}

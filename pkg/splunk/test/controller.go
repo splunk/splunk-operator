@@ -626,7 +626,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], funcCalls[0], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
 		"Update": {funcCalls[0]},
 		"Delete": pvcCalls,
 	}
