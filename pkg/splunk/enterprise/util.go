@@ -438,7 +438,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// TODO FIXME Vivek
 		// adding a second delay just to make sure the first config update is complete
 		// this is temporary solution until we create idempotency for configmap
-		//time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second)
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 		if err != nil {
