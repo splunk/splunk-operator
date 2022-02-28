@@ -51,6 +51,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 			if err != nil {
 				return nil, err
 			}
+			secret = &result
 		}
 	} else if k8serrors.IsNotFound(err) {
 		scopedLog.Info("Didn't find secret, creating one")

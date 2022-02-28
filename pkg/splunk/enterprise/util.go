@@ -367,7 +367,6 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// on the call its going to fail as it do not contain latest resource version, as temporary fix i have added
 		// sleep
 		scopedLog.Info("Vivek AppList modified new configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
-		time.Sleep(1 * time.Second)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
 		if err != nil {
@@ -438,7 +437,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// TODO FIXME Vivek
 		// adding a second delay just to make sure the first config update is complete
 		// this is temporary solution until we create idempotency for configmap
-		time.Sleep(1 * time.Second)
+		//time.Sleep(1 * time.Second)
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 		if err != nil {

@@ -47,6 +47,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err == nil {
 				dataUpdated = true
+				configMap = &current
 			}
 		} else {
 			scopedLog.Info("No changes for ConfigMap")

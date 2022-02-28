@@ -150,13 +150,6 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return splcommon.PhaseScalingDown, nil
 		}
 
-		// always get the latest resource before updating it
-		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: statefulSet.GetName()}
-		err = c.Get(ctx, namespacedName, statefulSet)
-		if err != nil {
-			return splcommon.PhaseUpdating, err
-		}
-
 		// scale down statefulset to terminate pod
 		scopedLog.Info("Scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
