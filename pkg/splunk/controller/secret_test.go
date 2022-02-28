@@ -32,7 +32,6 @@ func TestApplySecret(t *testing.T) {
 	// Re-concile tester
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-secrets"},
-		{MetaName: "*v1.Secret-test-secrets"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[0]}}
