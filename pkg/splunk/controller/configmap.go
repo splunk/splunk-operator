@@ -58,9 +58,9 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true
-			gerr := client.Get(context.TODO(), namespacedName, &current)
+			gerr := client.Get(ctx, namespacedName, &current)
 			loopCount := 0
-			for ; gerr != nil; gerr = client.Get(context.TODO(), namespacedName, &current) {
+			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
 				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
 				time.Sleep(10 * time.Microsecond)
 				loopCount += 1
