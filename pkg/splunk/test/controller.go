@@ -484,6 +484,9 @@ func ReconcileTester(t *testing.T, method string,
 	} else {
 		updateNoChangecalls = map[string][]MockFuncCall{"Get": createCalls["Get"]}
 	}
+	if method == "TestApplyConfigMap" && len(updateCalls["Get"]) > 0 {
+		updateNoChangecalls["Get"] = updateCalls["Get"]
+	}
 	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
 
 	// test updates required
