@@ -827,8 +827,7 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	var err error
 	var newConfigMap bool
 
-	scopedLog.Info("Creating/Updating manual app update configMap")
-
+	scopedLog.Info("new configMap data", "crKindMap", crKindMap)
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
 		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
@@ -841,15 +840,17 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
+		scopedLog.Info("Creating manual app update configMap")
 		err = splutil.CreateResourceLocked(client, configMap, mux)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
+		scopedLog.Info("Updating manual app update configMap")
 		err = splutil.UpdateResourceLocked(client, configMap, mux)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
 			return configMap, err
 		}
 	}
@@ -918,6 +919,7 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 			}
 		}
 
+		scopedLog.Info("Existing confiMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
