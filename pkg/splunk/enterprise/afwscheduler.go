@@ -598,17 +598,13 @@ func extractClusterScopedAppOnPod(worker *PipelineWorker, appSrcScope string, ap
 	cr := worker.cr
 	scopedLog := log.WithName("extractClusterScopedAppOnPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "app name", worker.appDeployInfo.AppName)
 
-	var clusterAppsPath string
 	var stdOut, stdErr string
 	var err error
-	kind := worker.cr.GroupVersionKind().Kind
-	if kind == "SearchHeadCluster" {
-		clusterAppsPath = "/opt/splunk/etc/shcluster/apps/"
-	} else if kind == "ClusterMaster" {
-		clusterAppsPath = "/opt/splunk/etc/master-apps/"
-	} else {
-		// Do not return an error
-		scopedLog.Error(nil, "app extraction should not be called", "kind", kind)
+
+	clusterAppsPath := getClusterScopedAppsLocOnPod(worker.cr)
+	if clusterAppsPath == "" {
+		// This should never happen
+		scopedLog.Error(nil, "could not find the cluster scoped apps location on the Pod")
 		return err
 	}
 
@@ -1291,6 +1287,35 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush() error {
 	return nil
 }
 
+// getClusterScopedAppsLocOnPod returns the cluster apps directory
+func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "ClusterMaster":
+		return idxcAppsLocationOnClusterManager
+	case "SearchHeadCluster":
+		return shcAppsLocationOnDeployer
+	default:
+		return ""
+	}
+}
+
+// adjustClusterAppsFilePermissions sets the file permissions to +550
+func adjustClusterAppsFilePermissions(podExecClient splutil.PodExecClientImpl) error {
+	dirPath := getClusterScopedAppsLocOnPod(podExecClient.GetCR())
+	if dirPath == "" {
+		return fmt.Errorf("invalid Cluster apps location")
+	}
+
+	cmd := fmt.Sprintf(cmdSetFilePermissionsToRW, dirPath)
+	streamOptions := splutil.NewStreamOptionsObject(cmd)
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
+	if err != nil || stdErr != "" {
+		return fmt.Errorf("command failed. cmd: %s, stdout: %s, stderr: %s, err: %v", cmd, stdOut, stdErr, err)
+	}
+
+	return nil
+}
+
 // runPlaybook will implement the bundle push logic for SHC
 func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 	scopedLog := log.WithName("runPlaybook").WithValues("crName", shcPlaybookContext.cr.GetName(), "namespace", shcPlaybookContext.cr.GetNamespace())
@@ -1328,6 +1353,14 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
 		scopedLog.Info("running command to apply SHC Bundle")
+
+		// Adjust the file permissions
+		err = adjustClusterAppsFilePermissions(shcPlaybookContext.podExecClient)
+		if err != nil {
+			scopedLog.Error(err, "failed to adjust the file permissions")
+			return err
+		}
+
 		err = shcPlaybookContext.triggerBundlePush()
 		if err != nil {
 			scopedLog.Error(err, "failed to apply SHC Bundle")
@@ -1412,9 +1445,16 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook() error {
 		}
 
 	case enterpriseApi.BundlePushPending:
+		// Adjust the file permissions
+		err := adjustClusterAppsFilePermissions(idxcPlaybookContext.podExecClient)
+		if err != nil {
+			scopedLog.Error(err, "failed to adjust the file permissions")
+			return err
+		}
+
 		// run the command to apply cluster bundle
 		scopedLog.Info("running command to apply IndexerCluster Bundle")
-		err := idxcPlaybookContext.triggerBundlePush()
+		err = idxcPlaybookContext.triggerBundlePush()
 		if err != nil {
 			scopedLog.Error(err, "failed to apply IndexerCluster Bundle")
 			return err

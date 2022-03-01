@@ -2188,8 +2188,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	// CSPL-1604
-	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled for manual update", func() {
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2515,8 +2514,6 @@ var _ = Describe("c3appfw test", func() {
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
-			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -2526,11 +2523,32 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
 
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["MonitoringConsole"] = strings.Replace(config.Data["MonitoringConsole"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
@@ -2625,8 +2643,13 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
+<<<<<<< HEAD
 	// CSPL-1604
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+=======
+	// CSPL-1647
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+>>>>>>> 9cd498a3bcac0f4eff8c15e583ca3414931d83c9
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
@@ -2843,7 +2866,7 @@ var _ = Describe("c3appfw test", func() {
 
 			testenvInstance.Log.Info("Modify config map to trigger manual update")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+
 			err = deployment.UpdateCR(config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -2852,6 +2875,15 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+
+			testenvInstance.Log.Info("Get config map for triggering manual update")
+			config, err = testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
+			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
+
+			testenvInstance.Log.Info("Modify config map to trigger manual update")
+			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			err = deployment.UpdateCR(config)
+			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(deployment, testenvInstance)
@@ -2924,7 +2956,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	// CSPL-1604
+	// CSPL-1647
 	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 

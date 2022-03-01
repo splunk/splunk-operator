@@ -73,6 +73,13 @@ const (
 
 	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
 
+	shcAppsLocationOnDeployer = "/opt/splunk/etc/shcluster/apps/"
+
+	idxcAppsLocationOnClusterManager = "/opt/splunk/etc/master-apps/"
+
+	// command to append FS permissions to +rw-rw-
+	cmdSetFilePermissionsToRW = "chmod +660 -R %s"
+
 	// command for init container on a standalone
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
 
