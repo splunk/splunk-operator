@@ -23,6 +23,16 @@ RUN CGO_ENABLED=0 go get -ldflags "-s -w -extldflags '-static'" github.com/go-de
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -gcflags="all=-N -l" -a -o manager main.go
 
 FROM debian:stable
+
+LABEL name="splunk" \
+      maintainer="support@splunk.com" \
+      vendor="splunk" \
+      version="1.1.0" \
+      release="1" \
+      summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
+      description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."
+
+
 RUN mkdir /.config 
 RUN chmod -R 0777 /.config 
 ARG USERNAME=nonroot
@@ -38,15 +48,26 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && apt-get install -y sudo \
     && apt-get install -y git \
     && apt-get install -y curl \
+    && apt-get install -y procps \ 
+    && apt install -y wget \
     && curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64 \
     && sudo install skaffold /usr/local/bin/ \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
+
+ENV GOVERSION="1.17.7" \
+    GOPATH=$HOME/go \
+    PATH=/usr/local/go/bin:$PATH:$GOPATH/bin:/
+
+RUN wget "https://golang.org/dl/go${GOVERSION}.linux-amd64.tar.gz" -4
+RUN tar -C /usr/local -xvf "go${GOVERSION}.linux-amd64.tar.gz"
 
 WORKDIR /
 COPY . .
 COPY --from=builder /go/bin/dlv dlv
 COPY --from=builder /manager  manager
 
+
 USER $USERNAME
-ENTRYPOINT [ "/dlv" , "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "/manager"]
+ENTRYPOINT [ "/dlv" , "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "manager"]
+#ENTRYPOINT ["/manager"]
