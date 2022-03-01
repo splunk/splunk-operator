@@ -75,7 +75,6 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("smoke, m4, appframework, appframeworksm4: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
-
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to S3 for Monitoring Console
@@ -323,7 +322,6 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, appframework, appframeworksm4: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
 
-
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V2 apps to S3 for Monitoring Console
@@ -560,7 +558,6 @@ var _ = Describe("m4appfw test", func() {
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, appframework, appframeworksm4: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
-
 			/* Test Steps
 			   ################## SETUP ##################
 			   * Upload V1 apps to S3 for M4
@@ -786,7 +783,6 @@ var _ = Describe("m4appfw test", func() {
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework)", func() {
 		It("integration, m4, appframework, appframeworksm4: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
-
 
 			/* Test Steps
 			   ################## SETUP ####################

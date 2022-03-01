@@ -322,7 +322,6 @@ var _ = Describe("c3appfw test", func() {
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("smoke, c3, appframework, appframeworksc3: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
-
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V2 apps to S3 for Monitoring Console
@@ -565,7 +564,6 @@ var _ = Describe("c3appfw test", func() {
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("integration, c3, appframework, appframeworksc3: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
-
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1254,7 +1252,6 @@ var _ = Describe("c3appfw test", func() {
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframework, appframeworksc3: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
 
-
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
@@ -1472,7 +1469,6 @@ var _ = Describe("c3appfw test", func() {
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3, appframework, appframeworksc3: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
-
 
 			/* Test Steps
 			   ################## SETUP ####################
