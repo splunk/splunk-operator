@@ -5,6 +5,7 @@ on:
 jobs:
   int-tests:
     strategy:
+      fail-fast: false
       matrix:
         test: [appframeworks1, appframeworkc3, appframeworkm4, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
@@ -42,16 +43,16 @@ jobs:
           ref: develop
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@v0.2.7
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
-          version: 'v1.16.13'
+          version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v2
       - name: Install AWS CLI
         run: |
-          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle-1.20.8.zip" -o "awscli-bundle.zip"
+          curl "${{ steps.dotenv.outputs.AWSCLI_URL}}" -o "awscli-bundle.zip"
           unzip awscli-bundle.zip
           sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
           aws --version
@@ -120,9 +121,8 @@ jobs:
         run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+      - name: Archive Pod Logs if Failure in Smoke Test
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
@@ -138,9 +138,11 @@ jobs:
       TAG: edge
     steps:
     - uses: actions/checkout@v2
+      with:
+          ref: develop
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v0.2.7
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Configure AWS credentials
