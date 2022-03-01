@@ -111,13 +111,16 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			if component == "monitoring-console" {
 				mockCalls["Create"] = []spltest.MockFuncCall{}
 				mockCalls["Get"] = []spltest.MockFuncCall{
-					{MetaName: "*v3.MonitoringConsole-test-stack1"},
+					//{MetaName: "*v3.MonitoringConsole-test-stack1"},
 					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				}
 				mockCalls["Update"] = []spltest.MockFuncCall{
 					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+				}
+				mockCalls["Delete"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 				}
 			}
 		} else {

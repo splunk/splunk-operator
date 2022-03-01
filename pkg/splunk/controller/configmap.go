@@ -18,6 +18,7 @@ package controller
 import (
 	"context"
 	"reflect"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	errors "k8s.io/apimachinery/pkg/api/errors"
@@ -57,6 +58,10 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true
+			for gerr := client.Get(context.TODO(), namespacedName, &current); gerr != nil; {
+				scopedLog.Info("Newly created resource still not in cache sleeping for 1 micro second", "configmap", configMap.Name)
+				time.Sleep(1 * time.Microsecond)
+			}
 		}
 	}
 
