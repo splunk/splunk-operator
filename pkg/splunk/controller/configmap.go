@@ -59,9 +59,14 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		if err == nil {
 			dataUpdated = true
 			gerr := client.Get(context.TODO(), namespacedName, &current)
+			loopCount := 0
 			for ; gerr != nil; gerr = client.Get(context.TODO(), namespacedName, &current) {
 				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
 				time.Sleep(10 * time.Microsecond)
+				loopCount += 1
+				if loopCount > 10 {
+					scopedLog.Error(gerr, "Tried for 10 times, erroring out", "configmap", configMap.Name, "error", gerr.Error())
+				}
 			}
 		}
 	}
