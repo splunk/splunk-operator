@@ -2643,13 +2643,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-<<<<<<< HEAD
 	// CSPL-1604
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-=======
-	// CSPL-1647
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
->>>>>>> 9cd498a3bcac0f4eff8c15e583ca3414931d83c9
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
