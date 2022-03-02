@@ -63,9 +63,10 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
 				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
 				time.Sleep(10 * time.Microsecond)
-				loopCount ++
+				loopCount++
 				if loopCount > 10 {
 					scopedLog.Error(gerr, "Tried for 10 times, erroring out", "configmap", configMap.Name, "error", gerr.Error())
+					return dataUpdated, gerr
 				}
 			}
 		}
