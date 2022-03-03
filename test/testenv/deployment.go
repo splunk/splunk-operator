@@ -703,14 +703,18 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) error {
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApi.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, name)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
@@ -736,13 +740,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 
 	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	// Deploy the indexer cluster
 	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
@@ -771,22 +775,26 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	if shc {
 		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
-	return nil
+	return cm, idxc, sh, nil
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApi.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, licenseMaster)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
@@ -822,9 +830,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 
-	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
+	cm, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	// Deploy indexer sites
@@ -834,9 +842,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
@@ -868,12 +876,12 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
-		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
-	return nil
+	return cm, idxc, sh, nil
 }
 
 // DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console

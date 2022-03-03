@@ -286,6 +286,9 @@ type AppFrameworkSpec struct {
 
 	// List of App sources on remote storage
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
+
+	// Maximum number of apps that can be downloaded at same time
+	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information
@@ -293,9 +296,18 @@ type AppDeploymentInfo struct {
 	AppName          string              `json:"appName"`
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
+	IsUpdate         bool                `json:"isUpdate"`
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+
+	// App phase info to track download, copy and install
+	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
+
+	// Used to track the copy and install status for each replica member.
+	// Each Pod's phase info is mapped to its ordinal value.
+	// Ignored, once the DeployStatus is marked as Complete
+	AuxPhaseInfo []PhaseInfo `json:"auxPhaseInfo,omitempty"`
 }
 
 // AppSrcDeployInfo represents deployment info for list of Apps
@@ -325,3 +337,79 @@ type AppDeploymentContext struct {
 	// because the spec and status are different.
 	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
 }
+
+// AppPhaseStatusType defines the Phase status
+type AppPhaseStatusType uint32
+
+// AppPhaseType defines the App Phase
+type AppPhaseType string
+
+const (
+	// PhaseDownload identifies download phase
+	PhaseDownload AppPhaseType = "download"
+
+	// PhasePodCopy identifies pod copy phase
+	PhasePodCopy = "podCopy"
+
+	// PhaseInstall identifies install phase for local scoped apps
+	PhaseInstall = "install"
+)
+
+// PhaseInfo defines the status to track the App framework installation phase
+type PhaseInfo struct {
+	// Phase type
+	Phase AppPhaseType `json:"phase,omitempty"`
+	// Status of the phase
+	Status AppPhaseStatusType `json:"status,omitempty"`
+	// represents number of failures
+	FailCount uint32 `json:"failCount,omitempty"`
+}
+
+const (
+	// AppPkgDownloadPending indicates pending
+	AppPkgDownloadPending AppPhaseStatusType = 101
+	// AppPkgDownloadInProgress indicates in progress
+	AppPkgDownloadInProgress = 102
+	// AppPkgDownloadComplete indicates complete
+	AppPkgDownloadComplete = 103
+	// AppPkgDownloadError indicates error after retries
+	AppPkgDownloadError = 199
+)
+
+const (
+	// AppPkgPodCopyPending indicates pending
+	AppPkgPodCopyPending AppPhaseStatusType = 201
+	// AppPkgPodCopyInProgress indicates in progress
+	AppPkgPodCopyInProgress = 202
+	// AppPkgPodCopyComplete indicates complete
+	AppPkgPodCopyComplete = 203
+	// AppPkgMissingFromOperator indicates the downloaded app package is missing
+	AppPkgMissingFromOperator = 298
+	// AppPkgPodCopyError indicates error after retries
+	AppPkgPodCopyError = 299
+)
+
+const (
+	// AppPkgInstallPending indicates pending
+	AppPkgInstallPending AppPhaseStatusType = 301
+	// AppPkgInstallInProgress  indicates in progress
+	AppPkgInstallInProgress = 302
+	// AppPkgInstallComplete indicates complete
+	AppPkgInstallComplete = 303
+	// AppPkgMissingOnPodError indicates app pkg is not available on Pod for install
+	AppPkgMissingOnPodError = 398
+	// AppPkgInstallError indicates error after retries
+	AppPkgInstallError = 399
+)
+
+// StatefulSetScalingType determines if the statefulset is scaling up/down
+type StatefulSetScalingType uint32
+
+const (
+	// StatefulSetNotScaling indicates sts is not scaling
+	StatefulSetNotScaling StatefulSetScalingType = iota
+	// StatefulSetScalingUp indicates sts is scaling up
+	StatefulSetScalingUp
+	// StatefulSetScalingDown indicates sts is scaling down
+	StatefulSetScalingDown
+)

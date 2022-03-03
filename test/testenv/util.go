@@ -17,6 +17,7 @@ package testenv
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -776,4 +777,22 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 		}
 	}
 	return podNames
+}
+
+// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
+func GetPodsStartTime(ns string) map[string]time.Time {
+	splunkPodsStartTime := make(map[string]time.Time)
+	splunkPods := DumpGetPods(ns)
+
+	for _, podName := range splunkPods {
+		output, _ := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		restResponse := PodDetailsStruct{}
+		err := json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse splunk pods")
+		}
+		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
+		splunkPodsStartTime[podName] = podStartTime
+	}
+	return splunkPodsStartTime
 }

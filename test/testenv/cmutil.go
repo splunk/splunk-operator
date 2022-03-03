@@ -92,11 +92,11 @@ func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 		return false
 	}
 	sfMet := restResponse.Entries[0].Content.SearchFactorMet == "1"
-	if sfMet == false {
+	if !sfMet {
 		logf.Log.Info("Search Factor not met")
 	}
 	rfMet := restResponse.Entries[0].Content.ReplicationFactorMet == "1"
-	if rfMet == false {
+	if !rfMet {
 		logf.Log.Info("Replicaton Factor not met")
 	}
 	return rfMet && sfMet
@@ -199,10 +199,7 @@ func RollHotBuckets(ctx context.Context, deployment *Deployment) bool {
 		return false
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	if strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.") {
-		return true
-	}
-	return false
+	return strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.")
 }
 
 // ClusterMasterInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint

@@ -1,5 +1,4 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,6 +57,7 @@ type PodDetailsStruct struct {
 		PodIPs []struct {
 			IP string `json:"ip"`
 		} `json:"podIPs"`
+		StartTime string `json:"startTime"`
 	} `json:"status"`
 }
 
@@ -777,11 +777,11 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, checkAppDirectory bool, scope string) {
 	for _, podName := range pods {
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
-		if clusterWideInstall {
+		if scope == enterpriseApi.ScopeCluster {
 			if strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
 			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
@@ -902,4 +902,94 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 		}
 		return true
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyAppInstallInProgress verify given app installation is in progress, i.e when Status is between 101 and 303
+func VerifyAppInstallInProgress(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)) //Check status value is between 100 and 303
+	}
+}
+
+// WaitForAppInstall waits until an app is correctly installed (having status equal to 303)
+func WaitForAppInstall(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeEquivalentTo(enterpriseApi.AppPkgInstallComplete))
+	}
+
+}
+
+// VerifyAppListPhase verify given app Phase has completed for the given list of apps for given CR Kind
+func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, phase enterpriseApi.AppPhaseType, appList []string) {
+	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
+		for _, appName := range appList {
+			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return phase
+				}
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
+		}
+	} else {
+		for _, appName := range appList {
+			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return enterpriseApi.PhaseDownload
+				}
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
+				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+					testenvInstance.Log.Info("Phase Install Not Complete.", "Phase Found", appDeploymentInfo.PhaseInfo.Phase, "Phase Status Found", appDeploymentInfo.PhaseInfo.Status)
+					return enterpriseApi.PhaseDownload
+				}
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+		}
+	}
+}
+
+// VerifyAppsPackageDeletedOnContainer verify that apps are deleted by container
+func VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+	for _, podName := range pods {
+		for _, app := range apps {
+			gomega.Eventually(func() bool {
+				appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Unable to get apps on pod", "Pod", podName)
+					return true
+				}
+				found := CheckStringInSlice(appList, app+"_")
+				testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
+				return found
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+		}
+	}
+}
+
+// VerifyNoPodReset verify that no pod reset during App install using phase3 framework
+func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
+	// Get current Age on all splunk pods and compare with previous
+	currentSplunkPodAge := GetPodsStartTime(ns)
+	for podName, currentpodAge := range currentSplunkPodAge {
+		// Only compare if the pod was present in previous pod iteration
+		if _, ok := podStartTimeMap[podName]; ok {
+			// Check if pod needs to be skipped
+			if !CheckStringInSlice(podToSkip, podName) {
+				podReset := currentpodAge.Equal(podStartTimeMap[podName])
+				gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+			}
+		}
+	}
 }

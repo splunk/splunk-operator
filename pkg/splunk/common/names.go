@@ -111,3 +111,7 @@ func GetLabelTypes() map[string]string {
 		"instance":  "app.kubernetes.io/instance",
 	}
 }
+
+// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
+// sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
+var AppDownloadVolume string = "/opt/splunk/appframework/"
