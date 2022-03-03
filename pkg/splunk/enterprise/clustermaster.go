@@ -54,9 +54,6 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		return result, err
 	}
 
-	// update the mutex map for global resource tracker
-	mux := getNamespaceScopedMutex(namespace)
-
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
@@ -100,7 +97,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, &mux)
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -127,7 +124,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterManager, &mux)
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterManager)
 			if err != nil {
 				return result, err
 			}

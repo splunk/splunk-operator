@@ -72,11 +72,18 @@ const (
 	maxParallelInstallsPerPod = 1
 )
 
+type commonResourceTracker struct {
+	// mutex to serialize the access to commonResourceTracker
+	mutex sync.Mutex
+
+	// map of resource name:mutex, so that we can serialize get/create/update to common resources such as secrets/configMaps
+	mutexMap map[string]*sync.Mutex
+}
+
 type globalResourceTracker struct {
 	storage *storageTracker
 
-	// map of namespace:mutex, so that we can serialize create/update to resources in a namespace
-	mutexMap map[string]sync.Mutex
+	commonResourceTracker *commonResourceTracker
 }
 
 type storageTracker struct {

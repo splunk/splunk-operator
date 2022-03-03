@@ -53,9 +53,6 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		return result, err
 	}
 
-	// update the mutex map for global resource tracker
-	mux := getNamespaceScopedMutex(namespace)
-
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
@@ -85,7 +82,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, &mux)
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -119,7 +116,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkStandalone, &mux)
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkStandalone)
 			if err != nil {
 				return result, err
 			}

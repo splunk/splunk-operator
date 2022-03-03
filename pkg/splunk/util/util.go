@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -76,13 +75,6 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// CreateResourceLocked is locked version of CreateResource
-func CreateResourceLocked(client splcommon.ControllerClient, obj splcommon.MetaObject, mux *sync.Mutex) error {
-	mux.Lock()
-	defer mux.Unlock()
-	return CreateResource(client, obj)
-}
-
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("CreateResource").WithValues(
@@ -99,13 +91,6 @@ func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject)
 	scopedLog.Info("Created resource")
 
 	return nil
-}
-
-// UpdateResourceLocked is locked version of UpdateResource
-func UpdateResourceLocked(client splcommon.ControllerClient, obj splcommon.MetaObject, mux *sync.Mutex) error {
-	mux.Lock()
-	defer mux.Unlock()
-	return UpdateResource(client, obj)
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.

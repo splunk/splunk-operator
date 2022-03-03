@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
@@ -1383,9 +1382,8 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	revised := cr
 	revised.ObjectMeta.Name = "standalone2"
 
-	var mux sync.Mutex
 	// Create the configMap
-	configMap, err := createOrUpdateAppUpdateConfigMap(client, &cr, &mux)
+	configMap, err := createOrUpdateAppUpdateConfigMap(client, &cr)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}
@@ -1399,7 +1397,7 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	}
 
 	// update the configMap
-	_, err = createOrUpdateAppUpdateConfigMap(client, &revised, &mux)
+	_, err = createOrUpdateAppUpdateConfigMap(client, &revised)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}

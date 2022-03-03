@@ -18,7 +18,6 @@ import (
 	"context"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
@@ -49,28 +48,6 @@ func TestCreateResource(t *testing.T) {
 	})
 }
 
-func TestCreateResourceLocked(t *testing.T) {
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{"one": []byte("value1")},
-	}
-
-	c := spltest.NewMockClient()
-	var mux sync.Mutex
-	err := CreateResourceLocked(c, &secret, &mux)
-	if err != nil {
-		t.Errorf("CreateResource() returned %v; want nil", err)
-	}
-	c.CheckCalls(t, "TestCreateResource", map[string][]spltest.MockFuncCall{
-		"Create": {
-			{CTX: context.TODO(), Obj: &secret},
-		},
-	})
-}
-
 func TestUpdateResource(t *testing.T) {
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -82,28 +59,6 @@ func TestUpdateResource(t *testing.T) {
 
 	c := spltest.NewMockClient()
 	err := UpdateResource(c, &secret)
-	if err != nil {
-		t.Errorf("UpdateResource() returned %v; want nil", err)
-	}
-	c.CheckCalls(t, "TestUpdateResource", map[string][]spltest.MockFuncCall{
-		"Update": {
-			{CTX: context.TODO(), Obj: &secret},
-		},
-	})
-}
-
-func TestUpdateResourceLocked(t *testing.T) {
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{"one": []byte("value1")},
-	}
-
-	var mux sync.Mutex
-	c := spltest.NewMockClient()
-	err := UpdateResourceLocked(c, &secret, &mux)
 	if err != nil {
 		t.Errorf("UpdateResource() returned %v; want nil", err)
 	}

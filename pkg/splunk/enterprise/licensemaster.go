@@ -48,9 +48,6 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		return result, err
 	}
 
-	// update the mutex map for global resource tracker
-	mux := getNamespaceScopedMutex(namespace)
-
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
@@ -61,7 +58,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, &mux)
+		err := initAndCheckAppInfoStatus(client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
@@ -93,7 +90,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkLicenseManager, &mux)
+			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkLicenseManager)
 			if err != nil {
 				return result, err
 			}

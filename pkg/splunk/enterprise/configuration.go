@@ -20,7 +20,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"sync"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -816,7 +815,7 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 }
 
 // ApplyManualAppUpdateConfigMap applies the manual app update config map
-func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string, mux *sync.Mutex) (*corev1.ConfigMap, error) {
+func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
 
 	scopedLog := log.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -826,8 +825,6 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	var configMap *corev1.ConfigMap
 	var err error
 	var newConfigMap bool
-
-	scopedLog.Info("new configMap data", "crKindMap", crKindMap)
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
 		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
@@ -841,14 +838,14 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 
 	if newConfigMap {
 		scopedLog.Info("Creating manual app update configMap")
-		err = splutil.CreateResourceLocked(client, configMap, mux)
+		err = splutil.CreateResource(client, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
 		scopedLog.Info("Updating manual app update configMap")
-		err = splutil.UpdateResourceLocked(client, configMap, mux)
+		err = splutil.UpdateResource(client, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
 			return configMap, err
@@ -893,7 +890,7 @@ func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.Met
 }
 
 // createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
-func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, mux *sync.Mutex) (*corev1.ConfigMap, error) {
+func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 	scopedLog := log.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var crKindMap map[string]string
@@ -907,6 +904,9 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
+	mux := getResourceMutex(configMapName)
+	mux.Lock()
+	defer mux.Unlock()
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err == nil {
 		// If this CR is already an owner reference, then do nothing.
@@ -943,7 +943,7 @@ refCount: %d`, status, numOfObjects+1)
 	crKindMap[kind] = configMapData
 
 	// Create/update the configMap to store the values of manual trigger per CR kind.
-	configMap, err = ApplyManualAppUpdateConfigMap(client, cr, crKindMap, mux)
+	configMap, err = ApplyManualAppUpdateConfigMap(client, cr, crKindMap)
 	if err != nil {
 		scopedLog.Error(err, "Create/update configMap for app update failed")
 		return configMap, err
@@ -953,7 +953,7 @@ refCount: %d`, status, numOfObjects+1)
 }
 
 // initAppFrameWorkContext used to initialize the appframework context
-func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext, mux *sync.Mutex) error {
+func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 		//Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
@@ -962,7 +962,7 @@ func initAppFrameWorkContext(client splcommon.ControllerClient, cr splcommon.Met
 		// handle upgrading to the latest version.
 		appStatusContext.Version = enterpriseApi.LatestAfwVersion
 
-		_, err := createOrUpdateAppUpdateConfigMap(client, cr, mux)
+		_, err := createOrUpdateAppUpdateConfigMap(client, cr)
 		if err != nil {
 			return err
 		}
