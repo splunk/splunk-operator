@@ -15,7 +15,6 @@ package m4appfw
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
@@ -179,104 +178,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			appFileList = testenv.GetAppFileList(appListV1)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Saving current V1 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
-
-			// Add Search Head Cluster and Indexer Pods to all Pod Names
-			allPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-
-			// Verify apps are copied to correct location for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for M4", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify apps are copied to correct location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
-
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are installed on M4 (cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on M4 pods (cluster-wide)", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
-
-			// Verify apps are installed on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Monitoring Console pod (local)", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 			//############# UPGRADE APPS ################
 			// Delete apps on S3
@@ -329,83 +244,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATIONS ##########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppVersion = appVersion
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are deleted on Monitoring Console Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status and compare bundle hash with previous V1 bundle
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Verify V2 apps are copied to location for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on M4 pods", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
-
-			// Verify V2 apps are copied to location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
-
-			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are updated on M4(cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on M4 pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
-
-			// Verify apps are updated on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -521,103 +373,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Saving current V2 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
-
-			// Add Search Head Cluster and Indexer Pods to all Pod Names
-			allPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-
-			// Verify V2 apps are copied to location on M4
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on M4", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
-
-			// Verify V2 apps are copied to correct location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
-
-			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify V2 apps are installed on (cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
-
-			// Verify apps are installed on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Monitoring Console pod", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 
 			//############# DOWNGRADE APPS ################
 			// Delete V2 apps on S3
@@ -670,84 +439,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## DOWNGRADE VERIFICATIONS ########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV1
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV1
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			mcAppSourceInfo.CrAppVersion = appVersion
+			mcAppSourceInfo.CrAppList = appListV1
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are deleted on Monitoring Console Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Verify V1 apps are copied to correct location for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for M4", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify V1 apps are copied to correct location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
-
-			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are downgraded on M4 (cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on the M4 pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
-
-			// Verify apps are downgraded on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been downgraded to %s on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 		})
 	})
 
@@ -839,67 +544,18 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########### INITIAL VERIFICATIONS #########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify bundle push status
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Verify apps are copied to correct location
-			allPodNames := testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			managerPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are installed on Monitoring Console and M4(cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed cluster-wide on the pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//############### SCALING UP ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -946,64 +602,14 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//######### SCALING UP VERIFICATIONS ########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Search Head pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify bundle push status. Bundle hash not compared as scaleup does not involve new config
-			testenvInstance.Log.Info("Verify bundle push status after scaling up")
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount)
-
-			// Verify V1 apps are copied to correct location
-			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location after scaling up of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify V1 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling up of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
 			// Listing the Search Head cluster pods to exclude them from the 'no pod reset' test as they are expected to be reset after scaling
-			shcPodNames := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
 
 			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, shcPodNames)
-
-			// Verify V1 apps are installed cluster-wide
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods after scaling up of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			//############### SCALING DOWN ##############
 			// Get instance of current Search Head Cluster CR with latest config
@@ -1048,59 +654,10 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(deployment, testenvInstance)
 
 			//######### SCALING DOWN VERIFICATIONS ######
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify bundle push status
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), int(scaledIndexerReplicas), "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount)
-
-			// Verify apps are copied to correct location
-			allPodNames = testenv.DumpGetPods(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location based on Pod KIND after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), managerPodNames, appListV1, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, shcPodNames)
-
-			// Verify apps are installed cluster-wide after scaling down
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on the pods after scaling down of Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 		})
 	})
 
@@ -1155,6 +712,7 @@ var _ = Describe("m4appfw test", func() {
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
 			indexersPerSite := 1
+			shReplicas := 3
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -1172,62 +730,18 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATION #############
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify V1 apps are installed locally on Cluster Manager and on Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
-
-			// Verify V1 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1265,54 +779,17 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge = testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## UPGRADE VERIFICATIONS ############
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V2 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
-
-			// Verify V2 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify V2 apps are installed locally on Cluster Manager and on Deployer
-			testenvInstance.Log.Info("Verify apps have been updated to %s on Cluster Manager and Deployer", appVersion)
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -1430,104 +907,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATIONS ##########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			opLocalAppPathMonitoringConsole := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), mc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameMC)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			appFileList = testenv.GetAppFileList(appListV1)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are deleted on Monitoring Console Pod
-			downloadLocationMCPod := testenv.AppStagingLocOnPod + appSourceNameMC
-			mcPodName := fmt.Sprintf(testenv.MonitoringConsolePod, mcName, 0)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Saving current V1 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
-
-			// Add Search Head Cluster and Indexer Pods to all Pod Names
-			allPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
-			allPodNames = append(allPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-
-			// Verify apps are copied to correct location for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for M4", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, true)
-
-			// Verify apps are copied to correct location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location for Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, false)
-
-			// Verify apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer (App list: %s)", appVersion, appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are installed on M4 (cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on M4 pods (cluster-wide)", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
-
-			// Verify apps are installed on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed on Monitoring Console pod (local)", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
 
 			// ############### UPGRADE APPS ################
 
@@ -1574,65 +967,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1)
-
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify apps are deleted on Monitoring Console Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			//Verify Apps are not updated cluster-wide
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not updated on the pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
-
-			// Verify apps are not updated on Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not updated on Monitoring Console pod (local)", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV1, true, "enabled", false, false)
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// ############ ENABLE MANUAL POLL ############
 			testenvInstance.Log.Info("Get config map for triggering manual update")
@@ -1692,85 +1027,20 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############ VERIFY APPS UPDATED TO V2 #############
-			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppVersion = appVersion
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify Apps Deleted on Operator Pod for Monitoring Console
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathMonitoringConsole)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Monitoring Console CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, mc.Name, mc.Kind, appSourceNameMC, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify apps are deleted on Monitoring Console Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Monitoring Console pod %s", appVersion, mcPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appFileList, downloadLocationMCPod)
-
-			// Verify bundle push status and compare bundle hash with previous V1 bundle
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Verify V2 apps are copied to location for M4 SVA
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on M4 pods", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, true)
-
-			// Verify V2 apps are copied to location for Monitoring Console
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to correct location on Monitoring Console", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, false)
-
-			// Verify V2 apps are not copied in /etc/apps/ on Cluster Manager and on Deployer (therefore not installed on Deployer and on Cluster Manager)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are NOT copied to /etc/apps on Cluster Manager and Deployer", appFileList))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps are updated on M4(cluster-wide)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on M4 pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV2, true, "enabled", true, true)
-
-			// Verify apps are updated on Monitoring Console (local install)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Monitoring Console", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{mcPodName}, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -1829,6 +1099,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
+			shReplicas := 3
 			indexersPerSite := 1
 			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
@@ -1847,62 +1118,18 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//########## INITIAL VERIFICATION #############
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManager := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadCluster := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			downloadLocationClusterMaster := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			downloadLocationSearchHeadCluster := testenv.AppStagingLocOnPod + appSourceVolumeNameShc
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V1 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
-			podNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, false)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify V1 apps are installed locally on Cluster Manager and on Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, "enabled", false, false)
-
-			// Verify V1 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, false, true)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1938,50 +1165,10 @@ var _ = Describe("m4appfw test", func() {
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1)
-
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
-
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			//Verify Apps are not updated locally
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not updated on the pods", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV1, true, "enabled", false, false)
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
 			// ############ ENABLE MANUAL POLL ############
 			appVersion = "V2"
-			appFileList = testenv.GetAppFileList(appListV2)
-
 			testenvInstance.Log.Info("Get config map for triggering manual update")
 			config, err := testenv.GetAppframeworkManualUpdateConfigMap(deployment, testenvInstance.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
@@ -2027,54 +1214,17 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATIONS ############
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseDownload, appFileList)
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhasePodCopy, appFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhasePodCopy, appFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathClusterManager)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appFileList, opLocalAppPathSearchHeadCluster)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameIdxc, enterpriseApi.PhaseInstall, appFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameShc, enterpriseApi.PhaseInstall, appFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manger pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, appFileList, downloadLocationClusterMaster)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, appFileList, downloadLocationSearchHeadCluster)
-
-			// Verify V2 apps are copied at the correct location on Cluster Manager and on Deployer (/etc/apps/)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are copied to /etc/apps on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, false)
-
-			// Verify V2 apps are not copied in the apps folder on Cluster Manager and /etc/shcluster/ on Deployer (therefore not installed on Indexers and on Search Heads)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are not copied to "+splcommon.ManagerAppsLoc+" on Cluster Manager and "+splcommon.SHCluster+" on Deployer", appVersion))
-			testenv.VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, false, true)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify V2 apps are installed locally on Cluster Manager and on Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify apps have been updated to %s on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), podNames, appListV2, true, "enabled", true, false)
 		})
 	})
 
@@ -2204,83 +1354,20 @@ var _ = Describe("m4appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
 
 			//############ INITIAL VERIFICATIONS ##########
-			// Verify App Download State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseDownload, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseDownload, clusterappFileList)
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			cmAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameLocalIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcLocal, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
+			cmAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameClusterIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxcCluster, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			shcAppSourceInfoLocal := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameLocalShc, CrAppSourceVolumeName: appSourceVolumeNameShcLocal, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appListLocal, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			shcAppSourceInfoCluster := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameClusterShc, CrAppSourceVolumeName: appSourceVolumeNameShcCluster, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appListCluster, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseDownload, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseDownload, clusterappFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhasePodCopy, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhasePodCopy, clusterappFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhasePodCopy, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhasePodCopy, clusterappFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			opLocalAppPathClusterManagerLocalInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameLocalIdxc)
-			opLocalAppPathClusterManagerClusterInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameClusterIdxc)
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathClusterManagerLocalInstall)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathClusterManagerClusterInstall)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			opLocalAppPathSearchHeadClusterLocalInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceNameLocalShc)
-			opLocalAppPathSearchHeadClusterClusterInstall := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), shc.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameClusterShc)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathSearchHeadClusterLocalInstall)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathSearchHeadClusterClusterInstall)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseInstall, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseInstall, clusterappFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseInstall, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseInstall, clusterappFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			localDownloadLocationClusterManager := "/init-apps/" + appSourceVolumeNameIdxcLocal
-			clusterDownloadLocationClusterManager := "/init-apps/" + appSourceVolumeNameIdxcCluster
-			clusterManagerPodName := fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager Pod pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, localappFileList, localDownloadLocationClusterManager)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, clusterappFileList, clusterDownloadLocationClusterManager)
-
-			// Verify apps are deleted on Search Head Cluster
-			localDownloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShcLocal
-			clusterDownloadLocationSearchHeadCluster := "/init-apps/" + appSourceVolumeNameShcCluster
-			deployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, localappFileList, localDownloadLocationSearchHeadCluster)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, clusterappFileList, clusterDownloadLocationSearchHeadCluster)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, "")
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			// Saving current V1 bundle hash for future comparison
-			clusterManagerBundleHash := testenv.GetClusterManagerBundleHash(deployment)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps with local scope are installed locally on Cluster Manager and on Deployer
-			localPodNames := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName()), fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are installed locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", false, false)
-
-			// Verify apps with cluster scope are installed on Indexers
-			clusterPodNames := []string{}
-			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)...)
-			clusterPodNames = append(clusterPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are installed on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", false, true)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -2347,64 +1434,23 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseDownload, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseDownload, clusterappFileList)
+			cmAppSourceInfoLocal.CrAppVersion = appVersion
+			cmAppSourceInfoLocal.CrAppList = appListV2
+			cmAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			cmAppSourceInfoCluster.CrAppVersion = appVersion
+			cmAppSourceInfoCluster.CrAppList = appListV2
+			cmAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoLocal.CrAppVersion = appVersion
+			shcAppSourceInfoLocal.CrAppList = appListV2
+			shcAppSourceInfoLocal.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfoCluster.CrAppVersion = appVersion
+			shcAppSourceInfoCluster.CrAppList = appListV2
+			shcAppSourceInfoCluster.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfoLocal, cmAppSourceInfoCluster, shcAppSourceInfoLocal, shcAppSourceInfoCluster}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
-			//Verify App Download State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseDownload, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseDownload, clusterappFileList)
-
-			// Verify App Copy State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhasePodCopy, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhasePodCopy, clusterappFileList)
-
-			//Verify App Copy State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhasePodCopy, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhasePodCopy, clusterappFileList)
-
-			// Verify Apps Deleted on Operator Pod for Cluster Manager
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathClusterManagerLocalInstall)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathClusterManagerClusterInstall)
-
-			// Verify Apps Deleted on Operator Pod for Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Apps are deleted on Splunk Operator for version %s", appVersion))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, localappFileList, opLocalAppPathSearchHeadClusterLocalInstall)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, clusterappFileList, opLocalAppPathSearchHeadClusterClusterInstall)
-
-			// Verify App Install State on Cluster Manager CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameLocalIdxc, enterpriseApi.PhaseInstall, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, cm.Name, cm.Kind, appSourceNameClusterIdxc, enterpriseApi.PhaseInstall, clusterappFileList)
-
-			//Verify App Install State on Search Head Cluster CR
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameLocalShc, enterpriseApi.PhaseInstall, localappFileList)
-			testenv.VerifyAppListPhase(deployment, testenvInstance, shc.Name, shc.Kind, appSourceNameClusterShc, enterpriseApi.PhaseInstall, clusterappFileList)
-
-			// Verify apps are deleted on Cluster Manager Pod
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Cluster Manager pod %s", appVersion, clusterManagerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, localappFileList, localDownloadLocationClusterManager)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{clusterManagerPodName}, clusterappFileList, clusterDownloadLocationClusterManager)
-
-			// Verify apps are deleted on Search Head Cluster
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps are deleted on Deployer pod %s", appVersion, deployerPodName))
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, localappFileList, localDownloadLocationSearchHeadCluster)
-			testenv.VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{deployerPodName}, clusterappFileList, clusterDownloadLocationSearchHeadCluster)
-
-			// Verify bundle push status
-			testenvInstance.Log.Info(fmt.Sprintf("Verify bundle push status (%s apps)", appVersion))
-			testenv.VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), siteCount, clusterManagerBundleHash)
-			testenv.VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), shReplicas)
-
-			//Verify no pods reset by checking the pod age
+			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
-
-			// Verify apps with local scope are upgraded locally on Cluster Manager and on Deployer
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with local scope are upgraded locally on Cluster Manager and Deployer", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), localPodNames, appListLocal, true, "enabled", true, false)
-
-			// Verify apps with cluster scope are upgraded on Indexers
-			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with cluster scope are upgraded on Indexers and Search Heads", appVersion))
-			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), clusterPodNames, appListCluster, true, "enabled", true, true)
 		})
 	})
 })

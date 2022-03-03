@@ -75,7 +75,7 @@ var _ = Describe("Licensemanager test", func() {
 			testenv.VerifyLMConfiguredOnPod(deployment, standalonePodName)
 
 			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName(), 0)
+			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
 			testenv.VerifyLMConfiguredOnPod(deployment, monitoringConsolePodName)
 		})
 	})
