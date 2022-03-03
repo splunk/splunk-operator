@@ -204,13 +204,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = true
 			return result, err
 		}
-	} /*else if cr.Status.Phase == splcommon.PhasePending {
-		result.Requeue = false
-	} */
-
-	/*if !result.Requeue {
-		return reconcile.Result{}, nil
-	} */
+	} 
 	return result, nil
 }
 

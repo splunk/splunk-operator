@@ -143,8 +143,6 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterprisev3.Standalone{},
 			}).
-		/*Watches(&source.Kind{Type: &extapi.CustomResourceDefinition{}},
-		&handler.EnqueueRequestForObject{}).*/
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

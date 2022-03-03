@@ -29,7 +29,6 @@ const (
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second
 
-	// FIXME Vivek change back to 200 and 2000
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 400 * time.Millisecond
 	ConsistentDuration     = 4000 * time.Millisecond

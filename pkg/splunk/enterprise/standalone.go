@@ -222,13 +222,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		} else {
 			result.Requeue = false
 		}
-	} /*else if cr.Status.Phase == splcommon.PhasePending {
-		result.Requeue = false
-	} */
-
-	/*if !result.Requeue {
-		return reconcile.Result{}, nil
-	} */
+	} 
 	return result, nil
 }
 
