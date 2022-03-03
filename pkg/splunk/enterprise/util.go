@@ -351,9 +351,7 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	if len(appListingConfigMap.Data) > 0 {
 		if appsModified {
-			scopedLog.Info("Vivek AppList modified new configmpad empty config created", "configMapName", configMapName)
 			// App packages are modified, reset configmap to ensure a new resourceVersion
-			scopedLog.Info("Resetting App ConfigMap to force new resourceVersion", "configMapName", configMapName)
 			savedData := appListingConfigMap.Data
 			appListingConfigMap.Data = make(map[string]string)
 			_, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
@@ -366,7 +364,6 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// when the next Get is done, it gets data from cache and with the older resource version, when we do update
 		// on the call its going to fail as it do not contain latest resource version, as temporary fix i have added
 		// sleep
-		scopedLog.Info("Vivek AppList modified new configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
 		if err != nil {
@@ -374,9 +371,6 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 			return nil, configMapDataChanged, err
 		}
 	}
-	scopedLog.Info("Vivek app moified", "configMapName", configMapName, "appModified", appsModified, "Data", appListingConfigMap.Data)
-
-	scopedLog.Info("Vivek AppList configmpad data is set to", "configMapName", configMapName, "configData", appListingConfigMap.Data)
 	return appListingConfigMap, configMapDataChanged, nil
 }
 
@@ -434,10 +428,6 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
 		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
-		// TODO FIXME Vivek
-		// adding a second delay just to make sure the first config update is complete
-		// this is temporary solution until we create idempotency for configmap
-		//time.Sleep(1 * time.Second)
 		// Apply the configMap with a fresh token
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 		if err != nil {
