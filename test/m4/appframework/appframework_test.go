@@ -967,7 +967,8 @@ var _ = Describe("m4appfw test", func() {
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			allPodNames := append(idxcPodNames, shcPodNames...)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// ############ ENABLE MANUAL POLL ############
 			testenvInstance.Log.Info("Get config map for triggering manual update")
@@ -1027,6 +1028,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############ VERIFY APPS UPDATED TO V2 #############
+			appVersion = "V2"
 			cmAppSourceInfo.CrAppVersion = appVersion
 			cmAppSourceInfo.CrAppList = appListV2
 			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)

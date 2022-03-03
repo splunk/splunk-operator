@@ -1513,7 +1513,7 @@ var _ = Describe("c3appfw test", func() {
 			//######### INITIAL VERIFICATIONS #############
 			var idxcPodNames, shcPodNames []string
 			idxcPodNames = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
-			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
@@ -1568,7 +1568,8 @@ var _ = Describe("c3appfw test", func() {
 
 			//  ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
-			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+			allPodNames := append(idxcPodNames, shcPodNames...)
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appListV1, true, "enabled", false, true)
 
 			// ############ ENABLE MANUAL POLL ############
 			testenvInstance.Log.Info("Get config map for triggering manual update")
@@ -1622,6 +1623,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############## UPGRADE VERIFICATIONS ############
+			appVersion = "V2"
 			cmAppSourceInfo.CrAppVersion = appVersion
 			cmAppSourceInfo.CrAppList = appListV2
 			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
