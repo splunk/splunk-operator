@@ -39,9 +39,7 @@ func ApplyStandalone(client splcommon.ControllerClient, cr *enterpriseApi.Standa
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-
-	namespace := cr.GetNamespace()
-	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", namespace)
+	scopedLog := log.WithName("ApplyStandalone").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}

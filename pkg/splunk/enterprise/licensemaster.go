@@ -38,9 +38,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-
-	namespace := cr.GetNamespace()
-	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", namespace)
+	scopedLog := log.WithName("ApplyLicenseManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(cr)
 	if err != nil {

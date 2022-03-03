@@ -42,8 +42,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	namespace := cr.GetNamespace()
-	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", namespace)
+	scopedLog := log.WithName("ApplyClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
