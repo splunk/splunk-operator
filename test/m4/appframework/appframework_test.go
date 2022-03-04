@@ -1775,7 +1775,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	// CSPL-1647
-	XContext("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, appframeworkm4, appframework: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", func() {
 
 			/* Test Steps
