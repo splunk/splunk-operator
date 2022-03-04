@@ -63,6 +63,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
 				time.Sleep(10 * time.Microsecond)
 			}
+			configMap = &current
 		}
 	}
 

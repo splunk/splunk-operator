@@ -27,6 +27,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -428,8 +429,20 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
 		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
+
+		// this is tricky call, I have seen update fail here  with error": "Operation cannot be fulfilled on configmaps
+		// the object has been modified; please apply your changes to the latest version and try again"
+		// now the problem here is if configmap data has changed we need to update configtoken, only way we can do that
+		// is try at least few times before failing, I took random number of 10 times to try
+		// FIXME ideally this loopCnt should be moved to const
 		// Apply the configMap with a fresh token
-		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
+		loopCnt := 10
+		for i := 0; i < loopCnt; i++ {
+			configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
+			if (err != nil && !k8serrors.IsConflict(err)) || err == nil {
+				break
+			}
+		}
 		if err != nil {
 			scopedLog.Error(err, "config map update failed", "error", err.Error())
 			return nil, configMapDataChanged, err
