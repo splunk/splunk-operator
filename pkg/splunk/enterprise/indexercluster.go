@@ -204,7 +204,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			result.Requeue = true
 			return result, err
 		}
-	} 
+	}
 	return result, nil
 }
 

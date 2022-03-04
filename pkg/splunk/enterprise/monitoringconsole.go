@@ -150,7 +150,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		} else {
 			result.Requeue = false
 		}
-	} 
+	}
 	return result, nil
 }
 

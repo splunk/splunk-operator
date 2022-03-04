@@ -202,7 +202,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 				result.Requeue = false
 			}
 		}
-	} 
+	}
 	return result, nil
 }
 

@@ -1021,8 +1021,8 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 	if HasAppRepoCheckTimerExpired(ctx, appStatusContext) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 
 		// TODO FIXME temporary fix, need to work with the team to find the solution
-		// configmap issue is fixed by waiting until the newly created configmap is in cache, 
-		// this is code is just to make sure if configmap data is blank we would like to move ahead to check if 
+		// configmap issue is fixed by waiting until the newly created configmap is in cache,
+		// this is code is just to make sure if configmap data is blank we would like to move ahead to check if
 		// there are any changes to configmap  and update the configmap
 		// starts here
 		configMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GroupVersionKind().Kind)

@@ -222,7 +222,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		} else {
 			result.Requeue = false
 		}
-	} 
+	}
 	return result, nil
 }
 

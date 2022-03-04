@@ -69,13 +69,13 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        resources:
-          limits:
-            cpu: 200m
-            memory: 1000Mi
-          requests:
-            cpu: 200m
-            memory: 200Mi
+        #resources:
+        #  limits:
+        #    cpu: 200m
+        #    memory: 1000Mi
+        #  requests:
+        #    cpu: 200m
+        #    memory: 200Mi
         #volumeMounts:
         #  - mountPath: /opt/splunk/appframework/
         #    name: app-staging
