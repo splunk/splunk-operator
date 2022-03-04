@@ -30,8 +30,8 @@ const (
 	PollInterval = 5 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 400 * time.Millisecond
-	ConsistentDuration     = 4000 * time.Millisecond
+	ConsistentPollInterval = 200 * time.Millisecond
+	ConsistentDuration     = 2000 * time.Millisecond
 )
 
 var (
