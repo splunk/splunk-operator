@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
-      CLUSTER_WORKERS: 3
+      CLUSTER_WORKERS: 5
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
