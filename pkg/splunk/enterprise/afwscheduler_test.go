@@ -111,6 +111,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -176,6 +177,7 @@ func TestCreateFanOutWorker(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -208,9 +210,9 @@ func TestCreateFanOutWorker(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseInstall,
-				Status:     enterpriseApi.AppPkgInstallComplete,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseInstall,
+				Status:    enterpriseApi.AppPkgInstallComplete,
+				FailCount: 0,
 			},
 			ObjectHash: "abcd1234abcd",
 		},
@@ -394,6 +396,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -523,10 +526,13 @@ func TestTransitionWorkerPhase(t *testing.T) {
 func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 	worker := &PipelineWorker{
 		isActive: false,
+		afwConfig: &enterpriseApi.AppFrameworkSpec{
+			PhaseMaxRetries: 3,
+		},
 	}
 	phaseInfo := &enterpriseApi.PhaseInfo{
-		RetryCount: 0,
-		Status:     enterpriseApi.AppPkgDownloadPending,
+		FailCount: 0,
+		Status:    enterpriseApi.AppPkgDownloadPending,
 	}
 
 	// test for an eligible worker
@@ -542,11 +548,11 @@ func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 	worker.isActive = false
 
 	// test for max retry
-	phaseInfo.RetryCount = 4
+	phaseInfo.FailCount = 4
 	if checkIfWorkerIsEligibleForRun(worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 		t.Errorf("Unable to detect an ineligible worker(max retries exceeded)")
 	}
-	phaseInfo.RetryCount = 0
+	phaseInfo.FailCount = 0
 
 	// test for already completed worker
 	phaseInfo.Status = enterpriseApi.AppPkgDownloadComplete
@@ -625,6 +631,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
 
@@ -698,9 +705,9 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 			appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 				AppName: fmt.Sprintf("app%d.tgz", i),
 				PhaseInfo: enterpriseApi.PhaseInfo{
-					Phase:      enterpriseApi.PhaseDownload,
-					Status:     enterpriseApi.AppPkgDownloadPending,
-					RetryCount: 2,
+					Phase:     enterpriseApi.PhaseDownload,
+					Status:    enterpriseApi.AppPkgDownloadPending,
+					FailCount: 2,
 				},
 			},
 			afwConfig: &cr.Spec.AppFrameworkConfig,
@@ -727,13 +734,13 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	if worker != workerList[i-1] {
 		t.Errorf("Unable to flush a download worker")
 	}
-	worker.appDeployInfo.PhaseInfo.RetryCount = 4
+	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
 	time.Sleep(600 * time.Millisecond)
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = nil
 
 	// add the worker to the pod copy phase
-	worker.appDeployInfo.PhaseInfo.RetryCount = 0
+	worker.appDeployInfo.PhaseInfo.FailCount = 0
 	worker.isActive = false
 	worker.fanOut = false
 	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo,
@@ -754,13 +761,13 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	if worker != workerList[0] {
 		t.Errorf("Unable to flush a pod copy worker")
 	}
-	worker.appDeployInfo.PhaseInfo.RetryCount = 4
+	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
 	time.Sleep(600 * time.Millisecond)
 	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = nil
 
 	// add the worker to the install phase
-	worker.appDeployInfo.PhaseInfo.RetryCount = 0
+	worker.appDeployInfo.PhaseInfo.FailCount = 0
 	worker.isActive = false
 	worker.fanOut = false
 	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo,
@@ -774,7 +781,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	ppln.phaseWaiter.Add(1)
 	go ppln.installPhaseManager()
 
-	worker.appDeployInfo.PhaseInfo.RetryCount = 4
+	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
 	time.Sleep(600 * time.Millisecond)
 
@@ -980,64 +987,90 @@ func TestIsPhaseStatusComplete(t *testing.T) {
 
 func TestIsPhaseMaxRetriesReached(t *testing.T) {
 	phaseInfo := &enterpriseApi.PhaseInfo{
-		RetryCount: 1,
+		FailCount: 1,
+	}
+
+	afwConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 	}
 
 	// should return false, when the retries are not maxed out
-	if isPhaseMaxRetriesReached(phaseInfo) {
+	if isPhaseMaxRetriesReached(phaseInfo, afwConfig) {
 		t.Errorf("Should return false, when the max retries are not reached")
 	}
 
 	// should return true, whe the max. retries are reached
-	phaseInfo.RetryCount = pipelinePhaseMaxRetryCount
-	if !isPhaseMaxRetriesReached(phaseInfo) {
+	phaseInfo.FailCount = afwConfig.PhaseMaxRetries + 1
+	if !isPhaseMaxRetriesReached(phaseInfo, afwConfig) {
 		t.Errorf("Should return true, when the max retries reached")
 	}
 }
 
 func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
+	afwConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "appSrc1",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "test_volume",
+					Scope:   "local",
+				},
+			},
+			{
+				Name:     "appSrc2",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "test_volume",
+					Scope:   "cluster",
+				},
+			},
+		},
+	}
+
 	phaseInfo := &enterpriseApi.PhaseInfo{
-		Phase:      enterpriseApi.PhaseDownload,
-		Status:     enterpriseApi.AppPkgDownloadComplete,
-		RetryCount: pipelinePhaseMaxRetryCount + 1,
+		Phase:     enterpriseApi.PhaseDownload,
+		Status:    enterpriseApi.AppPkgDownloadComplete,
+		FailCount: afwConfig.PhaseMaxRetries + 1,
 	}
 
 	// Should not be eligible once the max. retries are reached
-	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Should not be eligible once the max. retries reached")
 	}
 
-	phaseInfo.RetryCount = 0
+	phaseInfo.FailCount = 0
 	// For local scope, if the phase and status are not install complete, should return true
-	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+	if !isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Local scope: If the install is not complete, should be eligible to run")
 	}
 
 	// For local scope, once the app is install complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhaseInstall
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeLocal, phaseInfo) {
+	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Local scope: When the install is complete, should not be eligible to run")
 	}
 
 	// For cluster scope, once the app is install complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhaseInstall
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: when the install is complete, should not be eligible to run")
 	}
 
 	// For cluster scope, once the podcopy is complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhasePodCopy
 	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
-	if isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: On podcopy complete, should not be eligible to run")
 	}
 
 	// For cluster scope, if the podCopy is not complete, should be able to run
 	phaseInfo.Phase = enterpriseApi.PhasePodCopy
 	phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
-	if !isPhaseInfoEligibleForSchedulerEntry(enterpriseApi.ScopeCluster, phaseInfo) {
+	if !isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: If the pod copy is not complete, should be eligible to run")
 	}
 }
@@ -1221,9 +1254,9 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -1280,9 +1313,9 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		appDeployInfoList[index] = &enterpriseApi.AppDeploymentInfo{
 			AppName: testApps[index],
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseDownload,
-				Status:     enterpriseApi.AppPkgDownloadPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseDownload,
+				Status:    enterpriseApi.AppPkgDownloadPending,
+				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
 			Size:       uint64(testSizes[index]),
@@ -1370,9 +1403,9 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -1413,9 +1446,9 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		appDeployInfoList[index] = &enterpriseApi.AppDeploymentInfo{
 			AppName: testApps[index],
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseDownload,
-				Status:     enterpriseApi.AppPkgDownloadPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseDownload,
+				Status:    enterpriseApi.AppPkgDownloadPending,
+				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
 			Size:       uint64(testSizes[index]),
@@ -1505,9 +1538,9 @@ func TestScheduleDownloads(t *testing.T) {
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -1567,9 +1600,9 @@ func TestScheduleDownloads(t *testing.T) {
 		appDeployInfoList[index] = &enterpriseApi.AppDeploymentInfo{
 			AppName: testApps[index],
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseDownload,
-				Status:     enterpriseApi.AppPkgDownloadPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseDownload,
+				Status:    enterpriseApi.AppPkgDownloadPending,
+				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
 			Size:       uint64(testSizes[index]),
@@ -1635,9 +1668,9 @@ func TestCreateDownloadDirOnOperator(t *testing.T) {
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -1692,9 +1725,9 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -1745,9 +1778,9 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhasePodCopy,
-				Status:     enterpriseApi.AppPkgPodCopyPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhasePodCopy,
+				Status:    enterpriseApi.AppPkgPodCopyPending,
+				FailCount: 0,
 			},
 		},
 		client: client,
@@ -1828,6 +1861,7 @@ func TestRunPodCopyWorker(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -1869,9 +1903,9 @@ func TestRunPodCopyWorker(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhasePodCopy,
-				Status:     enterpriseApi.AppPkgPodCopyPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhasePodCopy,
+				Status:    enterpriseApi.AppPkgPodCopyPending,
+				FailCount: 0,
 			},
 			ObjectHash: "abcd1234abcd",
 		},
@@ -1952,6 +1986,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -1988,9 +2023,9 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhasePodCopy,
-				Status:     enterpriseApi.AppPkgPodCopyPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhasePodCopy,
+				Status:    enterpriseApi.AppPkgPodCopyPending,
+				FailCount: 0,
 			},
 			ObjectHash: "abcd1234abcd",
 		},
@@ -2086,9 +2121,9 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		appDeployInfoList[index] = enterpriseApi.AppDeploymentInfo{
 			AppName: testApps[index],
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhasePodCopy,
-				Status:     enterpriseApi.AppPkgPodCopyComplete,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhasePodCopy,
+				Status:    enterpriseApi.AppPkgPodCopyComplete,
+				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
 			Size:       uint64(testSizes[index]),
@@ -2241,9 +2276,9 @@ func TestSHCRunPlaybook(t *testing.T) {
 		appDeployInfoList[index] = enterpriseApi.AppDeploymentInfo{
 			AppName: testApps[index],
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhasePodCopy,
-				Status:     enterpriseApi.AppPkgPodCopyComplete,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhasePodCopy,
+				Status:    enterpriseApi.AppPkgPodCopyComplete,
+				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
 			Size:       uint64(testSizes[index]),
@@ -2398,7 +2433,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
-
+				PhaseMaxRetries:           3,
 				VolList: []enterpriseApi.VolumeSpec{
 					{
 						Name:      "test_volume",
@@ -2493,9 +2528,9 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 				AppName:    "app1.tgz",
 				ObjectHash: "abcdef12345abcdef",
 				PhaseInfo: enterpriseApi.PhaseInfo{
-					Phase:      enterpriseApi.PhaseDownload,
-					Status:     enterpriseApi.AppPkgDownloadPending,
-					RetryCount: 2,
+					Phase:     enterpriseApi.PhaseDownload,
+					Status:    enterpriseApi.AppPkgDownloadPending,
+					FailCount: 2,
 				},
 			},
 			afwConfig: &cr.Spec.AppFrameworkConfig,
@@ -2562,6 +2597,7 @@ func TestDeleteAppPkgFromOperator(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -2766,7 +2802,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 
 	cr.TypeMeta.Kind = "ClusterMaster"
 	afwPipeline = initAppInstallPipeline(appDeployContext, client, cr)
-	podCopyWorker := &PipelineWorker{appDeployInfo: &enterpriseApi.AppDeploymentInfo{PhaseInfo: enterpriseApi.PhaseInfo{RetryCount: 10}}}
+	podCopyWorker := &PipelineWorker{appDeployInfo: &enterpriseApi.AppDeploymentInfo{PhaseInfo: enterpriseApi.PhaseInfo{FailCount: 10}}}
 	afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q = append(afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q, podCopyWorker)
 
 	// When the pipeline are not empty, should return false
@@ -2808,6 +2844,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -2828,9 +2865,9 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseInstall,
-				Status:     enterpriseApi.AppPkgInstallComplete,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseInstall,
+				Status:    enterpriseApi.AppPkgInstallComplete,
+				FailCount: 0,
 			},
 			ObjectHash: "abcd1234abcd",
 		},
@@ -2993,6 +3030,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
@@ -3048,9 +3086,9 @@ func TestInstallWorkerHandler(t *testing.T) {
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
-				Phase:      enterpriseApi.PhaseInstall,
-				Status:     enterpriseApi.AppPkgInstallPending,
-				RetryCount: 0,
+				Phase:     enterpriseApi.PhaseInstall,
+				Status:    enterpriseApi.AppPkgInstallPending,
+				FailCount: 0,
 			},
 			ObjectHash: "abcd1234abcd",
 		},
@@ -3112,7 +3150,13 @@ func TestAfwYieldWatcher(t *testing.T) {
 		},
 	}
 
-	afwPipeline := &AppInstallPipeline{}
+	afwPipeline := &AppInstallPipeline{
+		appDeployContext: &enterpriseApi.AppDeploymentContext{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				SchedulerYieldInterval: 300,
+			},
+		},
+	}
 	afwPipeline.cr = &cr
 	afwPipeline.sigTerm = make(chan struct{})
 	afwPipeline.afwEntryTime = time.Now().Unix()
@@ -3121,8 +3165,7 @@ func TestAfwYieldWatcher(t *testing.T) {
 	afwPipeline.phaseWaiter.Add(1)
 
 	// When the pipeline is empty, should break
-	yieldTime := 300
-	afwPipeline.afwYieldWatcher(int64(yieldTime))
+	afwPipeline.afwYieldWatcher()
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen := <-afwPipeline.sigTerm
@@ -3143,8 +3186,8 @@ func TestAfwYieldWatcher(t *testing.T) {
 	// Add a waiter
 	afwPipeline.phaseWaiter.Add(1)
 	// When the pipeline is empty, should break
-	yieldTime = 10
-	afwPipeline.afwYieldWatcher(int64(yieldTime))
+	afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval = 10
+	afwPipeline.afwYieldWatcher()
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen = <-afwPipeline.sigTerm
@@ -3153,7 +3196,7 @@ func TestAfwYieldWatcher(t *testing.T) {
 	}
 
 	yieldTimeSpent := time.Now().Unix() - currentTime
-	if yieldTimeSpent < int64(yieldTime) {
+	if yieldTimeSpent < int64(afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) {
 		t.Errorf("When the pipelines are not empty, yield should happen only on timer expiry. Time spent by scheduler: %v", yieldTimeSpent)
 	}
 }
@@ -3178,6 +3221,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 	}
 
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
+		PhaseMaxRetries: 3,
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
 		},
