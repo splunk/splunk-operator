@@ -39,22 +39,25 @@ spec:
         imagePullPolicy: Always
         name: manager
         env:
-        # enable this if operator scope is need to be set to only one namespace where its installed
-        #- name: WATCH_NAMESPACE
-        #  valueFrom:
-        #    fieldRef:
-        #      fieldPath: metadata.namespace
-        # this is updated to show that operator scope is set to cluster wide 
-        - name: WATCH_NAMESPACE
-          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: OPERATOR_NAME
-          value: "splunk-operator"
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: WATCH_NAMESPACE
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: "docker.io/splunk/splunk:8.2.3.3"
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: RELATED_IMAGE_SPLUNK_ENTERPRISE
+        - name: OPERATOR_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: OPERATOR_NAME
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
@@ -71,16 +74,19 @@ spec:
           periodSeconds: 10
         #resources:
         #  limits:
-        #    cpu: 200m
+        #    cpu: 1000m
         #    memory: 1000Mi
         #  requests:
-        #    cpu: 200m
-        #    memory: 200Mi
+        #    cpu: 1000m
+        #    memory: 1000Mi
         #volumeMounts:
         #  - mountPath: /opt/splunk/appframework/
         #    name: app-staging
       serviceAccountName: controller-manager
-      #volumes:
+      volumes:
+      - configMap:
+          name: config
+        name: splunk-operator-config
       #  - name:  app-staging
       #    persistentVolumeClaim:
       #      claimName: tmp-app-download

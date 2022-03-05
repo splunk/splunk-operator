@@ -361,10 +361,7 @@ func ApplyAppListingConfigMap(ctx context.Context, client splcommon.ControllerCl
 			}
 			appListingConfigMap.Data = savedData
 		}
-		// adding sleep here as the first call has completed but the result is not yet in the cache
-		// when the next Get is done, it gets data from cache and with the older resource version, when we do update
-		// on the call its going to fail as it do not contain latest resource version, as temporary fix i have added
-		// sleep
+
 		configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, appListingConfigMap)
 
 		if err != nil {
@@ -434,10 +431,10 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// the object has been modified; please apply your changes to the latest version and try again"
 		// now the problem here is if configmap data has changed we need to update configtoken, only way we can do that
 		// is try at least few times before failing, I took random number of 10 times to try
-		// FIXME ideally this loopCnt should be moved to const
+		// FIXME ideally retryCnt should come from global const
 		// Apply the configMap with a fresh token
-		loopCnt := 10
-		for i := 0; i < loopCnt; i++ {
+		retryCnt := 10
+		for i := 0; i < retryCnt; i++ {
 			configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 			if (err != nil && !k8serrors.IsConflict(err)) || err == nil {
 				break
