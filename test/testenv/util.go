@@ -516,8 +516,8 @@ func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
 	for _, line := range strings.Split(string(output), "\n") {
@@ -534,13 +534,17 @@ func DumpGetTopNodes() []string {
 	output, err := exec.Command("kubectl", "top", "nodes").Output()
 	var splunkNodes []string
 	if err != nil {
-		cmd := "kubectl top nodes"
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		//cmd := "kubectl top nodes"
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
-		splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+			}
+		}
 	}
 	return splunkNodes
 }
@@ -548,17 +552,21 @@ func DumpGetTopNodes() []string {
 // DumpGetTopPods prints and returns Node load information
 func DumpGetTopPods(ns string) []string {
 	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
-	var splunkNodes []string
+	var splunkPods []string
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
 		logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
-		splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkPods = append(splunkPods, strings.Fields(line)[0])
+			}
+		}
 	}
-	return splunkNodes
+	return splunkPods
 }
 
 // GetOperatorPodName returns name of operator pod in the namespace
