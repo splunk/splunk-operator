@@ -89,6 +89,8 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 		}
 		testenvInstance.Log.Info("Waiting for Standalone phase to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 

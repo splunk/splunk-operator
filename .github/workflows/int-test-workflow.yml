@@ -117,6 +117,12 @@ jobs:
       - name: Run Integration test
         run: |
           make int-test
+      - name: install metric server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      - name: install k8s dashboard
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Collect Test Logs
         if: ${{ always() }}
         run: | 

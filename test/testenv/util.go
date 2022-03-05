@@ -529,6 +529,38 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// DumpGetTopNodes prints and returns Node load information
+func DumpGetTopNodes() []string {
+	output, err := exec.Command("kubectl", "top", "nodes").Output()
+	var splunkNodes []string
+	if err != nil {
+		cmd := "kubectl top nodes"
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+	}
+	return splunkNodes
+}
+
+// DumpGetTopPods prints and returns Node load information
+func DumpGetTopPods(ns string) []string {
+	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
+	var splunkNodes []string
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+	}
+	return splunkNodes
+}
+
 // GetOperatorPodName returns name of operator pod in the namespace
 func GetOperatorPodName(ns string) string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
