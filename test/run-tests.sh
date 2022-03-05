@@ -66,6 +66,9 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "wait for operator pod to be ready..."
+# sleep before checking for deployment, in slow clusters deployment call may not even started
+# in those cases, kubectl will fail with error:  no matching resources found
+sleep 2
 kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
 if [ $? -ne 0 ]; then
   echo "Operator installation not ready..."
