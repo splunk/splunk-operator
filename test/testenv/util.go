@@ -554,8 +554,8 @@ func DumpGetTopPods(ns string) []string {
 	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		//cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
 	if len(output) > 0 {
