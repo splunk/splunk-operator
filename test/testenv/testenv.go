@@ -112,8 +112,10 @@ var (
 	specifiedSplunkImage     = defaultSplunkImage
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
-	specifiedTestTimeout     = defaultTestTimeout
 	specifiedCommitHash      = ""
+	// SpecifiedTestTimeout exported test timeout time as this can be
+	// configured per test case if needed
+	SpecifiedTestTimeout = defaultTestTimeout
 )
 
 //HTTPCodes Response codes for http request
@@ -156,7 +158,7 @@ func init() {
 	flag.StringVar(&specifiedOperatorImage, "operator-image", defaultOperatorImage, "Splunk Operator image to use")
 	flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
-	flag.IntVar(&specifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
+	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
 }
 
@@ -621,7 +623,7 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
 		name:              testenv.GetName() + "-" + name,
 		testenv:           testenv,
-		testTimeoutInSecs: time.Duration(specifiedTestTimeout) * time.Second,
+		testTimeoutInSecs: time.Duration(SpecifiedTestTimeout) * time.Second,
 	}
 
 	return &d, nil

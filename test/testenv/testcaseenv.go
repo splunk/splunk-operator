@@ -395,7 +395,7 @@ func (testenv *TestCaseEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
 		name:              testenv.GetName() + "-" + name,
 		testenv:           testenv,
-		testTimeoutInSecs: time.Duration(specifiedTestTimeout) * time.Second,
+		testTimeoutInSecs: time.Duration(SpecifiedTestTimeout) * time.Second,
 	}
 
 	return &d, nil
