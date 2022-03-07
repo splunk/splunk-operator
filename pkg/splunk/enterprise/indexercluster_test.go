@@ -41,6 +41,19 @@ func TestApplyIndexerCluster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3." + splcommon.TestClusterManager1},
+		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
+		{MetaName: "*v3.ClusterMaster-test-master1"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+	}
+	updateFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v3." + splcommon.TestClusterManager1},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
@@ -61,8 +74,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[4], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -514,6 +527,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 		{MetaName: "*v1." + fmt.Sprintf(splcommon.TestClusterManagerPod, "0")},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
@@ -529,7 +543,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 
 	// test 1 ready pod
 	mockHandlers := []spltest.MockHTTPHandler{
@@ -579,6 +593,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	decommisonFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
@@ -589,6 +604,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	// test pod needs update => wait for decommission to complete
 	reassigningFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
@@ -606,7 +622,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantDecomCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}, "Delete": {funcCalls[4]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"Decommissioning"`, `"status":"Down"`, 1)
 	method = "indexerClusterPodManager.Update(Delete Pod)"
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
@@ -617,7 +633,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	statefulSet.Status.Replicas = 2
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Status.UpdatedReplicas = 2
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4]}, "Create": {funcCalls[1]}}
 	method = "indexerClusterPodManager.Update(Pod Not Found)"
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
 
@@ -636,6 +652,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	}
 	decommisionFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},

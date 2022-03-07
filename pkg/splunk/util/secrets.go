@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -421,6 +422,12 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
+	name := splcommon.GetNamespaceScopedSecretName(namespace)
+
+	scopedLog := log.WithName("ApplyConfigMap").WithValues(
+		"name", splcommon.GetNamespaceScopedSecretName(namespace),
+		"namespace", namespace)
+
 	// Check if a namespace scoped K8S secrets object exists
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}
 	err := client.Get(ctx, namespacedName, &current)
@@ -479,6 +486,11 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		return nil, err
 	}
 
+	gerr := client.Get(ctx, namespacedName, &current)
+	for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
+		scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", name, "error", gerr.Error())
+		time.Sleep(10 * time.Microsecond)
+	}
 	return &current, nil
 }
 

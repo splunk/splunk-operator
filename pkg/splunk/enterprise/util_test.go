@@ -42,11 +42,12 @@ func TestApplySplunkConfig(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3]}}
 	searchHeadCR := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -91,7 +92,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)

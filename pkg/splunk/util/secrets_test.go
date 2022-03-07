@@ -846,6 +846,10 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
+	cerateFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+	}
 
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
@@ -853,7 +857,7 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	}
 
 	// "splunk-secrets" object doesn't exist
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": cerateFuncCalls, "Create": funcCalls}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
 
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false)
