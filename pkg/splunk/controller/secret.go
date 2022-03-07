@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,6 +59,11 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 		err = splutil.CreateResource(ctx, client, secret)
 		if err != nil {
 			return nil, err
+		}
+		gerr := client.Get(ctx, namespacedName, secret)
+		for ; gerr != nil; gerr = client.Get(ctx, namespacedName, secret) {
+			scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr.Error())
+			time.Sleep(10 * time.Microsecond)
 		}
 		result = *secret
 	} else {

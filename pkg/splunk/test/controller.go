@@ -485,6 +485,8 @@ func ReconcileTester(t *testing.T, method string,
 		updateNoChangecalls["Get"] = updateCalls["Get"]
 	} else if method == "TestApplyNamespaceScopedSecretObject" && len(updateCalls["Get"]) > 0 {
 		updateNoChangecalls["Get"] = updateCalls["Get"]
+	} else if method == "TestApplySecret" && len(updateCalls["Get"]) > 0 {
+		updateNoChangecalls["Get"] = updateCalls["Get"]
 	}
 
 	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
