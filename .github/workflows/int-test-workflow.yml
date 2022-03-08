@@ -4,7 +4,7 @@ on:
     branches:
       - develop
       - master
-      - sdk-upgrade-1-15
+      - sdk-upgrade-1-15-namespace-scope
 jobs:
   int-tests:
     strategy:
@@ -30,6 +30,7 @@ jobs:
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      CLUSTER_WIDE: "false"
     steps:
       - name: Set Test Cluster Name
         run: | 

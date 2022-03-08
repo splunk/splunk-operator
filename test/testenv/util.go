@@ -583,7 +583,10 @@ func GetOperatorPodName(ns string) string {
 		if strings.HasPrefix(line, "splunk-operator-controller-manager") {
 			splunkPods = strings.Fields(line)[0]
 			return splunkPods
-		}
+		} else if strings.HasPrefix(line, "splunk-op") {
+			splunkPods = strings.Fields(line)[0]
+			return splunkPods
+		}  
 	}
 	return splunkPods
 }

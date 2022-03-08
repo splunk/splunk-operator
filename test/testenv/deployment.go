@@ -105,8 +105,17 @@ func (d *Deployment) Teardown() error {
 
 	// adding operator pod for each test case, currently this log contains previously run test case operator log
 	// we can enhance this to only collect log for this test case
-	podName := GetOperatorPodName("splunk-operator")
-	output, err := exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
+	
+	var err error
+	var output []byte
+	var podName string
+	if d.testenv.clusterWideOperator != "true" {
+		podName := GetOperatorPodName(d.GetName())
+		output, err = exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
+	} else {
+		podName := GetOperatorPodName("splunk-operator")
+		output, err = exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
+	}
 	if err != nil {
 		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get operator logs from Pod %s", podName))
 	} else {

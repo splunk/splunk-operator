@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"os"
 	"time"
-
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +38,9 @@ type TestCaseEnv struct {
 	serviceAccountName string
 	roleName           string
 	roleBindingName    string
+	operatorName       string
+	operatorImage      string
+	splunkImage        string
 	initialized        bool
 	SkipTeardown       bool
 	licenseFilePath    string
@@ -46,6 +49,7 @@ type TestCaseEnv struct {
 	Log                logr.Logger
 	cleanupFuncs       []cleanupFunc
 	debug              string
+	clusterWideOperator string
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -55,11 +59,11 @@ func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 
 // NewDefaultTestCaseEnv creates a default test environment
 func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv, error) {
-	return NewTestCaseEnv(kubeClient, name, specifiedLicenseFilePath)
+	return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
 }
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
-func NewTestCaseEnv(kubeClient client.Client, name, licenseFilePath string) (*TestCaseEnv, error) {
+func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string,  licenseFilePath string) (*TestCaseEnv, error) {
 	var envName string
 
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
@@ -74,11 +78,15 @@ func NewTestCaseEnv(kubeClient client.Client, name, licenseFilePath string) (*Te
 		serviceAccountName: name,
 		roleName:           name,
 		roleBindingName:    name,
+		operatorName:       "splunk-op-" + name,
+		operatorImage:      operatorImage,
+		splunkImage:        splunkImage,
 		SkipTeardown:       specifiedSkipTeardown,
 		licenseCMName:      name,
 		licenseFilePath:    licenseFilePath,
 		s3IndexSecret:      "splunk-s3-index-" + name,
 		debug:              os.Getenv("DEBUG"),
+		clusterWideOperator: installOperatorClusterWide,
 	}
 
 	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)
@@ -96,6 +104,11 @@ func (testenv *TestCaseEnv) GetName() string {
 	return testenv.name
 }
 
+//IsOperatorInstalledClusterWide returns if operator is installed clusterwide
+func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
+	return testenv.clusterWideOperator
+}
+
 func (testenv *TestCaseEnv) setup() error {
 	testenv.Log.Info("testenv initializing.\n")
 
@@ -108,6 +121,23 @@ func (testenv *TestCaseEnv) setup() error {
 	err = testenv.createSA()
 	if err != nil {
 		return err
+	}
+
+	if installOperatorClusterWide != "true" {
+		err = testenv.createRole()
+		if err != nil {
+			return err
+		}
+
+		err = testenv.createRoleBinding()
+		if err != nil {
+			return err
+		}
+
+		err = testenv.createOperator()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create s3 secret object for index test
@@ -289,6 +319,49 @@ func (testenv *TestCaseEnv) createRoleBinding() error {
 		return nil
 	})
 
+	return nil
+}
+
+func (testenv *TestCaseEnv) createOperator() error {
+	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
+	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
+	err := testenv.GetKubeClient().Create(context.TODO(), op)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to create operator")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), op)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete operator")
+			return err
+		}
+		return nil
+	})
+
+	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
+		deployment := &appsv1.Deployment{}
+		err := testenv.GetKubeClient().Get(context.TODO(), key, deployment)
+		if err != nil {
+			return false, err
+		}
+
+		DumpGetPods(testenv.namespace)
+		if deployment.Status.UpdatedReplicas < deployment.Status.Replicas {
+			return false, nil
+		}
+
+		if deployment.Status.ReadyReplicas < *op.Spec.Replicas {
+			return false, nil
+		}
+
+		return true, nil
+	}); err != nil {
+		testenv.Log.Error(err, "Unable to create operator")
+		return err
+	}
 	return nil
 }
 
