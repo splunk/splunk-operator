@@ -340,7 +340,8 @@ func (testenv *TestCaseEnv) createOperator() error {
 		return nil
 	})
 
-	if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+	OperatorInstallationTimeout := 10 * time.Minute
+	if err := wait.PollImmediate(PollInterval, OperatorInstallationTimeout, func() (bool, error) {
 		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
 		deployment := &appsv1.Deployment{}
 		err := testenv.GetKubeClient().Get(context.TODO(), key, deployment)
@@ -359,7 +360,7 @@ func (testenv *TestCaseEnv) createOperator() error {
 
 		return true, nil
 	}); err != nil {
-		testenv.Log.Error(err, "Unable to create operator")
+		testenv.Log.Error(err, "Unable to find operator after creation")
 		return err
 	}
 	return nil
