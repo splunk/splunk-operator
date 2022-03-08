@@ -919,7 +919,7 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 			}
 		}
 
-		scopedLog.Info("Existing confiMap data", "data", configMap.Data)
+		scopedLog.Info("Existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind

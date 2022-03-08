@@ -1421,8 +1421,6 @@ refCount: %d`, getManualUpdateStatus(c, cr, configMapName), numOfObjects)
 	}
 
 	// Update configMap now
-	// Make sure to call the locked version since this is a common resource
-	// shared among all the CRs in the namespace
 	err = splutil.UpdateResource(c, configMap)
 	if err != nil {
 		scopedLog.Error(err, "Unable to update configMap", "name", namespacedName.Name)
