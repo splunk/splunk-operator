@@ -23,7 +23,7 @@ import (
 	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
