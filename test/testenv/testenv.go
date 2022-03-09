@@ -22,11 +22,10 @@ import (
 	"os"
 	"time"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
