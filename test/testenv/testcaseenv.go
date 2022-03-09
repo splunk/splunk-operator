@@ -340,13 +340,14 @@ func (testenv *TestCaseEnv) createOperator() error {
 		return nil
 	})
 
-	OperatorInstallationTimeout := 10 * time.Minute
+	OperatorInstallationTimeout := 5 * time.Minute
 	if err := wait.PollImmediate(PollInterval, OperatorInstallationTimeout, func() (bool, error) {
 		key := client.ObjectKey{Name: testenv.operatorName, Namespace: testenv.namespace}
 		deployment := &appsv1.Deployment{}
 		err := testenv.GetKubeClient().Get(context.TODO(), key, deployment)
 		if err != nil {
-			return false, err
+			testenv.Log.Error(err, "operator not found waiting")
+			return false, nil
 		}
 
 		DumpGetPods(testenv.namespace)
