@@ -56,8 +56,6 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
 fi
 
 
-# Install the CRDs
-echo "Installing enterprise CRDs..."
 echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
 make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 if [ $? -ne 0 ]; then
@@ -66,7 +64,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "wait for operator pod to be ready..."
-# sleep before checking for deployment, in slow clusters deployment call may not even started
+# sleep before checking for deployment, in slow clusters deployment call, may not even started
 # in those cases, kubectl will fail with error:  no matching resources found
 sleep 2
 kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
