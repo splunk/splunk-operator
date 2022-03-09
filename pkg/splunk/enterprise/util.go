@@ -1383,9 +1383,9 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 	return numOfObjects
 }
 
-// UpdateOrRemoveEntryFromConfigMap removes/updates the entry for the CR type from the manual app update configMap
-func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
-	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// UpdateOrRemoveEntryFromConfigMapLocked removes/updates the entry for the CR type from the manual app update configMap
+func UpdateOrRemoveEntryFromConfigMapLocked(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
+	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMapLocked").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}

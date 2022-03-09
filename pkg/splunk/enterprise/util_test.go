@@ -1167,7 +1167,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 	}
 }
 
-func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
+func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	stand1 := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -1209,9 +1209,9 @@ func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// To test the failure scenario, do not add the configMap to the client yet
-	err := UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err := UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err == nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there is no configMap yet")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there is no configMap yet")
 	}
 
 	kind := stand1.GetObjectKind().GroupVersionKind().Kind
@@ -1230,9 +1230,9 @@ refCount: 1`)
 	client.AddObject(configMap)
 
 	// To test the failure scenario, do not add the standalone cr to the list yet
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err == nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there are no owner references in the configMap")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there are no owner references in the configMap")
 	}
 
 	// set the second CR too as the owner ref for the config map
@@ -1252,9 +1252,9 @@ refCount: 1`)
 	}
 
 	// We should have decremented the refCount to 1
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand2, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand2, SplunkStandalone)
 	if err != nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
 
 	refCount := getManualUpdateRefCount(client, &stand1, configMapName)
@@ -1270,9 +1270,9 @@ refCount: 1`)
 	}
 
 	// Now since there is only 1 standalone left, we should be removing the entry from the configMap
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err != nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
 
 	if _, ok := configMap.Data[kind]; ok {
