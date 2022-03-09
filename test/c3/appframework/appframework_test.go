@@ -1641,8 +1641,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	// CSPL-1647
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	// CSPL-1604
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
@@ -1826,7 +1826,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	// CSPL-1647
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps

@@ -88,6 +88,16 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMapLocked(client, cr, SplunkLicenseManager)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		terminating, err := splctrl.CheckForDeletion(cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = splcommon.PhaseTerminating

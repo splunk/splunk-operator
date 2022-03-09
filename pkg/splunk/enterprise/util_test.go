@@ -950,6 +950,53 @@ func TestGetNextRequeueTime(t *testing.T) {
 	}
 }
 
+func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+	}
+
+	var appStatusContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{}
+	c := spltest.NewMockClient()
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+	var turnOffManualChecking bool
+
+	crKindMap := make(map[string]string)
+	configMapData := fmt.Sprintf(`status: on
+refCount: 1`)
+	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
+
+	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
+
+	// Test1: with no confiMap added, we should return error
+	err := updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	if err == nil {
+		t.Errorf("updateManualAppUpdateConfigMapLocked should have returned error since there is no configMap yet.")
+	}
+
+	// now add the confiMap to the client
+	c.AddObject(configMap)
+
+	// Test2: This should not return error since we have added configMap now
+	err = updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	if err != nil {
+		t.Errorf("updateManualAppUpdateConfigMapLocked should not have returned error since we just added configMap. err=%v", err)
+	}
+
+	// Test3: now enable TurnOffManualChecking
+	turnOffManualChecking = true
+	err = updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	if err != nil {
+		t.Errorf("updateManualAppUpdateConfigMapLocked should not have returned error. err=%v", err)
+	}
+}
+
 func TestShouldCheckAppRepoStatus(t *testing.T) {
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1120,7 +1167,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 	}
 }
 
-func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
+func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	stand1 := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -1162,9 +1209,9 @@ func TestUpdateOrRemoveEntryFromConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// To test the failure scenario, do not add the configMap to the client yet
-	err := UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err := UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err == nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there is no configMap yet")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there is no configMap yet")
 	}
 
 	kind := stand1.GetObjectKind().GroupVersionKind().Kind
@@ -1183,9 +1230,9 @@ refCount: 1`)
 	client.AddObject(configMap)
 
 	// To test the failure scenario, do not add the standalone cr to the list yet
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err == nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should have returned error as there are no owner references in the configMap")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there are no owner references in the configMap")
 	}
 
 	// set the second CR too as the owner ref for the config map
@@ -1205,9 +1252,9 @@ refCount: 1`)
 	}
 
 	// We should have decremented the refCount to 1
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand2, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand2, SplunkStandalone)
 	if err != nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
 
 	refCount := getManualUpdateRefCount(client, &stand1, configMapName)
@@ -1223,9 +1270,9 @@ refCount: 1`)
 	}
 
 	// Now since there is only 1 standalone left, we should be removing the entry from the configMap
-	err = UpdateOrRemoveEntryFromConfigMap(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
 	if err != nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMap should not have returned error")
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
 
 	if _, ok := configMap.Data[kind]; ok {
@@ -1629,22 +1676,31 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 	}
 }
 
-func TestInitStorageTracker(t *testing.T) {
+func TestInitGlobalResourceTracker(t *testing.T) {
 	if operatorResourceTracker == nil {
 		t.Errorf("operatorResourceTracker should be initialized as part of the enterprise package init()")
 	}
 
 	// When the volume is not configured, should use a temporary location from main memory
-	err := initStorageTracker()
-	if err != nil {
-		t.Errorf("When the volume doesn't exist, should fall back to the temp location of the app framework")
+	initGlobalResourceTracker()
+	if operatorResourceTracker == nil || operatorResourceTracker.commonResourceTracker == nil {
+		t.Errorf("operatorResourceTracker or commonResourceTracker should have been initialized")
 	}
 
 	// When the volume exists, should not return an error
 	splcommon.AppDownloadVolume = "/"
-	err = initStorageTracker()
-	if err != nil {
-		t.Errorf("When the volume exists, should not return an error. Error: %v", err)
+	initGlobalResourceTracker()
+	if operatorResourceTracker.storage.availableDiskSpace == 0 {
+		t.Errorf("availableDiskSpace should not be 0")
+	}
+}
+
+func TestGetResourceMutex(t *testing.T) {
+	initGlobalResourceTracker()
+
+	_ = getResourceMutex("default")
+	if _, ok := operatorResourceTracker.commonResourceTracker.mutexMap["default"]; !ok {
+		t.Errorf("we should have assigned a new mutex for the default namspace")
 	}
 }
 
