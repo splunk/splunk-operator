@@ -419,6 +419,16 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	// if existing configmap contains key conftoken then add that back
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err == nil && configMap != nil && configMap.Data != nil && reflect.ValueOf(configMap.Data).Kind() == reflect.Map {
+		if _, ok := configMap.Data[configToken]; ok {
+			SplunkOperatorAppConfigMap.Data[configToken] = configMap.Data[configToken]
+		}
+	}
+
 	configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 	if err != nil {
 		scopedLog.Error(err, "config map create/update failed", "error", err.Error())
