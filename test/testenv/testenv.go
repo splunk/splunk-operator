@@ -22,11 +22,10 @@ import (
 	"os"
 	"time"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -44,7 +43,6 @@ import (
 )
 
 const (
-
 	defaultOperatorInstallation = "false"
 
 	defaultOperatorImage = "splunk/splunk-operator"
@@ -118,7 +116,7 @@ var (
 	specifiedCommitHash      = ""
 	// SpecifiedTestTimeout exported test timeout time as this can be
 	// configured per test case if needed
-	SpecifiedTestTimeout = defaultTestTimeout
+	SpecifiedTestTimeout       = defaultTestTimeout
 	installOperatorClusterWide = defaultOperatorInstallation
 )
 

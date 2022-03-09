@@ -18,37 +18,37 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"time"
 )
 
 // TestCaseEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run test cases against
 type TestCaseEnv struct {
-	kubeClient         client.Client
-	name               string
-	namespace          string
-	serviceAccountName string
-	roleName           string
-	roleBindingName    string
-	operatorName       string
-	operatorImage      string
-	splunkImage        string
-	initialized        bool
-	SkipTeardown       bool
-	licenseFilePath    string
-	licenseCMName      string
-	s3IndexSecret      string
-	Log                logr.Logger
-	cleanupFuncs       []cleanupFunc
-	debug              string
+	kubeClient          client.Client
+	name                string
+	namespace           string
+	serviceAccountName  string
+	roleName            string
+	roleBindingName     string
+	operatorName        string
+	operatorImage       string
+	splunkImage         string
+	initialized         bool
+	SkipTeardown        bool
+	licenseFilePath     string
+	licenseCMName       string
+	s3IndexSecret       string
+	Log                 logr.Logger
+	cleanupFuncs        []cleanupFunc
+	debug               string
 	clusterWideOperator string
 }
 
@@ -63,7 +63,7 @@ func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv,
 }
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
-func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string,  licenseFilePath string) (*TestCaseEnv, error) {
+func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
 	var envName string
 
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
@@ -72,20 +72,20 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 	}
 
 	testenv := &TestCaseEnv{
-		kubeClient:         kubeClient,
-		name:               name,
-		namespace:          name,
-		serviceAccountName: name,
-		roleName:           name,
-		roleBindingName:    name,
-		operatorName:       "splunk-op-" + name,
-		operatorImage:      operatorImage,
-		splunkImage:        splunkImage,
-		SkipTeardown:       specifiedSkipTeardown,
-		licenseCMName:      name,
-		licenseFilePath:    licenseFilePath,
-		s3IndexSecret:      "splunk-s3-index-" + name,
-		debug:              os.Getenv("DEBUG"),
+		kubeClient:          kubeClient,
+		name:                name,
+		namespace:           name,
+		serviceAccountName:  name,
+		roleName:            name,
+		roleBindingName:     name,
+		operatorName:        "splunk-op-" + name,
+		operatorImage:       operatorImage,
+		splunkImage:         splunkImage,
+		SkipTeardown:        specifiedSkipTeardown,
+		licenseCMName:       name,
+		licenseFilePath:     licenseFilePath,
+		s3IndexSecret:       "splunk-s3-index-" + name,
+		debug:               os.Getenv("DEBUG"),
 		clusterWideOperator: installOperatorClusterWide,
 	}
 

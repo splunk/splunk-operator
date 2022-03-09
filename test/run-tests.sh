@@ -67,7 +67,7 @@ else
 fi
 
 if [ $? -ne 0 ]; then
-  echo "Unable to install the crd. Exiting..."
+  echo "Unable to install the operator. Exiting..."
   exit 1
 fi
 

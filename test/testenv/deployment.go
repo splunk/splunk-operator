@@ -105,7 +105,7 @@ func (d *Deployment) Teardown() error {
 
 	// adding operator pod for each test case, currently this log contains previously run test case operator log
 	// we can enhance this to only collect log for this test case
-	
+
 	var err error
 	var output []byte
 	var podName string

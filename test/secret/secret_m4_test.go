@@ -37,6 +37,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 		// SpecifiedTestTimeout override default timeout for m4 test cases as we have seen
 		// it takes more than 3000 seconds for one of the test case
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		testenv.SpecifiedTestTimeout = 4000
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
