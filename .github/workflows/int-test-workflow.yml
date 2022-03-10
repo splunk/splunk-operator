@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
-      CLUSTER_WORKERS: 5
+      CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
@@ -36,12 +36,12 @@ jobs:
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
-          if grep -q "appframework" <<< "${{ matrix.test }}"; then
+          if [ ${{ matrix.test }} == *"appframework"* ]; then 
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
           fi
       - name: Checkcout code
-        uses: actions/checkout@v2   
+        uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -103,7 +103,7 @@ jobs:
       - name: Push Splunk Operator Image to ECR
         run: |
           echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-          make docker-push  IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
@@ -125,7 +125,7 @@ jobs:
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
-        run: | 
+        run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
