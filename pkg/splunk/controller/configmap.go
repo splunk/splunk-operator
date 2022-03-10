@@ -83,7 +83,6 @@ func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 	err := client.Get(context.TODO(), namespacedName, &configMap)
 	if err != nil {
 		//if we don't find mc configmap create and return an empty configmap
-		var configMap corev1.ConfigMap
 		configMap = corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      namespacedName.Name,
@@ -97,6 +96,10 @@ func GetMCConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, 
 		}
 	}
 	err = SetConfigMapOwnerRef(client, cr, namespacedName)
+	if err != nil {
+		return nil, err
+	}
+	err = client.Get(context.TODO(), namespacedName, &configMap)
 	if err != nil {
 		return nil, err
 	}
