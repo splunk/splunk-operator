@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - master
-      - sdk-upgrade-1-15
 jobs:
   int-tests:
     strategy:
