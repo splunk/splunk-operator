@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+# Delete a Monitoring Console
+- apiVersion: enterprise.splunk.com/v3
+  kind: MonitoringConsole
+  name: example

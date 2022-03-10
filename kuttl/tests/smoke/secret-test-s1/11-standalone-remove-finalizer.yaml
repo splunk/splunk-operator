@@ -1,0 +1,44 @@
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  finalizers: []
+  name: st-test
+spec:
+  Mock: false
+  affinity: {}
+  appRepo:
+    defaults: {}
+  clusterMasterRef: {}
+  defaults: ""
+  defaultsUrl: ""
+  defaultsUrlApps: ""
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  image: ""
+  imagePullPolicy: IfNotPresent
+  licenseMasterRef:
+    name: lc-test
+  licenseUrl: ""
+  livenessInitialDelaySeconds: 0
+  monitoringConsoleRef:
+    name: mc-test
+  readinessInitialDelaySeconds: 0
+  replicas: 0
+  resources: {}
+  schedulerName: ""
+  serviceAccount: ""
+  serviceTemplate:
+    metadata: {}
+    spec: {}
+    status:
+        loadBalancer: {}
+  smartstore:
+    cacheManager: {}
+    defaults: {}
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  volumes: []

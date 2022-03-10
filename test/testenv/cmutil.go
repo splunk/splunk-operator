@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -72,12 +74,12 @@ type ClusterMasterHealthContent struct {
 }
 
 // CheckRFSF check if cluster has met replication factor and search factor
-func CheckRFSF(deployment *Deployment) bool {
+func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetHealth
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false
@@ -120,7 +122,7 @@ type ClusterMasterPeersAndSearchHeadResponse struct {
 }
 
 // GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Manager
-func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
+func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
 	url := ""
 	if endpoint == "sh" {
 		url = splcommon.LocalURLClusterManagerGetSearchHeads
@@ -131,7 +133,7 @@ func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) Clust
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	restResponse := ClusterMasterPeersAndSearchHeadResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
@@ -146,8 +148,8 @@ func GetIndexersOrSearchHeadsOnCM(deployment *Deployment, endpoint string) Clust
 }
 
 // CheckIndexerOnCM check given Indexer on cluster manager
-func CheckIndexerOnCM(deployment *Deployment, indexerName string) bool {
-	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "peer")
+func CheckIndexerOnCM(ctx context.Context, deployment *Deployment, indexerName string) bool {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "peer")
 	found := false
 	for _, entry := range restResponse.Entry {
 		logf.Log.Info("Peer found On CM", "Indexer Name", entry.Content.Label, "Status", entry.Content.Status)
@@ -160,8 +162,8 @@ func CheckIndexerOnCM(deployment *Deployment, indexerName string) bool {
 }
 
 // CheckSearchHeadOnCM check given search head on cluster manager
-func CheckSearchHeadOnCM(deployment *Deployment, searchHeadName string) bool {
-	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "sh")
+func CheckSearchHeadOnCM(ctx context.Context, deployment *Deployment, searchHeadName string) bool {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	found := false
 	for _, entry := range restResponse.Entry {
 		logf.Log.Info("Search Head On CM", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
@@ -174,8 +176,8 @@ func CheckSearchHeadOnCM(deployment *Deployment, searchHeadName string) bool {
 }
 
 // CheckSearchHeadRemoved check if search head is removed from Indexer Cluster
-func CheckSearchHeadRemoved(deployment *Deployment) bool {
-	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "sh")
+func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "sh")
 	searchHeadRemoved := true
 	for _, entry := range restResponse.Entry {
 		logf.Log.Info("Search Found", "Search Head", entry.Content.Label, "Status", entry.Content.Status)
@@ -187,11 +189,11 @@ func CheckSearchHeadRemoved(deployment *Deployment) bool {
 }
 
 // RollHotBuckets roll hot buckets in cluster
-func RollHotBuckets(deployment *Deployment) bool {
+func RollHotBuckets(ctx context.Context, deployment *Deployment) bool {
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
 	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false
@@ -218,10 +220,10 @@ type ClusterMasterInfoEndpointResponse struct {
 }
 
 // ClusterMasterInfoResponse Get cluster Manager response
-func ClusterMasterInfoResponse(deployment *Deployment, podName string) ClusterMasterInfoEndpointResponse {
+func ClusterMasterInfoResponse(ctx context.Context, deployment *Deployment, podName string) ClusterMasterInfoEndpointResponse {
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	restResponse := ClusterMasterInfoEndpointResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
@@ -237,11 +239,11 @@ func ClusterMasterInfoResponse(deployment *Deployment, podName string) ClusterMa
 }
 
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
-func CheckRollingRestartStatus(deployment *Deployment) bool {
+func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool {
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false
@@ -261,8 +263,8 @@ func CheckRollingRestartStatus(deployment *Deployment) bool {
 }
 
 // ClusterManagerBundlePushstatus Check for bundle push status on ClusterManager
-func ClusterManagerBundlePushstatus(deployment *Deployment, previousBundleHash string) map[string]string {
-	restResponse := GetIndexersOrSearchHeadsOnCM(deployment, "")
+func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string) map[string]string {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "")
 
 	bundleStatus := make(map[string]string)
 	for _, entry := range restResponse.Entry {
@@ -281,9 +283,9 @@ func ClusterManagerBundlePushstatus(deployment *Deployment, previousBundleHash s
 }
 
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
-func GetClusterManagerBundleHash(deployment *Deployment) string {
+func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) string {
 	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-	restResponse := ClusterMasterInfoResponse(deployment, podName)
+	restResponse := ClusterMasterInfoResponse(ctx, deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
 	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)

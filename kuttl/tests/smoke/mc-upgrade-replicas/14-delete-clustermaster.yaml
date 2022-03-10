@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+# Delete a ClusterMaster
+- apiVersion: enterprise.splunk.com/v3
+  kind: ClusterMaster
+  name: example

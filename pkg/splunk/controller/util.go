@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,6 +78,15 @@ func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta,
 func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
 	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
+
+	// check for changes in ServiceAccount
+	if splcommon.CompareByMarshall(current.ServiceAccountName, revised.ServiceAccountName) {
+		scopedLog.Info("Pod service account differs",
+			"current", current.ServiceAccountName,
+			"revised", revised.ServiceAccountName)
+		current.ServiceAccountName = revised.ServiceAccountName
+		result = true
+	}
 
 	// check for changes in Affinity
 	if splcommon.CompareByMarshall(current.Affinity, revised.Affinity) {

@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      name: splunk-operator
+  strategy: 
+    type: Recreate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        name: splunk-operator
+    spec:
+      securityContext:
+        runAsUser: 1001
+        #runAsNonRoot: true
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        - --pprof
+        image: controller:latest
+        imagePullPolicy: Always
+        name: manager
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: WATCH_NAMESPACE
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: RELATED_IMAGE_SPLUNK_ENTERPRISE
+        - name: OPERATOR_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: splunk-operator-config
+              key: OPERATOR_NAME
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        #resources:
+        #  limits:
+        #    cpu: 1000m
+        #    memory: 1000Mi
+        #  requests:
+        #    cpu: 1000m
+        #    memory: 1000Mi
+        #volumeMounts:
+        #  - mountPath: /opt/splunk/appframework/
+        #    name: app-staging
+      serviceAccountName: controller-manager
+      volumes:
+      - configMap:
+          name: config
+        name: splunk-operator-config
+      #  - name:  app-staging
+      #    persistentVolumeClaim:
+      #      claimName: tmp-app-download
+      terminationGracePeriodSeconds: 10
