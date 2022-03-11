@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +38,7 @@ func TestApplyService(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.ClusterIP = "8.8.8.8"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		return ApplyService(c, cr.(*corev1.Service))
+		return ApplyService(context.TODO(), c, cr.(*corev1.Service))
 	}
 	spltest.ReconcileTester(t, "TestApplyService", &current, revised, createCalls, updateCalls, reconcile, false)
 }

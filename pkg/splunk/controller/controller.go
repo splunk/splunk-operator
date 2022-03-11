@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -36,10 +36,10 @@ type SplunkController interface {
 	GetInstance() splcommon.MetaObject
 
 	// GetWatchTypes returns a list of types owned by the controller that it would like to receive watch events for
-	GetWatchTypes() []runtime.Object
+	GetWatchTypes() []client.Object
 
 	// Reconcile is used to perform an idempotent reconciliation of the custom resource managed by this controller
-	Reconcile(client.Client, splcommon.MetaObject) (reconcile.Result, error)
+	Reconcile(ctx context.Context, client client.Client, instance splcommon.MetaObject) (reconcile.Result, error)
 }
 
 // AddToManager adds a specific Splunk Controller to the Manager.
@@ -95,7 +95,7 @@ type splunkReconciler struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r splunkReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	instance := r.splctrl.GetInstance()
 	gvk := instance.GroupVersionKind()
 	scopedLog := log.WithName("Reconcile").WithValues("Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
@@ -118,7 +118,7 @@ func (r splunkReconciler) Reconcile(request reconcile.Request) (reconcile.Result
 	instance.SetGroupVersionKind(gvk)
 
 	// call Reconcile method defined for the controller
-	result, err := r.splctrl.Reconcile(r.client, instance)
+	result, err := r.splctrl.Reconcile(ctx, r.client, instance)
 
 	// log what happens next
 	if err != nil {

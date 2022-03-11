@@ -15,9 +15,9 @@ jobs:
     - name: Install golint
       run: |
         go version
-        go get -u golang.org/x/lint/golint
+        go install golang.org/x/lint/golint@latest
     - name: Check Source formatting
-      run: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      run: X=`make fmt` && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
       run: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
   unit-tests:
@@ -35,11 +35,11 @@ jobs:
       - name: Install golint
         run: |
           go version
-          go get -u golang.org/x/lint/golint
+          go install golang.org/x/lint/golint@latest
       - name: Install goveralls
         run: |
           go version
-          go get github.com/mattn/goveralls@latest
+          go install github.com/mattn/goveralls@latest
       - name: Run Unit Tests
         run: make test  
       - name: Run Code Coverage
@@ -66,8 +66,12 @@ jobs:
       uses: docker-practice/actions-setup-docker@v1
     - name: Install Operator SDK
       run: |
-        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-        sudo chmod +x /usr/local/bin/operator-sdk
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -80,7 +84,7 @@ jobs:
     - name: Make Splunk Operator Image
       run: |
         docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-        operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker build -t ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA .
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
@@ -150,16 +154,12 @@ jobs:
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
+      CLUSTER_WIDE: "true"
     steps:
       - name: Set Test Cluster Name
         run: | 
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-      - name: Set Test Cluster Nodes and Parallel Runs
-        run: >-
-          if [ ${{ matrix.test }} == "appframework" ]; then 
-            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
-          fi
       - name: Chekcout code
         uses: actions/checkout@v2  
       - name: Dotenv Action
@@ -229,14 +229,24 @@ jobs:
       - name: Create EKS cluster
         run: |
            make cluster-up
+      - name: install metric server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      - name: install k8s dashboard
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run smoke test
         id: smoketest
         run: |
           make int-test
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: | 
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs if Failure in Smoke Test
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+      - name: Archive Pod Logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"

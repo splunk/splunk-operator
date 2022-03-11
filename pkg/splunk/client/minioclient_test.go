@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,36 +16,37 @@
 package client
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
 
 func TestInitMinioClientWrapper(t *testing.T) {
-
-	minioS3ClientSession := InitMinioClientWrapper("https://s3.us-east-1.amazonaws.com", "abcd", "1234")
+	ctx := context.TODO()
+	minioS3ClientSession := InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234")
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 }
 
 func TestNewMinioClient(t *testing.T) {
-
+	ctx := context.TODO()
 	fn := InitMinioClientWrapper
 
 	// Test1. Test for endpoint with https
-	minioS3Client, err := NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err := NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test2. Test for endpoint with http
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "http://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "http://s3.us-west-2.amazonaws.com", fn)
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test3. Test for invalid endpoint
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "random-endpoint.com", fn)
+	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "random-endpoint.com", fn)
 	if minioS3Client != nil || err == nil {
 		t.Errorf("NewMinioClient should have returned a error.")
 	}
@@ -52,17 +54,18 @@ func TestNewMinioClient(t *testing.T) {
 
 func TestMinioGetInitContainerImage(t *testing.T) {
 	minioClient := &MinioClient{}
-
-	if minioClient.GetInitContainerImage() != "amazon/aws-cli" {
+	ctx := context.TODO()
+	if minioClient.GetInitContainerImage(ctx) != "amazon/aws-cli" {
 		t.Errorf("Got invalid init container image for Minio client.")
 	}
 }
 
 func TestGetMinioInitContainerCmd(t *testing.T) {
+	ctx := context.TODO()
 	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
 
 	minioClient := &MinioClient{}
-	gotCmd := minioClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
+	gotCmd := minioClient.GetInitContainerCmd(ctx, "https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
 	if !reflect.DeepEqual(wantCmd, gotCmd) {
 		t.Errorf("Got incorrect Init container cmd")
 	}

@@ -1,0 +1,1 @@
+Standalone deployment (S1) with LM and MC

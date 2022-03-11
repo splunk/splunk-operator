@@ -1,0 +1,1 @@
+Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)

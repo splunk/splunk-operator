@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,14 +29,14 @@ func init() {
 }
 
 // SplunkFinalizerMethod is used to register finalizer callbacks in the registry
-type SplunkFinalizerMethod func(splcommon.MetaObject, splcommon.ControllerClient) error
+type SplunkFinalizerMethod func(context.Context, splcommon.MetaObject, splcommon.ControllerClient) error
 
 // SplunkFinalizerRegistry is a list of Splunk finalizers processed when deletion is requested
 var SplunkFinalizerRegistry map[string]SplunkFinalizerMethod
 
 // CheckForDeletion checks to see if deletion was requested for the custom resource.
 // If so, it will process and remove any remaining finalizers.
-func CheckForDeletion(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
+func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
 	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
@@ -66,13 +67,13 @@ func CheckForDeletion(cr splcommon.MetaObject, c splcommon.ControllerClient) (bo
 
 		// process finalizer callback
 		scopedLog.Info("Processing callback", "Finalizer", finalizer)
-		err := callback(cr, c)
+		err := callback(ctx, cr, c)
 		if err != nil {
 			return false, err
 		}
 
 		// remove finalizer from custom resource
-		err = removeSplunkFinalizer(cr, c, finalizer)
+		err = removeSplunkFinalizer(ctx, cr, c, finalizer)
 		if err != nil {
 			return false, err
 		}
@@ -84,7 +85,7 @@ func CheckForDeletion(cr splcommon.MetaObject, c splcommon.ControllerClient) (bo
 }
 
 // removeSplunkFinalizer removes a finalizer from a custom resource.
-func removeSplunkFinalizer(cr splcommon.MetaObject, c splcommon.ControllerClient, finalizer string) error {
+func removeSplunkFinalizer(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient, finalizer string) error {
 	scopedLog := log.WithName("RemoveFinalizer").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	scopedLog.Info("Removing finalizer", "name", finalizer)
 

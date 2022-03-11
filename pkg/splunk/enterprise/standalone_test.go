@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package enterprise
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -34,8 +36,10 @@ func TestApplyStandalone(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
@@ -43,7 +47,24 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
+	updatefuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+	}
+	updateFuncCalls := append(updatefuncCalls, spltest.MockFuncCall{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"})
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
@@ -55,8 +76,8 @@ func TestApplyStandalone(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[9]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[11]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -69,7 +90,7 @@ func TestApplyStandalone(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -79,13 +100,14 @@ func TestApplyStandalone(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
 func TestApplyStandaloneWithSmartstore(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -95,6 +117,28 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+	}
+	createFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
@@ -103,6 +147,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
@@ -114,8 +159,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[9], funcCalls[13]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[12], funcCalls[13]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[10], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -152,20 +197,20 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Without S3 keys, ApplyStandalone should fail
-	_, err := ApplyStandalone(client, &current)
+	_, err := ApplyStandalone(context.Background(), client, &current)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail without S3 secrets configured")
 	}
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -173,13 +218,14 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStandalone(c, cr.(*enterpriseApi.Standalone))
+		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandaloneWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
 }
 
 func TestGetStandaloneStatefulSet(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -188,17 +234,17 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateStandaloneSpec(&cr); err != nil {
+			if err := validateStandaloneSpec(ctx, &cr); err != nil {
 				t.Errorf("validateStandaloneSpec() returned error: %v", err)
 			}
-			return getStandaloneStatefulSet(c, &cr)
+			return getStandaloneStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, "getStandaloneStatefulSet()", f, want)
 	}
@@ -233,7 +279,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	_ = splutil.CreateResource(c, &current)
+	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(splcommon.TestGetStandaloneStatefulSetT3)
 
@@ -249,6 +295,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 }
 
 func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
+	ctx := context.TODO()
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -275,19 +322,19 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyStandalone(client, &current)
+	_, err = ApplyStandalone(context.Background(), client, &current)
 	if err != nil {
 		t.Errorf("ApplyStandalone should not fail with full configuration")
 	}
@@ -296,12 +343,12 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 	secret.Data[s3AccessKey] = []byte("changed")
 	current.Status.ResourceRevMap["splunk-test-secret"] = "3456"
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	changed := AreRemoteVolumeKeysChanged(client, &current, SplunkStandalone, &current.Spec.SmartStore, current.Status.ResourceRevMap, &err)
+	changed := AreRemoteVolumeKeysChanged(ctx, client, &current, SplunkStandalone, &current.Spec.SmartStore, current.Status.ResourceRevMap, &err)
 
 	if !changed {
 		t.Errorf("Key change was not detected %v", err)
@@ -309,6 +356,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 }
 
 func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -347,7 +395,7 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -357,13 +405,14 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyStandalone(client, &cr)
+	_, err = ApplyStandalone(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
 }
 
 func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -402,7 +451,7 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -412,20 +461,21 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyStandalone(client, &cr)
+	_, err = ApplyStandalone(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
 
 	// now scale up
 	cr.Spec.Replicas = 2
-	_, err = ApplyStandalone(client, &cr)
+	_, err = ApplyStandalone(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
 }
 
 func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -485,12 +535,12 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -552,24 +602,24 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 		s3ClientMgr := &S3ClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
 			location: appSource.Location,
-			initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
-				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
 
-		s3Response, err := s3ClientMgr.GetAppsList()
+		s3Response, err := s3ClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -597,6 +647,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -627,12 +678,12 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -670,7 +721,7 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 	s3ClientMgr := &S3ClientManager{
 		client:          client,
@@ -678,20 +729,20 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 		vol:             &vol,
 		location:        appSource.Location,
-		initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+		getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
-			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -707,21 +758,21 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -731,18 +782,18 @@ func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// This should return an error as we have initialized initFn for s3ClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList()
+	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
 	}

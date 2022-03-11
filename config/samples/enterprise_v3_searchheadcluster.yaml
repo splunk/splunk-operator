@@ -1,0 +1,8 @@
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: searchheadcluster-sample
+  finalizers:  
+  - "enterprise.splunk.com/delete-pvc" 
+spec: {}
+  # Add fields here

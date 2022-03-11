@@ -93,3 +93,9 @@ deploy/olm-certified
 *junit.xml
 # Bias Language Linter
 .biaslanguage/
+bin/
+bundle_*/
+test/secret/*.log
+kubeconfig
+.devcontainer/devcontainer.json
+kuttl-artifacts/*

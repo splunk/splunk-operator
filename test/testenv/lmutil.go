@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,9 +16,11 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"strings"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -37,10 +40,10 @@ type licenserLocalPeerResponse struct {
 }
 
 // CheckLicenseManagerConfigured checks if lm is configured on given pod
-func CheckLicenseManagerConfigured(deployment *Deployment, podName string) bool {
+func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, podName string) bool {
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLLicensePeerJSONOutput
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return false

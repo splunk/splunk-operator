@@ -1,0 +1,10 @@
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: test
+  finalizers: []
+spec: 
+  volumes: []
+  spec: 
+    imagePullPolicy: "IfNotPresent"
+  defaults: ""
