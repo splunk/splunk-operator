@@ -694,16 +694,16 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
 		if spec.LicenseMasterRef.Name == "" {
-		  //Check if CM is connected to a LicenseMaster
-		  namespacedName := types.NamespacedName{
-			  Namespace: cr.GetNamespace(),
-			  Name:      spec.ClusterMasterRef.Name,
-		  }
-		  managerIdxCluster := &enterpriseApi.ClusterMaster{}
-		  err := client.Get(ctx, namespacedName, managerIdxCluster)
-		  if err != nil {
-			  scopedLog.Error(err, "Unable to get ClusterMaster")
-		  }
+			//Check if CM is connected to a LicenseMaster
+			namespacedName := types.NamespacedName{
+				Namespace: cr.GetNamespace(),
+				Name:      spec.ClusterMasterRef.Name,
+			}
+			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get ClusterMaster")
+			}
 
 			if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
 				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
