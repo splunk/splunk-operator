@@ -366,7 +366,7 @@ func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv,
 
 	// Verify apps packages are deleted from the CR pods
 	for _, appSource := range appSource {
-		podDownloadPath := "/init-apps/" + appSource.CrAppSourceVolumeName
+		podDownloadPath := AppStagingLocOnPod + appSource.CrAppSourceVolumeName
 		pod := appSource.CrPod
 		testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appSource.CrAppVersion, pod))
 		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), pod, appSource.CrAppFileList, podDownloadPath)
