@@ -10,7 +10,7 @@ If you want to customize the installation of the Splunk Operator, download a cop
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
 ```
 
-## Admin Installation for All Namespaces
+## Default Installation
 
 By default operator will be installed in `splunk-operator` and will watch all the namespaces of your cluster for splunk enterprise custom resources:
 
@@ -18,7 +18,7 @@ By default operator will be installed in `splunk-operator` and will watch all th
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
 ```
 
-## Installation operator to watch single namespace
+## Install operator to watch single namespace
 
 By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
 if user wants to watch only one namespace then eeit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
@@ -36,6 +36,8 @@ metadata:
   name: splunk-operator-config
   namespace: splunk-operator
 ```
+
+## Install operator to watch multiple namespace
 
 if user want to manager multiple namespaces, then they can set `WATCH_NAMESPACE` field to all those namespaces , names should be comma (,) sepearated. example
 
