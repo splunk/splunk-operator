@@ -119,7 +119,7 @@ If user wants to deploy operator for specific namespace then they has to pass `W
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1"
 ```
 
-If user wants to operator to use specific version of splunk instance, then they has to pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
+If user wants to operator to use specific version of splunk instance, then user should pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
  
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
