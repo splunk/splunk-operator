@@ -1,0 +1,14 @@
+#create new indexer cluster custom resource 
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: test-idxc
+  finalizers: 
+    - "enterprise.splunk.com/delete-pvc"
+spec: 
+  volumes: []
+  imagePullPolicy: IfNotPresent
+  clusterMasterRef:
+    name: test
+  replicas: 3
+  serviceAccount: test-svc-account

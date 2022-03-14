@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +16,12 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"os/exec"
 	"strings"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -39,9 +42,9 @@ var SecretAPIRequests = map[string]string{
 }
 
 // GetSecretStruct Gets the secret struct for a given k8 secret name.
-func GetSecretStruct(deployment *Deployment, ns string, secretName string) (*corev1.Secret, error) {
+func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, secretName string) (*corev1.Secret, error) {
 	secretObject := &corev1.Secret{}
-	err := deployment.GetInstance(secretName, secretObject)
+	err := deployment.GetInstance(ctx, secretName, secretObject)
 	if err != nil {
 		deployment.testenv.Log.Error(err, "Unable to get secret object", "Secret Name", secretName, "Namespace", ns)
 	}
@@ -49,10 +52,10 @@ func GetSecretStruct(deployment *Deployment, ns string, secretName string) (*cor
 }
 
 //ModifySecretObject Modifies the secret object with given data
-func ModifySecretObject(deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
+func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
-	err := deployment.UpdateCR(secret)
+	err := deployment.UpdateCR(ctx, secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
 	}
@@ -60,10 +63,10 @@ func ModifySecretObject(deployment *Deployment, ns string, secretName string, da
 }
 
 //DeleteSecretObject Deletes the entire secret object
-func DeleteSecretObject(deployment *Deployment, ns string, secretName string) error {
+func DeleteSecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string) error {
 	logf.Log.Info("Delete secret object", "Secret Name", secretName, "Namespace", ns)
 	secret := newSecretSpec(ns, secretName, map[string][]byte{})
-	err := deployment.DeleteCR(secret)
+	err := deployment.DeleteCR(ctx, secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to delete secret object")
 		return err
@@ -72,10 +75,10 @@ func DeleteSecretObject(deployment *Deployment, ns string, secretName string) er
 }
 
 //GetMountedKey Gets the key mounted on pod
-func GetMountedKey(deployment *Deployment, podName string, key string) string {
+func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, key string) string {
 	stdin := fmt.Sprintf("cat /mnt/splunk-secrets/%s", key)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return ""
@@ -90,7 +93,7 @@ func GetRandomeHECToken() string {
 }
 
 // GetSecretFromServerConf gets give secret from server under given stanza
-func GetSecretFromServerConf(deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
+func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podName string, ns string, configName string, stanza string) (string, string, error) {
 	filePath := "/opt/splunk/etc/system/local/server.conf"
 	confline, err := GetConfLineFromPod(podName, filePath, ns, configName, stanza, true)
 	if err != nil {
@@ -100,15 +103,15 @@ func GetSecretFromServerConf(deployment *Deployment, podName string, ns string, 
 
 	secretList := strings.Split(confline, "=")
 	key := strings.TrimSpace(secretList[0])
-	value := DecryptSplunkEncodedSecret(deployment, podName, ns, strings.TrimSpace(secretList[1]))
+	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, ns, strings.TrimSpace(secretList[1]))
 	return key, value, nil
 }
 
 // DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
-func DecryptSplunkEncodedSecret(deployment *Deployment, podName string, ns string, secretValue string) string {
+func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, ns string, secretValue string) string {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "Failed"
@@ -169,14 +172,14 @@ func GetSecretDataMap(hecToken string, password string, pass4SymmKey string, idx
 }
 
 // CheckSecretViaAPI check if secret (hec token or password) can be used to access api
-func CheckSecretViaAPI(deployment *Deployment, podName string, secretName string, secret string) bool {
+func CheckSecretViaAPI(ctx context.Context, deployment *Deployment, podName string, secretName string, secret string) bool {
 	var cmd string
 	if secretName == "password" {
 		cmd = fmt.Sprintf(SecretAPIRequests[secretName], "admin", secret, "localhost", 8089)
 	} else if secretName == "hec_token" {
 		cmd = fmt.Sprintf(SecretAPIRequests[secretName], "Splunk", secret, "localhost", 8088)
 	}
-	output, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	output, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 	if err != nil {
 		return false
 	}

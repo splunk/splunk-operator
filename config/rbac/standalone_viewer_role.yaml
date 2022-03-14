@@ -1,0 +1,20 @@
+# permissions for end users to view standalones.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: standalone-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - standalones
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - standalones/status
+  verbs:
+  - get

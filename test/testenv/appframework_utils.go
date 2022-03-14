@@ -1,12 +1,13 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -55,13 +56,13 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 }
 
 // GetPodAppStatus Get the app install status and version number
-func GetPodAppStatus(deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
+func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
 	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, splcommon.TestDeployerDashed)) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil
 	}
-	output, err := GetPodAppInstallStatus(deployment, podName, ns, appname)
+	output, err := GetPodAppInstallStatus(ctx, deployment, podName, ns, appname)
 	if err != nil {
 		return "", "", err
 	}
@@ -98,10 +99,10 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 }
 
 // GetPodAppInstallStatus Get the app install status
-func GetPodAppInstallStatus(deployment *Deployment, podName string, ns string, appname string) (string, error) {
+func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string) (string, error) {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
@@ -112,10 +113,10 @@ func GetPodAppInstallStatus(deployment *Deployment, podName string, ns string, a
 }
 
 // GetPodAppbtoolStatus Get the app btool status
-func GetPodAppbtoolStatus(deployment *Deployment, podName string, ns string, appname string) (string, error) {
+func GetPodAppbtoolStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string) (string, error) {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk btool %s --app=%s --debug", appname, appname)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
 		return "", err
@@ -141,7 +142,7 @@ func GetAppFileList(appList []string) []string {
 }
 
 // GenerateAppFrameworkSpec Generate Appframework spec
-func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
+func GenerateAppFrameworkSpec(testenvInstance *TestCaseEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
 
 	// Create App framework volume
 	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}

@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/smoke
+parallel: 1
+timeout: 1000
+startKIND: false
+artifactsDir: kuttl-artifacts
+kindNodeCache: false
+#crdDir: config/crd/bases
+#commands:
+#  "make deploy IMG="docker.io/splunk/splunk-operator:1.1.0" - command: bash -c "make deploy IMG="docker.io/splunk/splunk-operator:1.1.0"
+#    background: true

@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +19,7 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -25,7 +27,7 @@ import (
 )
 
 // ApplyService creates or updates a Kubernetes Service
-func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) error {
+func ApplyService(ctx context.Context, client splcommon.ControllerClient, revised *corev1.Service) error {
 	scopedLog := log.WithName("ApplyService").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
@@ -33,9 +35,11 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current corev1.Service
 
-	err := client.Get(context.TODO(), namespacedName, &current)
-	if err != nil {
-		return splutil.CreateResource(client, revised)
+	err := client.Get(ctx, namespacedName, &current)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return splutil.CreateResource(ctx, client, revised)
+	} else if err != nil {
+		return err
 	}
 
 	// check for changes in service template
@@ -45,7 +49,14 @@ func ApplyService(client splcommon.ControllerClient, revised *corev1.Service) er
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
 		scopedLog.Info("Updating existing Service")
-		return splutil.UpdateResource(client, revised)
+		err = splutil.UpdateResource(ctx, client, revised)
+		if err != nil {
+			return err
+		}
+		err = client.Get(ctx, namespacedName, revised)
+		if err != nil {
+			return err
+		}
 	}
 
 	// all is good!

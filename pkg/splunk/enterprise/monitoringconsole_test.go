@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package enterprise
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -33,8 +35,10 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoringconsole-app-list"},
@@ -43,6 +47,22 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 	}
+	updateFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
+		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoringconsole-app-list"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
@@ -54,8 +74,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2], funcCalls[3], funcCalls[5], funcCalls[7], funcCalls[10]}, "Update": {funcCalls[0], funcCalls[7]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10]}, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[9]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
@@ -68,7 +88,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyMonitoringConsole(c, cr.(*enterpriseApi.MonitoringConsole))
+		_, err := ApplyMonitoringConsole(context.Background(), c, cr.(*enterpriseApi.MonitoringConsole))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -78,13 +98,14 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyMonitoringConsole(c, cr.(*enterpriseApi.MonitoringConsole))
+		_, err := ApplyMonitoringConsole(context.Background(), c, cr.(*enterpriseApi.MonitoringConsole))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 	}
@@ -96,7 +117,7 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	newURLsAdded := true
 	monitoringConsoleRef := "test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyMonitoringConsoleEnvConfigMap(c, "test", "test", monitoringConsoleRef, env, newURLsAdded)
+		_, err := ApplyMonitoringConsoleEnvConfigMap(ctx, c, "test", "test", monitoringConsoleRef, env, newURLsAdded)
 		return err
 	}
 
@@ -198,6 +219,8 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -206,17 +229,17 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	_, err := splutil.ApplyNamespaceScopedSecretObject(c, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateMonitoringConsoleSpec(&cr); err != nil {
+			if err := validateMonitoringConsoleSpec(ctx, &cr); err != nil {
 				t.Errorf("validateMonitoringConsoleSpec() returned error: %v", err)
 			}
-			return getMonitoringConsoleStatefulSet(c, &cr)
+			return getMonitoringConsoleStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, "getMonitoringConsoleStatefulSet()", f, want)
 	}
@@ -251,7 +274,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	_ = splutil.CreateResource(c, &current)
+	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 	test(splcommon.TestGetMonitoringConsoleStatefulSetT5)
 
@@ -266,6 +289,8 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 
 }
 func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "monitoringConsole",
@@ -303,7 +328,7 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -313,13 +338,15 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyMonitoringConsole(client, &cr)
+	_, err = ApplyMonitoringConsole(context.Background(), client, &cr)
 	if err != nil {
 		t.Errorf("ApplyMonitoringConsole should be successful")
 	}
 }
 
 func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "monitoringConsole",
@@ -378,12 +405,12 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -445,24 +472,24 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 		s3ClientMgr := &S3ClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
 			location: appSource.Location,
-			initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
-				c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
 
-		s3Response, err := s3ClientMgr.GetAppsList()
+		s3Response, err := s3ClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -490,6 +517,8 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 }
 
 func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -520,12 +549,12 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -563,7 +592,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, splclient.NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
 	s3ClientMgr := &S3ClientManager{
 		client:          client,
@@ -571,20 +600,20 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 		vol:             &vol,
 		location:        appSource.Location,
-		initFn: func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getS3Client: func(client splcommon.ControllerClient, cr splcommon.MetaObject,
+		getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 			// Get the mock client
-			c, err := GetRemoteStorageClient(client, cr, appFrameworkRef, vol, location, fn)
+			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -600,21 +629,21 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -624,18 +653,18 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	// This should return an error as we have initialized initFn for s3ClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList()
+	_, err = s3ClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList()
+	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
 	}

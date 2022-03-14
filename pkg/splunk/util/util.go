@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,53 +77,52 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 }
 
 // CreateResource creates a new Kubernetes resource using the REST API.
-func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
-	err := client.Create(context.TODO(), obj)
+	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to create resource")
+		scopedLog.Error(err, "Failed to create resource", "kind", obj.GetObjectKind())
 		return err
 	}
 
-	scopedLog.Info("Created resource")
+	scopedLog.Info("Created resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
-func UpdateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("UpdateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Update(context.TODO(), obj)
+	err := client.Update(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to update resource")
+		scopedLog.Error(err, "Failed to update resource", "kind", obj.GetObjectKind())
 		return err
 	}
-
-	scopedLog.Info("Updated resource")
+	scopedLog.Info("Updated resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
-func DeleteResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
 	scopedLog := log.WithName("DeleteResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Delete(context.TODO(), obj)
+	err := client.Delete(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to delete resource")
+		scopedLog.Error(err, "Failed to delete resource", "kind", obj.GetObjectKind())
 		return err
 	}
 
-	scopedLog.Info("Deleted resource")
+	scopedLog.Info("Deleted resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
@@ -139,12 +139,12 @@ func generateHECToken() []byte {
 }
 
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: podName}
-	err := c.Get(context.TODO(), namespacedName, &pod)
+	err := c.Get(ctx, namespacedName, &pod)
 	if err != nil {
 		return "", "", err
 	}
@@ -163,7 +163,7 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 			return "", "", err
 		}
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}
