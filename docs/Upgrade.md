@@ -21,7 +21,7 @@ run upgrade-to-1.1.0.sh script with below mentioned mandatory arguments
 
 ## Configuring Operator to watch specific namespace
 
-Edit config-map splunk-operator-config in splunk-operaor namespace, set WATCH_NAMESPACE field to the namespace operator need to watch
+Edit config-map splunk-operator-config in splunk-operator namespace, set WATCH_NAMESPACE field to the namespace operator need to watch
 
 ```
 apiVersion: v1

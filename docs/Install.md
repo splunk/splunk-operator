@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
 ```
 
 ## Default Installation
@@ -15,14 +15,14 @@ wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/
 By default operator will be installed in `splunk-operator` and will watch all the namespaces of your cluster for splunk enterprise custom resources:
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
 kubectl apply -f splunk-operator-cluster.yaml
 ```
 
 ## Install operator to watch single namespace
 
 By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
-if user wants to watch only one namespace then eeit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
+if user wants to watch only one namespace then eeit `config-map` `splunk-operator-config` in `splunk-operator` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
 
 ```
 apiVersion: v1
@@ -40,7 +40,7 @@ metadata:
 
 ## Install operator to watch multiple namespace
 
-if user want to manager multiple namespaces, then they can set `WATCH_NAMESPACE` field to all those namespaces , names should be comma (,) sepearated. example
+if user want to manager multiple namespaces, then they can set `WATCH_NAMESPACE` field to all those namespaces , names should be comma (,) seperated. example
 
 ```
 apiVersion: v1
@@ -65,7 +65,7 @@ If you plan to retag the container images as part of pushing it to a private reg
 image: splunk/splunk-operator
 ```
 
-If you are using a private registry for the Docker images, edit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `RELATED_IMAGE_SPLUNK_ENTERPRISE` field splunk docker image path
+If you are using a private registry for the Docker images, edit `config-map` `splunk-operator-config` in `splunk-operator` namespace, set `RELATED_IMAGE_SPLUNK_ENTERPRISE` field splunk docker image path
 
 ```
 apiVersion: v1

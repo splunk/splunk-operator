@@ -22,20 +22,27 @@ deploy and use the latest release, please see the
 ## Prerequisites
 
 You must have [Docker Engine](https://docs.docker.com/install/) installed to
-build the Splunk Operator. 
+build the Splunk Operator.
 
 This project uses [Go modules](https://blog.golang.org/using-go-modules),
-and requires [golang](https://golang.org/doc/install) 1.17.3 or later.
+and requires [golang](https://golang.org/doc/install) 1.13 or later.
 You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
 The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk)
-must also be installed to build this project. Follow the steps from [Operator-SDK Installation Documentaion](https://sdk.operatorframework.io/docs/installation/)
+must also be installed to build this project.
+
+```
+git clone -b v1.15.0 https://github.com/operator-framework/operator-sdk
+cd operator-sdk
+make tidy
+make install
+```
 
 You may need to add `$GOPATH/bin` to you path to run the `operator-sdk`
 command line tool:
 
-```shell
+```
 export PATH=${PATH}:${GOPATH}/bin
 ```
 
@@ -113,13 +120,13 @@ Other make targets include (more info below):
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name>
 ```
 
-If user wants to deploy operator for specific namespace then they has to pass `WATCH_NAMESPACE` parameter to `make deploy` command 
+If user wants to deploy operator for specific namespace then they have to pass `WATCH_NAMESPACE` parameter to `make deploy` command
  
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1"
 ```
 
-If user wants to operator to use specific version of splunk instance, then user should pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
+If user wants operator to use specific version of splunk instance, then they has to pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
  
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
