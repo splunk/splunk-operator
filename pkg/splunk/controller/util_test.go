@@ -19,10 +19,27 @@ import (
 	"reflect"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+func TestMergeStatefulSetSpecUpdates(t *testing.T) {
+	var current, revised appsv1.StatefulSetSpec
+	name := "test-sts"
+
+	// should be no updates to merge if they are empty
+	if MergeStatefulSetUpdates(&current, &revised, name) {
+		t.Errorf("MergeStatefulSetUpdates() returned %t; want %t", true, false)
+	}
+
+	current.UpdateStrategy.Type = appsv1.RollingUpdateStatefulSetStrategyType
+	// should be updates to merge for different strategy
+	if !MergeStatefulSetUpdates(&current, &revised, name) {
+		t.Errorf("MergeStatefulSetUpdates() returned %t; want %t", false, true)
+	}
+}
 func TestMergePodUpdates(t *testing.T) {
 	var current, revised corev1.PodTemplateSpec
 	name := "test-pod"

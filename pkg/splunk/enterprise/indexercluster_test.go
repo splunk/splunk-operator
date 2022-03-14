@@ -1116,6 +1116,18 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	}
 	test(splcommon.TestGetIndexerStatefulSettest5)
 
+	// Configure Ondelete statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategyType(appsv1.OnDeleteDaemonSetStrategyType)
+	test(splcommon.TestGetIndexerStatefulSettest5)
+
+	// Configure invalid statefulSet updateStrategy, should re-use Ondelete
+	cr.Spec.UpdateStrategy = "Fake"
+	test(splcommon.TestGetIndexerStatefulSettest5)
+
+	// Configure RollingUpdate statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+	test(splcommon.TestGetIndexerStatefulSettest6)
+
 	cr.Spec.ClusterMasterRef.Namespace = "other"
 	if err := validateIndexerClusterSpec(ctx, &cr); err == nil {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")

@@ -83,11 +83,15 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 	// found an existing StatefulSet
 
 	// check for changes in Pod template
-	hasUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+	hasPodSpecUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+
+	// check for changes in statefulSet spec
+	hasStatefulSetSpecUpdates := MergeStatefulSetUpdates(&current.Spec, &revised.Spec, current.GetObjectMeta().GetName())
+
 	*revised = current // caller expects that object passed represents latest state
 
 	// only update if there are material differences, as determined by comparison function
-	if hasUpdates {
+	if hasPodSpecUpdates || hasStatefulSetSpecUpdates {
 		// this updates the desired state template, but doesn't actually modify any pods
 		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods

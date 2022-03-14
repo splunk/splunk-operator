@@ -370,6 +370,8 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getSplunkStatefulSet").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -442,6 +444,17 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	err = addStorageVolumes(cr, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
+	}
+
+	// add updateStrategy if configured
+	if spec.UpdateStrategy != "" {
+		// Check if type is valid
+		if spec.UpdateStrategy != appsv1.OnDeleteStatefulSetStrategyType && spec.UpdateStrategy != appsv1.RollingUpdateStatefulSetStrategyType {
+			scopedLog.Error(err, "Invalid updateStrategy type")
+		} else {
+			scopedLog.Info("Configuring updateStrategy for the statefulset ", "updateStrategy", spec.UpdateStrategy)
+			statefulSet.Spec.UpdateStrategy.Type = spec.UpdateStrategy
+		}
 	}
 
 	// add serviceaccount if configured

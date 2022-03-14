@@ -634,6 +634,18 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 		},
 	}
 	test(splcommon.TestGetSearchHeadStatefulSetT4)
+
+	// Configure OnDelete statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+	test(splcommon.TestGetSearchHeadStatefulSetT4)
+
+	// Configure invalid statefulSet updateStrategy, should re-use Ondelete
+	cr.Spec.UpdateStrategy = "Fake"
+	test(splcommon.TestGetSearchHeadStatefulSetT4)
+
+	// Configure RollingUpdate statefulSet updateStrategy
+	cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+	test(splcommon.TestGetSearchHeadStatefulSetT5)
 }
 
 func TestGetDeployerStatefulSet(t *testing.T) {
