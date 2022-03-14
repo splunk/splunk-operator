@@ -16,6 +16,7 @@ By default operator will be installed in `splunk-operator` and will watch all th
 
 ```
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
+kubectl apply -f splunk-operator-cluster.yaml
 ```
 
 ## Install operator to watch single namespace
