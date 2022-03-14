@@ -21,7 +21,7 @@ wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/
 ## Installation operator to watch single namespace
 
 By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
-if user wants to watch only one then eit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `WATCH_NAMESPACE` field to the namespace operator need to watch
+if user wants to watch only one namespace then eeit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
 
 ```
 apiVersion: v1
