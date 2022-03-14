@@ -22,7 +22,7 @@ deploy and use the latest release, please see the
 ## Prerequisites
 
 You must have [Docker Engine](https://docs.docker.com/install/) installed to
-build the Splunk Operator.
+build the Splunk Operator. 
 
 This project uses [Go modules](https://blog.golang.org/using-go-modules),
 and requires [golang](https://golang.org/doc/install) 1.17.3 or later.
@@ -30,14 +30,7 @@ You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
 The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk)
-must also be installed to build this project.
-
-```shell
-git clone -b v1.15.0 https://github.com/operator-framework/operator-sdk
-cd operator-sdk
-make tidy
-make install
-```
+must also be installed to build this project. Follow the steps from [Operator-SDK Installation Documentaion](https://sdk.operatorframework.io/docs/installation/)
 
 You may need to add `$GOPATH/bin` to you path to run the `operator-sdk`
 command line tool:
@@ -113,12 +106,23 @@ Other make targets include (more info below):
 * `make catalog-build`: generates `splunk-operator-catalog` catalog container image example `make catalog-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
 * `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=1.1.0 IMG=docker.io/splunk/splunk-operator:1.1.0`
 
-## Running the Splunk Operator
-
-Ensure that you have the Custom Resource Definitions and RBAC policies installed in your cluster:
+## Deploying the Splunk Operator
+`make deploy` command will deploy all the necessery RBAC policies, services ,config maps, deployment necessary to run splunk operator. opeartor will be installed in `splunk-operator` namespace. if `splunk-operator` namespace do not exist , it will create the namespace.  By default `make deploy` will install operator clusterwide. operator will watch all the namespaces for any splunk entrprise custom resources.
 
 ```shell
-make install
+make deploy IMG=docker.io/splunk/splunk-operator:1.1.0
+```
+
+If user wants to deploy operator for specific namespace then they has to pass `WATCH_NAMESPACE` parameter to `make deploy` command 
+ 
+```
+make deploy IMG=docker.io/splunk/splunk-operator:1.1.0 WATCH_NAMESPACE="namespace1"
+```
+
+If user wants to operator to use specific version of splunk instance, then they has to pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
+ 
+```
+make deploy IMG=docker.io/splunk/splunk-operator:1.1.0 WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
 ```
 
 Use this to run the operator as a local foreground process on your machine:
