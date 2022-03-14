@@ -1457,4 +1457,271 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(deployment, testenvInstance, testenvInstance.GetName(), splunkPodAge, nil)
 		})
 	})
+
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
+		It("integration, m4, appframeworkm4, appframework: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
+			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Create app sources for Cluster Manager and Deployer
+			   * Prepare and deploy M4 CRD with app framework
+			   * Verify app installation is in progress on Cluster Manager and Deployer
+			   * Upload more apps from S3 during bigger app install
+			   * Wait for polling interval to pass
+			   * Verify all apps are installed on Cluster Manager and Deployer
+			*/
+
+			//################## SETUP ####################
+			// Upload V1 apps to S3 for Monitoring Console
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Prepare Monitoring Console spec with its own app source
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpecMC,
+			}
+
+			// Deploy Monitoring Console
+			testenvInstance.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Download all test apps from S3
+			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList = testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download apps")
+
+			// Upload big-size app to S3 for Cluster Manager
+			appList = testenv.BigSingleApp
+			appFileList = testenv.GetAppFileList(appList)
+			testenvInstance.Log.Info("Upload big-size app to S3 for Cluster Manager")
+			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload big-size app to S3 for Search Head Cluster
+			testenvInstance.Log.Info("Upload big-size app to S3 for Search Head Cluster")
+			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec for M4
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+
+			// Deploy M4 CRD
+			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
+			siteCount := 3
+			indexersPerSite := 1
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+
+			// Verify App installation is in progress on Cluster Manager
+			testenv.VerifyAppInstallInProgress(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Upload more apps to S3 for Cluster Manager
+			appList = testenv.ExtraApps
+			appFileList = testenv.GetAppFileList(appList)
+			testenvInstance.Log.Info("Upload more apps to S3 for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for  Cluster Manager")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload more apps to S3 for Deployer
+			testenvInstance.Log.Info("Upload more apps to S3 for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Ensure Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
+
+			// Wait for polling interval to pass
+			testenv.WaitForAppInstall(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Verify all apps are installed on Cluster Manager
+			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList = testenv.GetAppFileList(appList)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			testenvInstance.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Cluster Manager", appList))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), cmPod, appList, true, "enabled", false, false)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Wait for polling interval to pass
+			testenv.WaitForAppInstall(deployment, testenvInstance, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+
+			// Verify all apps are installed on Deployer
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			testenvInstance.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Deployer", appList))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), deployerPod, appList, true, "enabled", false, false)
+		})
+	})
+
+	Context("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
+		It("smoke, m4, appframeworkm4, appframework: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
+			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Create app sources for Cluster Manager and Deployer
+			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
+			   ############## VERIFICATIONS ################
+			   * Verify App installation is in progress on Cluster Manager and Deployer
+			   * Upload more apps from S3 during bigger app install
+			   * Wait for polling interval to pass
+			   * Verify all apps are installed on Cluster Manager and Deployer
+			*/
+
+			//################## SETUP ####################
+			// Upload V1 apps to S3 for Monitoring Console
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Prepare Monitoring Console spec with its own app source
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpecMC,
+			}
+
+			// Deploy Monitoring Console
+			testenvInstance.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(testenvInstance.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+
+			// Download all test apps from S3
+			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList = testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download apps")
+
+			// Upload big-size app to S3 for Cluster Manager
+			appList = testenv.BigSingleApp
+			appFileList = testenv.GetAppFileList(appList)
+			testenvInstance.Log.Info("Upload big-size app to S3 for Cluster Manager")
+			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload big-size app to S3 for Search Head Cluster
+			testenvInstance.Log.Info("Upload big-size app to S3 for Search Head Cluster")
+			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec for M4
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+
+			// Deploy M4 CRD
+			testenvInstance.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
+			siteCount := 3
+			shReplicas := 3
+			indexersPerSite := 1
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+
+			// Verify App installation is in progress
+			testenv.VerifyAppInstallInProgress(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Upload more apps to S3 for Cluster Manager
+			appList = testenv.ExtraApps
+			appFileList = testenv.GetAppFileList(appList)
+			testenvInstance.Log.Info("Upload more apps to S3 for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Cluster Manager")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload more apps to S3 for Deployer
+			testenvInstance.Log.Info("Upload more apps to S3 for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Ensure Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(deployment, testenvInstance)
+
+			// Wait for polling interval to pass
+			testenv.WaitForAppInstall(deployment, testenvInstance, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Ensure the Indexers of all sites go to Ready phase
+			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+
+			// Verify all apps are installed on indexers
+			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList = testenv.GetAppFileList(appList)
+			idxcPodNames := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), indexersPerSite, true, siteCount)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify all apps %v are installed on indexers", appList))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), idxcPodNames, appList, true, "enabled", false, true)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+
+			// Wait for polling interval to pass
+			testenv.WaitForAppInstall(deployment, testenvInstance, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+
+			// Verify all apps are installed on Search Heads
+			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Search Heads", appList))
+			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), shcPodNames, appList, true, "enabled", false, true)
+		})
+	})
 })
