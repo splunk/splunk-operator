@@ -5,7 +5,6 @@ on:
       - develop
       - master
       - feature-appframework
-      - CSPL-1595
 jobs:
   int-tests:
     strategy:
