@@ -46,7 +46,7 @@ func MergeStatefulSetUpdates(current *appsv1.StatefulSetSpec, revised *appsv1.St
 
 	// Compare updateStrategy's
 	if !reflect.DeepEqual(current.UpdateStrategy, revised.UpdateStrategy) {
-		scopedLog.Info("StatefulSet updateStrategy's difer", "current", current.UpdateStrategy, "revised", revised.UpdateStrategy)
+		scopedLog.Info("StatefulSet updateStrategy's differ", "current", current.UpdateStrategy, "revised", revised.UpdateStrategy)
 		current.UpdateStrategy = revised.UpdateStrategy
 		result = true
 	}
