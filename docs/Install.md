@@ -7,84 +7,76 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
+wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
 ```
-
-
-## Installation using a non-admin user
-
-Kubernetes only allows administrators to install new `CustomResourceDefinition` objects. All other objects included in the `splunk-operator.yaml` file can be installed by regular users within their own namespaces. 
-
-If you are not an administrator, you can have an administrator create the required objects for you by running:
-
-```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-crds.yaml
-```
-
-Afterwards, you can download and use the yaml file to install the operator within your own namespace:
-
-```
-wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-noadmin.yaml
-kubectl config set-context --current --namespace=<NAMESPACE>
-kubectl apply -f splunk-operator.yaml
-```
-
 
 ## Admin Installation for All Namespaces
 
-If you want to configure a single instance of the operator to watch all the namespaces of your cluster while managing deployments only in the namespace `splunk-operator`, use the alternative cluster scope installation yaml file:
+By default operator will be installed in `splunk-operator` and will watch all the namespaces of your cluster for splunk enterprise custom resources:
 
 ```
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-cluster.yaml
 ```
 
-**Note**: The operator has the ability to watch, list secret objects in all namespaces.
+## Installation operator to watch single namespace
 
-When running at cluster scope, you will need to bind the `splunk:operator:namespace-manager` ClusterRole to the `splunk-operator` ServiceAccount in all namespaces you want it to manage. 
+By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
+if user wants to watch only one then eit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `WATCH_NAMESPACE` field to the namespace operator need to watch
 
-For example, to create a new namespace called `splunk` that is managed by Splunk Operator:
-
-```yaml
-cat <<EOF | kubectl apply -f -
----
+```
 apiVersion: v1
-kind: Namespace
+data:
+  OPERATOR_NAME: '"splunk-operator"'
+  RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:latest
+  WATCH_NAMESPACE: "namespace1"
+kind: ConfigMap
 metadata:
-  name: splunk
----
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: splunk:operator:namespace-manager
-  namespace: splunk
-subjects:
-- kind: ServiceAccount
-  name: splunk-operator
+  labels:
+    name: splunk-operator
+  name: splunk-operator-config
   namespace: splunk-operator
-roleRef:
-  kind: ClusterRole
-  name: splunk:operator:namespace-manager
-  apiGroup: rbac.authorization.k8s.io
-EOF
 ```
 
+if user want to manager multiple namespaces, then they can set `WATCH_NAMESPACE` field to all those namespaces , names should be comma (,) sepearated. example
+
+```
+apiVersion: v1
+data:
+  OPERATOR_NAME: '"splunk-operator"'
+  RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:latest
+  WATCH_NAMESPACE: "namespace1,namespace2"
+kind: ConfigMap
+metadata:
+  labels:
+    name: splunk-operator
+  name: splunk-operator-config
+  namespace: splunk-operator
+```
 
 ## Private Registries
 
-If you plan to retag the container images as part of pushing it to a private registry, edit the image parameter in the  `splunk-operator` deployment to reference the appropriate image name.
+If you plan to retag the container images as part of pushing it to a private registry, edit the `manager` container image parameter in the  `splunk-operator-controller-manager` deployment to reference the appropriate image name.
 
 ```yaml
 # Replace this with the built image name
 image: splunk/splunk-operator
 ```
 
-If you are using a private registry for the Docker images, edit the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variables in `splunk-operator.yaml`.
+If you are using a private registry for the Docker images, edit `config-map` `splunk-operator-config` in `splunk-operaor` namespace, set `RELATED_IMAGE_SPLUNK_ENTERPRISE` field splunk docker image path
 
-```yaml
-- name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-  value: "splunk/splunk:8.1.0" (or later)
 ```
-
+apiVersion: v1
+data:
+  OPERATOR_NAME: '"splunk-operator"'
+  RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:latest
+  WATCH_NAMESPACE: ""
+kind: ConfigMap
+metadata:
+  labels:
+    name: splunk-operator
+  name: splunk-operator-config
+  namespace: splunk-operator
+```
 
 ## Cluster Domain
 
