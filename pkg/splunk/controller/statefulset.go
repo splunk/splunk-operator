@@ -303,13 +303,13 @@ func DeleteReferencesToAutomatedMCIfExists(client splcommon.ControllerClient, cr
 		if err != nil {
 			return err
 		}
+		//delete corresponding mc configmap
+		configmap, err := GetConfigMap(client, namespacedName)
+		if err != nil {
+			return err
+		}
+		err = splutil.DeleteResource(client, configmap)
 	}
-	//delete corresponding mc configmap
-	configmap, err := GetConfigMap(client, namespacedName)
-	if err != nil {
-		return err
-	}
-	err = splutil.DeleteResource(client, configmap)
 	return err
 }
 
