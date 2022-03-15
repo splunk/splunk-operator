@@ -15,11 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Please note upgrading Splunk operator to Version 1.1.0 is a new installation rather 
-# than upgrade from current operator. Due to this older Splunk operator need to be 
-# cleaned up before installing the latest version. The script will help customer in 
-# doing these steps. This script expect current namespace where operator is installed,
-# and path to 1.1.0 manifest file. script will 
+# Upgrading the Splunk operator to Version 1.1.0 is a new installation rather than an 
+# upgrade from the current operator. The older Splunk operator must be cleaned up before 
+# installing the new version. This script helps you to do the cleanup. The script expects 
+# the current namespace where the operator is installed and the path to the 1.1.0 
+# manifest file. The script performs the following steps
 # * Backup of all the operator resources within the namespace like
 #   - service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
 # * Deletes all the old Splunk operator resources and deployment
@@ -175,7 +175,7 @@ backup() {
         echo "---" >> ${backup_file_name}
     fi
     echo "--------------------------------------------------------------"
-    echo "backup of all the previsou splunk opeartor installation is complete, backup file is found in current diretory ${backup_file_name}"
+    echo "backup of all the previsou splunk operator installation is complete, backup file is found in current diretory ${backup_file_name}"
 }
 
 delete_operator() {

@@ -1,6 +1,6 @@
 # Splunk Operator Upgrade
 
-Please note upgrading Splunk operator to Version `1.1.0` is a new installation rather than upgrade from current operator. Due to this  older Splunk operator need to be cleaned up before installing the latest version.  The script will help customer in doing these steps. This script expect current namespace where operator is installed , and path to `1.1.0` manifest file. script will follow the below mentioned steps
+Upgrading the Splunk operator to Version 1.1.0 is a new installation rather than an upgrade from the current operator. The older Splunk operator must be cleaned up before installing the new version. This script helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the 1.1.0 manifest file. The script performs the following steps
 
 * Backup of all the operator resources within the namespace like
 ** service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
@@ -11,8 +11,8 @@ By default Splunk operator 1.1.0 will be installed to watch cluster-wide
 
 ## Steps for upgrade from 1.0.5 to 1.1.0
 
-run upgrade-to-1.1.0.sh script with below mentioned mandatory arguments
-`current_namespace` current namespace where operator is installed, if its not found, it will exit with error message
+run upgrade-to-1.1.0.sh script with the following mandatory arguments
+`current_namespace` current namespace where operator is installed, if the operator is not found, the script exits with an error message
 `manifest_file`: path where 1.1.0 Splunk operator manifest file exist
 
 ### Example
