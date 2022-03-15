@@ -1056,7 +1056,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Verify App installation is in progress on Standalone
-			testenv.VerifyAppInstallInProgress(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			testenv.VerifyAppState(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
 			// Upload more apps to S3 for Standalone
 			appList = testenv.ExtraApps
@@ -1077,6 +1077,144 @@ var _ = Describe("s1appfw test", func() {
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenvInstance.Log.Info(fmt.Sprintf("Verify all apps %v are installed on Standalone", appList))
 			testenv.VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), []string{standalonePodName}, appList, true, "enabled", false, false)
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
+
+			/* Test Steps
+				################## SETUP ####################
+				* Upload big-size app to S3 for Standalone
+				* Create app source for Standalone
+				* Prepare and deploy Standalone
+				* While app install is in progress, restart the operator
+				############## VERIFICATIONS ################
+				* Verify App installation is in progress on Standalone
+				* Upload more apps from S3 during bigger app install
+				* Wait for polling interval to pass
+			    * Verify all apps are installed on Standalone
+			*/
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Download all test apps from S3
+			appVersion := "V1"
+			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download apps")
+
+			// Upload big-size app to S3 for Standalone
+			testenvInstance.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Verify App installation is in progress on Standalone
+			testenv.VerifyAppState(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+
+			// Delete Operator pod while Install in progress
+			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
+			testenv.DeletePod(testenvInstance.GetName(), opPod)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+
+			// ############ VERIFICATION ###########
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
+
+			/* Test Steps
+				################## SETUP ####################
+				* Upload big-size app to S3 for Standalone
+				* Create app source for Standalone
+				* Prepare and deploy Standalone
+				* While app download is in progress, restart the operator
+				############## VERIFICATIONS ################
+				* Verify App installation is in progress on Standalone
+				* Upload more apps from S3 during bigger app install
+				* Wait for polling interval to pass
+			    * Verify all apps are installed on Standalone
+			*/
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Download all test apps from S3
+			appVersion := "V1"
+			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download apps")
+
+			// Upload big-size app to S3 for Standalone
+			testenvInstance.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testenvInstance.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Verify App download is in progress on Standalone
+			testenv.VerifyAppState(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
+
+			// Delete Operator pod while Install in progress
+			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
+			testenv.DeletePod(testenvInstance.GetName(), opPod)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+
+			// ############ VERIFICATION ###########
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 })
