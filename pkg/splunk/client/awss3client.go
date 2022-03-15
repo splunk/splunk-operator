@@ -52,12 +52,10 @@ type AWSS3Client struct {
 	AWSSecretAccessKey string
 	Prefix             string
 	StartAfter         string
-	Endpoint           string
 	Client             SplunkAWSS3Client
 	Downloader         SplunkAWSDownloadClient
 }
 
-// regex to extract the region from the s3 endpoint
 var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
 
 // GetRegion extracts the region from the endpoint field
@@ -125,10 +123,15 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
-	region := GetRegion(endpoint)
+
+	// for backward compatibility, if `region` is not specified in the CR,
+	// then derive the region from the endpoint.
+	if region == "" {
+		region = GetRegion(endpoint)
+	}
 	cl := fn(region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
@@ -145,7 +148,6 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 		AWSSecretAccessKey: secretAccessKey,
 		Prefix:             prefix,
 		StartAfter:         startAfter,
-		Endpoint:           endpoint,
 		Client:             s3SplunkClient,
 		Downloader:         downloader,
 	}, nil

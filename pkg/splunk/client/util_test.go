@@ -68,7 +68,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
-	_, err := NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
 	}
@@ -77,7 +77,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 	initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
 	}
