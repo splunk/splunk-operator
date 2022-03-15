@@ -12,7 +12,7 @@ wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/
 
 ## Default Installation
 
-By default operator will be installed in `splunk-operator` and will watch all the namespaces of your cluster for splunk enterprise custom resources:
+By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
 
 ```
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
@@ -21,8 +21,7 @@ kubectl apply -f splunk-operator-cluster.yaml
 
 ## Install operator to watch single namespace
 
-By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
-if user wants to watch only one namespace then edit `config-map` `splunk-operator-config` in `splunk-operator` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
+By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources. If user wants to watch only one namespace then edit `config-map` `splunk-operator-config` in `splunk-operator` namespace, set `WATCH_NAMESPACE` field to the namespace operator should watch
 
 ```
 apiVersion: v1
@@ -38,7 +37,7 @@ metadata:
   namespace: splunk-operator
 ```
 
-## Install operator to watch multiple namespace
+## Install operator to watch multiple namespaces
 
 If user wants to manage multiple namespaces, they must add the namespaces to the WATCH_NAMESPACE field, with each namespace separated by a comma (,). example
 

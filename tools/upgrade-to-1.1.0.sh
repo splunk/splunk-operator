@@ -181,12 +181,13 @@ backup() {
 delete_operator() {
     echo "--------------------------------------------------------------"
     echo "deleting all the previsous splunk operator resources....."
+    echo "deletign deployment"
+    kubectl delete deployment splunk-operator -n ${current_namespace}
     echo "deleting clusterrole"
     kubectl delete clusterrole splunk:operator:resource-manager 
     echo "deleting cluster rolebinding"
     kubectl delete clusterrolebinding splunk:operator:resource-manager 
-    echo "deletign deployment"
-    kubectl delete deployment splunk-operator -n ${current_namespace}
+    
     echo "deleting serviceaccount"
     kubectl delete serviceaccount splunk-operator -n ${current_namespace}
     echo "deleting role"
@@ -202,7 +203,16 @@ deploy_operator() {
     echo "installing splunk operator 1.1.0....." 
     kubectl apply -f ${manifest_file}
     echo "--------------------------------------------------------------"
-    echo "deployment new splunk opearator 1.1.0 complete"
+  echo "wait for operator pod to be ready..."
+  # sleep before checking for deployment, in slow clusters deployment call may not even started
+  # in those cases, kubectl will fail with error:  no matching resources found
+  sleep 2
+  kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
+  if [ $? -ne 0 ]; then
+    echo "Operator installation not ready..."
+    exit 1
+  fi
+  echo "deployment of new splunk opearator 1.1.0 complete"
 }
 
 parse_options "$@"
@@ -210,3 +220,6 @@ namespace_exist
 backup
 delete_operator
 deploy_operator
+
+
+
