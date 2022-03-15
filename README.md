@@ -114,7 +114,7 @@ Other make targets include (more info below):
 * `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name> IMG=docker.io/splunk/splunk-operator:<tag name>`
 
 ## Deploying the Splunk Operator
-`make deploy` command will deploy all the necessery RBAC policies, services ,config maps, deployment necessary to run splunk operator. operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist , it will create the namespace.  By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
+`make deploy` command will deploy all the necessery resources to run splunk operator like RBAC policies, services ,config maps, deployment. operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist , it will create the namespace.  By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
 
 ```shell
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name>

@@ -27,13 +27,12 @@
 # 
 # By default Splunk operator 1.1.0 will be installed to watch cluster-wide
 # Steps for upgrade from 1.0.5 to 1.1.0
-# run upgrade-to-1.1.0.sh script with below mentioned mandatory arguments 
-# current_namespace current namespace where operator is installed, if its not found, it 
-# will exit with error message
+# run upgrade-to-1.1.0.sh script with the following mandatory arguments
+# current_namespace: current namespace where operator is installed
 # manifest_file: path where 1.1.0 Splunk operator manifest file exist
 #
 # example 
-# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=release-v1.1.0/splunk-operator-cluster.yaml
+# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=release-v1.1.0/splunk-operator-install.yaml
 #
 #
 # Configuring Operator to watch specific namespace:

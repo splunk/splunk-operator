@@ -12,11 +12,11 @@ wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/
 
 ## Default Installation
 
-By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources:
+By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
 wget -O splunk-operator.yaml https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
-kubectl apply -f splunk-operator-cluster.yaml
+kubectl apply -f splunk-operator-install.yaml
 ```
 
 ## Install operator to watch single namespace
