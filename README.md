@@ -39,7 +39,7 @@ make tidy
 make install
 ```
 
-You may need to add `$GOPATH/bin` to you path to run the `operator-sdk`
+You may need to add `$GOPATH/bin` to your path to run the `operator-sdk`
 command line tool:
 
 ```
@@ -114,19 +114,19 @@ Other make targets include (more info below):
 * `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name> IMG=docker.io/splunk/splunk-operator:<tag name>`
 
 ## Deploying the Splunk Operator
-`make deploy` command will deploy all the necessery resources to run splunk operator like RBAC policies, services ,config maps, deployment. operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist , it will create the namespace.  By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
+`make deploy` command will deploy all the necessery resources to run splunk operator like RBAC policies, services, config maps, deployment. Operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist, it will create the namespace. By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
 
 ```shell
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name>
 ```
 
-If user wants operator for specific namespace then they must pass `WATCH_NAMESPACE` parameter to `make deploy` command
+If you want operator for specific namespace then you must pass `WATCH_NAMESPACE` parameter to `make deploy` command
  
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1"
 ```
 
-If user wants operator to use specific version of splunk instance, then they must pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
+If you want operator to use specific version of splunk instance, then you must pass `RELATED_IMAGE_SPLUNK_ENTERPRISE` parameter to `make deploy` command 
  
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
