@@ -29,15 +29,9 @@ If any of the above is not desired, please resort to collecting data manually.
             Eg. sh k8s-splunk-collector.sh -d true -t /Users/randomuser/collect/
             ```
        Please make sure you have enough space in the target folders in either case(for reference look at performance requirements section).
-    - The `-l` option is used to specify whether you want to limit the collection of data by avoiding `kubectl describe` commands. The kubectl describe command outputs `are` collected by default. There is an issue in K8S with creating too many clients for describe commands(https://github.com/kubernetes/kubernetes/issues/91913). In internal testing these messages have not caused any issues. However, to avoid the warning messages as well to protect your network bandwidth if limited, you can set the `-l` option to `true`.
-            ```    
-            Eg. sh collect_data.sh -dst /Users/akondur/collect/ -l true
-            ```
-            Example of a warning message from the K8S cluster:
+    - The `-l` option is used to specify whether you want to limit the collection of data by avoiding `kubectl describe` commands. The kubectl describe command outputs `are` collected by default. There is an issue in K8S with creating too many clients for describe commands(https://github.com/kubernetes/kubernetes/issues/91913). In internal testing these messages have not caused any issues. However, to avoid the warning messages as well to protect your network bandwidth if limited, you can set the `-l` option to `true`. Example of a warning message from the K8S cluster:
 
-            ```
             W0419 14:46:10.239590   21927 exec.go:203] constructing many client instances from the same exec auth config can cause performance problems during cert rotation and can exhaust available network connections; 1478 clients constructed calling "aws-iam-authenticator"
-            ```
     - The `-s` option is used to specify whether K8S secret data needs to be collected. Secret data is not collected by default. Set to `true` if you want the script to collect secret data.
 
 - Wait till you see the message `All data requried collected under folder <target_folder>`
