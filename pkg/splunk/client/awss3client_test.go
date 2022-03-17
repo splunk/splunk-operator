@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,60 +16,64 @@
 package client
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
 func TestInitAWSClientWrapper(t *testing.T) {
-
-	awsS3ClientSession := InitAWSClientWrapper("us-west-2", "abcd", "1234")
+	ctx := context.TODO()
+	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2", "abcd", "1234")
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
 }
 
 func TestNewAWSS3Client(t *testing.T) {
-
+	ctx := context.TODO()
 	fn := InitAWSClientWrapper
-	awsS3Client, err := NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	awsS3Client, err := NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
 	if awsS3Client == nil || err != nil {
 		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
 	}
 
 	// Test for invalid scenario, where we return nil client
-	fn = func(string, string, string) interface{} {
+	fn = func(context.Context, string, string, string) interface{} {
 		return nil
 	}
-	_, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
 		t.Errorf("NewAWSS3Client should have returned error.")
 	}
 }
 
 func TestGetInitContainerImage(t *testing.T) {
+	ctx := context.TODO()
 	awsClient := &AWSS3Client{}
 
-	if awsClient.GetInitContainerImage() != "amazon/aws-cli" {
+	if awsClient.GetInitContainerImage(ctx) != "amazon/aws-cli" {
 		t.Errorf("Got invalid init container image for AWS client.")
 	}
 }
 
 func TestGetAWSInitContainerCmd(t *testing.T) {
+	ctx := context.TODO()
 	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
 
 	awsClient := &AWSS3Client{}
-	gotCmd := awsClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin/", "admin", "/mnt/apps-local/")
+	gotCmd := awsClient.GetInitContainerCmd(ctx, "https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin/", "admin", "/mnt/apps-local/")
 	if !reflect.DeepEqual(wantCmd, gotCmd) {
 		t.Errorf("Got incorrect Init container cmd")
 	}
 }
 
 func TestAWSGetAppsListShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
@@ -165,7 +170,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -173,27 +178,27 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-		initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			cl.Objects = mockAwsObjects[index].Objects
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
-		awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		s3Response, err := awsClient.GetAppsList()
+		s3Response, err := awsClient.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		var mockResponse spltest.MockS3Client
-		mockResponse, err = ConvertS3Response(s3Response)
+		mockResponse, err = ConvertS3Response(ctx, s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -214,6 +219,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 }
 
 func TestAWSGetAppsListShouldFail(t *testing.T) {
+	ctx := context.TODO()
 
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -265,27 +271,27 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		// return empty objects list here to test the negative scenario
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
-	awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	s3Resp, err := awsClient.GetAppsList()
+	s3Resp, err := awsClient.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
 	}
@@ -296,7 +302,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 }
 
 func TestAWSDownloadAppShouldNotFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
@@ -373,27 +379,27 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-		initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-		awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		downloadSuccess, err := awsClient.DownloadApp(RemoteFiles[index], LocalFiles[index], Etags[index])
+		downloadSuccess, err := awsClient.DownloadApp(ctx, RemoteFiles[index], LocalFiles[index], Etags[index])
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
@@ -415,7 +421,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 }
 
 func TestAWSDownloadAppShouldFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
@@ -462,27 +468,27 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-	awsClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
@@ -490,7 +496,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
 
-	_, err = awsClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")

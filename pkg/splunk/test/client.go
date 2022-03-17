@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,13 +43,18 @@ type MockHTTPClient struct {
 
 // getHandlerKey method for MockHTTPClient returns map key for a HTTP request
 func (c *MockHTTPClient) getHandlerKey(req *http.Request) string {
-	return fmt.Sprintf("%s %s", req.Method, req.URL.String())
+	if req == nil {
+		return ""
+	}
+	handler := fmt.Sprintf("%s %s", req.Method, req.URL.String())
+	return handler
 }
 
 // Do method for MockHTTPClient just tracks the requests that it receives
 func (c *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	c.GotRequests = append(c.GotRequests, req)
-	rsp, ok := c.Handlers[c.getHandlerKey(req)]
+	handlerKey := c.getHandlerKey(req)
+	rsp, ok := c.Handlers[handlerKey]
 	if !ok {
 		return nil, errors.New("NotFound")
 	}

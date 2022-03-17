@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +21,7 @@ and the splunk.common package.
 package test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -67,7 +69,7 @@ type MockPodExecClient struct {
 }
 
 // AddMockPodExecReturnContext adds the MockPodExecReturnContext object for a command
-func (client *MockPodExecClient) AddMockPodExecReturnContext(cmd string, mockPodExecReturnContext *MockPodExecReturnContext) {
+func (client *MockPodExecClient) AddMockPodExecReturnContext(ctx context.Context, cmd string, mockPodExecReturnContext *MockPodExecReturnContext) {
 	client.WantCmdList = append(client.WantCmdList, cmd)
 	if client.MockReturnContexts == nil {
 		client.MockReturnContexts = make(map[string]*MockPodExecReturnContext)
@@ -76,14 +78,14 @@ func (client *MockPodExecClient) AddMockPodExecReturnContext(cmd string, mockPod
 }
 
 // AddMockPodExecReturnContexts adds mockPodExecReturnContexts for the corresponding commands
-func (client *MockPodExecClient) AddMockPodExecReturnContexts(podExecCmds []string, mockPodExecReturnContexts ...*MockPodExecReturnContext) {
+func (client *MockPodExecClient) AddMockPodExecReturnContexts(ctx context.Context, podExecCmds []string, mockPodExecReturnContexts ...*MockPodExecReturnContext) {
 	for n := range mockPodExecReturnContexts {
-		client.AddMockPodExecReturnContext(podExecCmds[n], mockPodExecReturnContexts[n])
+		client.AddMockPodExecReturnContext(ctx, podExecCmds[n], mockPodExecReturnContexts[n])
 	}
 }
 
 // GetMockPodExecReturnContextAndKey returns the mockPodExecReturnContext object and the corresponding command
-func (client *MockPodExecClient) GetMockPodExecReturnContextAndKey(cmd string) (*MockPodExecReturnContext, string) {
+func (client *MockPodExecClient) GetMockPodExecReturnContextAndKey(ctx context.Context, cmd string) (*MockPodExecReturnContext, string) {
 	for key := range client.MockReturnContexts {
 		if strings.Contains(cmd, key) {
 			return client.MockReturnContexts[key], key
@@ -110,7 +112,7 @@ func (client *MockPodExecClient) GetCR() splcommon.MetaObject {
 }
 
 // RunPodExecCommand returns the dummy values for mockPodExecClient
-func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
+func (client *MockPodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
 
 	var mockPodExecReturnContext *MockPodExecReturnContext = &MockPodExecReturnContext{}
 	var command string
@@ -126,7 +128,7 @@ func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.
 			cmdStr = cmdStr + string(cmd)
 		}
 
-		mockPodExecReturnContext, command = client.GetMockPodExecReturnContextAndKey(cmdStr)
+		mockPodExecReturnContext, command = client.GetMockPodExecReturnContextAndKey(ctx, cmdStr)
 		if mockPodExecReturnContext == nil {
 			err := fmt.Errorf("mockPodExecReturnContext is nil")
 			return "", "", err
@@ -149,7 +151,7 @@ func (client *MockPodExecClient) RunPodExecCommand(streamOptions *remotecommand.
 }
 
 // SetTargetPodName sets the targetPodName for MockPodExecClient
-func (client *MockPodExecClient) SetTargetPodName(targetPodName string) {
+func (client *MockPodExecClient) SetTargetPodName(ctx context.Context, targetPodName string) {
 	client.TargetPodName = targetPodName
 }
 

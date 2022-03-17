@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -27,14 +29,14 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -44,9 +46,8 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	l := zap.LoggerTo(ginkgo.GinkgoWriter)
-	l.WithName("util")
-	logf.SetLogger(l)
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
+
 }
 
 // RandomDNSName returns a random string that is a valid DNS name
@@ -279,7 +280,7 @@ func newRole(name, ns string) *rbacv1.Role {
 			{
 				APIGroups: []string{""},
 				Resources: []string{"events"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"apps"},
@@ -544,14 +545,54 @@ func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		logf.Log.Info(line)
 		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
 			splunkPods = append(splunkPods, strings.Fields(line)[0])
+		}
+	}
+	return splunkPods
+}
+
+// DumpGetTopNodes prints and returns Node load information
+func DumpGetTopNodes() []string {
+	output, err := exec.Command("kubectl", "top", "nodes").Output()
+	var splunkNodes []string
+	if err != nil {
+		//cmd := "kubectl top nodes"
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+			}
+		}
+	}
+	return splunkNodes
+}
+
+// DumpGetTopPods prints and returns Node load information
+func DumpGetTopPods(ns string) []string {
+	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
+	var splunkPods []string
+	if err != nil {
+		//cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkPods = append(splunkPods, strings.Fields(line)[0])
+			}
 		}
 	}
 	return splunkPods
@@ -568,7 +609,10 @@ func GetOperatorPodName(ns string) string {
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		logf.Log.Info(line)
-		if strings.HasPrefix(line, "splunk-op") {
+		if strings.HasPrefix(line, "splunk-operator-controller-manager") {
+			splunkPods = strings.Fields(line)[0]
+			return splunkPods
+		} else if strings.HasPrefix(line, "splunk-op") {
 			splunkPods = strings.Fields(line)[0]
 			return splunkPods
 		}
@@ -635,9 +679,9 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 }
 
 // ExecuteCommandOnPod execute command on given pod and return result
-func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (string, error) {
+func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
@@ -647,9 +691,9 @@ func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (
 }
 
 // GetConfigMap Gets the config map for a given k8 config map name
-func GetConfigMap(deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
-	err := deployment.GetInstance(configMapName, configMap)
+	err := deployment.GetInstance(ctx, configMapName, configMap)
 	if err != nil {
 		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
 	}
@@ -707,14 +751,14 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 }
 
 // GetDirsOrFilesInPath returns subdirectory under given path on the given POD
-func GetDirsOrFilesInPath(deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
 	var cmd string
 	if dirOnly {
 		cmd = fmt.Sprintf("cd %s; ls -d */", path)
 	} else {
 		cmd = fmt.Sprintf("cd %s; ls ", path)
 	}
-	stdout, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	//logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func init() {
@@ -37,7 +38,7 @@ func init() {
 }
 
 // kubernetes logger used by splunk.reconcile package
-var log = logf.Log.WithName("splunk.reconcile")
+//var log = logf.Log.WithName("splunk.reconcile")
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
 func AsOwner(cr MetaObject, isController bool) metav1.OwnerReference {

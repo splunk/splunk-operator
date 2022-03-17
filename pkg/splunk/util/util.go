@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,12 +35,12 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	//logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // kubernetes logger used by splunk.reconcile package
-var log = logf.Log.WithName("splunk.reconcile")
+//var log = logf.Log.WithName("splunk.reconcile")
 
 // TestResource defines a simple custom resource, used to test the Spec
 type TestResource struct {
@@ -76,53 +77,55 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 }
 
 // CreateResource creates a new Kubernetes resource using the REST API.
-func CreateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("CreateResource").WithValues(
+func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
-	err := client.Create(context.TODO(), obj)
+	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to create resource")
+		scopedLog.Error(err, "Failed to create resource", "kind", obj.GetObjectKind())
 		return err
 	}
 
-	scopedLog.Info("Created resource")
+	scopedLog.Info("Created resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
-func UpdateResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("UpdateResource").WithValues(
+func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("UpdateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Update(context.TODO(), obj)
+	err := client.Update(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to update resource")
+		scopedLog.Error(err, "Failed to update resource", "kind", obj.GetObjectKind())
 		return err
 	}
-
-	scopedLog.Info("Updated resource")
+	scopedLog.Info("Updated resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
-func DeleteResource(client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("DeleteResource").WithValues(
+func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DeleteResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Delete(context.TODO(), obj)
+	err := client.Delete(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
-		scopedLog.Error(err, "Failed to delete resource")
+		scopedLog.Error(err, "Failed to delete resource", "kind", obj.GetObjectKind())
 		return err
 	}
 
-	scopedLog.Info("Deleted resource")
+	scopedLog.Info("Deleted resource", "kind", obj.GetObjectKind())
 
 	return nil
 }
@@ -139,12 +142,12 @@ func generateHECToken() []byte {
 }
 
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
 	namespacedName := types.NamespacedName{Namespace: namespace, Name: podName}
-	err := c.Get(context.TODO(), namespacedName, &pod)
+	err := c.Get(ctx, namespacedName, &pod)
 	if err != nil {
 		return "", "", err
 	}
@@ -163,7 +166,7 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 			return "", "", err
 		}
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}
@@ -205,8 +208,8 @@ func PodExecCommand(c splcommon.ControllerClient, podName string, namespace stri
 // NOTE: This client will be helpful in UTs since we can create
 // our own mock client and pass it to the tests to work correctly.
 type PodExecClientImpl interface {
-	RunPodExecCommand(*remotecommand.StreamOptions, []string) (string, string, error)
-	SetTargetPodName(string)
+	RunPodExecCommand(context.Context, *remotecommand.StreamOptions, []string) (string, string, error)
+	SetTargetPodName(context.Context, string)
 	GetTargetPodName() string
 	GetCR() splcommon.MetaObject
 }
@@ -231,12 +234,12 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 }
 
 // RunPodExecCommand runs the specific pod exec command
-func (podExecClient *PodExecClient) RunPodExecCommand(streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
-	return PodExecCommand(podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
+	return PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
 }
 
 // SetTargetPodName sets the targetPodName field for podExecClient
-func (podExecClient *PodExecClient) SetTargetPodName(targetPodName string) {
+func (podExecClient *PodExecClient) SetTargetPodName(ctx context.Context, targetPodName string) {
 	podExecClient.targetPodName = targetPodName
 }
 

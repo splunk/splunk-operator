@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,26 +15,37 @@
 package example
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
 var _ = XDescribe("Example1", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 
 	// This is invoke for each "It" spec below
 	BeforeEach(func() {
+		var err error
 		// Create a deployment for this test
-		deployment, _ = testenvInstance.NewDeployment(testenv.RandomDNSName(5))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
+		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		deployment.Teardown()
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+		}
 	})
 
 	// "It" spec
@@ -41,20 +53,20 @@ var _ = XDescribe("Example1", func() {
 		// Add your test spec!!
 		// eg deployment.DeployStandalone()
 		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testenvInstance.Log.Info("Running test spec", "name", deployment.GetName())
+		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
 	})
 
 	// "It" spec
 	It("can update volumes", func() {
 		// Add your test spec!!
 		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testenvInstance.Log.Info("Running test spec", "name", deployment.GetName())
+		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
 	})
 
 	// "It" spec
 	It("can update service ports", func() {
 		// Add your test spec!!
 		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testenvInstance.Log.Info("Running test spec", "name", deployment.GetName())
+		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
 	})
 })

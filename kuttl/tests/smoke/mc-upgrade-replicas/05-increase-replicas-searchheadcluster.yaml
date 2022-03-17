@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: example-shc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 4
+  clusterMasterRef:
+    name: clustermaster
+  monitoringConsoleRef:
+    name: example

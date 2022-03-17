@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package controller
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -26,10 +28,17 @@ import (
 )
 
 func TestApplySecret(t *testing.T) {
+	ctx := context.TODO()
 	// Re-concile tester
-	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.Secret-test-secrets"}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	funcCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-secrets"},
+		{MetaName: "*v1.Secret-test-secrets"},
+	}
+	updateFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.Secret-test-secrets"},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[0]}}
 	current := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secrets",
@@ -39,7 +48,7 @@ func TestApplySecret(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Data = map[string][]byte{"a": {'1', '2'}}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplySecret(c, cr.(*corev1.Secret))
+		_, err := ApplySecret(ctx, c, cr.(*corev1.Secret))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySecret", &current, revised, createCalls, updateCalls, reconcile, false)
@@ -48,8 +57,8 @@ func TestApplySecret(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	// Test create
-	current.Data = map[string][]byte{"a": {'1', '1'}}
-	retr, err := ApplySecret(c, &current)
+	current.Data = map[string][]byte{"a": {'2', '1'}}
+	retr, err := ApplySecret(ctx, c, &current)
 	if err != nil {
 		t.Errorf("ApplySecret failed %s", err.Error())
 	}
@@ -60,7 +69,7 @@ func TestApplySecret(t *testing.T) {
 
 	// Test Update
 	retr.Data = map[string][]byte{"a": {'1', '2'}}
-	retr2, err := ApplySecret(c, retr)
+	retr2, err := ApplySecret(ctx, c, retr)
 	if err != nil {
 		t.Errorf("ApplySecret failed %s", err.Error())
 	}
@@ -70,7 +79,7 @@ func TestApplySecret(t *testing.T) {
 	}
 
 	// Negative testing
-	_, err = ApplySecret(c, nil)
+	_, err = ApplySecret(ctx, c, nil)
 	if err.Error() != splcommon.InvalidSecretObjectError {
 		t.Errorf("Didn't catch invalid secret object")
 	}

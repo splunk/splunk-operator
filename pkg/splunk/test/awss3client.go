@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +24,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 // MockAWSS3Client is used to store all the objects for an app source

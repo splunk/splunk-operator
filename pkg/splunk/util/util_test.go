@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +29,7 @@ import (
 )
 
 func TestCreateResource(t *testing.T) {
+	ctx := context.TODO()
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secret",
@@ -37,7 +39,7 @@ func TestCreateResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := CreateResource(c, &secret)
+	err := CreateResource(ctx, c, &secret)
 	if err != nil {
 		t.Errorf("CreateResource() returned %v; want nil", err)
 	}
@@ -58,7 +60,7 @@ func TestUpdateResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := UpdateResource(c, &secret)
+	err := UpdateResource(context.TODO(), c, &secret)
 	if err != nil {
 		t.Errorf("UpdateResource() returned %v; want nil", err)
 	}
@@ -79,7 +81,7 @@ func TestDeleteResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := DeleteResource(c, &secret)
+	err := DeleteResource(context.TODO(), c, &secret)
 	if err != nil {
 		t.Errorf("DeleteResource() returned %v; want nil", err)
 	}
@@ -125,6 +127,7 @@ func TestDeepCopyObject(t *testing.T) {
 }
 
 func TestPodExecCommand(t *testing.T) {
+	ctx := context.TODO()
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,17 +167,18 @@ func TestPodExecCommand(t *testing.T) {
 		Stdin: strings.NewReader("ls -ltr"),
 	}
 
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Add object
 	c.AddObject(pod)
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Hit some error legs
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
 }
 
 func TestRunPodExecCommand(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -192,7 +196,7 @@ func TestRunPodExecCommand(t *testing.T) {
 	streamOptions := &remotecommand.StreamOptions{
 		Stdin: strings.NewReader(dummyCmd),
 	}
-	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
+	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if stdOut != "" && stdErr != "" {
 		t.Errorf("expected stdOut and stdErr to be empty since it is a dummy podExec call")
 	}
@@ -215,11 +219,12 @@ func TestNewStreamOptionsObject(t *testing.T) {
 }
 
 func TestGetSetTargetPodName(t *testing.T) {
+	ctx := context.TODO()
 	podName := "pod-0"
 
 	var podExecClient PodExecClient = PodExecClient{}
 
-	podExecClient.SetTargetPodName(podName)
+	podExecClient.SetTargetPodName(ctx, podName)
 
 	gotPodName := podExecClient.GetTargetPodName()
 	if gotPodName != podName {

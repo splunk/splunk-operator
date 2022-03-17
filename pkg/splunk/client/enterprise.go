@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,12 +27,11 @@ import (
 	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	//logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // kubernetes logger used by splunk.enterprise package
-var log = logf.Log.WithName("splunk.client")
+//var log = logf.Log.WithName("splunk.client")
 
 // SplunkHTTPClient defines the interface used by SplunkClient.
 // It is used to mock alternative implementations used for testing.

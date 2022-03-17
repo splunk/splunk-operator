@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,20 +16,22 @@
 package controller
 
 import (
+	"context"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	//logf "sigs.k8s.io/controller-runtime/pkg/log"
 	//stdlog "log"
 	//"github.com/go-logr/stdr"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // kubernetes logger used by splunk.reconcile package
-var log = logf.Log.WithName("splunk.reconcile")
+//var log = logf.Log.WithName("splunk.reconcile")
 
 // simple stdout logger, used for debugging
 //var log = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile)).WithName("splunk.reconcile")
@@ -37,9 +40,9 @@ var log = logf.Log.WithName("splunk.reconcile")
 // config and a revised config. It merges material changes from revised to
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
-func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec, name string) bool {
-	result := MergePodSpecUpdates(&current.Spec, &revised.Spec, name)
-	if MergePodMetaUpdates(&current.ObjectMeta, &revised.ObjectMeta, name) {
+func MergePodUpdates(ctx context.Context, current *corev1.PodTemplateSpec, revised *corev1.PodTemplateSpec, name string) bool {
+	result := MergePodSpecUpdates(ctx, &current.Spec, &revised.Spec, name)
+	if MergePodMetaUpdates(ctx, &current.ObjectMeta, &revised.ObjectMeta, name) {
 		result = true
 	}
 	return result
@@ -49,8 +52,9 @@ func MergePodUpdates(current *corev1.PodTemplateSpec, revised *corev1.PodTemplat
 // meta data and a revised meta data. It merges material changes from revised to
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
-func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta, name string) bool {
-	scopedLog := log.WithName("MergePodMetaUpdates").WithValues("name", name)
+func MergePodMetaUpdates(ctx context.Context, current *metav1.ObjectMeta, revised *metav1.ObjectMeta, name string) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("MergePodMetaUpdates").WithValues("name", name)
 	result := false
 
 	// check Annotations
@@ -74,9 +78,19 @@ func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta,
 // desired spec and a revised spec. It merges material changes from revised to
 // current. This enables us to minimize updates. It returns true if there
 // are material differences between them, or false otherwise.
-func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
-	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
+func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
+
+	// check for changes in ServiceAccount
+	if splcommon.CompareByMarshall(current.ServiceAccountName, revised.ServiceAccountName) {
+		scopedLog.Info("Pod service account differs",
+			"current", current.ServiceAccountName,
+			"revised", revised.ServiceAccountName)
+		current.ServiceAccountName = revised.ServiceAccountName
+		result = true
+	}
 
 	// check for changes in Affinity
 	if splcommon.CompareByMarshall(current.Affinity, revised.Affinity) {
@@ -194,8 +208,9 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 }
 
 // SortStatefulSetSlices sorts required slices in a statefulSet
-func SortStatefulSetSlices(current *corev1.PodSpec, name string) error {
-	scopedLog := log.WithName("SortStatefulSetSlices").WithValues("name", name)
+func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name string) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("SortStatefulSetSlices").WithValues("name", name)
 
 	// Sort tolerations
 	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
@@ -220,8 +235,9 @@ func SortStatefulSetSlices(current *corev1.PodSpec, name string) error {
 }
 
 // MergeServiceSpecUpdates merges the current and revised spec of the service object
-func MergeServiceSpecUpdates(current *corev1.ServiceSpec, revised *corev1.ServiceSpec, name string) bool {
-	scopedLog := log.WithName("MergeServiceSpecUpdates").WithValues("name", name)
+func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, revised *corev1.ServiceSpec, name string) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("MergeServiceSpecUpdates").WithValues("name", name)
 	result := false
 
 	// check service Type

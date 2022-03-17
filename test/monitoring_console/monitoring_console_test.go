@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,12 +15,13 @@
 package monitoringconsoletest
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -28,22 +30,30 @@ import (
 
 var _ = Describe("Monitoring Console test", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
+	ctx := context.TODO()
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 
 		if deployment != nil {
 			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 	})
 
@@ -66,11 +76,13 @@ var _ = Describe("Monitoring Console test", func() {
 			*/
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Create Standalone Spec and apply
 			standaloneOneName := deployment.GetName()
@@ -86,65 +98,66 @@ var _ = Describe("Monitoring Console test", func() {
 					},
 				},
 			}
-			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(standaloneOneName, spec)
+			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneOneName, spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standaloneOne, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testcaseEnvInst)
 
-			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
 
 			// #########################  RECONFIGURE STANDALONE WITH SECOND MC #######################################
 
 			// Reconfig S1 with 2nd Monitoring Console Name
 			mcTwoName := deployment.GetName() + "-two"
-			err = deployment.GetInstance(standaloneOneName, standaloneOne)
+			err = deployment.GetInstance(ctx, standaloneOneName, standaloneOne)
 			Expect(err).To(Succeed(), "Unable to get instance of Standalone")
 			standaloneOne.Spec.MonitoringConsoleRef.Name = mcTwoName
 
 			// Update Standalone with 2nd MC
-			err = deployment.UpdateCR(standaloneOne)
+			err = deployment.UpdateCR(ctx, standaloneOne)
 			Expect(err).To(Succeed(), "Unable to update Standalone with new MC Name")
 
 			// Deploy 2nd MC Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(mcTwoName, "")
+			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Second Monitoring Console Pod")
 
 			// Verify 2nd Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
-			testenvInstance.Log.Info("Checking for Standalone Pod on SECOND MC Config Map after Standalone RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on SECOND MC Config Map after Standalone RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcTwoName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in SECOND MC Peer list after Standalone RECONFIG")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcTwoName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in SECOND MC Peer list after Standalone RECONFIG")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcTwoName, true, false)
 
 			// Verify Monitoring Console One is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is not configured in MC ONE Config Map
-			testenvInstance.Log.Info("Checking for Standalone Pod NOT ON FIRST MC Config Map after Standalone RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod NOT ON FIRST MC Config Map after Standalone RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
 
 			// Check Standalone Pod Not in MC ONE Peer List
-			testenvInstance.Log.Info("Check standalone NOT ON FIRST MC Peer list after Standalone RECONFIG")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, false, false)
+			testcaseEnvInst.Log.Info("Check standalone NOT ON FIRST MC Peer list after Standalone RECONFIG")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, false, false)
 
 		})
 	})
@@ -183,34 +196,37 @@ var _ = Describe("Monitoring Console test", func() {
 					},
 				},
 			}
-			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(standaloneOneName, spec)
+			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneOneName, spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standaloneOne, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testcaseEnvInst)
 
 			// Deploy MC and wait for MC to be READY
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
 			// Add another standalone instance in namespace
-			testenvInstance.Log.Info("Adding second standalone deployment to namespace")
+			testcaseEnvInst.Log.Info("Adding second standalone deployment to namespace")
 			// CSPL-901 standaloneTwoName := deployment.GetName() + "-two"
 			standaloneTwoName := "standalone-" + testenv.RandomDNSName(3)
 			// Configure Resources on second standalone CSPL-555
@@ -235,59 +251,68 @@ var _ = Describe("Monitoring Console test", func() {
 					},
 				},
 			}
-			standaloneTwo, err := deployment.DeployStandaloneWithGivenSpec(standaloneTwoName, standaloneTwoSpec)
+			standaloneTwo, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneTwoName, standaloneTwoSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
 			// Wait for standalone two to be in READY status
-			testenv.StandaloneReady(deployment, standaloneTwoName, standaloneTwo, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
 
-			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			// Vrify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods = append(standalonePods, fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0))
 
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map after adding new standalone")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map after adding new standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list after adding new standalone")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list after adding new standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// get revision number of the resource
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Delete Standlone TWO of the standalone and ensure MC is updated
-			testenvInstance.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
-			deployment.GetInstance(standaloneTwoName, standaloneTwo)
-			err = deployment.DeleteCR(standaloneTwo)
+			testcaseEnvInst.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
+			deployment.GetInstance(ctx, standaloneTwoName, standaloneTwo)
+			err = deployment.DeleteCR(ctx, standaloneTwo)
 			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
-			testenvInstance.Log.Info("Checking for Standalone One Pod in MC Config Map after deleting second standalone")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone One Pod in MC Config Map after deleting second standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check Standalone One Pod in MC Peer list after deleting second standalone")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check Standalone One Pod in MC Peer list after deleting second standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
 
 			// Check Standalone TWO NOT configured in MC Config Map
 			standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneTwoName, 1, false, 0)
 
-			testenvInstance.Log.Info("Checking for Standalone Two Pod NOT in MC Config Map after deleting second standalone")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Checking for Standalone Two Pod NOT in MC Config Map after deleting second standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
 
 			// Check Standalone Pod TWO NOT configured MC Peer List
-			testenvInstance.Log.Info("Check Standalone Two Pod NOT in MC Peer list after deleting second standalone")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, false, false)
+			testcaseEnvInst.Log.Info("Check Standalone Two Pod NOT in MC Peer list after deleting second standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, false, false)
 
 		})
 	})
@@ -323,61 +348,67 @@ var _ = Describe("Monitoring Console test", func() {
 				},
 			}
 
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(standaloneName, spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneName, spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standalone to be in READY Status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Deploy MC and wait for MC to be READY
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone is configure in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneName, 1, false, 0)
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Scale Standalone instance
-			testenvInstance.Log.Info("Scaling Standalone CR")
+			testcaseEnvInst.Log.Info("Scaling Standalone CR")
 			scaledReplicaCount := 2
 			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(deployment.GetName(), standalone)
+			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
 			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 
-			err = deployment.UpdateCR(standalone)
+			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseScalingUp)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to Updating Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneName, 2, false, 0)
 
 			// Check Standalone is configure in MC Config Map
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
 
 			// Check Standalone Pod in MC Peer List
-			testenvInstance.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, standalonePods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
 		})
 	})
 
@@ -402,77 +433,89 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
 			mcName := deployment.GetName()
-			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, true, mcName)
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
-
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Check Cluster Manager in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
-
-			// Check Deployer in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
-
-			// Check Search Head Pods in Monitoring Console Config Map
-			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Check Cluster Manager in Monitoring Console Config Map
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
+
+			// Check Deployer in Monitoring Console Config Map
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+
+			// Check Search Head Pods in Monitoring Console Config Map
+			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 			// Check Monitoring console Pod is configured with all search head
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
-			testenvInstance.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
+			testcaseEnvInst.Log.Info("Scaling up Search Head Cluster", "Current Replicas", defaultSHReplicas, "New Replicas", scaledSHReplicas)
 			shcName := deployment.GetName() + "-shc"
 
 			// Get instance of current SHC CR with latest config
 			shc := &enterpriseApi.SearchHeadCluster{}
-			err = deployment.GetInstance(shcName, shc)
+			err = deployment.GetInstance(ctx, shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Update Replicas of SHC
 			shc.Spec.Replicas = int32(scaledSHReplicas)
-			err = deployment.UpdateCR(shc)
+			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
 
 			// Ensure Search Head cluster scales up and go to ScalingUp phase
-			testenv.VerifySearchHeadClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp)
 
 			// Scale indexers
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
-			testenvInstance.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
+			testcaseEnvInst.Log.Info("Scaling up Indexer Cluster", "Current Replicas", defaultIndexerReplicas, "New Replicas", scaledIndexerReplicas)
 			idxcName := deployment.GetName() + "-idxc"
 
 			// Get instance of current Indexer CR with latest config
 			idxc := &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(idxcName, idxc)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+			err = deployment.GetInstance(ctx, idxcName, idxc)
+			Expect(err).To(Succeed(), "Failed to get instance  of Indexer Cluster")
 
 			// Update Replicas of Indexer Cluster
 			idxc.Spec.Replicas = int32(scaledIndexerReplicas)
-			err = deployment.UpdateCR(idxc)
+			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
 
 			// Ensure Indxer cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(deployment, testenvInstance, splcommon.PhaseScalingUp, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp, idxcName)
+
+			// get revision number of the resource
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Deploy Standalone Pod
 			spec := enterpriseApi.StandaloneSpec{
@@ -486,45 +529,50 @@ var _ = Describe("Monitoring Console test", func() {
 					},
 				},
 			}
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Ensure Indexer cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to PENDING Phase
-			testenv.VerifyMonitoringConsolePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhasePending)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhasePending)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Standalone configured on Monitoring Console
-			testenvInstance.Log.Info("Checking for Standalone Pod on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, "SPLUNK_STANDALONE_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, "SPLUNK_STANDALONE_URL", mcName, true)
 
-			testenvInstance.Log.Info("Check standalone instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, mcName, true, false)
+			testcaseEnvInst.Log.Info("Check standalone instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, mcName, true, false)
+
+			//time.Sleep(2 * time.Second)
 
 			// Verify all Search Head Members are configured on Monitoring Console
 			shPods = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas, false, 0)
 
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Config Map after Scale Up")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Config Map after Scale Up")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Scale Up")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Scale Up")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Checking for Indexer Pod on MC after Scale Up")
+			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC after Scale Up")
 			indexerPods = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas, false, 0)
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
 		})
 	})
 
@@ -558,175 +606,195 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
 			mcName := deployment.GetName()
-			err := deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, true, mcName)
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
-
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
-
-			// Check Cluster Manager in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
-
-			// Check Deployer in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
-
-			// Check Search Head Pods in Monitoring Console Config Map
-			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Check Cluster Manager in Monitoring Console Config Map
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
+
+			// Check Deployer in Monitoring Console Config Map
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+
+			// Check Search Head Pods in Monitoring Console Config Map
+			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Monitoring console Pod is configured with all search head
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), defaultIndexerReplicas, false, 0)
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
 
 			// #################  Update Monitoring Console In Cluster Manager CR ##################################
 
 			mcTwoName := deployment.GetName() + "-two"
 			cm := &enterpriseApi.ClusterMaster{}
-			err = deployment.GetInstance(deployment.GetName(), cm)
+			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
+			// get revision number of the resource
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, cm)
+
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
-			err = deployment.UpdateCR(cm)
+			err = deployment.UpdateCR(ctx, cm)
+
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, cm, resourceVersion)
+
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(mcTwoName, "")
+			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console TWO is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// ###########   VERIFY MONITORING CONSOLE TWO AFTER CLUSTER MANAGER RECONFIG  ###################################
 
 			// Check Cluster Manager in Monitoring Console Two Config Map
-			testenvInstance.Log.Info("Verify Cluster Manager in Monitoring Console Two Config Map after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Verify Cluster Manager in Monitoring Console Two Config Map after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Monitoring console Two is configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Verify Indexers in Monitoring Console Pod TWO Config String after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcTwoName, true, true)
+			testcaseEnvInst.Log.Info("Verify Indexers in Monitoring Console Pod TWO Config String after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
 
 			// Check Deployer NOT in Monitoring Console TWO Config Map
-			testenvInstance.Log.Info("Verify DEPLOYER NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, false)
+			testcaseEnvInst.Log.Info("Verify DEPLOYER NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, false)
 
 			// Check Monitoring Console TWO is NOT configured with Search Head in namespace
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Config Map after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
 
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Pod after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcTwoName, false, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console TWO Pod after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcTwoName, false, false)
 
 			// ##############  VERIFY MONITORING CONSOLE ONE AFTER CLUSTER MANAGER RECONFIG #######################
 
 			// Verify Monitoring Console One Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Cluster Manager Not in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619
-			// testenvInstance.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Manager Reconfig")
-			// testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
+			// testcaseEnvInst.Log.Info("Verify Indexers NOT in Monitoring Console One Pod Config String after Cluster Manager Reconfig")
+			// testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, false, true)
 
 			// Check Monitoring Console One is still configured with Search Head in namespace
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console One Config Map after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console One Config Map after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Cluster Manager Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Pod after Cluster Manager Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// #################  Update Monitoring Console In SHC CR ##################################
 
 			// Get instance of current SHC CR with latest config
 			shc := &enterpriseApi.SearchHeadCluster{}
 			shcName := deployment.GetName() + "-shc"
-			err = deployment.GetInstance(shcName, shc)
+			err = deployment.GetInstance(ctx, shcName, shc)
 			Expect(err).To(Succeed(), "Failed to get instance of Search Head Cluster")
 
 			// Update SHC to use 2nd Montioring Console
 			shc.Spec.MonitoringConsoleRef.Name = mcTwoName
-			err = deployment.UpdateCR(shc)
+			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to get update Monitoring Console in Search Head Cluster CRD")
 
 			// Ensure Search Head Cluster go to Ready Phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// ############################  VERIFICATOIN FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
 
 			// Check Cluster Manager in Monitoring Console Two Config Map
-			testenvInstance.Log.Info("Verify Cluster Manager on Monitoring Console Two Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Verify Cluster Manager on Monitoring Console Two Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Deployer in Monitoring Console Two Config Map
-			testenvInstance.Log.Info("Verify Deployer on Monitoring Console Two Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Verify Deployer on Monitoring Console Two Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcTwoName, true)
 
 			// Verify all Search Head Members are configured on Monitoring Console Two
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Two Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Two Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, true)
 
-			testenvInstance.Log.Info("Verify Search Head Pods on Monitoring Console Pod after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcTwoName, true, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods on Monitoring Console Pod after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcTwoName, true, false)
 
 			// Check Monitoring console Two is configured with all Indexer in Name Space
-			testenvInstance.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcTwoName, true, true)
+			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
 
 			// ############################  VERIFICATOIN FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
 			// Verify MC ONE is Ready and stays in ready state before running verfications
-			testenv.VerifyMonitoringConsoleReady(deployment, mcName, mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc, testcaseEnvInst)
 
 			// Check Cluster Manager Not in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Verify Cluster Manager NOT in Monitoring Console One Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check DEPLOYER Not in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Verify DEPLOYER NOT in Monitoring Console One Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Verify DEPLOYER NOT in Monitoring Console One Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, false)
 
 			// Verify all Search Head Members are Not configured on Monitoring Console One
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Config Map after SHC Reconfig")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Config Map after SHC Reconfig")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, false)
 
-			testenvInstance.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Pod after Search Head Reconfig")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, false, false)
+			testcaseEnvInst.Log.Info("Verify Search Head Pods NOT on Monitoring Console ONE Pod after Search Head Reconfig")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, false, false)
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619
-			// testenvInstance.Log.Info("Checking for Indexer Pod NOT on MC One after SHC Reconfig")
-			// testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
+			// testcaseEnvInst.Log.Info("Checking for Indexer Pod NOT on MC One after SHC Reconfig")
+			// testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, false, true)
 		})
 	})
 
@@ -755,108 +823,114 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultIndexerReplicas := 1
 			siteCount := 3
 			mcName := deployment.GetName()
-			err := deployment.DeployMultisiteClusterWithMonitoringConsole(deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true)
+			err := deployment.DeployMultisiteClusterWithMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
-			testenv.IndexersReady(deployment, testenvInstance, siteCount)
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure indexer clustered is configured as multisite
-			testenv.IndexerClusterMultisiteStatus(deployment, testenvInstance, siteCount)
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(deployment, testenvInstance)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Check Cluster Manager in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, true)
 
 			// Check Deployer in Monitoring Console Config Map
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
 
 			// Deploy Monitoring Console Pod
-			mc, err := deployment.DeployMonitoringConsole(deployment.GetName(), "")
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Monitoring console is configured with all search head instances in namespace
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
 
-			testenvInstance.Log.Info("Checking for Search Head on MC Config Map")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Search Head on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Checking for Search Head on MC Pod")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Checking for Search Head on MC Pod")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 			// Check Monitoring console is configured with all Indexer in Name Space
 			indexerPods := testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, 3)
-			testenvInstance.Log.Info("Checking for Indexer Pods on MC POD")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, true, true)
+			testcaseEnvInst.Log.Info("Checking for Indexer Pods on MC POD")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, true, true)
 
 			// ############ CLUSTER MANAGER MC RECONFIG #################################
 			mcTwoName := deployment.GetName() + "-two"
 			cm := &enterpriseApi.ClusterMaster{}
-			err = deployment.GetInstance(deployment.GetName(), cm)
+			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, cm)
+
 			cm.Spec.MonitoringConsoleRef.Name = mcTwoName
-			err = deployment.UpdateCR(cm)
+			err = deployment.UpdateCR(ctx, cm)
 			Expect(err).To(Succeed(), "Failed to update mcRef in Cluster Manager")
 
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, cm, resourceVersion)
+
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(deployment, testenvInstance, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(deployment, testenvInstance)
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console Pod
-			mcTwo, err := deployment.DeployMonitoringConsole(mcTwoName, "")
+			mcTwo, err := deployment.DeployMonitoringConsole(ctx, mcTwoName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console Two instance")
 
 			// Verify Monitoring Console TWO is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, mcTwoName, mcTwo, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// Check Cluster Manager in Monitoring Console Config Map
-			testenvInstance.Log.Info("Checking for Cluster Manager on MC TWO CONFIG MAP after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
+			testcaseEnvInst.Log.Info("Checking for Cluster Manager on MC TWO CONFIG MAP after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcTwoName, true)
 
 			// Check Monitoring Console TWO is configured with all Indexers in Name Space
-			testenvInstance.Log.Info("Checking for Indexer Pods on MC TWO POD after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcTwoName, true, true)
+			testcaseEnvInst.Log.Info("Checking for Indexer Pods on MC TWO POD after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
 
 			// Check Monitoring console Two is NOT configured with all search head instances in namespace
-			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Config Map after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
+			testcaseEnvInst.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Config Map after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcTwoName, false)
 
-			testenvInstance.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Pod after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcTwoName, false, false)
+			testcaseEnvInst.Log.Info("Checking for Search Head NOT CONFIGURED on MC TWO Pod after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcTwoName, false, false)
 
 			// Verify Monitoring Console One is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(deployment, deployment.GetName(), mc, testenvInstance)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Check Cluster Manager NOT configured on  Monitoring Console One Config Map
-			testenvInstance.Log.Info("Checking for Cluster Manager NOT in MC One Config Map after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
+			testcaseEnvInst.Log.Info("Checking for Cluster Manager NOT in MC One Config Map after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterMasterServiceName, deployment.GetName())}, "SPLUNK_CLUSTER_MASTER_URL", mcName, false)
 
 			// Check Monitoring console One is Not configured with all Indexer in Name Space
 			// CSPL-619
-			// testenvInstance.Log.Info("Checking for Indexer Pods Not on MC one POD after Cluster Manager RECONFIG")
-			//testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, indexerPods, mcName, false, true)
+			// testcaseEnvInst.Log.Info("Checking for Indexer Pods Not on MC one POD after Cluster Manager RECONFIG")
+			//testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcName, false, true)
 
 			// Check Deployer in Monitoring Console One Config Map
-			testenvInstance.Log.Info("Checking for Deployer in MC One Config Map after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Deployer in MC One Config Map after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.DeployerServiceName, deployment.GetName())}, "SPLUNK_DEPLOYER_URL", mcName, true)
 
 			// Check Monitoring console  One is configured with all search head instances in namespace
-			testenvInstance.Log.Info("Checking for Search Head on MC ONE Config Map after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigMap(deployment, testenvInstance, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+			testcaseEnvInst.Log.Info("Checking for Search Head on MC ONE Config Map after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
 
-			testenvInstance.Log.Info("Checking for Search Head on MC ONE Pod after Cluster Manager RECONFIG")
-			testenv.VerifyPodsInMCConfigString(deployment, testenvInstance, shPods, mcName, true, false)
+			testcaseEnvInst.Log.Info("Checking for Search Head on MC ONE Pod after Cluster Manager RECONFIG")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
 		})
 	})

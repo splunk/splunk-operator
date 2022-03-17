@@ -1,6 +1,5 @@
 .git
 .idea
-pkg
 test
 vendor
 build/_output/bin/splunk-operator-local

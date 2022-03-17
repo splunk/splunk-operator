@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +16,11 @@
 package client
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -62,28 +64,29 @@ func TestCheckIfVolumeExists(t *testing.T) {
 }
 
 func TestNewMockAWSS3Client(t *testing.T) {
-
+	ctx := context.TODO()
 	// Test 1. Test the valid case
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
-	_, err := NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
 	}
 
 	// Test 2. Test the invalid case by returning nil client
-	initFn = func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client("sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "htts://s3.us-west-2.amazonaws.com", initFn)
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
 	}
 }
 
 func TestGetVolume(t *testing.T) {
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		AppsRepoPollInterval: 60,
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
@@ -127,7 +130,7 @@ func TestGetVolume(t *testing.T) {
 
 	// test for valid volumes
 	for index, appSource := range appFrameworkRef.AppSources {
-		vol, err := GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("GetVolume should not have returned error")
 		}
@@ -149,7 +152,7 @@ func TestGetVolume(t *testing.T) {
 		},
 	}
 
-	_, err := GetAppSrcVolume(appFrameworkRef.AppSources[0], &appFrameworkRef)
+	_, err := GetAppSrcVolume(ctx, appFrameworkRef.AppSources[0], &appFrameworkRef)
 	if err == nil {
 		t.Errorf("GetVolume should have returned error for an invalid volume name")
 	}

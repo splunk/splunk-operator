@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +18,12 @@ package client
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"os"
+	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 )
 
 // blank assignment to verify that MinioClient implements S3Client
@@ -46,11 +47,11 @@ type MinioClient struct {
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
-	cl := fn(endpoint, accessKeyID, secretAccessKey)
+	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -76,13 +77,14 @@ func RegisterMinioClient() {
 }
 
 // InitMinioClientWrapper is a wrapper around InitMinioClientSession
-func InitMinioClientWrapper(appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
-	return InitMinioClientSession(appS3Endpoint, accessKeyID, secretAccessKey)
+func InitMinioClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
+	return InitMinioClientSession(ctx, appS3Endpoint, accessKeyID, secretAccessKey)
 }
 
 // InitMinioClientSession initializes and returns a client session object
-func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
-	scopedLog := log.WithName("InitMinioClientSession")
+func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("InitMinioClientSession")
 
 	// Check if SSL is needed
 	useSSL := true
@@ -124,8 +126,9 @@ func InitMinioClientSession(appS3Endpoint string, accessKeyID string, secretAcce
 }
 
 // GetAppsList get the list of apps from remote storage
-func (client *MinioClient) GetAppsList() (S3Response, error) {
-	scopedLog := log.WithName("GetAppsList")
+func (client *MinioClient) GetAppsList(ctx context.Context) (S3Response, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
 	s3Resp := S3Response{}
@@ -160,8 +163,9 @@ func (client *MinioClient) GetAppsList() (S3Response, error) {
 }
 
 // DownloadApp downloads an app package from remote storage
-func (client *MinioClient) DownloadApp(remoteFile string, localFile, etag string) (bool, error) {
-	scopedLog := log.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
+func (client *MinioClient) DownloadApp(ctx context.Context, remoteFile string, localFile, etag string) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
 
 	file, err := os.Create(localFile)
 	if err != nil {
@@ -176,7 +180,7 @@ func (client *MinioClient) DownloadApp(remoteFile string, localFile, etag string
 	// set the option to match the specified etag on remote storage
 	options.SetMatchETag(etag)
 
-	err = s3Client.FGetObject(context.Background(), client.BucketName, remoteFile, localFile, options)
+	err = s3Client.FGetObject(ctx, client.BucketName, remoteFile, localFile, options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to download remote file")
 		return false, err
@@ -188,12 +192,12 @@ func (client *MinioClient) DownloadApp(remoteFile string, localFile, etag string
 }
 
 // GetInitContainerImage returns the initContainer image to be used with this s3 client
-func (client *MinioClient) GetInitContainerImage() string {
+func (client *MinioClient) GetInitContainerImage(ctx context.Context) string {
 	return ("amazon/aws-cli")
 }
 
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
-func (client *MinioClient) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
+func (client *MinioClient) GetInitContainerCmd(ctx context.Context, endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
 	s3AppSrcPath := filepath.Join(bucket, path) + "/"
 	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
 

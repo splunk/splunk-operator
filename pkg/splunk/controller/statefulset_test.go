@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,25 +16,32 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 func TestApplyStatefulSet(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"}}
+	getFuncCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": getFuncCalls, "Update": funcCalls}
 	var replicas int32 = 1
 	current := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -47,24 +55,26 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStatefulSet(c, cr.(*appsv1.StatefulSet))
+		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestDefaultStatefulSetPodManager(t *testing.T) {
+
 	// test for updating
 	mgr := DefaultStatefulSetPodManager{}
 	method := "DefaultStatefulSetPodManager.Update"
 	spltest.PodManagerTester(t, method, &mgr)
 }
 
-func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManager, statefulSet *appsv1.StatefulSet, desiredReplicas int32, initObjects ...runtime.Object) (splcommon.Phase, error) {
+func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManager, statefulSet *appsv1.StatefulSet, desiredReplicas int32, initObjects ...client.Object) (splcommon.Phase, error) {
 	// initialize client
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	c.AddObjects(initObjects)
-	phase, err := UpdateStatefulSetPods(c, statefulSet, mgr, desiredReplicas)
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
 	return phase, err
 }
 
@@ -147,6 +157,8 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -163,31 +175,33 @@ func TestSetStatefulSetOwnerRef(t *testing.T) {
 	}
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 
-	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
-	if err.Error() != "NotFound" {
+	err := SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 
 	// Create statefulset
-	err = splutil.CreateResource(c, &current)
+	err = splutil.CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
 
 	// Test existing owner reference
-	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
 
 	// Try adding same owner again
-	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for statefulset %s", current.GetName())
 	}
 }
 
 func TestGetStatefulSetByName(t *testing.T) {
+
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 
 	current := appsv1.StatefulSet{
@@ -197,19 +211,20 @@ func TestGetStatefulSetByName(t *testing.T) {
 		},
 	}
 
-	_, err := ApplyStatefulSet(c, &current)
+	_, err := ApplyStatefulSet(ctx, c, &current)
 	if err != nil {
 		return
 	}
 
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
-	_, err = GetStatefulSetByName(c, namespacedName)
+	_, err = GetStatefulSetByName(ctx, c, namespacedName)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 }
 
 func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -233,24 +248,24 @@ func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
 	}
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 
-	err := SetStatefulSetOwnerRef(c, &cr, namespacedName)
-	if err.Error() != "NotFound" {
+	err := SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
+	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Couldn't detect resource %s", current.GetName())
 	}
 
 	// Create statefulset
-	err = splutil.CreateResource(c, &current)
+	err = splutil.CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
 
 	// Test existing owner reference
-	err = SetStatefulSetOwnerRef(c, &cr, namespacedName)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
 
-	err = SetStatefulSetOwnerRef(c, &cr1, namespacedName)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr1, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
@@ -263,44 +278,46 @@ func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
 	}
 
 	// Create configmap
-	err = splutil.CreateResource(c, &configmap)
+	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
 
 	// multiple owner ref
-	err = DeleteReferencesToAutomatedMCIfExists(c, &cr, namespacedName)
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't delete resource %s", current.GetName())
 	}
 
 	//single owner
 	// Create statefulset
-	err = splutil.CreateResource(c, &current)
+	err = splutil.CreateResource(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
 
 	//set owner reference
-	err = SetStatefulSetOwnerRef(c, &cr1, namespacedName)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr1, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
 
 	// Create configmap
-	err = splutil.CreateResource(c, &configmap)
+	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
 
 	// multiple owner ref
-	err = DeleteReferencesToAutomatedMCIfExists(c, &cr1, namespacedName)
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr1, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't delete resource %s", current.GetName())
 	}
 }
 
 func TestIsStatefulSetScalingUp(t *testing.T) {
+
+	ctx := context.TODO()
 	var replicas int32 = 1
 	statefulSetName := "splunk-stand1-standalone"
 
@@ -324,13 +341,13 @@ func TestIsStatefulSetScalingUp(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	*current.Spec.Replicas = 2
-	_, err := IsStatefulSetScalingUpOrDown(c, &cr, statefulSetName, replicas)
+	_, err := IsStatefulSetScalingUpOrDown(ctx, c, &cr, statefulSetName, replicas)
 	if err == nil {
 		t.Errorf("IsStatefulSetScalingUp should have returned error as we have not yet added statefulset to client.")
 	}
 
 	c.AddObject(current)
-	_, err = IsStatefulSetScalingUpOrDown(c, &cr, statefulSetName, replicas)
+	_, err = IsStatefulSetScalingUpOrDown(ctx, c, &cr, statefulSetName, replicas)
 	if err != nil {
 		t.Errorf("IsStatefulSetScalingUp should not have returned error")
 	}

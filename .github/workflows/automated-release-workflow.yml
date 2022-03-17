@@ -52,12 +52,12 @@ jobs:
     - name: Install golint
       run: |
         go version
-        go get -u golang.org/x/lint/golint
+        go install golang.org/x/lint/golint
     
     - name: Install goveralls
       run: |
         go version
-        go get github.com/mattn/goveralls@latest
+        go install github.com/mattn/goveralls@latest
     
     - name: Install Operator SDK
       run: |
@@ -66,12 +66,12 @@ jobs:
 
     - name: Make Splunk Operator Image
       run: |
-        make image
+        make docker-build IMG="docker.io/splunk/splunk-operator:latest" 
         docker images
 
     - name: Run Make Package
       run: |
-        build/package.sh
+        tools/package.sh
         docker images
 
     - name: Update Operator Image name in Release Folder
