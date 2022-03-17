@@ -35,6 +35,7 @@ import (
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
+// Update for  DefaultStatefulSetPodManager to update stateful set pod
 func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
 	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
 	if err == nil && phase == splcommon.PhaseReady {
