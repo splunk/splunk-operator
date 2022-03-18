@@ -59,12 +59,15 @@ type AWSS3Client struct {
 var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
 
 // GetRegion extracts the region from the endpoint field
-func GetRegion(endpoint string) string {
+func GetRegion(endpoint string, region *string) error {
+	var err error
 	pattern := regexp.MustCompile(regionRegex)
 	if len(pattern.FindStringSubmatch(endpoint)) > 0 {
-		return pattern.FindStringSubmatch(endpoint)[1]
+		*region = pattern.FindStringSubmatch(endpoint)[1]
+	} else {
+		err = fmt.Errorf("unable to extract region from the endpoint")
 	}
-	return ""
+	return err
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientSession
@@ -130,8 +133,12 @@ func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey strin
 	// for backward compatibility, if `region` is not specified in the CR,
 	// then derive the region from the endpoint.
 	if region == "" {
-		region = GetRegion(endpoint)
+		err = GetRegion(endpoint, &region)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	cl := fn(region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
