@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -37,6 +38,12 @@ import (
 )
 
 func TestApplyClusterManager(t *testing.T) {
+
+	// redefining cpmakeTar to return nil always
+	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
+		return nil
+	}
+
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -267,7 +274,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Without S3 keys, ApplyClusterManager should fail
-	_, err := ApplyClusterManager(context.Background(), client, &current)
+	_, err := ApplyClusterManager(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
 	}
@@ -477,7 +484,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 }
 
 func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
-
+	initGlobalResourceTracker()
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{

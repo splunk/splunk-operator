@@ -18,16 +18,16 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"io"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -38,6 +38,11 @@ import (
 )
 
 func init() {
+	fmt.Printf("init is called here from test")
+	initGlobalResourceTracker()
+	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
+		return nil
+	}
 }
 
 func TestApplySplunkConfig(t *testing.T) {
@@ -369,6 +374,7 @@ func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
 }
 
 func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
+	initGlobalResourceTracker()
 	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
