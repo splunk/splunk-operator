@@ -63,6 +63,7 @@ spec:
         provider: aws
         path: bucket-app-framework-us-west-2/Standalone-us/
         endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
         secretRef: s3-secret
 ```
 
@@ -128,6 +129,7 @@ spec:
         provider: aws
         path: bucket-app-framework-us-west-2/idxcAndCmApps/
         endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
         secretRef: s3-secret
 ```
 
@@ -202,6 +204,7 @@ spec:
         provider: aws
         path: bucket-app-framework-us-west-2/shcLoc-us/
         endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
         secretRef: s3-secret
 ```
 
@@ -291,6 +294,10 @@ Here is a typical App framework configuration in a Custom Resource definition:
                           description: 'App Package Remote Store provider. For e.g.
                             aws, azure, minio, etc. Currently we are only supporting
                             aws. TODO: Support minio as well.'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name

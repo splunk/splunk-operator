@@ -200,6 +200,9 @@ type VolumeSpec struct {
 
 	// App Package Remote Store provider. Supported values: aws, minio
 	Provider string `json:"provider"`
+
+	// Region of the remote storage volume where apps reside
+	Region string `json:"region"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation

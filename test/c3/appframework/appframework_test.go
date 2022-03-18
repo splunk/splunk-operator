@@ -974,7 +974,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -985,7 +985,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
@@ -1179,7 +1179,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1190,7 +1190,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
@@ -1902,7 +1902,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1913,7 +1913,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,

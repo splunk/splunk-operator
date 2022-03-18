@@ -85,7 +85,7 @@ func RollHotToWarm(deployment *Deployment, podName string, indexName string) boo
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values
-func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
+func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string, region string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      volumeName,
 		Endpoint:  endpoint,
@@ -93,6 +93,7 @@ func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef strin
 		SecretRef: secretRef,
 		Provider:  provider,
 		Type:      storageType,
+		Region:    region,
 	}
 }
 

@@ -51,7 +51,7 @@ type GetInitFunc func(string, string, string) interface{}
 
 //GetS3Client gets the required S3Client based on the provider
 type GetS3Client func(string /* bucket */, string, /* AWS access key ID */
-	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Endpoint */, GetInitFunc) (S3Client, error)
+	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Region */, string /* Endpoint */, GetInitFunc) (S3Client, error)
 
 // S3Clients is a map of provider name to init functions
 var S3Clients = make(map[string]GetS3ClientWrapper)

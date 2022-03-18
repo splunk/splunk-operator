@@ -722,6 +722,10 @@ spec:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
                           type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
+                          type: string
                         secretRef:
                           description: Secret object name
                           type: string
@@ -1411,6 +1415,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2783,6 +2791,10 @@ spec:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio'
                               type: string
+                            region:
+                              description: Region of the remote storage volume where
+                                apps reside
+                              type: string
                             secretRef:
                               description: Secret object name
                               type: string
@@ -3031,6 +3043,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name

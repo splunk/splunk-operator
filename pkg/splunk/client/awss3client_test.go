@@ -35,8 +35,20 @@ func TestInitAWSClientWrapper(t *testing.T) {
 func TestNewAWSS3Client(t *testing.T) {
 
 	fn := InitAWSClientWrapper
-	awsS3Client, err := NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	awsS3Client, err := NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if awsS3Client == nil || err != nil {
+		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
+	}
+
+	// just test the backward compatibility where we do not pass a region explicitly
+	awsS3Client, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.amazonaws.com", fn)
+	if awsS3Client == nil || err != nil {
+		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
+	}
+
+	// test the invalid scenario where we cannot extract region from endpoint
+	awsS3Client, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "", "https://s3.us-west-2.dummyprovider.com", fn)
+	if awsS3Client != nil || err == nil {
 		t.Errorf("NewAWSS3Client should have returned a valid AWS S3 client.")
 	}
 
@@ -44,7 +56,7 @@ func TestNewAWSS3Client(t *testing.T) {
 	fn = func(string, string, string) interface{} {
 		return nil
 	}
-	_, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	_, err = NewAWSS3Client("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
 		t.Errorf("NewAWSS3Client should have returned error.")
 	}
