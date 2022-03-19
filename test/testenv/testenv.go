@@ -177,7 +177,7 @@ func init() {
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
-	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "false", "install operator clusterwide, if not install per test case")
+	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
