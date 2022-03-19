@@ -361,7 +361,12 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 	}
 
 	// Verify apps packages are deleted from the operator pod for all CRs
-	opPod := GetOperatorPodName(testenvInstance.GetName())
+	var opPod string
+	if testenvInstance.clusterWideOperator != "true" {
+		opPod = GetOperatorPodName(testenvInstance.GetName())
+	} else {
+		opPod = GetOperatorPodName("splunk-operator")
+	}
 	for _, appSource := range appSource {
 		testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
 		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
