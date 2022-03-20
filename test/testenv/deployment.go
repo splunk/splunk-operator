@@ -280,30 +280,30 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 		opNamespace = d.testenv.GetName()
 		execReq = restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
 		option = &corev1.PodExecOptions{
-				Command: cmd,
-				Stdin:   true,
-				Stdout:  true,
-				Stderr:  true,
-				TTY:     tty,
+			Command: cmd,
+			Stdin:   true,
+			Stdout:  true,
+			Stderr:  true,
+			TTY:     tty,
 		}
 	} else {
 		opNamespace = "splunk-operator"
 		execReq = restClient.Post().
-					Resource("pods").
-					Name(podName).
-					Namespace(opNamespace).
-					Param("container", "manager").
-					SubResource("exec")
+			Resource("pods").
+			Name(podName).
+			Namespace(opNamespace).
+			Param("container", "manager").
+			SubResource("exec")
 		option = &corev1.PodExecOptions{
-				Container: "manager",
-				Command: cmd,
-				Stdin:   true,
-				Stdout:  true,
-				Stderr:  true,
-				TTY:     tty,
-			}
+			Container: "manager",
+			Command:   cmd,
+			Stdin:     true,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       tty,
+		}
 	}
-	
+
 	if stdin == "" {
 		option.Stdin = false
 	}
