@@ -690,7 +690,7 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 	return stdout, nil
 }
 
-// ExecuteCommandOnPod execute command on given pod and return result
+// ExecuteCommandOnOperatorPod execute command on given pod and return result
 func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)

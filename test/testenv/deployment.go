@@ -275,7 +275,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 		opNamespace = d.testenv.GetName()
 	} else {
 		opNamespace = "splunk-operator"
-	}	
+	}
 	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
 	option := &corev1.PodExecOptions{
 		Command: cmd,
