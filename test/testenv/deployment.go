@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -270,13 +271,16 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	if err != nil {
 		return "", "", err
 	}
+
+	var execReq *rest.Request
 	var opNamespace string
 	if d.testenv.clusterWideOperator != "true" {
 		opNamespace = d.testenv.GetName()
+		execReq = restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
 	} else {
 		opNamespace = "splunk-operator"
+		execReq = restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).Resource("container").Name("manager").SubResource("exec")
 	}
-	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
 	option := &corev1.PodExecOptions{
 		Command: cmd,
 		Stdin:   true,
