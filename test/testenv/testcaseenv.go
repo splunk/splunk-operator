@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -27,7 +28,6 @@ import (
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"time"
 )
 
@@ -364,7 +364,6 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 
 	return err
 }
-
 
 func (testenv *TestCaseEnv) createOperator() error {
 	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")

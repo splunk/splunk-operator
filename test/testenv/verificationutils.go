@@ -828,6 +828,24 @@ func VerifyAppsDownloadedOnContainer(ctx context.Context, deployment *Deployment
 	}
 }
 
+// VerifyAppsPackageDeletedOnOperatorContainer verify that apps are deleted by container
+func VerifyAppsPackageDeletedOnOperatorContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+	for _, podName := range pods {
+		for _, app := range apps {
+			gomega.Eventually(func() bool {
+				appList, err := GetOperatorDirsOrFilesInPath(ctx, deployment, podName, path, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Unable to get apps on operator pod", "Pod", podName)
+					return true
+				}
+				found := CheckStringInSlice(appList, app+"_")
+				testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
+				return found
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+		}
+	}
+}
+
 // VerifyAppsPackageDeletedOnContainer verify that apps are deleted by container
 func VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
 	for _, podName := range pods {

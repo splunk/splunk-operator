@@ -690,6 +690,18 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 	return stdout, nil
 }
 
+// ExecuteCommandOnPod execute command on given pod and return result
+func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return "", err
+	}
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	return stdout, nil
+}
+
 // GetConfigMap Gets the config map for a given k8 config map name
 func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
@@ -748,6 +760,26 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 	}
 
 	return &new
+}
+
+// GetOperatorDirsOrFilesInPath returns subdirectory under given path on the given POD
+func GetOperatorDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+	var cmd string
+	if dirOnly {
+		cmd = fmt.Sprintf("cd %s; ls -d */", path)
+	} else {
+		cmd = fmt.Sprintf("cd %s; ls ", path)
+	}
+	stdout, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+	if err != nil {
+		return nil, err
+	}
+	dirList := strings.Fields(stdout)
+	// Directory are returned with trailing /. The below loop removes the trailing /
+	for i, dirName := range dirList {
+		dirList[i] = strings.TrimSuffix(dirName, "/")
+	}
+	return strings.Fields(stdout), err
 }
 
 // GetDirsOrFilesInPath returns subdirectory under given path on the given POD

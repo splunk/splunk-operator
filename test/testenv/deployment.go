@@ -256,6 +256,59 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 	return stdout.String(), stderr.String(), nil
 }
 
+// OperatorPodExecCommand execute a shell command in the specified pod
+func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
+	pod := &corev1.Pod{}
+	d.GetInstance(ctx, podName, pod)
+	gvk, _ := apiutil.GVKForObject(pod, scheme.Scheme)
+	restConfig, err := config.GetConfig()
+	if err != nil {
+		return "", "", err
+	}
+	//FIXME
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	if err != nil {
+		return "", "", err
+	}
+	var opNamespace string
+	if d.testenv.clusterWideOperator != "true" {
+		opNamespace = d.testenv.GetName()
+	} else {
+		opNamespace = "splunk-operator"
+	}	
+	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
+	option := &corev1.PodExecOptions{
+		Command: cmd,
+		Stdin:   true,
+		Stdout:  true,
+		Stderr:  true,
+		TTY:     tty,
+	}
+	if stdin == "" {
+		option.Stdin = false
+	}
+	execReq.VersionedParams(
+		option,
+		scheme.ParameterCodec,
+	)
+	exec, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
+	if err != nil {
+		return "", "", err
+	}
+	stdinReader := strings.NewReader(stdin)
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	err = exec.Stream(remotecommand.StreamOptions{
+		Stdin:  stdinReader,
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return stdout.String(), stderr.String(), nil
+}
+
 //DeployLicenseManager deploys the license manager instance
 func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*enterpriseApi.LicenseMaster, error) {
 
