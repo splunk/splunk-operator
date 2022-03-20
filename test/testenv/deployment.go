@@ -273,10 +273,19 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	}
 
 	var execReq *rest.Request
+	var option *corev1.PodExecOptions
 	var opNamespace string
+
 	if d.testenv.clusterWideOperator != "true" {
 		opNamespace = d.testenv.GetName()
 		execReq = restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
+		option = &corev1.PodExecOptions{
+				Command: cmd,
+				Stdin:   true,
+				Stdout:  true,
+				Stderr:  true,
+				TTY:     tty,
+		}
 	} else {
 		opNamespace = "splunk-operator"
 		execReq = restClient.Post().
@@ -285,14 +294,16 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 					Namespace(opNamespace).
 					Param("container", "manager").
 					SubResource("exec")
+		option = &corev1.PodExecOptions{
+				Container: "manager",
+				Command: cmd,
+				Stdin:   true,
+				Stdout:  true,
+				Stderr:  true,
+				TTY:     tty,
+			}
 	}
-	option := &corev1.PodExecOptions{
-		Command: cmd,
-		Stdin:   true,
-		Stdout:  true,
-		Stderr:  true,
-		TTY:     tty,
-	}
+	
 	if stdin == "" {
 		option.Stdin = false
 	}
