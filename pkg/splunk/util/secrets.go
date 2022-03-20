@@ -426,7 +426,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyConfigMap").WithValues(
+	scopedLog := reqLogger.WithName("ApplyNamespaceScopedSecretObject").WithValues(
 		"name", splcommon.GetNamespaceScopedSecretName(namespace),
 		"namespace", namespace)
 

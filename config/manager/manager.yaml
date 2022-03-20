@@ -28,6 +28,7 @@ spec:
     spec:
       securityContext:
         runAsUser: 1001
+        fsGroup: 1001
         #runAsNonRoot: true
       containers:
       - command:
@@ -72,13 +73,13 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        #resources:
-        #  limits:
-        #    cpu: 1000m
-        #    memory: 1000Mi
-        #  requests:
-        #    cpu: 1000m
-        #    memory: 1000Mi
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2000Mi
+          requests:
+            cpu: 1000m
+            memory: 2000Mi
         volumeMounts:
           - mountPath: /opt/splunk/appframework/
             name: app-staging
