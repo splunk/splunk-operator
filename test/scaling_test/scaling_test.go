@@ -108,7 +108,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		FIt("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
+		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
