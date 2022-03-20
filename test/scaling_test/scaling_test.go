@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -107,7 +108,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
+		FIt("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
@@ -178,6 +179,8 @@ var _ = Describe("Scaling test", func() {
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			time.Sleep(60 * time.Second)
 
 			// Verify New SearchHead is added to Cluster Manager
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
