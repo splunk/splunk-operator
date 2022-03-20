@@ -122,7 +122,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Scale Search Head Cluster
 			scaledSHReplicas := defaultSHReplicas + 1
@@ -178,7 +178,7 @@ var _ = Describe("Scaling test", func() {
 
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			time.Sleep(60 * time.Second)
 
@@ -271,7 +271,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)

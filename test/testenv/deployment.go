@@ -391,8 +391,6 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 	if err != nil {
 		return nil, err
 	}
-	// Verify standalone goes to ready state
-	//SingleSiteIndexersReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }

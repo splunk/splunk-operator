@@ -868,14 +868,14 @@ func VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deploy
 func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, phase enterpriseApi.AppPhaseType, appList []string) {
 	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
 		for _, appName := range appList {
-			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
+			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase not to be %s", crKind, name, appName, phase))
 			gomega.Eventually(func() enterpriseApi.AppPhaseType {
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
 					return phase
 				}
-				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase
 			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
 		}
