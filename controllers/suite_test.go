@@ -17,11 +17,13 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,17 +31,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	"github.com/splunk/splunk-operator/pkg/config"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	//+kubebuilder:scaffold:imports
 )
-
-// These tests use Ginkgo (BDD-style Go testing framework). Refer tbrew install kubebuildero
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var k8sManager ctrl.Manager
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -86,6 +92,16 @@ var _ = BeforeSuite(func() {
 
 	//+kubebuilder:scaffold:scheme
 
+	k8sManager, err := mainFunction()
+	Expect(err).ToNot(HaveOccurred())
+
+	go func() {
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	Expect(err).ToNot(HaveOccurred())
+
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
@@ -97,3 +113,87 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func mainFunction() (manager.Manager, error) {
+	var metricsAddr string
+	var enableLeaderElection bool
+	var probeAddr string
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterprisev3.AddToScheme(scheme))
+
+	// Logging setup
+	ctrl.SetLogger(zap.New())
+	setupLog := ctrl.Log.WithName("setup")
+
+	options := ctrl.Options{
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		Port:                   9443,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "270bec8c.splunk.com",
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), config.ManagerOptionsWithNamespaces(setupLog, options))
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+
+	if err = (&ClusterMasterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err = (&IndexerClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err = (&LicenseMasterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err = (&MonitoringConsoleReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err = (&SearchHeadClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err = (&StandaloneReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	//+kubebuilder:scaffold:builder
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		return nil, fmt.Errorf("unable to start manager")
+	}
+
+	return mgr, nil
+}
