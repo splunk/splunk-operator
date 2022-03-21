@@ -59,9 +59,6 @@ var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
-	//Expect(os.Setenv("TEST_ASSET_KUBE_APISERVER", "../testbin/bin/kube-apiserver")).To(Succeed())
-	//Expect(os.Setenv("TEST_ASSET_ETCD", "../testbin/bin/etcd")).To(Succeed())
-	//Expect(os.Setenv("TEST_ASSET_KUBECTL", "../testbin/bin/kubectl")).To(Succeed())
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
@@ -168,31 +165,31 @@ func mainFunction() (manager.Manager, error) {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
-		return nil, fmt.Errorf("unable to start manager")
+		return nil, fmt.Errorf("unable to create controller")
 	}
 	if err = (&SearchHeadClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
-		return nil, fmt.Errorf("unable to start manager")
+		return nil, fmt.Errorf("unable to create controller")
 	}
 	if err = (&StandaloneReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
-		return nil, fmt.Errorf("unable to start manager")
+		return nil, fmt.Errorf("unable to create controller")
 	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
-		return nil, fmt.Errorf("unable to start manager")
+		return nil, fmt.Errorf("unable to create controller")
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
-		return nil, fmt.Errorf("unable to start manager")
+		return nil, fmt.Errorf("unable to create controller")
 	}
 
 	return mgr, nil
