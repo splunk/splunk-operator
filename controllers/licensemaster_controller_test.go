@@ -20,13 +20,10 @@ import (
 	//"k8s.io/client-go/kubernetes/scheme"
 )
 
-const timeout = time.Second * 120
-const interval = time.Second * 2
-
-var _ = Describe("Standalone Controller", func() {
+var _ = Describe("LicenseMaster Controller", func() {
 
 	var (
-		namespace = "ns-splunk-st"
+		namespace = "ns-splunk-lm"
 	)
 
 	BeforeEach(func() {
@@ -37,13 +34,13 @@ var _ = Describe("Standalone Controller", func() {
 
 	})
 
-	Context("Standalone Management", func() {
+	Context("LicenseMaster Management", func() {
 
-		It("Create Standalone custom resource should succeeded", func() {
+		It("Create LicenseMaster custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
-			CreateStandlaone("test", nsSpecs.Name, splcommon.PhaseReady)
-			DeleteStandalone("test", nsSpecs.Name)
+			CreateLicenseMaster("test", nsSpecs.Name, splcommon.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 		It("Cover Unused methods", func() {
@@ -54,40 +51,30 @@ var _ = Describe("Standalone Controller", func() {
 			//Expect(err).ToNot(HaveOccurred())
 
 			//rr, err := New(k8sManager)
-			//callUnsedMethods(rr.(*StandaloneReconciler), namespace)
+			//callUnsedMethods(rr.(*LicenseMasterReconciler), namespace)
 		})
 
 	})
 })
 
-func callUnsedMethods(rr *StandaloneReconciler, namespace string) {
-	key := types.NamespacedName{
-		Name:      "secret5",
-		Namespace: namespace,
-	}
-
-	secret := &corev1.Secret{}
-	_ = k8sClient.Get(context.TODO(), key, secret)
-}
-
-func CreateStandlaone(name string, namespace string, status splcommon.Phase) *enterprisev3.Standalone {
+func CreateLicenseMaster(name string, namespace string, status splcommon.Phase) *enterprisev3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterprisev3.Standalone{
+	ssSpec := &enterprisev3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: enterprisev3.StandaloneSpec{},
+		Spec: enterprisev3.LicenseMasterSpec{},
 	}
-	ssSpec = testutils.NewStandalone(name, namespace, "image")
+	ssSpec = testutils.NewLicenseMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting Standalone custom resource to be created successfully")
-	ss := &enterprisev3.Standalone{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterprisev3.LicenseMaster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -102,15 +89,15 @@ func CreateStandlaone(name string, namespace string, status splcommon.Phase) *en
 	return ss
 }
 
-func DeleteStandalone(name string, namespace string) {
+func DeleteLicenseMaster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting Standalone Deleted successfully")
+	By("Expecting LicenseMaster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterprisev3.Standalone{}
+		ssys := &enterprisev3.LicenseMaster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err
