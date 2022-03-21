@@ -13,7 +13,7 @@
 # Below env variables required to run license manager test cases
 : "${ENTERPRISE_LICENSE_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
-# Below env variables requried to run remote indexes test cases
+# Below env variables required to run remote indexes test cases
 : "${INDEXES_S3_BUCKET:=}"
 : "${AWS_S3_REGION:=}"
 # set when operator need to be installed clusterwide

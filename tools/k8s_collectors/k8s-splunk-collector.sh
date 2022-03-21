@@ -112,6 +112,10 @@ kubectl get pvc  >> pvc.txt; kubectl get pvc -o yaml >> pvc.txt;
 kubectl get pv >> pv.txt; kubectl get pv -o yaml >> pv.txt;
 kubectl get sc  >> storageClass.txt; kubectl get sc -o yaml >> storageClass.txt;
 kubectl get serviceaccount >> serviceaccount.txt; kubectl get serviceaccount -o yaml >> serviceaccount.txt;
+kubectl get role >> role.txt; kubectl get role -o yaml >> role.txt;
+kubectl get rolebinding >> rolebinding.txt; kubectl get rolebinding -o yaml >> rolebinding.txt;
+kubectl get clusterrole >> clusterrole.txt; kubectl get clusterrole -o yaml >> clusterrole.txt;
+kubectl get clusterrolebinding >> clusterrolebinding.txt; kubectl get clusterrolebinding -o yaml >> clusterrolebinding.txt;
 kubectl get crds >> crds.txt; kubectl get crds -o yaml >> crds.txt;
 kubectl api-resources | grep splunk >> api-resources.txt;
 kubectl get stdaln  >> standalone.txt; kubectl get stdaln -o yaml >> standalone.txt;
@@ -142,6 +146,10 @@ then
    kubectl describe pv  > pv.txt
    kubectl describe sc > storageClass.txt
    kubectl describe serviceaccount  > serviceaccount.txt
+   kubectl describe role > role.txt;
+   kubectl describe rolebinding > rolebinding.txt;
+   kubectl describe clusterrole > clusterrole.txt;
+   kubectl describe clusterrolebinding > clusterrolebinding.txt;
    kubectl describe crds  > crds.txt
    kubectl describe stdaln  > standalone.txt
    kubectl describe idxc  > indexerclusters.txt
@@ -152,4 +160,4 @@ then
 fi
 
 #All done
-echo "All data requried collected under folder $collect_folder\n"
+echo "All data required collected under folder $collect_folder\n"
