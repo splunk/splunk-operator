@@ -34,7 +34,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 
 	})
 
-	Context("LicenseMaster Management", func() {
+	XContext("LicenseMaster Management", func() {
 
 		It("Create LicenseMaster custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
