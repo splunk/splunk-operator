@@ -34,7 +34,7 @@ var _ = Describe("MonitoringConsole Controller", func() {
 
 	})
 
-	XContext("MonitoringConsole Management", func() {
+	Context("MonitoringConsole Management", func() {
 
 		It("Create MonitoringConsole custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}

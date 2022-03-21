@@ -34,7 +34,7 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 
 	})
 
-	XContext("SearchHeadCluster Management", func() {
+	Context("SearchHeadCluster Management", func() {
 
 		It("Create SearchHeadCluster custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}

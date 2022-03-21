@@ -34,7 +34,7 @@ var _ = Describe("IndexerCluster Controller", func() {
 
 	})
 
-	XContext("IndexerCluster Management", func() {
+	Context("IndexerCluster Management", func() {
 
 		It("Create IndexerCluster custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}

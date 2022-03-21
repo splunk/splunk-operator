@@ -37,7 +37,7 @@ var _ = Describe("Standalone Controller", func() {
 
 	})
 
-	XContext("Standalone Management", func() {
+	Context("Standalone Management", func() {
 
 		It("Create Standalone custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}

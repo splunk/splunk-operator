@@ -91,17 +91,17 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
-
-	k8sManager, err := mainFunction()
-	Expect(err).ToNot(HaveOccurred())
-
-	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+	/*
+		k8sManager, err := mainFunction()
 		Expect(err).ToNot(HaveOccurred())
-	}()
 
-	Expect(err).ToNot(HaveOccurred())
+		go func() {
+			err = k8sManager.Start(ctrl.SetupSignalHandler())
+			Expect(err).ToNot(HaveOccurred())
+		}()
 
+		Expect(err).ToNot(HaveOccurred())
+	*/
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())

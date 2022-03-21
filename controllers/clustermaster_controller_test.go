@@ -34,7 +34,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 	})
 
-	XContext("ClusterMaster Management", func() {
+	Context("ClusterMaster Management", func() {
 
 		It("Create ClusterMaster custom resource should succeeded", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
