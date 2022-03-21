@@ -181,7 +181,7 @@ var _ = Describe("Smartstore test", func() {
 			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC Pod is Ready
 			// testenv.MCPodReady(testcaseEnvInst.GetName(), deployment)
