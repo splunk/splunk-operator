@@ -39,25 +39,60 @@ func TestLocalPath(t *testing.T) {
 		t.Errorf("unable to strip slashes")
 	}
 
+	path := Path{
+		basepath: "testing",
+	}
+
+	test1 := src.Join(path)
+	if test1.file == "" {
+		t.Errorf("unable to strip slashes")
+	}
+
+	_, err := src.Glob()
+	if err == nil {
+		t.Errorf("unable to strip slashes")
+	}
+
+}
+
+type Path struct {
+	basepath string
+}
+
+func (p Path) String() string {
+	return p.basepath
 }
 
 func TestRemotePath(t *testing.T) {
-
-	src := remotePath{file: "/tmp/test.text"}
-	value := src.Base().file
+	rp := remotePath{file: "/tmp/test.text"}
+	value := rp.Base().file
 	if value == "" {
 		t.Errorf("unable to find base")
 	}
-	value = src.Dir().file
+	value = rp.Dir().file
 	if value == "" {
 		t.Errorf("unable to find directory")
 	}
-	value = src.Clean().file
+	value = rp.Clean().file
 	if value == "" {
 		t.Errorf("unable to clean file path")
 	}
-	value = src.StripSlashes().file
+	value = rp.StripSlashes().file
 	if value == "" {
 		t.Errorf("unable to strip slashes")
+	}
+
+	path := Path{
+		basepath: "testing",
+	}
+
+	test1 := rp.Join(path)
+	if test1.file == "" {
+		t.Errorf("unable to strip slashes")
+	}
+
+	rp = rp.StripShortcuts()
+	if rp.file == "" {
+		t.Errorf("unable to strip shortcuts")
 	}
 }
