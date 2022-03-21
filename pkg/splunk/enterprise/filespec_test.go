@@ -49,8 +49,8 @@ func TestLocalPath(t *testing.T) {
 	}
 
 	_, err := src.Glob()
-	if err == nil {
-		t.Errorf("unable to strip slashes")
+	if err != nil {
+		t.Errorf("unable to Glob")
 	}
 
 }
