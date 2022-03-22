@@ -1,5 +1,5 @@
 # **K8S data collectors**
-The Splunk Operator for K8S deploys Splunk Enterprise custom resources across a single namespace or multiple namespaces. The helper scripts `k8s-splunk-collector.sh` and `k8s-systeminfo-collector.sh` in the [tools directory](https://github.com/splunk/splunk-operator/tree/master/tools/k8s_collectors), collect data from a K8S cluster which runs the Splunk Operator for K8S.
+The Splunk Operator for K8S deploys Splunk Enterprise custom resources across a single namespace or multiple namespaces. The helper scripts `k8s-splunk-collector.sh` and `k8s-systeminfo-collector.sh` in the [tools directory](https://github.com/splunk/splunk-operator/tree/master/tools/k8s_collectors) collect data from a K8S cluster which runs the Splunk Operator for K8S.
 
 ## **Splunk Collector for K8S - k8s-splunk-collector.sh**
 The Splunk collector for K8S collects data from multiple <kubectl> get/describe commands, container logs and diags from the Splunk instances (if opted for) in the context of the current namespace.
