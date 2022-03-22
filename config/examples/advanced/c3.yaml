@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: lm-example
@@ -11,7 +11,7 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm-example
@@ -20,29 +20,34 @@ metadata:
 spec:
   licenseMasterRef:
     name: lm-example
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: cluster
+    appSources:
+      - name: idxApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: s3-secret
   smartstore:
     defaults:
-        remotePath: $_index_name
-        volumeName: <my_volume_name>
+        volumeName: volume_smartstore
     indexes:
       - name: main
-        remotePath: $_index_name
-        volumeName: <my_volume_name>
+        volumeName: volume_smartstore
     volumes:
-      - name: <my_volume_name>
-        path: <my_path>
-        endpoint: https://<my_s3_URL>
-        secretRef: <my_secret_name>
-  volumes:
-    - name: apps
-      configMap:
-        name: splunk-apps
-  defaults: |-
-    splunk:
-      apps_location:
-        - "/mnt/apps/<my_index_config>.tgz"
+     - name: volume_smartstore
+        path: <smartstore-path>
+        endpoint: https://<smartstore-endpoint>
+        secretRef: s3-secret
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: idxc-example
@@ -55,7 +60,7 @@ spec:
   licenseMasterRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v1
+apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: shc-example
@@ -66,3 +71,18 @@ spec:
     name: cm-example
   licenseMasterRef:
     name: lm-example
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: cluster
+    appSources:
+      - name: shApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: s3-secret
