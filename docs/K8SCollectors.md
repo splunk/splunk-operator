@@ -16,7 +16,7 @@ If any of the above is not desired, please resort to collecting data manually.
 - Enough space to collect data in a target folder
 
 ### **Script run instructions**
-- Run the script using the following command - `sh k8s-splunk-collector.sh -d <flag_to_collect_splunk_diags> -t <target_folder> -l <flag_to_limit_output_by_avoid_kubectl_describe> -s <collect_secret_data>`. There are three options which are configurable through the script:
+- Run the script using the following command - `sh k8s-splunk-collector.sh -d <flag_to_collect_splunk_diags> -t <target_folder> -l <flag_to_limit_output_by_avoid_kubectl_describe> -s <flag_to_collect_secret_object_metadata>`. There are three options which are configurable through the script:
     - The `-d` option is used to specify whether Splunk diags needs to be collected. Splunk diags are not collected by default. Set to `true` if Splunk diags are to be collected.
     - The `-t` option is used to specify a `<target folder>`. This option is `not mandatory`. The script allows you to store the data collected in two different ways:
         - If the `-t` option is not used, a timestamped folder `tmp-<timestamp>` is created in the present working directory where the data will be written to. 
@@ -28,7 +28,7 @@ If any of the above is not desired, please resort to collecting data manually.
     - The `-l` option is used to specify whether you want to limit the collection of data by avoiding `kubectl describe` commands. The kubectl describe command outputs `are` collected by default. There is an issue in K8s with creating too many clients for describe commands (https://github.com/kubernetes/kubernetes/issues/91913). In internal testing these messages have not caused any issues. However, to avoid the warning messages as well to protect your network bandwidth if limited, you can set the `-l` option to `true`. Example of a warning message from the K8s cluster:
 
             W0419 14:46:10.239590   21927 exec.go:203] constructing many client instances from the same exec auth config can cause performance problems during cert rotation and can exhaust available network connections; 1478 clients constructed calling "aws-iam-authenticator"
-    - The `-s` option is used to specify whether sensitive K8s secret data needs to be collected. Secret data is not collected by default. Set to `true` if you want the script to collect secret data.
+    - The `-s` option is used to specify whether K8s secret object metadata needs to be collected. Secret object metadata is not collected by default. Set to `true` if you want the script to collect secret object metadata. Note: The sensitive secret data is `NOT`collected.
 
 - After you run the script, wait until you see the message `All data required collected under folder <target_folder>`
 
