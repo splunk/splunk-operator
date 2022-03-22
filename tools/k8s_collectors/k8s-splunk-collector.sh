@@ -149,10 +149,6 @@ then
    kubectl describe all > all.txt
    kubectl describe nodes > nodes.txt
    kubectl describe pods  > pods.txt
-   if [ $getsecrets == "true" ]
-   then
-      kubectl describe secrets  > secrets.txt
-   fi
    kubectl describe cm  > configmap.txt
    kubectl describe sts  > statefulset.txt
    kubectl describe deployments  > deployment.txt
