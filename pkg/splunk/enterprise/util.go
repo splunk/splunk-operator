@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,10 +56,38 @@ var operatorResourceTracker *globalResourceTracker = nil
 
 // initialize operator level context
 func init() {
+	initGlobalResourceTracker()
+}
+
+// initGlobalResourceTracker initializes globalResourceTracker
+func initGlobalResourceTracker() {
 	operatorResourceTracker = &globalResourceTracker{}
 
 	// initialize the storage tracker
 	initStorageTracker()
+
+	// initialize the resource tracker
+	initCommonResourceTracker()
+}
+
+func initCommonResourceTracker() {
+	operatorResourceTracker.commonResourceTracker = &commonResourceTracker{
+		mutexMap: make(map[string]*sync.Mutex),
+	}
+}
+
+// getResourceMutex returns the mutex for the given K8s object
+func getResourceMutex(resourceName string) *sync.Mutex {
+	commonResourceTracker := operatorResourceTracker.commonResourceTracker
+
+	commonResourceTracker.mutex.Lock()
+	defer commonResourceTracker.mutex.Unlock()
+
+	if _, ok := commonResourceTracker.mutexMap[resourceName]; !ok {
+		var mutex sync.Mutex
+		commonResourceTracker.mutexMap[resourceName] = &mutex
+	}
+	return commonResourceTracker.mutexMap[resourceName]
 }
 
 func initStorageTracker() error {
@@ -154,7 +183,7 @@ func GetRemoteStorageClient(client splcommon.ControllerClient, cr splcommon.Meta
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
 	var err error
-	s3Client.Client, err = getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint, fn)
+	s3Client.Client, err = getClient(bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
 		return s3Client, err
@@ -768,9 +797,9 @@ func updateAuxPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, desiredR
 
 	for i := auxPhaseInfoLen; i < int(desiredReplicas); i++ {
 		phaseInfo := enterpriseApi.PhaseInfo{
-			Phase:      enterpriseApi.PhasePodCopy,
-			Status:     enterpriseApi.AppPkgPodCopyPending,
-			RetryCount: 0,
+			Phase:     enterpriseApi.PhasePodCopy,
+			Status:    enterpriseApi.AppPkgPodCopyPending,
+			FailCount: 0,
 		}
 		appDeployInfo.AuxPhaseInfo = append(appDeployInfo.AuxPhaseInfo, phaseInfo)
 	}
@@ -991,7 +1020,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(appSrcDeploymentInfo *enterpriseApi.App
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
 					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
-					appList[idx].PhaseInfo.RetryCount = 0
+					appList[idx].PhaseInfo.FailCount = 0
 					appList[idx].AuxPhaseInfo = nil
 
 					// Make the state active for an app that was deleted earlier, and got activated again
@@ -1188,6 +1217,57 @@ func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	return &cleanObjectHash, nil
 }
 
+// updateManualAppUpdateConfigMapLocked updates the manual app update config map
+func updateManualAppUpdateConfigMapLocked(client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking bool) error {
+	scopedLog := log.WithName("updateManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	var status string
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	mux := getResourceMutex(configMapName)
+	mux.Lock()
+	defer mux.Unlock()
+	configMap, err := splctrl.GetConfigMap(client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
+		return err
+	}
+
+	// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
+	appStatusContext.LastAppInfoCheckTime = 0
+
+	numOfObjects := getManualUpdateRefCount(client, cr, configMapName)
+
+	// turn off the manual checking for this CR kind in the configMap
+	if turnOffManualChecking {
+		scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
+		// reset the status back to "off" and
+		// refCount to original count
+		status = "off"
+		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+	} else {
+		//just decrement the refCount if the status is "on"
+		status = getManualUpdateStatus(client, cr, configMapName)
+		if status == "on" {
+			numOfObjects--
+		}
+	}
+
+	// prepare the configMapData
+	configMapData := fmt.Sprintf(`status: %s
+refCount: %d`, status, numOfObjects)
+
+	configMap.Data[kind] = configMapData
+
+	err = splutil.UpdateResource(client, configMap)
+	if err != nil {
+		scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+		return err
+	}
+	return nil
+}
+
 // initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
 func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	scopedLog := log.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1254,44 +1334,9 @@ func initAndCheckAppInfoStatus(client splcommon.ControllerClient, cr splcommon.M
 		if isAppRepoPollingEnabled(appStatusContext) {
 			SetLastAppInfoCheckTime(appStatusContext)
 		} else {
-			var status string
-			configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
-			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-			configMap, err := splctrl.GetConfigMap(client, namespacedName)
+			err = updateManualAppUpdateConfigMapLocked(client, cr, appStatusContext, kind, turnOffManualChecking)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
-				return err
-			}
-
-			// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
-			appStatusContext.LastAppInfoCheckTime = 0
-
-			numOfObjects := getManualUpdateRefCount(client, cr, configMapName)
-
-			// turn off the manual checking for this CR kind in the configMap
-			if turnOffManualChecking {
-				scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
-				// reset the status back to "off" and
-				// refCount to original count
-				status = "off"
-				numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
-			} else {
-				//just decrement the refCount if the status is "on"
-				status = getManualUpdateStatus(client, cr, configMapName)
-				if status == "on" {
-					numOfObjects--
-				}
-			}
-
-			// prepare the configMapData
-			configMapData := fmt.Sprintf(`status: %s
-refCount: %d`, status, numOfObjects)
-
-			configMap.Data[kind] = configMapData
-
-			err = splutil.UpdateResource(client, configMap)
-			if err != nil {
-				scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+				scopedLog.Error(err, "failed to update the manual app udpate configMap")
 				return err
 			}
 		}
@@ -1338,12 +1383,16 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 	return numOfObjects
 }
 
-// UpdateOrRemoveEntryFromConfigMap removes/updates the entry for the CR type from the manual app update configMap
-func UpdateOrRemoveEntryFromConfigMap(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
-	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// UpdateOrRemoveEntryFromConfigMapLocked removes/updates the entry for the CR type from the manual app update configMap
+func UpdateOrRemoveEntryFromConfigMapLocked(c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
+	scopedLog := log.WithName("UpdateOrRemoveEntryFromConfigMapLocked").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	mux := getResourceMutex(configMapName)
+	mux.Lock()
+	defer mux.Unlock()
 	configMap, err := splctrl.GetConfigMap(c, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get config map", "name", namespacedName.Name)

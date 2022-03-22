@@ -83,7 +83,7 @@ const (
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
 	// MonitoringConsolePod Monitoring Console Pod Template String
-	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+	MonitoringConsolePod = "splunk-%s-monitoring-console-0"
 
 	// ClusterManagerPod ClusterMaster Pod Template String
 	ClusterManagerPod = "splunk-%s-" + splcommon.ClusterManager + "-0"

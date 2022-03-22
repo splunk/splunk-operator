@@ -3,6 +3,7 @@ package testenv
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,6 +32,26 @@ var AppInfo = map[string]map[string]string{
 	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "filename": "splunk-db-connect.tgz"},
 	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "filename": "splunk-security-essentials.tgz"},
 	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "filename": "splunk-enterprise-security.spl"},
+	"test_app":                          {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app.tgz"},
+	"test_app2":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app2.tgz"},
+	"test_app3":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app3.tgz"},
+}
+
+//AppSourceInfo holds info related to app sources
+type AppSourceInfo struct {
+	CrKind                string
+	CrName                string
+	CrAppSourceName       string
+	CrAppSourceVolumeName string
+	CrPod                 []string
+	CrAppVersion          string
+	CrAppScope            string
+	CrAppList             []string
+	CrAppFileList         []string
+	CrReplicas            int
+	CrSiteCount           int
+	CrMultisite           bool
+	CrClusterPods         []string
 }
 
 //BasicApps Apps that require no restart to be installed
@@ -41,6 +62,12 @@ var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange
 
 //NewAppsAddedBetweenPolls Apps to be installed as poll after
 var NewAppsAddedBetweenPolls = []string{"TA-LDAP"}
+
+//BigSingleApp is 1 app with bigger size to perform tests while installation is in progress
+var BigSingleApp = []string{"test_app"}
+
+//ExtraApps is 2 apps to be added to app source during app installa in progress
+var ExtraApps = []string{"test_app2", "test_app3"}
 
 // AppLocationV1 Location of apps on S3 for V1 Apps
 var AppLocationV1 = "appframework/v1apps/"
@@ -272,7 +299,7 @@ func GetAppDeploymentInfo(deployment *Deployment, testenvInstance *TestEnv, name
 func GenerateAppFrameworkSpec(testenvInstance *TestEnv, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
 
 	// Create App framework volume
-	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3")}
+	volumeSpec := []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())}
 
 	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -310,4 +337,90 @@ func WaitforPhaseChange(deployment *Deployment, testenvInstance *TestEnv, name s
 		}
 		time.Sleep(1 * time.Second)
 	}
+}
+
+// AppFrameWorkVerifications will perform several verifications needed between the different steps of App Framework tests
+func AppFrameWorkVerifications(deployment *Deployment, testenvInstance *TestEnv, appSource []AppSourceInfo, splunkPodAge map[string]time.Time, clusterManagerBundleHash string) string {
+	/* Function Steps
+	 * Verify apps 'download' and 'podCopy' states for all CRs
+	 * Verify apps packages are deleted from the operator pod for all CRs
+	 * Verify apps 'install' state for all CRs
+	 * Verify apps packages are deleted from the CR pods
+	 * Verify bundle push status
+	 * Verify apps are copied to correct location on CR pods
+	 * Verify apps are installed to correct location on CR pods
+	 */
+
+	// Verify apps 'download' and 'podCopy' states for all CRs
+	for _, phase := range []enterpriseApi.AppPhaseType{enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy} {
+		for _, appSource := range appSource {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", phase, appSource.CrKind, appSource.CrName))
+			VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, phase, appSource.CrAppFileList)
+		}
+	}
+
+	// Verify apps packages are deleted from the operator pod for all CRs
+	opPod := GetOperatorPodName(testenvInstance.GetName())
+	for _, appSource := range appSource {
+		testenvInstance.Log.Info(fmt.Sprintf("Verify apps %s packages are deleted from the operator pod for CR %v with name %v", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
+		opPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), appSource.CrKind, deployment.GetName(), appSource.CrAppScope, appSource.CrAppSourceName)
+		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), []string{opPod}, appSource.CrAppFileList, opPath)
+	}
+
+	// Verify apps 'install' state for all CRs
+	for _, appSource := range appSource {
+		testenvInstance.Log.Info(fmt.Sprintf("Verify apps '%v' state on CR %v with name %v", enterpriseApi.PhaseInstall, appSource.CrKind, appSource.CrName))
+		VerifyAppListPhase(deployment, testenvInstance, appSource.CrName, appSource.CrKind, appSource.CrAppSourceName, enterpriseApi.PhaseInstall, appSource.CrAppFileList)
+	}
+
+	// Verify apps packages are deleted from the CR pods
+	for _, appSource := range appSource {
+		podDownloadPath := AppStagingLocOnPod + appSource.CrAppSourceVolumeName
+		pod := appSource.CrPod
+		testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps packages are deleted on pod %s", appSource.CrAppVersion, pod))
+		VerifyAppsPackageDeletedOnContainer(deployment, testenvInstance, testenvInstance.GetName(), pod, appSource.CrAppFileList, podDownloadPath)
+	}
+
+	// Verify bundle push status
+	for _, appSource := range appSource {
+		if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
+			VerifyClusterManagerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
+			if clusterManagerBundleHash == "" {
+				clusterManagerBundleHash = GetClusterManagerBundleHash(deployment)
+			}
+		}
+		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))
+			VerifyDeployerBundlePush(deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas)
+		}
+	}
+
+	// Verify apps are copied to correct location on all CRs
+	for _, appSource := range appSource {
+		if appSource.CrAppScope == enterpriseApi.ScopeLocal {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope are copied to /etc/apps/ for CR %s with name %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName))
+			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), appSource.CrPod, appSource.CrAppList, true, appSource.CrAppScope)
+		} else {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are NOT copied to /etc/apps/ on %v pod", appSource.CrAppVersion, appSource.CrPod))
+			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), appSource.CrPod, appSource.CrAppList, false, appSource.CrAppScope)
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope are copied on %v pods", appSource.CrAppVersion, appSource.CrClusterPods))
+			VerifyAppsCopied(deployment, testenvInstance, testenvInstance.GetName(), appSource.CrClusterPods, appSource.CrAppList, true, appSource.CrAppScope)
+		}
+	}
+
+	// Verify apps are installed at correct location on the pods
+	for _, appSource := range appSource {
+		allPodNames := appSource.CrPod
+		checkUpdated := appSource.CrAppVersion == "V2"
+		if appSource.CrAppScope == "local" {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'local' scope for CR %s with name %s are installed on pod %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
+			VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, false)
+		} else {
+			allPodNames = appSource.CrClusterPods
+			testenvInstance.Log.Info(fmt.Sprintf("Verify %s apps with 'cluster' scope for CR %s with name %s are installed on pods %s", appSource.CrAppVersion, appSource.CrKind, appSource.CrName, allPodNames))
+			VerifyAppInstalled(deployment, testenvInstance, testenvInstance.GetName(), allPodNames, appSource.CrAppList, true, "enabled", checkUpdated, true)
+		}
+	}
+	return clusterManagerBundleHash
 }

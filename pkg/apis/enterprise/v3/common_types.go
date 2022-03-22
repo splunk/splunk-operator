@@ -200,6 +200,9 @@ type VolumeSpec struct {
 
 	// App Package Remote Store provider. Supported values: aws, minio
 	Provider string `json:"provider"`
+
+	// Region of the remote storage volume where apps reside
+	Region string `json:"region"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation
@@ -276,6 +279,19 @@ type AppFrameworkSpec struct {
 	//    3. If anything more than the max value is specified then we set it to 1 day.
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
+	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
+	// Note: Do not change this setting unless instructed to do so by Splunk Support
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=30
+	// +kubebuilder:default:=90
+	SchedulerYieldInterval uint64 `json:"appInstallPeriodSeconds,omitempty"`
+
+	// Maximum number of retries to install Apps
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:default:=2
+	PhaseMaxRetries uint32 `json:"installMaxRetries,omitempty"`
+
 	// List of remote storage volumes
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 
@@ -329,7 +345,7 @@ type BundlePushTracker struct {
 	// Represents the current stage. Internal to the App framework
 	BundlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
 
-	// RetryCount defines the number of retries completed so far
+	// defines the number of retries completed so far
 	RetryCount int32 `json:"retryCount,omitempty"`
 }
 
@@ -396,8 +412,8 @@ type PhaseInfo struct {
 	Phase AppPhaseType `json:"phase,omitempty"`
 	// Status of the phase
 	Status AppPhaseStatusType `json:"status,omitempty"`
-	// RetryCount defines the number of retries completed so far
-	RetryCount int32 `json:"retryCount,omitempty"`
+	// represents number of failures
+	FailCount uint32 `json:"failCount,omitempty"`
 }
 
 const (

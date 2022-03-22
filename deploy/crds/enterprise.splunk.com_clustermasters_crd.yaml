@@ -637,6 +637,15 @@ spec:
                 description: Splunk Enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
+                  appInstallPeriodSeconds:
+                    default: 90
+                    description: 'App installation period within a reconcile. Apps
+                      will be installed during this period before the next reconcile
+                      is attempted. Note: Do not change this setting unless instructed
+                      to do so by Splunk Support'
+                    format: int64
+                    minimum: 30
+                    type: integer
                   appSources:
                     description: List of App sources on remote storage
                     items:
@@ -684,6 +693,12 @@ spec:
                         description: Remote Storage Volume name
                         type: string
                     type: object
+                  installMaxRetries:
+                    default: 2
+                    description: Maximum number of retries to install Apps
+                    format: int32
+                    minimum: 0
+                    type: integer
                   maxConcurrentAppDownloads:
                     description: Maximum number of apps that can be downloaded at
                       same time
@@ -706,6 +721,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name
@@ -1396,6 +1415,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name
@@ -2681,6 +2704,15 @@ spec:
                     description: List of App package (*.spl, *.tgz) locations on remote
                       volume
                     properties:
+                      appInstallPeriodSeconds:
+                        default: 90
+                        description: 'App installation period within a reconcile.
+                          Apps will be installed during this period before the next
+                          reconcile is attempted. Note: Do not change this setting
+                          unless instructed to do so by Splunk Support'
+                        format: int64
+                        minimum: 30
+                        type: integer
                       appSources:
                         description: List of App sources on remote storage
                         items:
@@ -2730,6 +2762,12 @@ spec:
                             description: Remote Storage Volume name
                             type: string
                         type: object
+                      installMaxRetries:
+                        default: 2
+                        description: Maximum number of retries to install Apps
+                        format: int32
+                        minimum: 0
+                        type: integer
                       maxConcurrentAppDownloads:
                         description: Maximum number of apps that can be downloaded
                           at same time
@@ -2752,6 +2790,10 @@ spec:
                             provider:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio'
+                              type: string
+                            region:
+                              description: Region of the remote storage volume where
+                                apps reside
                               type: string
                             secretRef:
                               description: Secret object name
@@ -2787,14 +2829,13 @@ spec:
                                   description: PhaseInfo defines the status to track
                                     the App framework installation phase
                                   properties:
+                                    failCount:
+                                      description: represents number of failures
+                                      format: int32
+                                      type: integer
                                     phase:
                                       description: Phase type
                                       type: string
-                                    retryCount:
-                                      description: RetryCount defines the number of
-                                        retries completed so far
-                                      format: int32
-                                      type: integer
                                     status:
                                       description: Status of the phase
                                       format: int32
@@ -2815,14 +2856,13 @@ spec:
                                 description: App phase info to track download, copy
                                   and install
                                 properties:
+                                  failCount:
+                                    description: represents number of failures
+                                    format: int32
+                                    type: integer
                                   phase:
                                     description: Phase type
                                     type: string
-                                  retryCount:
-                                    description: RetryCount defines the number of
-                                      retries completed so far
-                                    format: int32
-                                    type: integer
                                   status:
                                     description: Status of the phase
                                     format: int32
@@ -2858,8 +2898,7 @@ spec:
                           App framework
                         type: integer
                       retryCount:
-                        description: RetryCount defines the number of retries completed
-                          so far
+                        description: defines the number of retries completed so far
                         format: int32
                         type: integer
                     type: object
@@ -3004,6 +3043,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name

@@ -135,7 +135,7 @@ func (ppln *AppInstallPipeline) deleteWorkerFromPipelinePhase(phaseID enterprise
 // setContextForNewPhase sets the PhaseInfo to new phase
 func setContextForNewPhase(phaseInfo *enterpriseApi.PhaseInfo, newPhase enterpriseApi.AppPhaseType) {
 	phaseInfo.Phase = newPhase
-	phaseInfo.RetryCount = 0
+	phaseInfo.FailCount = 0
 	setPhaseStatusToPending(phaseInfo)
 }
 
@@ -211,10 +211,9 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 				}
 			} else {
 				scopedLog.Info("Installation was already in progress for replica members")
-				scope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
 				for podID := range appDeployInfo.AuxPhaseInfo {
 					phaseInfo := &appDeployInfo.AuxPhaseInfo[podID]
-					if !isPhaseInfoEligibleForSchedulerEntry(scope, phaseInfo) {
+					if !isPhaseInfoEligibleForSchedulerEntry(worker.appSrcName, phaseInfo, worker.afwConfig) {
 						continue
 					}
 
@@ -260,7 +259,7 @@ func (ppln *AppInstallPipeline) transitionWorkerPhase(worker *PipelineWorker, cu
 
 // checkIfWorkerIsEligibleForRun confirms if the worker is eligible to run
 func checkIfWorkerIsEligibleForRun(worker *PipelineWorker, phaseInfo *enterpriseApi.PhaseInfo, phaseStatus enterpriseApi.AppPhaseStatusType) bool {
-	if !worker.isActive && phaseInfo.RetryCount < pipelinePhaseMaxRetryCount &&
+	if !worker.isActive && !isPhaseMaxRetriesReached(phaseInfo, worker.afwConfig) &&
 		phaseInfo.Status != phaseStatus {
 		return true
 	}
@@ -295,12 +294,12 @@ func getPhaseInfoByPhaseType(worker *PipelineWorker, phaseType enterpriseApi.App
 	return &worker.appDeployInfo.PhaseInfo
 }
 
-// updatePplnWorkerPhaseInfo updates the in-memory PhaseInfo(specifically status and retryCount)
-func updatePplnWorkerPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, retryCount int32, statusType enterpriseApi.AppPhaseStatusType) {
+// updatePplnWorkerPhaseInfo updates the in-memory PhaseInfo(specifically status and fail count)
+func updatePplnWorkerPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, failCount uint32, statusType enterpriseApi.AppPhaseStatusType) {
 	scopedLog := log.WithName("updatePplnWorkerPhaseInfo").WithValues("appName", appDeployInfo.AppName)
 
 	scopedLog.Info("changing the status", "old status", appPhaseStatusAsStr(appDeployInfo.PhaseInfo.Status), "new status", appPhaseStatusAsStr(statusType))
-	appDeployInfo.PhaseInfo.RetryCount = retryCount
+	appDeployInfo.PhaseInfo.FailCount = failCount
 	appDeployInfo.PhaseInfo.Status = statusType
 }
 
@@ -346,8 +345,8 @@ func (downloadWorker *PipelineWorker) download(pplnPhase *PipelinePhase, s3Clien
 	remoteFile, err := getRemoteObjectKey(splunkCR, downloadWorker.afwConfig, appSrcName, appName)
 	if err != nil {
 		scopedLog.Error(err, "unable to get remote object key", "appName", appName)
-		// increment the retry count and mark this app as download pending
-		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+		// increment the fail count and mark this app as download pending
+		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
 		return
 	}
 
@@ -362,12 +361,12 @@ func (downloadWorker *PipelineWorker) download(pplnPhase *PipelinePhase, s3Clien
 			scopedLog.Error(err, "unable to remove local file from operator")
 		}
 
-		// increment the retry count and mark this app as download pending
-		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+		// increment the fail count and mark this app as download pending
+		updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
 		return
 	}
 
-	// download is successfull, update the state and reset the retry count
+	// download is successfull, update the state and reset the fail count
 	updatePplnWorkerPhaseInfo(appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 
 	scopedLog.Info("Finished downloading app")
@@ -418,15 +417,15 @@ downloadWork:
 				downloadWorker.waiter.Add(1)
 
 				// update the download state of app to be DownloadInProgress
-				updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.RetryCount, enterpriseApi.AppPkgDownloadInProgress)
+				updatePplnWorkerPhaseInfo(downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.FailCount, enterpriseApi.AppPkgDownloadInProgress)
 
 				appDeployInfo := downloadWorker.appDeployInfo
 
 				// create the sub-directories on the volume for downloading scoped apps
 				localPath, err := downloadWorker.createDownloadDirOnOperator()
 				if err != nil {
-					// increment the retry count and mark this app as download pending
-					updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.RetryCount+1, enterpriseApi.AppPkgDownloadPending)
+					// increment the fail count and mark this app as download pending
+					updatePplnWorkerPhaseInfo(appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
 
 					<-downloadWorkersRunPool
 					continue
@@ -506,7 +505,7 @@ downloadPhase:
 		default:
 			for _, downloadWorker := range pplnPhase.q {
 				phaseInfo := getPhaseInfoByPhaseType(downloadWorker, enterpriseApi.PhaseDownload)
-				if isPhaseMaxRetriesReached(phaseInfo) {
+				if isPhaseMaxRetriesReached(phaseInfo, downloadWorker.afwConfig) {
 					downloadWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, downloadWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
@@ -568,15 +567,15 @@ func (ctx *localScopePlaybookContext) runPlaybook() error {
 	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(streamOptions, []string{"/bin/sh"})
 	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
-		phaseInfo.RetryCount++
-		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "retry count", phaseInfo.RetryCount)
-		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, retry count: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.RetryCount)
+		phaseInfo.FailCount++
+		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "failCount", phaseInfo.FailCount)
+		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
 	}
 
 	// Mark the worker for install complete status
 	scopedLog.Info("App pkg installation complete")
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	phaseInfo.RetryCount = 0
+	phaseInfo.FailCount = 0
 
 	// Delete the app package from the target pod /operator-staging/appframework/ location
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
@@ -659,16 +658,16 @@ func runPodCopyWorker(worker *PipelineWorker, ch chan struct{}) {
 	podExecClient := splutil.GetPodExecClient(worker.client, cr, worker.targetPodName)
 	stdOut, stdErr, err := CopyFileToPod(worker.client, cr.GetNamespace(), appPkgLocalPath, appPkgPathOnPod, podExecClient)
 	if err != nil {
-		phaseInfo.RetryCount++
-		scopedLog.Error(err, "app package pod copy failed", "stdout", stdOut, "stderr", stdErr, "retry count", phaseInfo.RetryCount)
+		phaseInfo.FailCount++
+		scopedLog.Error(err, "app package pod copy failed", "stdout", stdOut, "stderr", stdErr, "failCount", phaseInfo.FailCount)
 		return
 	}
 
 	if appSrcScope == enterpriseApi.ScopeCluster {
 		err = extractClusterScopedAppOnPod(worker, appSrcScope, appPkgPathOnPod, appPkgLocalPath, podExecClient)
 		if err != nil {
-			phaseInfo.RetryCount++
-			scopedLog.Error(err, "extracting the app package on pod failed", "retry count", phaseInfo.RetryCount)
+			phaseInfo.FailCount++
+			scopedLog.Error(err, "extracting the app package on pod failed", "failCount", phaseInfo.FailCount)
 			return
 		}
 	}
@@ -757,7 +756,7 @@ podCopyPhase:
 		default:
 			for _, podCopyWorker := range pplnPhase.q {
 				phaseInfo := getPhaseInfoByPhaseType(podCopyWorker, enterpriseApi.PhasePodCopy)
-				if isPhaseMaxRetriesReached(phaseInfo) {
+				if isPhaseMaxRetriesReached(phaseInfo, podCopyWorker.afwConfig) {
 					podCopyWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgPodCopyError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, podCopyWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
@@ -841,7 +840,7 @@ func needToRunClusterScopedPlaybook(afwPipeline *AppInstallPipeline) bool {
 	}
 
 	// Its already time to yield the current reconcile
-	if afwPipeline.afwEntryTime+maxRunTimeBeforeAttemptingYield < time.Now().Unix() {
+	if afwPipeline.afwEntryTime+int64(afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) < time.Now().Unix() {
 		return false
 	}
 
@@ -982,7 +981,7 @@ installPhase:
 				}
 
 				phaseInfo := getPhaseInfoByPhaseType(installWorker, enterpriseApi.PhaseInstall)
-				if isPhaseMaxRetriesReached(phaseInfo) {
+				if isPhaseMaxRetriesReached(phaseInfo, installWorker.afwConfig) {
 					phaseInfo.Status = enterpriseApi.AppPkgInstallError
 					ppln.deleteWorkerFromPipelinePhase(phaseInfo.Phase, installWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
@@ -1038,8 +1037,9 @@ func isPhaseStatusComplete(phaseInfo *enterpriseApi.PhaseInfo) bool {
 	}
 }
 
-func isPhaseMaxRetriesReached(phaseInfo *enterpriseApi.PhaseInfo) bool {
-	return phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount
+// isPhaseMaxRetriesReached confirms if the max retries reached
+func isPhaseMaxRetriesReached(phaseInfo *enterpriseApi.PhaseInfo, afwConfig *enterpriseApi.AppFrameworkSpec) bool {
+	return (afwConfig.PhaseMaxRetries < phaseInfo.FailCount)
 }
 
 // isPipelineEmpty checks if the pipeline is empty or not
@@ -1346,9 +1346,9 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook() error {
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(appDeployContext)
 		} else if err != nil {
-			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again.")
+			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again")
 		} else {
-			scopedLog.Info("SHC Bundle Push is still in progress, will check back again in next reconcile..")
+			scopedLog.Info("SHC Bundle Push is still in progress, will check back again")
 		}
 	case enterpriseApi.BundlePushPending:
 		// run the command to apply cluster bundle
@@ -1484,8 +1484,8 @@ func checkAndUpdateAppFrameworkProgressFlag(afwPipeline *AppInstallPipeline) {
 }
 
 // isPhaseInfoEligibleForSchedulerEntry confirms if there is any pending work
-func isPhaseInfoEligibleForSchedulerEntry(scope string, phaseInfo *enterpriseApi.PhaseInfo) bool {
-	if phaseInfo.RetryCount >= pipelinePhaseMaxRetryCount {
+func isPhaseInfoEligibleForSchedulerEntry(appSrcName string, phaseInfo *enterpriseApi.PhaseInfo, afwConfig *enterpriseApi.AppFrameworkSpec) bool {
+	if isPhaseMaxRetriesReached(phaseInfo, afwConfig) {
 		return false
 	}
 
@@ -1494,6 +1494,7 @@ func isPhaseInfoEligibleForSchedulerEntry(scope string, phaseInfo *enterpriseApi
 		return false
 	}
 
+	scope := getAppSrcScope(afwConfig, appSrcName)
 	// For cluster scoped apps, if pod copy is complete, do not schedule a worker
 	if scope == enterpriseApi.ScopeCluster && phaseInfo.Phase == enterpriseApi.PhasePodCopy && phaseInfo.Status == enterpriseApi.AppPkgPodCopyComplete {
 		return false
@@ -1535,7 +1536,6 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	scopedLog.Info("Creating pipeline workers for pending app packages")
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
-		scope := getAppSrcScope(appFrameworkConfig, appSrcName)
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 
 		sts := afwGetReleventStatefulsetByKind(cr, client)
@@ -1553,7 +1553,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 
 		for i := range deployInfoList {
 			// Ignore any apps if there is no pending work
-			if !isPhaseInfoEligibleForSchedulerEntry(scope, &deployInfoList[i].PhaseInfo) {
+			if !isPhaseInfoEligibleForSchedulerEntry(appSrcName, &deployInfoList[i].PhaseInfo, appFrameworkConfig) {
 				continue
 			}
 			afwPipeline.createAndAddPipelineWorker(deployInfoList[i].PhaseInfo.Phase, &deployInfoList[i], appSrcName, podName, appFrameworkConfig, client, cr, sts)
@@ -1565,7 +1565,7 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	// while setting up the pipeline phases.
 	// Wait for the yield function to finish.
 	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.afwYieldWatcher(maxRunTimeBeforeAttemptingYield)
+	go afwPipeline.afwYieldWatcher()
 
 	scopedLog.Info("Waiting for the phase managers to finish")
 
@@ -1580,9 +1580,9 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 }
 
 // afwYieldWatcher issues termination request to the scheduler when the yield time expires or the pipelines become empty.
-func (ppln *AppInstallPipeline) afwYieldWatcher(maxTimeToYield int64) {
+func (ppln *AppInstallPipeline) afwYieldWatcher() {
 	scopedLog := log.WithName("afwYieldWatcher").WithValues("name", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
-	yieldTrigger := time.After(time.Duration(maxTimeToYield) * time.Second)
+	yieldTrigger := time.After(time.Duration(ppln.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) * time.Second)
 
 yieldScheduler:
 	for {

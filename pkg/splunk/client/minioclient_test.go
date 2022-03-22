@@ -37,19 +37,19 @@ func TestNewMinioClient(t *testing.T) {
 	fn := InitMinioClientWrapper
 
 	// Test1. Test for endpoint with https
-	minioS3Client, err := NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "https://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err := NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test2. Test for endpoint with http
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "http://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://s3.us-west-2.amazonaws.com", fn)
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test3. Test for invalid endpoint
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "random-endpoint.com", fn)
+	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
 	if minioS3Client != nil || err == nil {
 		t.Errorf("NewMinioClient should have returned a error.")
 	}

@@ -825,9 +825,6 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	var configMap *corev1.ConfigMap
 	var err error
 	var newConfigMap bool
-
-	scopedLog.Info("Creating/Updating manual app update configMap")
-
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err != nil {
 		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
@@ -840,15 +837,17 @@ func ApplyManualAppUpdateConfigMap(client splcommon.ControllerClient, cr splcomm
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
+		scopedLog.Info("Creating manual app update configMap")
 		err = splutil.CreateResource(client, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
+		scopedLog.Info("Updating manual app update configMap")
 		err = splutil.UpdateResource(client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
 			return configMap, err
 		}
 	}
@@ -894,7 +893,7 @@ func getManualUpdateRefCount(client splcommon.ControllerClient, cr splcommon.Met
 func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 	scopedLog := log.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	crKindMap := make(map[string]string)
+	var crKindMap map[string]string
 	var configMapData, status string
 	var configMap *corev1.ConfigMap
 	var err error
@@ -905,6 +904,9 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
+	mux := getResourceMutex(configMapName)
+	mux.Lock()
+	defer mux.Unlock()
 	configMap, err = splctrl.GetConfigMap(client, namespacedName)
 	if err == nil {
 		// If this CR is already an owner reference, then do nothing.
@@ -917,6 +919,7 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 			}
 		}
 
+		scopedLog.Info("Existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -926,6 +929,9 @@ func createOrUpdateAppUpdateConfigMap(client splcommon.ControllerClient, cr splc
 	// prepare the configMap data OR
 	// initialize the configMap data for this CR type,
 	// if it did not exist before
+	if crKindMap == nil {
+		crKindMap = make(map[string]string)
+	}
 	if _, ok := crKindMap[kind]; !ok {
 		status = "off"
 	} else {

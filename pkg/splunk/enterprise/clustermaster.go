@@ -123,7 +123,7 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkClusterManager)
+			err = UpdateOrRemoveEntryFromConfigMapLocked(client, cr, SplunkClusterManager)
 			if err != nil {
 				return result, err
 			}

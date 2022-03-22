@@ -88,7 +88,7 @@ func ApplyLicenseManager(client splcommon.ControllerClient, cr *enterpriseApi.Li
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMap(client, cr, SplunkLicenseManager)
+			err = UpdateOrRemoveEntryFromConfigMapLocked(client, cr, SplunkLicenseManager)
 			if err != nil {
 				return result, err
 			}

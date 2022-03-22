@@ -4,22 +4,22 @@ jobs:
   check-formating:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@v0.2.7
-    - name: Setup Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    - name: Install golint
-      run: |
-        go version
-        go get -u golang.org/x/lint/golint
-    - name: Check Source formatting
-      run: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
-    - name: Lint source code
-      run: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+      - name: Install golint
+        run: |
+          go version
+          go get -u golang.org/x/lint/golint
+      - name: Check Source formatting
+        run: X=`make fmt` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
+      - name: Lint source code
+        run: X=`make lint` && if [[ "x$X" != "x" ]]; then echo $X && false; fi
   unit-tests:
     runs-on: ubuntu-latest
     needs: check-formating
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@v0.2.7
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -41,11 +41,11 @@ jobs:
           go version
           go get github.com/mattn/goveralls@latest
       - name: Run Unit Tests
-        run: make test  
+        run: make test
       - name: Run Code Coverage
         run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
       - name: Upload Coverage artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: coverage.out
           path: coverage.out
@@ -58,33 +58,33 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@v0.2.7
-    - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
-    - name: Install Operator SDK
-      run: |
-        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-        sudo chmod +x /usr/local/bin/operator-sdk
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Make Splunk Operator Image
-      run: |
-        docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-        operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Push Splunk Operator Image to ECR
-      run: |
-        echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@v1
+      - name: Install Operator SDK
+        run: |
+          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
+          sudo chmod +x /usr/local/bin/operator-sdk
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Make Splunk Operator Image
+        run: |
+          docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
+          operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Push Splunk Operator Image to ECR
+        run: |
+          echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
+          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -94,43 +94,51 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@v0.2.7
-    - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Pull Splunk Operator Image Locally
-      run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Change Operator Image Tag to latest
-      run: |
-        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
-    - name: Setup clair scanner
-      run: make setup_clair_scanner
-    - name: Scan container image
-      run: make run_clair_scan
-    - name: Stop clair scanner
-      run: make stop_clair_scanner
-    - name: Save scan results as artifacts
-      uses: actions/upload-artifact@v2
-      with:
-        name: clair-scanner-logs
-        path: clair-scanner-logs
+      - uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Pull Splunk Operator Image Locally
+        run: |
+          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Change Operator Image Tag to latest
+        run: |
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
+      - name: Setup clair scanner
+        run: make setup_clair_scanner
+      - name: Scan container image
+        run: make run_clair_scan
+      - name: Stop clair scanner
+        run: make stop_clair_scanner
+      - name: Save scan results as artifacts
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        with:
+          name: clair-scanner-logs
+          path: clair-scanner-logs
   smoke-tests:
     needs: vulnerability-scan
     strategy:
       fail-fast: false
       matrix:
-        test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
+        test:
+          [
+            basic,
+            appframeworks1,
+            appframeworkc3,
+            appframeworkm4,
+            secret,
+            monitoringconsole,
+          ]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -152,7 +160,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
     steps:
       - name: Set Test Cluster Name
-        run: | 
+        run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
@@ -161,19 +169,19 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
           fi
       - name: Chekcout code
-        uses: actions/checkout@v2  
+        uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
-        uses: falti/dotenv-action@v0.2.7 
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
-          version: 'v1.16.13'
+          version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v2
       - name: Install AWS CLI
         run: |
-          curl "https://s3.amazonaws.com/aws-cli/awscli-bundle-1.20.8.zip" -o "awscli-bundle.zip"
+          curl "${{ steps.dotenv.outputs.AWSCLI_URL}}" -o "awscli-bundle.zip"
           unzip awscli-bundle.zip
           sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
           aws --version
@@ -185,10 +193,10 @@ jobs:
         run: |
           go version
           go get -u golang.org/x/lint/golint
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
-            go get github.com/onsi/ginkgo/ginkgo
-            go get github.com/onsi/gomega/...
+          go get github.com/onsi/ginkgo/ginkgo
+          go get github.com/onsi/gomega/...
       - name: Install EKS CTL
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -228,59 +236,59 @@ jobs:
           docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
-           make cluster-up
+          make cluster-up
       - name: Run smoke test
         id: smoketest
         run: |
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
-        run: | 
+        run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
-        run: | 
-           make cluster-down
+        run: |
+          make cluster-down
   push-latest:
     needs: smoke-tests
-    if: github.ref == 'refs/heads/master' 
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: latest
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@v0.2.7
-    - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
-    - name: Configure Docker Hub credentials
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Pull Splunk Operator Image Locally
-      run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Change Operator Image Tag to latest
-      run: |
-        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
-    - name: Push Splunk Operator Image to Docker Hub 
-      run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@v1
+      - name: Configure Docker Hub credentials
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Pull Splunk Operator Image Locally
+        run: |
+          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Change Operator Image Tag to latest
+        run: |
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+      - name: Push Splunk Operator Image to Docker Hub
+        run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}

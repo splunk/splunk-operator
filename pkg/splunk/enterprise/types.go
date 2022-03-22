@@ -62,18 +62,22 @@ const (
 )
 
 const (
-	// Max retries for each phase of the App install pipeline
-	pipelinePhaseMaxRetryCount = 3
-
-	// Max. time the app framework scheduler waits before trying to yield
-	maxRunTimeBeforeAttemptingYield = 90
-
 	// Max. of parallel installs for a given Pod
 	maxParallelInstallsPerPod = 1
 )
 
+type commonResourceTracker struct {
+	// mutex to serialize the access to commonResourceTracker
+	mutex sync.Mutex
+
+	// map of resource name:mutex, so that we can serialize get/create/update to common resources such as secrets/configMaps
+	mutexMap map[string]*sync.Mutex
+}
+
 type globalResourceTracker struct {
 	storage *storageTracker
+
+	commonResourceTracker *commonResourceTracker
 }
 
 type storageTracker struct {

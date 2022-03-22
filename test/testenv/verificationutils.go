@@ -69,16 +69,6 @@ func VerifyMonitoringConsoleReady(deployment *Deployment, mcName string, monitor
 		}
 		testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		// CSPL-1532 - MC Resets after becoming READY. Remove the if block when bug is fixed.
-		if monitoringConsole.Status.Phase == splcommon.PhaseReady {
-			testenvInstance.Log.Info("After Monitoring Console Phase goes to Ready Phase in some instances it flips back to Pending/Updating. Adding Static Wait to avoid this situtaion")
-			time.Sleep(10 * time.Second)
-			err := deployment.GetInstance(mcName, monitoringConsole)
-			if err != nil {
-				return splcommon.PhaseError
-			}
-			testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
-		}
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
@@ -668,11 +658,11 @@ func VerifyAppInstalled(deployment *Deployment, testenvInstance *TestEnv, ns str
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+func VerifyAppsCopied(deployment *Deployment, testenvInstance *TestEnv, ns string, pods []string, apps []string, checkAppDirectory bool, scope string) {
 	for _, podName := range pods {
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
-		if clusterWideInstall {
+		if scope == enterpriseApi.ScopeCluster {
 			if strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
 			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
@@ -767,6 +757,27 @@ func VerifyAppListPhase(deployment *Deployment, testenvInstance *TestEnv, name s
 			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 		}
 	}
+}
+
+// VerifyAppInstallInProgress verify given app installation is in progress, i.e when Status is between 101 and 303
+func VerifyAppInstallInProgress(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)) //Check status value is between 100 and 303
+	}
+}
+
+// WaitForAppInstall waits until an app is correctly installed (having status equal to 303)
+func WaitForAppInstall(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeEquivalentTo(enterpriseApi.AppPkgInstallComplete))
+	}
+
 }
 
 // VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
