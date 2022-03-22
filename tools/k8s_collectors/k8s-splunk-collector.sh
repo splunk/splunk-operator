@@ -13,7 +13,7 @@ helpFunction()
 
 echo $opt
 
-while getopts "d:t:l:" opt
+while getopts "d:t:l:s:" opt
 do
    case "$opt" in
       d) diag="$OPTARG" ;;
@@ -24,40 +24,49 @@ do
    esac
 done
 
-#initializa option variables
-diag="false"
-limitandavoiddescribe="false"
-getsecrets="false"
-
 # Print helpFunction in case diag flag is not used properly
-if [ ! -z "$diag" ] && [ $diag != "true" ]
+if [ ! -z "$diag" ]
 then
-   echo "Please enter valid value for -d option i.e set to true if diag is required. Use option only if diag is required. False by default.";
-   helpFunction
+   if [ $diag != "true" ]
+   then
+      echo "Please enter valid value (true) for -d option i.e set to true if diag is required. Use option only if diag is required. False by default.";
+      helpFunction
+   fi
+else
+   diag="false"
+fi
+
+# Print helpFunction in case limitandavoiddescribe flag is not used properly
+if [ ! -z "$limitandavoiddescribe" ]
+then
+   if [ $limitandavoiddescribe != "true" ]
+   then
+      echo "Please enter valid value (true) for -l option i.e set to true if you want to avoid kubectl describe commands";
+      helpFunction
+   fi
+else
+   limitandavoiddescribe="false"
+fi
+
+# Print helpFunction in case getsecrets flag is not used properly
+if [ ! -z "$getsecrets" ]
+then
+   if [ $getsecrets != "true" ]
+   then
+      echo "Please enter valid value (true) for -s option i.e set to true if you want secret information to be collected";
+      helpFunction
+   fi
+else
+   getsecrets="false"
 fi
 
 # Determine full path of where the data needs to be collected
 if [ -z "$targetfolder" ]
 then
    collect_folder=$PWD/tmp-$(date "+%F-%H-%M")
-else 
+else
    collect_folder=$targetfolder/tmp-$(date "+%F-%H-%M")
 fi
-
-# Print helpFunction in case avoid describe flag is not used properly
-if [ ! -z "$limitandavoiddescribe" ] && [ $limitandavoiddescribe != "true" ]
-then
-   echo "Please enter valid value for -l option i.e set to true if you want to avoid kubectl describe commands";
-   helpFunction
-fi
-
-# Print helpFunction in getsecrets flag is not used properly
-if [ ! -z "$getsecrets" ] && [ $getsecrets != "true" ]
-then
-   echo "Please enter valid value for -s option i.e set to true if you want secret information to be collected";
-   helpFunction
-fi
-
 
 echo "Starting to collect data with diag $diag in folder $collect_folder \n"
 
@@ -68,7 +77,8 @@ mkdir -p $collect_folder/
 mkdir -p $collect_folder/pod_data
 mkdir -p $collect_folder/k8s_data
 mkdir -p $collect_folder/k8s_data/get
-if [ -z "$limitandavoiddescribe" ]
+
+if [ $limitandavoiddescribe != "true" ]
 then
    mkdir -p $collect_folder/k8s_data/describe
 fi
@@ -125,8 +135,8 @@ kubectl get shc >> searchheadclusters.txt; kubectl get shc -o yaml >> searchhead
 kubectl get lm >> licensemaster.txt; kubectl get lm -o yaml >> licensemaster.txt;
 echo "Done collecting kubectl get command outputs \n"
 
-# Implement kubectl describe only if -a option is not used. Avoid describe if -a option is set to true
-if [ -z "$limitandavoiddescribe" ]
+# Implement kubectl describe only if -l option is not used. Avoid describe if -l option is set to true
+if [ $limitandavoiddescribe != "true" ]
 then
    #Capture kubectl describe command outputs
    echo "Started collecting kubectl describe command outputs \n"

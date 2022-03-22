@@ -48,7 +48,7 @@ def main(argv):
             collectDir = arg
 
     # Collect logs from the operator
-    output = executeShellCommand("kubectl logs deployment/splunk-operator > %s/%s/operator.log" % (collectDir, podLogsDir))
+    output = executeShellCommand("kubectl logs deployment/splunk-operator-controller-manager manager > %s/%s/operator.log" % (collectDir, podLogsDir))
     output = executeShellCommand("kubectl logs -l app.kubernetes.io/managed-by=splunk-operator --tail -1 > %s/%s/splunkEnterprisePods.log" % (collectDir, podLogsDir))
 
     output = executeShellCommand("kubectl get pods")
@@ -57,12 +57,14 @@ def main(argv):
         if "splunk" in words[0]:
             pod = words[0]
 
+            #ensure container is specified for the operator
+            if "operator" in pod:
+                opPod = pod + " -c manager"
+                executeShellCommand("kubectl logs %s > %s/%s/%s.log" % (opPod, collectDir, podLogsDir, pod))
+                continue
+
             # Collect logs from pod
             executeShellCommand("kubectl logs %s > %s/%s/%s.log" % (pod, collectDir, podLogsDir, pod))
-
-            # Skip operator pod for diag purposes
-            if "operator" in pod:
-                continue
 
             # Collect diag and save diag from all Splunk Instances
             if collectDiag == "true":
@@ -70,8 +72,3 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
-
-
-
-
