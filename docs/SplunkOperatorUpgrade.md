@@ -50,7 +50,7 @@ Set KUBECONFIG and run `upgrade-to-1.1.0.sh` script with the following mandatory
 ### Example
 
 ```
->upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=release-v1.1.0/splunk-operator-install.yaml
+>upgrade-to-1.1.0.sh --current_namespace=splunk-operator --manifest_file=release-v1.1.0/splunk-operator-install.yaml
 ```
 
 Note: This script can be run from `Mac` or `Linux` system. To run this script on `Windows`, use `cygwin`.
