@@ -27,9 +27,9 @@ done
 # Print helpFunction in case diag flag is not used properly
 if [ ! -z "$diag" ]
 then
-   if [ $diag != "true" ]
+   if [ $diag != "true" ] && [ $diag != "false" ]
    then
-      echo "Please enter valid value (true) for -d option i.e set to true if diag is required. Use option only if diag is required. False by default.";
+      echo "Please enter valid value (true/false) for -d option i.e set to true if diag is required. Use option only if diag is required. False by default.";
       helpFunction
    fi
 else
@@ -39,9 +39,9 @@ fi
 # Print helpFunction in case limitandavoiddescribe flag is not used properly
 if [ ! -z "$limitandavoiddescribe" ]
 then
-   if [ $limitandavoiddescribe != "true" ]
+   if [ $limitandavoiddescribe != "true" ] && [ $limitandavoiddescribe != "false" ]
    then
-      echo "Please enter valid value (true) for -l option i.e set to true if you want to avoid kubectl describe commands";
+      echo "Please enter valid value (true/false) for -l option i.e set to true if you want to avoid kubectl describe commands";
       helpFunction
    fi
 else
@@ -51,9 +51,9 @@ fi
 # Print helpFunction in case getsecrets flag is not used properly
 if [ ! -z "$getsecrets" ]
 then
-   if [ $getsecrets != "true" ]
+   if [ $getsecrets != "true" ] && [ $getsecrets != "false" ]
    then
-      echo "Please enter valid value (true) for -s option i.e set to true if you want secret information to be collected";
+      echo "Please enter valid value (true/false) for -s option i.e set to true if you want secret information to be collected";
       helpFunction
    fi
 else
