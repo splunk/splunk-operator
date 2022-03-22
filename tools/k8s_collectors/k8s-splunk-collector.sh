@@ -112,7 +112,12 @@ kubectl get nodes >> nodes.txt; kubectl get nodes -o yaml >> nodes.txt;
 kubectl get pods >> pods.txt; kubectl get pods -o yaml >> pods.txt;
 if [ $getsecrets == "true" ]
 then
-  kubectl get secrets >> secrets.txt; kubectl get secrets -o go-template='{{range .items}}{{"\n"}}{{"apiVersion: "}}{{.apiVersion}}{{"\n"}}{{"kind: "}}{{.kind}}{{"\n"}}{{"creationTimestamp: "}}{{.metadata.creationTimestamp}}{{"\n"}}{{"name: "}}{{.metadata.name}}{{"\n"}}{{"namespace: "}}{{.metadata.namespace}}{{"\n"}}{{"ownerReferences: "}}{{"\n"}}{{range .metadata.ownerReferences}}{{"    apiVersion: "}}{{.apiVersion}}{{"\n"}}{{"    controller: "}}{{.controller}}{{"\n"}}{{"    kind: "}}{{.kind}}{{"\n"}}{{"    name: "}}{{.name}}{{"\n"}}{{"    uid: "}}{{.uid}}{{end}}{{"\n"}}{{"resourceVersion: "}}{{.metadata.resourceVersion}}{{"\n"}}{{"uid: "}}{{.metadata.uid}}{{"\n"}}{{end}}' >> secrets.txt;
+  kubectl get secrets >> secrets.txt; kubectl get secrets -o go-template='{{range .items}}{{"\n"}}{{"apiVersion: "}}{{.apiVersion}}
+{{"kind: "}}{{.kind}}{{"\n"}}{{"creationTimestamp: "}}{{.metadata.creationTimestamp}}
+{{"name: "}}{{.metadata.name}}{{"\n"}}{{"namespace: "}}{{.metadata.namespace}}{{"\n"}}{{"ownerReferences: "}}
+{{range .metadata.ownerReferences}}{{"    apiVersion: "}}{{.apiVersion}}{{"\n"}}{{"    controller: "}}{{.controller}}
+{{"    kind: "}}{{.kind}}{{"\n"}}{{"    name: "}}{{.name}}{{"\n"}}{{"    uid: "}}{{.uid}}{{end}}{{"\n"}}{{"resourceVersion: "}}{{.metadata.resourceVersion}}
+{{"uid: "}}{{.metadata.uid}}{{"\n"}}{{end}}' >> secrets.txt;
 fi
 kubectl get cm >> configmap.txt; kubectl get cm -o yaml >> configmap.txt;
 kubectl get sts >> statefulset.txt; kubectl get sts -o yaml >> statefulset.txt;
