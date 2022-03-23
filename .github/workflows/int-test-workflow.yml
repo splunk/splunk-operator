@@ -20,7 +20,7 @@ jobs:
             monitoringconsole,
             scaling,
             crcrud,
-            licensemaster,
+            licensemanager,
           ]
     runs-on: ubuntu-latest
     env:

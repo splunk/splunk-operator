@@ -866,3 +866,11 @@ func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestEnv, ns strin
 		}
 	}
 }
+
+// WaitForSplunkPodCleanup Wait for cleanup to happend
+func WaitForSplunkPodCleanup(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() int {
+		testenvInstance.Log.Info("Waiting for Splunk Pods to be deleted before running test")
+		return len(DumpGetPods(testenvInstance.GetName()))
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(0))
+}
