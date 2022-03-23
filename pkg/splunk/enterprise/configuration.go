@@ -706,26 +706,28 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
-		//Check if CM is connected to a LicenseMaster
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      spec.ClusterMasterRef.Name,
-		}
-		managerIdxCluster := &enterpriseApi.ClusterMaster{}
-		err := client.Get(ctx, namespacedName, managerIdxCluster)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get ClusterMaster")
-		}
-
-		if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-			licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-			if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-				licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+		if spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			namespacedName := types.NamespacedName{
+				Namespace: cr.GetNamespace(),
+				Name:      spec.ClusterMasterRef.Name,
 			}
-			env = append(env, corev1.EnvVar{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseManagerURL,
-			})
+			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get ClusterManager")
+			}
+
+			if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  "SPLUNK_LICENSE_MASTER_URL",
+					Value: licenseManagerURL,
+				})
+			}
 		}
 	}
 
