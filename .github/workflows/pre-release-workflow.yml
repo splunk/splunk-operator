@@ -79,16 +79,12 @@ jobs:
 
     - name: Install Operator SDK
       run: |
-        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-        sudo chmod +x /usr/local/bin/operator-sdk
-
-    - name: Update Operator Version in version.go
-      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
-      with:
-        find: "${{ github.event.inputs.old_operator_version }}"
-        replace: "${{ github.event.inputs.new_operator_version }}"
-        include: "**version.go"
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -136,14 +132,12 @@ jobs:
 
     - name: Run Make Package
       run: |
-        make package
+        make docker-build IMG=splunk/splunk-operator:latest
+        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
   
     - name: Tag and Push release RC Image
       run: |
-        docker images
-        docker tag splunk/splunk-operator:latest splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        docker push splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        docker images
+        make docker-build docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
 
     - name: Update Operator Image name in Release Folder
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
