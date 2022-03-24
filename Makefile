@@ -275,6 +275,7 @@ run_clair_scan:
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+    mkdir -p release-${VERSION}}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-install.yaml
 
