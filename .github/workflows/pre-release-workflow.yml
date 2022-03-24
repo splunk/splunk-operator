@@ -27,7 +27,11 @@ jobs:
   automated-release:
     name: Automated Pre Release
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if:
+      contains('
+        refs/heads/develop
+        refs/heads/sdk-release-changes
+        ', github.ref)
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
