@@ -137,7 +137,7 @@ jobs:
     - name: Run Make Package
       run: |
         make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }}
+        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk/${{ github.event.inputs.new_enterprise_version }}
   
     - name: Tag and Push release RC Image
       run: |
