@@ -15,7 +15,7 @@ limitations under the License.
 
 
 Credits
-Some of the components included in Splunk Operator for Kubernetes (beta) project are licensed under free or open source licenses. We wish to thank the contributors to those projects.
+Some of the components included in Splunk Operator for Kubernetes project are licensed under free or open source licenses. We wish to thank the contributors to those projects.
 
 The following components are licensed under Apache 2.0:
 
@@ -322,7 +322,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-The following components are licensed under the BSD 2-Clause "Simplified License":
+The following component is licensed under the BSD 2-Clause "Simplified License":
 
 errors v0.9.1
 Copyright (c) 2015, Dave Cheney <dave@cheney.net>
@@ -351,7 +351,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-The following components are dual licensed under MIT or the UNLICENSE:
+The following component is dual licensed under MIT or the UNLICENSE:
 
 ripgrep v13.0.0
 https://github.com/BurntSushi/ripgrep
