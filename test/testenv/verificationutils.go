@@ -759,13 +759,13 @@ func VerifyAppListPhase(deployment *Deployment, testenvInstance *TestEnv, name s
 	}
 }
 
-// VerifyAppInstallInProgress verify given app installation is in progress, i.e when Status is between 101 and 303
-func VerifyAppInstallInProgress(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string) {
+// VerifyAppState verify given app state is in between states passed as parameters, i.e when Status is between 101 and 303 we would pass enterpriseApi.AppPkgInstallComplete and enterpriseApi.AppPkgPodCopyComplete
+func VerifyAppState(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType) {
 	for _, appName := range appList {
 		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
 			appDeploymentInfo, _ := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
 			return appDeploymentInfo.PhaseInfo.Status
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)) //Check status value is between 100 and 303
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", appStateFinal, appStateInitial)) //Check status value is between appStateInitial and appStateFinal
 	}
 }
 
