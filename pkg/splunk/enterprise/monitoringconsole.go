@@ -165,6 +165,11 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 	}
+	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
+	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
+	if !result.Requeue {
+		result.RequeueAfter = 0
+	}
 	return result, nil
 }
 
