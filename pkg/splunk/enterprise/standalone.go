@@ -239,7 +239,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
-	
+
 	return result, nil
 }
 
