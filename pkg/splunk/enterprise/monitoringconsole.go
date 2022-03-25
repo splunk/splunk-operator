@@ -134,7 +134,10 @@ func ApplyMonitoringConsole(client splcommon.ControllerClient, cr *enterpriseApi
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == splcommon.PhaseReady {
-		finalResult := handleAppFrameworkActivity(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		//TODO:Gaurav - right now initializing the context here, but after the merging latest sdk upgrade changes,
+		// we would not need to initialize context here since we will be passing context as an arg in the reconcile logic.
+		ctx := context.TODO()
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 	}
 	return result, nil

@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -3164,8 +3165,9 @@ func TestAfwYieldWatcher(t *testing.T) {
 	// add a waiter
 	afwPipeline.phaseWaiter.Add(1)
 
+	ctx := context.TODO()
 	// When the pipeline is empty, should break
-	afwPipeline.afwYieldWatcher()
+	afwPipeline.afwYieldWatcher(ctx)
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen := <-afwPipeline.sigTerm
@@ -3187,7 +3189,12 @@ func TestAfwYieldWatcher(t *testing.T) {
 	afwPipeline.phaseWaiter.Add(1)
 	// When the pipeline is empty, should break
 	afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval = 10
-	afwPipeline.afwYieldWatcher()
+	ctx, cancel := context.WithTimeout(
+		ctx,
+		time.Duration(afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval)*time.Second,
+	)
+	defer cancel()
+	afwPipeline.afwYieldWatcher(ctx)
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen = <-afwPipeline.sigTerm
@@ -3259,7 +3266,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 	}
 
 	startTime := time.Now().Unix()
-	afwSchedulerEntry(client, &cr, appDeployContext, appFrameworkConfig)
+	afwSchedulerEntry(context.TODO(), client, &cr, appDeployContext, appFrameworkConfig)
 	// Assuming the test is returning sooner, testing it for a 2 seconds value, which should be optimal for now
 	waitTime := time.Now().Unix() - startTime
 	if waitTime > 2 {

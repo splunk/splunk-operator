@@ -1738,7 +1738,7 @@ func updateReconcileRequeueTime(result *reconcile.Result, rqTime time.Duration, 
 }
 
 // handleAppFrameworkActivity handles any pending app framework activity
-func handleAppFrameworkActivity(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
+func handleAppFrameworkActivity(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	finalResult := &reconcile.Result{
 		Requeue:      false,
@@ -1751,7 +1751,7 @@ func handleAppFrameworkActivity(client splcommon.ControllerClient, cr splcommon.
 	}
 
 	if appDeployContext.AppsSrcDeployStatus != nil {
-		requeue, err := afwSchedulerEntry(client, cr, appDeployContext, appFrameworkConfig)
+		requeue, err := afwSchedulerEntry(ctx, client, cr, appDeployContext, appFrameworkConfig)
 		if err != nil {
 			scopedLog.Error(err, "app framework returned error")
 		}

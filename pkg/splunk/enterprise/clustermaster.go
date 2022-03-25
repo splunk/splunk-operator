@@ -193,7 +193,10 @@ func ApplyClusterManager(client splcommon.ControllerClient, cr *enterpriseApi.Cl
 			return result, err
 		}
 
-		finalResult := handleAppFrameworkActivity(client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		//TODO:Gaurav - right now initializing the context here, but after the merging latest sdk upgrade changes,
+		// we would not need to initialize context here since we will be passing context as an arg in the reconcile logic.
+		ctx := context.TODO()
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 	}
 	return result, nil

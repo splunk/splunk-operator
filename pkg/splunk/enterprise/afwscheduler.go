@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1504,7 +1505,7 @@ func isPhaseInfoEligibleForSchedulerEntry(appSrcName string, phaseInfo *enterpri
 }
 
 // afwSchedulerEntry Starts the scheduler Pipeline with the required phases
-func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
+func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	scopedLog := log.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// return error, if there is no storage defined for the Operator pod
@@ -1565,7 +1566,13 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 	// while setting up the pipeline phases.
 	// Wait for the yield function to finish.
 	afwPipeline.phaseWaiter.Add(1)
-	go afwPipeline.afwYieldWatcher()
+
+	ctx, cancel := context.WithTimeout(
+		ctx,
+		time.Duration(afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval)*time.Second,
+	)
+	defer cancel()
+	go afwPipeline.afwYieldWatcher(ctx)
 
 	scopedLog.Info("Waiting for the phase managers to finish")
 
@@ -1580,14 +1587,13 @@ func afwSchedulerEntry(client splcommon.ControllerClient, cr splcommon.MetaObjec
 }
 
 // afwYieldWatcher issues termination request to the scheduler when the yield time expires or the pipelines become empty.
-func (ppln *AppInstallPipeline) afwYieldWatcher() {
+func (ppln *AppInstallPipeline) afwYieldWatcher(ctx context.Context) {
 	scopedLog := log.WithName("afwYieldWatcher").WithValues("name", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
-	yieldTrigger := time.After(time.Duration(ppln.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval) * time.Second)
 
 yieldScheduler:
 	for {
 		select {
-		case <-yieldTrigger:
+		case <-ctx.Done():
 			scopedLog.Info("Yielding from AFW scheduler", "time elapsed", time.Now().Unix()-ppln.afwEntryTime)
 			break yieldScheduler
 		default:
