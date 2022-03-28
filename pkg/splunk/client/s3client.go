@@ -54,7 +54,6 @@ func (c *GetS3ClientWrapper) GetS3ClientInitFuncPtr(ctx context.Context) GetInit
 type GetInitFunc func(context.Context, string, string, string) interface{}
 
 //GetS3Client gets the required S3Client based on the provider
-
 type GetS3Client func(context.Context, string /* bucket */, string, /* AWS access key ID */
 	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Region */, string /* Endpoint */, GetInitFunc) (S3Client, error)
 
