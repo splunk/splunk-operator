@@ -153,7 +153,8 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Create App framework Spec
 			volumeName := "lm-test-volume-" + testenv.RandomDNSName(3)
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3")}
+
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
 			appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{

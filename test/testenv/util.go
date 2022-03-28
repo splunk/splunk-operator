@@ -857,3 +857,13 @@ func GetPodsStartTime(ns string) map[string]time.Time {
 	}
 	return splunkPodsStartTime
 }
+
+// DeletePod Delete pod in the namespace
+func DeletePod(ns string, podName string) error {
+	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		return err
+	}
+	return nil
+}

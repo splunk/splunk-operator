@@ -899,13 +899,13 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 	}
 }
 
-// VerifyAppInstallInProgress verify given app installation is in progress, i.e when Status is between 101 and 303
-func VerifyAppInstallInProgress(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
+// VerifyAppState verify given app state is in between states passed as parameters, i.e when Status is between 101 and 303 we would pass enterpriseApi.AppPkgInstallComplete and enterpriseApi.AppPkgPodCopyComplete
+func VerifyAppState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType) {
 	for _, appName := range appList {
 		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
 			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 			return appDeploymentInfo.PhaseInfo.Status
-		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)) //Check status value is between 100 and 303
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", appStateFinal, appStateInitial)) //Check status value is between appStateInitial and appStateFinal
 	}
 }
 
@@ -1013,4 +1013,12 @@ func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestCaseEnv, ns s
 			}
 		}
 	}
+}
+
+// WaitForSplunkPodCleanup Wait for cleanup to happend
+func WaitForSplunkPodCleanup(deployment *Deployment, testenvInstance *TestEnv) {
+	gomega.Eventually(func() int {
+		testenvInstance.Log.Info("Waiting for Splunk Pods to be deleted before running test")
+		return len(DumpGetPods(testenvInstance.GetName()))
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(0))
 }

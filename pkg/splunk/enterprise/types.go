@@ -64,12 +64,6 @@ const (
 )
 
 const (
-	// Max retries for each phase of the App install pipeline
-	pipelinePhaseMaxRetryCount = 3
-
-	// Max. time the app framework scheduler waits before trying to yield
-	maxRunTimeBeforeAttemptingYield = 90
-
 	// Max. of parallel installs for a given Pod
 	maxParallelInstallsPerPod = 1
 )

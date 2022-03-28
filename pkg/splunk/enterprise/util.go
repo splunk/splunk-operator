@@ -186,7 +186,9 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
 	var err error
-	s3Client.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Endpoint, fn)
+
+	s3Client.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
+
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
 		return s3Client, err
@@ -833,9 +835,9 @@ func updateAuxPhaseInfo(appDeployInfo *enterpriseApi.AppDeploymentInfo, desiredR
 
 	for i := auxPhaseInfoLen; i < int(desiredReplicas); i++ {
 		phaseInfo := enterpriseApi.PhaseInfo{
-			Phase:      enterpriseApi.PhasePodCopy,
-			Status:     enterpriseApi.AppPkgPodCopyPending,
-			RetryCount: 0,
+			Phase:     enterpriseApi.PhasePodCopy,
+			Status:    enterpriseApi.AppPkgPodCopyPending,
+			FailCount: 0,
 		}
 		appDeployInfo.AuxPhaseInfo = append(appDeployInfo.AuxPhaseInfo, phaseInfo)
 	}
@@ -1062,7 +1064,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
 					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
 					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
-					appList[idx].PhaseInfo.RetryCount = 0
+					appList[idx].PhaseInfo.FailCount = 0
 					appList[idx].AuxPhaseInfo = nil
 
 					// Make the state active for an app that was deleted earlier, and got activated again

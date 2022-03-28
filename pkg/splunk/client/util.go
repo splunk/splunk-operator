@@ -29,10 +29,9 @@ import (
 // Ideally this function should live in test package but due to
 // dependency of some variables in client package and to avoid
 // cyclic dependency this has to live here.
-func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
-	region := GetRegion(endpoint)
 
 	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
@@ -50,14 +49,13 @@ func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID stri
 		AWSSecretAccessKey: secretAccessKey,
 		Prefix:             prefix,
 		StartAfter:         startAfter,
-		Endpoint:           endpoint,
 		Client:             s3SplunkClient,
 		Downloader:         downloader,
 	}, nil
 }
 
 // NewMockMinioS3Client is mock client for testing minio client
-func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkMinioClient
 	var err error
 

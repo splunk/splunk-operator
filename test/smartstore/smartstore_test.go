@@ -48,7 +48,7 @@ var _ = Describe("Smartstore test", func() {
 			testcaseEnvInst.Log.Info("Index secret name ", "secret name ", testcaseEnvInst.GetIndexSecretName())
 
 			var indexSpec []enterpriseApi.IndexSpec
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3")}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 
 			// Create index volume spec from index volume map
 			for index, volume := range indexVolumeMap {
@@ -96,7 +96,8 @@ var _ = Describe("Smartstore test", func() {
 
 			specialConfig := map[string]int{"MaxGlobalDataSizeMB": 100, "MaxGlobalRawDataSizeMB": 100}
 
-			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3")}
+			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+
 			indexSpec := []enterpriseApi.IndexSpec{{Name: indexName, RemotePath: indexName}}
 			defaultSmartStoreSpec := enterpriseApi.IndexConfDefaultsSpec{IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{VolName: volName, MaxGlobalDataSizeMB: uint(specialConfig["MaxGlobalDataSizeMB"]), MaxGlobalRawDataSizeMB: uint(specialConfig["MaxGlobalRawDataSizeMB"])}}
 			cacheManagerSmartStoreSpec := enterpriseApi.CacheManagerSpec{MaxCacheSizeMB: 9900000, EvictionPaddingSizeMB: 1000, MaxConcurrentDownloads: 6, MaxConcurrentUploads: 6, EvictionPolicy: "lru"}
@@ -160,7 +161,7 @@ var _ = Describe("Smartstore test", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
-			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3")}
+			volSpec := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volName, testenv.GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			indexSpec := []enterpriseApi.IndexSpec{testenv.GenerateIndexSpec(indexName, volName)}
 			smartStoreSpec := enterpriseApi.SmartStoreSpec{
 				VolList:   volSpec,

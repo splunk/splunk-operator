@@ -47,7 +47,9 @@ type MinioClient struct {
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+
+func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
