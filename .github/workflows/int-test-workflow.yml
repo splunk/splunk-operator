@@ -5,7 +5,6 @@ on:
       - develop
       - master
       - feature-appframework
-      - poc-pre-test-cleanup-wait
 jobs:
   int-tests:
     strategy:
