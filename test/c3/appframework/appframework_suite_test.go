@@ -44,6 +44,7 @@ var (
 	testS3Bucket     = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	s3AppDirV1       = testenv.AppLocationV1
 	s3AppDirV2       = testenv.AppLocationV2
+	s3AppDirDisabled = testenv.AppLocationDisabledApps
 	currDir, _       = os.Getwd()
 	downloadDirV1    = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2    = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))

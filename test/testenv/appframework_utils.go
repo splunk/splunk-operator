@@ -75,6 +75,9 @@ var AppLocationV1 = "appframework/v1apps/"
 // AppLocationV2 Location of apps on S3 for V2 Apps
 var AppLocationV2 = "appframework/v2apps/"
 
+// AppLocationDisabledApps Location of apps on S3 for Disabled Apps
+var AppLocationDisabledApps = "appframework/Disabledapps/"
+
 // AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
 var AppStagingLocOnPod = "/operator-staging/appframework/"
 
