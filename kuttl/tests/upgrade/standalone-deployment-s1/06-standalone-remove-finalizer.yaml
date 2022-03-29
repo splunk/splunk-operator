@@ -1,0 +1,10 @@
+apiVersion: enterprise.splunk.com/v2
+kind: Standalone
+metadata:
+  name: test
+  finalizers: []
+spec: 
+  imagePullPolicy: "IfNotPresent"
+  image: "splunk/splunk:8.2.3.3"
+  volumes: []
+  serviceAccount: smoke-service-account

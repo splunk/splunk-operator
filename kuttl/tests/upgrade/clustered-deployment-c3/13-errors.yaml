@@ -1,0 +1,20 @@
+---
+apiVersion: enterprise.splunk.com/v2
+kind: ClusterMaster
+name: test
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-test-cluster-master
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-test-cluster-master-secret-v1

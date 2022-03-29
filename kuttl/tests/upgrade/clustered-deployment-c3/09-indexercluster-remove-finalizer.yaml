@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v2
+kind: IndexerCluster
+metadata:
+  name: test-idxc
+  finalizers: []
+spec: 
+  volumes: []
+  imagePullPolicy: IfNotPresent
+  image: "splunk/splunk:8.2.3.3" 
+  clusterMasterRef:
+    name: test
+  replicas: 3

@@ -1,0 +1,7 @@
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: splunk-operator-controller-manager
+  namespace: splunk-operator

@@ -263,7 +263,7 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 	currentOwnerRef := statefulset.GetOwnerReferences()
 	// Check if owner ref exists
 	for i := 0; i < len(currentOwnerRef); i++ {
-		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+		if reflect.DeepEqual(currentOwnerRef[i].UID, cr.GetUID()) {
 			return nil
 		}
 	}
@@ -326,7 +326,7 @@ func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon
 
 //isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
 func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
-	return reflect.DeepEqual(currentOwners[0], splcommon.AsOwner(cr, false))
+	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID())
 }
 
 // IsStatefulSetScalingUp checks if we are currently scaling up

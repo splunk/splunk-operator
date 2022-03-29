@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+# Delete a Standalone
+- apiVersion: enterprise.splunk.com/v2
+  kind: Standalone
+  name: test

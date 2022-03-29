@@ -1,0 +1,64 @@
+---
+# assert if splunk deployment is ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+  namespace: splunk-operator
+status:
+  readyReplicas: 1
+
+---
+# assert if crd are installed
+apiVersion: apiextensions.k8s.io/v1
+kind:  CustomResourceDefinition
+metadata:
+  name: clustermasters.enterprise.splunk.com
+status:
+  storedVersions:
+  - v2
+  - v3
+
+---
+# assert if crd are installed
+apiVersion: apiextensions.k8s.io/v1
+kind:  CustomResourceDefinition
+metadata:
+  name: indexerclusters.enterprise.splunk.com
+status:
+  storedVersions:
+  - v2
+  - v3
+
+---
+# assert if crd are installed
+apiVersion: apiextensions.k8s.io/v1
+kind:  CustomResourceDefinition
+metadata:
+  name: licensemasters.enterprise.splunk.com
+status:
+  storedVersions:
+  - v2
+  - v3
+
+---
+# assert if crd are installed
+apiVersion: apiextensions.k8s.io/v1
+kind:  CustomResourceDefinition
+metadata:
+  name: searchheadclusters.enterprise.splunk.com
+status:
+  storedVersions:
+  - v2
+  - v3
+
+---
+# assert if crd are installed
+apiVersion: apiextensions.k8s.io/v1
+kind:  CustomResourceDefinition
+metadata:
+  name: standalones.enterprise.splunk.com
+status:
+  storedVersions:
+  - v2
+  - v3

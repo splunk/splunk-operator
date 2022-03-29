@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v2
+kind: SearchHeadCluster
+metadata:
+  name: test-shc
+  finalizers: []
+spec: 
+  volumes: []
+  imagePullPolicy: IfNotPresent
+  image: "splunk/splunk:8.2.3.3" 
+  clusterMasterRef: 
+    name: test

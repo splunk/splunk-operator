@@ -1,0 +1,7 @@
+#create new cluster manager custom resource 
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+- command: kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
+  namespaced: true
+  timeout: 120

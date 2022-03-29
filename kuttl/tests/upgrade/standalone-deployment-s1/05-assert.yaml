@@ -1,0 +1,17 @@
+
+---
+apiVersion: enterprise.splunk.com/v2
+kind: Standalone
+metadata:
+  name: test
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-test-standalone
+status:
+  replicas: 1

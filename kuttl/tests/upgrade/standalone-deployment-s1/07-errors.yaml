@@ -1,0 +1,5 @@
+---
+apiVersion: enterprise.splunk.com/v2
+kind: Standalone
+name: test
+

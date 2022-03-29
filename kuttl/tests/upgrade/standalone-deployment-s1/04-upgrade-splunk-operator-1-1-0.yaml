@@ -1,0 +1,6 @@
+#create new cluster manager custom resource 
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+- command: ../../release-1.1.0/upgrade-to-1.1.0.sh --current_namespace=$NAMESPACE --manifest_file=../../release-1.1.0/splunk-operator-install.yaml
+  timeout: 100

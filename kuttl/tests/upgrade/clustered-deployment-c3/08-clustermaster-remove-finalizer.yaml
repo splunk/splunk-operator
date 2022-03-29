@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v2
+kind: ClusterMaster
+metadata:
+  name: test
+  finalizers: []
+spec: 
+  volumes: []
+  imagePullPolicy: "IfNotPresent"
+  image: "splunk/splunk:8.2.3.3" 
