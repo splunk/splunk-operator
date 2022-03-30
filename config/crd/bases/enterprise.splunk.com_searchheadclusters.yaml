@@ -918,6 +918,7 @@ spec:
                       type: object
                     type: array
                   appsRepoPollIntervalSeconds:
+                    default: 3600
                     description: Interval in seconds to check the Remote Storage for
                       App changes. The default value for this config is 1 hour(3600
                       sec), minimum value is 1 minute(60sec) and maximum value is
@@ -927,6 +928,7 @@ spec:
                       we set it to 1 min.    3. If anything more than the max value
                       is specified then we set it to 1 day.
                     format: int64
+                    minimum: 60
                     type: integer
                   defaults:
                     description: Defines the default configuration settings for App
@@ -967,6 +969,8 @@ spec:
                           type: string
                       type: object
                     type: array
+                required:
+                - appsRepoPollIntervalSeconds
                 type: object
               clusterMasterRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
@@ -1024,6 +1028,7 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
+                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -1199,6 +1204,7 @@ spec:
                   for the Liveness probe Note: If needed, Operator overrides with
                   a higher value'
                 format: int32
+                minimum: 0
                 type: integer
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
@@ -1243,6 +1249,7 @@ spec:
                   for Readiness probe Note: If needed, Operator overrides with a higher
                   value'
                 format: int32
+                minimum: 0
                 type: integer
               replicas:
                 description: Number of search head pods; a search head cluster will
@@ -1819,6 +1826,7 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
+                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -3351,6 +3359,7 @@ spec:
                           type: object
                         type: array
                       appsRepoPollIntervalSeconds:
+                        default: 3600
                         description: Interval in seconds to check the Remote Storage
                           for App changes. The default value for this config is 1
                           hour(3600 sec), minimum value is 1 minute(60sec) and maximum
@@ -3361,6 +3370,7 @@ spec:
                           anything more than the max value is specified then we set
                           it to 1 day.
                         format: int64
+                        minimum: 60
                         type: integer
                       defaults:
                         description: Defines the default configuration settings for
@@ -3402,6 +3412,8 @@ spec:
                               type: string
                           type: object
                         type: array
+                    required:
+                    - appsRepoPollIntervalSeconds
                     type: object
                   appSrcDeployStatus:
                     additionalProperties:
