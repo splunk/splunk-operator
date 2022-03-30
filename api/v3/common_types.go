@@ -127,10 +127,12 @@ type CommonSplunkSpec struct {
 
 	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
 	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
 	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
 
 	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
 	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
 }
 
@@ -143,6 +145,8 @@ type StorageClassSpec struct {
 	StorageCapacity string `json:"storageCapacity"`
 
 	// If true, ephemeral (emptyDir) storage will be used
+	// default false
+	// +optional
 	EphemeralStorage bool `json:"ephemeralStorage"`
 }
 
@@ -253,9 +257,11 @@ type IndexAndCacheManagerCommonSpec struct {
 // AppSourceDefaultSpec defines config common for defaults and App Sources
 type AppSourceDefaultSpec struct {
 	// Remote Storage Volume name
+	// +optional
 	VolName string `json:"volumeName,omitempty"`
 
 	// Scope of the App deployment: cluster, clusterWithPreConfig, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	// +optional
 	Scope string `json:"scope,omitempty"`
 }
 
@@ -282,6 +288,11 @@ type AppFrameworkSpec struct {
 	//    1. If no value or 0 is specified then it means periodic polling is disabled.
 	//    2. If anything less than min is specified then we set it to 1 min.
 	//    3. If anything more than the max value is specified then we set it to 1 day.
+	// +optional
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default:=3600
+	// +kubebuilder:validation:Minimum:=60
+	// +kubebuilder:validation:Maximum:=86400
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
