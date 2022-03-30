@@ -151,6 +151,12 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 			result.Requeue = false
 		}
 	}
+	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
+	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
+	if !result.Requeue {
+		result.RequeueAfter = 0
+	}
+
 	return result, nil
 }
 
