@@ -21,7 +21,6 @@ function deleteCluster() {
     eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
     if [ $? -ne 0 ]; then
       echo "Unable to delete Nodegroup ${NODE_GROUP}. For Cluster - ${TEST_CLUSTER_NAME}"
-      return 1
     fi
   fi
   eksctl delete cluster --name=${TEST_CLUSTER_NAME}
