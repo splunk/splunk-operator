@@ -66,7 +66,7 @@ var _ = Describe("Smartstore test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSmartStoreSpec(ctx, deployment.GetName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
 
-			time.Sleep(1*time.Minute)
+			time.Sleep(1 * time.Minute)
 			// Verify standalone goes to ready state
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
