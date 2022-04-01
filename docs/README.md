@@ -60,7 +60,7 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
 * `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.1.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.3.3 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.5 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
