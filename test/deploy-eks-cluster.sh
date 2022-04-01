@@ -16,6 +16,13 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
 fi
 
 function deleteCluster() {
+  NODE_GROUP=$(eksctl get nodegroup --cluster=${TEST_CLUSTER_NAME} | sed -n 4p | awk '{ print $2 }')
+  if [[  ! -z "${NODE_GROUP}" ]]; then
+    eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
+    if [ $? -ne 0 ]; then
+      echo "Unable to delete Nodegroup ${NODE_GROUP}. For Cluster - ${TEST_CLUSTER_NAME}"
+    fi
+  fi
   eksctl delete cluster --name=${TEST_CLUSTER_NAME}
   if [ $? -ne 0 ]; then
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
