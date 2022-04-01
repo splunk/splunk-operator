@@ -136,7 +136,7 @@ func SetConfigMapOwnerRef(ctx context.Context, client splcommon.ControllerClient
 	currentOwnerRef := configMap.GetOwnerReferences()
 	// Check if owner ref exists
 	for i := 0; i < len(currentOwnerRef); i++ {
-		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+		if reflect.DeepEqual(currentOwnerRef[i].UID, cr.GetUID()) {
 			return nil
 		}
 	}

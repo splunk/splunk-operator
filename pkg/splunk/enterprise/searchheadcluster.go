@@ -225,6 +225,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
 	return result, nil
 }
 

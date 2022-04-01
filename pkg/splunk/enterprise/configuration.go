@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	//"sort"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -585,9 +584,11 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
+	runAsNonRoot := true
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser: &runAsUser,
-		FSGroup:   &fsGroup,
+		RunAsUser:    &runAsUser,
+		FSGroup:      &fsGroup,
+		RunAsNonRoot: &runAsNonRoot,
 	}
 
 	var additionalDelayForAppInstallation int32

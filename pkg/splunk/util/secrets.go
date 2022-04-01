@@ -121,7 +121,7 @@ func SetSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient, s
 	currentOwnerRef := secret.GetOwnerReferences()
 	// Check if owner ref exists
 	for i := 0; i < len(currentOwnerRef); i++ {
-		if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+		if reflect.DeepEqual(currentOwnerRef[i].UID, cr.GetUID()) {
 			return nil
 		}
 	}

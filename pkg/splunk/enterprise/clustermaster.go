@@ -212,6 +212,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
 	return result, nil
 }
 
