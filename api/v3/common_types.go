@@ -291,7 +291,7 @@ type AppFrameworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default:=3600
-	// +kubebuilder:validation:Minimum:=60
+	// +kubebuilder:validation:Minimum:=0
 	// +kubebuilder:validation:Maximum:=86400
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 

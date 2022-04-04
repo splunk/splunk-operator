@@ -932,7 +932,7 @@ spec:
                       value is specified then we set it to 1 day.
                     format: int64
                     maximum: 86400
-                    minimum: 60
+                    minimum: 0
                     type: integer
                   defaults:
                     description: Defines the default configuration settings for App
@@ -3382,7 +3382,7 @@ spec:
                           set it to 1 day.
                         format: int64
                         maximum: 86400
-                        minimum: 60
+                        minimum: 0
                         type: integer
                       defaults:
                         description: Defines the default configuration settings for
