@@ -927,7 +927,6 @@ spec:
                       type: object
                     type: array
                   appsRepoPollIntervalSeconds:
-                    default: 3600
                     description: Interval in seconds to check the Remote Storage for
                       App changes. The default value for this config is 1 hour(3600
                       sec), minimum value is 1 minute(60sec) and maximum value is
@@ -937,8 +936,6 @@ spec:
                       then we set it to 1 min.    3. If anything more than the max
                       value is specified then we set it to 1 day.
                     format: int64
-                    maximum: 86400
-                    minimum: 0
                     type: integer
                   defaults:
                     description: Defines the default configuration settings for App
@@ -994,8 +991,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                required:
-                - appsRepoPollIntervalSeconds
                 type: object
               clusterMasterRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
@@ -3393,7 +3388,6 @@ spec:
                           type: object
                         type: array
                       appsRepoPollIntervalSeconds:
-                        default: 3600
                         description: Interval in seconds to check the Remote Storage
                           for App changes. The default value for this config is 1
                           hour(3600 sec), minimum value is 1 minute(60sec) and maximum
@@ -3404,8 +3398,6 @@ spec:
                           If anything more than the max value is specified then we
                           set it to 1 day.
                         format: int64
-                        maximum: 86400
-                        minimum: 0
                         type: integer
                       defaults:
                         description: Defines the default configuration settings for
@@ -3462,8 +3454,6 @@ spec:
                               type: string
                           type: object
                         type: array
-                    required:
-                    - appsRepoPollIntervalSeconds
                     type: object
                   appSrcDeployStatus:
                     additionalProperties:

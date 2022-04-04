@@ -288,11 +288,6 @@ type AppFrameworkSpec struct {
 	//    1. If no value or 0 is specified then it means periodic polling is disabled.
 	//    2. If anything less than min is specified then we set it to 1 min.
 	//    3. If anything more than the max value is specified then we set it to 1 day.
-	// +optional
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default:=3600
-	// +kubebuilder:validation:Minimum:=0
-	// +kubebuilder:validation:Maximum:=86400
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
 
 	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
