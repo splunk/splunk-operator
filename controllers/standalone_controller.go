@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -104,9 +105,13 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
-
-	return enterprise.ApplyStandalone(ctx, r.Client, instance)
+	return ApplyStandalone(ctx, r.Client, instance)
 	//return ctrl.Result{}, nil
+}
+
+// ApplyStandalone adding to handle unit test case
+var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterprisev3.Standalone) (reconcile.Result, error) {
+	return enterprise.ApplyStandalone(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

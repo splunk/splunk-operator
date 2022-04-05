@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -99,7 +100,12 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplyMonitoringConsole(ctx, r.Client, instance)
+	return ApplyMonitoringConsole(ctx, r.Client, instance)
+}
+
+// ApplyMonitoringConsole adding to handle unit test case
+var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
+	return enterprise.ApplyMonitoringConsole(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

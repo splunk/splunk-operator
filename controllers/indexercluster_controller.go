@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -100,7 +101,12 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	return enterprise.ApplyIndexerCluster(ctx, r.Client, instance)
+	return ApplyIndexerCluster(ctx, r.Client, instance)
+}
+
+// ApplyIndexerCluster adding to handle unit test case
+var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
+	return enterprise.ApplyIndexerCluster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

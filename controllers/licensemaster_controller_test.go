@@ -3,11 +3,14 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	//"reflect"
 	"time"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	//ctrl "sigs.k8s.io/controller-runtime"
 
@@ -37,6 +40,10 @@ var _ = Describe("LicenseMaster Controller", func() {
 	Context("LicenseMaster Management", func() {
 
 		It("Create LicenseMaster custom resource should succeeded", func() {
+			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			CreateLicenseMaster("test", nsSpecs.Name, splcommon.PhaseReady)

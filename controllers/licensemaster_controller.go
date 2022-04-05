@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -100,7 +101,12 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return enterprise.ApplyLicenseManager(ctx, r.Client, instance)
+	return ApplyLicenseManager(ctx, r.Client, instance)
+}
+
+// ApplyLicenseManager adding to handle unit test case
+var ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

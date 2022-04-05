@@ -3,11 +3,14 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	//"reflect"
 	"time"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	//ctrl "sigs.k8s.io/controller-runtime"
 
@@ -37,6 +40,10 @@ var _ = Describe("ClusterMaster Controller", func() {
 	Context("ClusterMaster Management", func() {
 
 		It("Create ClusterMaster custom resource should succeeded", func() {
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			CreateClusterMaster("test", nsSpecs.Name, splcommon.PhaseReady)

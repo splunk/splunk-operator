@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
@@ -101,7 +102,12 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplySearchHeadCluster(ctx, r.Client, instance)
+	return ApplySearchHeadCluster(ctx, r.Client, instance)
+}
+
+// ApplySearchHeadCluster adding to handle unit test case
+var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.SearchHeadCluster) (reconcile.Result, error) {
+	return enterprise.ApplySearchHeadCluster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

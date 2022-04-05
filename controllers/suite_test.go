@@ -20,18 +20,20 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	//"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	//"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	//"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -69,37 +71,82 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
+
+	// Create New Manager for controllers
+	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: clientgoscheme.Scheme,
+	})
+	Expect(err).ToNot(HaveOccurred())
+	if err := (&ClusterMasterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&IndexerClusterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&LicenseMasterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&MonitoringConsoleReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&SearchHeadClusterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&StandaloneReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+
 	/*
-		k8sManager, err := mainFunction()
+		k8sManager, err = mainFunction(clientgoscheme.Scheme)
 		Expect(err).ToNot(HaveOccurred())
-
-		go func() {
-			err = k8sManager.Start(ctrl.SetupSignalHandler())
-			Expect(err).ToNot(HaveOccurred())
-		}()
-
-		Expect(err).ToNot(HaveOccurred())
+		time.Sleep(time.Second * 1)
 	*/
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	go func() {
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		fmt.Printf("error %v", err.Error())
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	Expect(err).ToNot(HaveOccurred())
+
+	k8sClient, err = client.New(cfg, client.Options{Scheme: clientgoscheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
@@ -111,14 +158,13 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
-func mainFunction() (manager.Manager, error) {
+func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
 
-	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(enterprisev3.AddToScheme(scheme))
+	//utilruntime.Must(enterprisev3.AddToScheme(scheme))
 
 	// Logging setup
 	ctrl.SetLogger(zap.New())
