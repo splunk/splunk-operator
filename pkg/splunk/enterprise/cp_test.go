@@ -40,7 +40,7 @@ func TestCpMakeTar(t *testing.T) {
 func TestRecursiveTarEmptySrcDir(t *testing.T) {
 
 	// prepare temporary files to tar operation
-	if err := os.MkdirAll("/tmp/src", os.ModePerm); err != nil {
+	if err := os.MkdirAll("/tmp/src1", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
 	
@@ -49,7 +49,7 @@ func TestRecursiveTarEmptySrcDir(t *testing.T) {
 	}
 
 	// test recursive directories copy
-	src := localPath{file: "/tmp/src"}
+	src := localPath{file: "/tmp/src1"}
 	dest := remotePath{file: "/tmp/dst"}
 	var discard io.Writer = io.Discard
 	err := cpMakeTar(src, dest, discard)
@@ -57,7 +57,7 @@ func TestRecursiveTarEmptySrcDir(t *testing.T) {
 		t.Errorf("copy tar file failed")
 	}
 
-	if err := os.RemoveAll("/tmp/src"); err != nil {
+	if err := os.RemoveAll("/tmp/src1"); err != nil {
 		t.Errorf(err.Error())
 	}
 
@@ -69,11 +69,11 @@ func TestRecursiveTarEmptySrcDir(t *testing.T) {
 // TestRecursiveTarSrcOneDir test recursiviley tar one src directory
 func TestRecursiveTarSrcOneDir(t *testing.T) {
 	// prepare temporary files to tar operation
-	if err := os.MkdirAll("/tmp/src", os.ModePerm); err != nil {
+	if err := os.MkdirAll("/tmp/src2", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
 	for i := 0; i < 10; i++ {
-		path := fmt.Sprintf("/tmp/src/a/filename-%d.txt", i)
+		path := fmt.Sprintf("/tmp/src2/filename-%d.txt", i)
 		err := ioutil.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %s", err.Error()))
@@ -84,7 +84,7 @@ func TestRecursiveTarSrcOneDir(t *testing.T) {
 	}
 
 	// test recursive directories copy
-	src := localPath{file: "/tmp/src"}
+	src := localPath{file: "/tmp/src2"}
 	dest := remotePath{file: "/tmp/dst"}
 	var discard io.Writer = io.Discard
 	err := cpMakeTar(src, dest, discard)
@@ -92,7 +92,7 @@ func TestRecursiveTarSrcOneDir(t *testing.T) {
 		t.Errorf("copy tar file failed")
 	}
 
-	if err := os.RemoveAll("/tmp/src"); err != nil {
+	if err := os.RemoveAll("/tmp/src2"); err != nil {
 		t.Errorf(err.Error())
 	}
 
@@ -105,26 +105,26 @@ func TestRecursiveTarSrcOneDir(t *testing.T) {
 func TestRecursiveTarSrcAllDir(t *testing.T) {
 
 	// prepare temporary files to tar operation
-	if err := os.MkdirAll("/tmp/src/a/b/c/d/e", os.ModePerm); err != nil {
+	if err := os.MkdirAll("/tmp/src3/a/b/c/d/e", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
 	for i := 0; i < 10; i++ {
-		path := fmt.Sprintf("/tmp/src/a/filename-%d.txt", i)
+		path := fmt.Sprintf("/tmp/src3/a/filename-%d.txt", i)
 		err := ioutil.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %s", err.Error()))
 		}
-		path = fmt.Sprintf("/tmp/src/a/b/filename-%d.txt", i)
+		path = fmt.Sprintf("/tmp/src3/a/b/filename-%d.txt", i)
 		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}
-		path = fmt.Sprintf("/tmp/src/a/b/c/filename-%d.txt", i)
+		path = fmt.Sprintf("/tmp/src3/a/b/c/filename-%d.txt", i)
 		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}
-		path = fmt.Sprintf("/tmp/src/a/b/c/d/filename-%d.txt", i)
+		path = fmt.Sprintf("/tmp/src3/a/b/c/d/filename-%d.txt", i)
 		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
@@ -132,7 +132,7 @@ func TestRecursiveTarSrcAllDir(t *testing.T) {
 	}
 	
 	// test recursive directories copy
-	src := localPath{file: "/tmp/src"}
+	src := localPath{file: "/tmp/src3"}
 	dest := remotePath{file: "/tmp/dst"}
 	var discard io.Writer = io.Discard
 	err := cpMakeTar(src, dest, discard)
@@ -140,7 +140,7 @@ func TestRecursiveTarSrcAllDir(t *testing.T) {
 		t.Errorf("copy tar file failed")
 	}
 
-	if err := os.RemoveAll("/tmp/src"); err != nil {
+	if err := os.RemoveAll("/tmp/src3"); err != nil {
 		t.Errorf(err.Error())
 	}
 
