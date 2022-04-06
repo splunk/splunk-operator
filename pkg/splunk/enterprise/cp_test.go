@@ -43,7 +43,7 @@ func TestRecursiveTarEmptySrcDir(t *testing.T) {
 	if err := os.MkdirAll("/tmp/src1", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
-	
+
 	if err := os.MkdirAll("/tmp/dst/", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
@@ -130,7 +130,7 @@ func TestRecursiveTarSrcAllDir(t *testing.T) {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}
 	}
-	
+
 	// test recursive directories copy
 	src := localPath{file: "/tmp/src3"}
 	dest := remotePath{file: "/tmp/dst"}

@@ -30,7 +30,6 @@ jobs:
     if:
       contains('
         refs/heads/develop
-        refs/heads/sdk-release-changes
         ', github.ref)
     steps:
     - name: Checkout code

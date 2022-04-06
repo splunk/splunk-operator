@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
-      CLUSTER_WORKERS: 5
+      CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
@@ -137,7 +137,7 @@ jobs:
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
-        run: | 
+        run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
