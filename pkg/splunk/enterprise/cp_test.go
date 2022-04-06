@@ -38,7 +38,7 @@ func TestCpMakeTar(t *testing.T) {
 
 func TestRecursiveTar(t *testing.T) {
 	// prepare temporary files to tar operation
-	if err := os.MkdirAll("/tmp/src/a/b/c/d", os.ModePerm); err != nil {
+	if err := os.MkdirAll("/tmp/src/a/b/c/d/e", os.ModePerm); err != nil {
 		t.Errorf(err.Error())
 	}
 	for i := 0; i < 10; i++ {
