@@ -18,16 +18,20 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"io"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+
+	//"io"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -40,9 +44,9 @@ import (
 func init() {
 	fmt.Printf("init is called here from test")
 	initGlobalResourceTracker()
-	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
+	/*cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
 		return nil
-	}
+	}*/
 }
 
 func TestApplySplunkConfig(t *testing.T) {
@@ -2218,4 +2222,29 @@ func TestGetCleanObjectDigest(t *testing.T) {
 		t.Errorf("Converted digest value: %v is not equal to the expected digest value: %v", *retDigest, digests[1])
 	}
 
+}
+
+func TestUpdateReconcileRequeueTime(t *testing.T) {
+	// this test case for code coverage, function do not return anything
+	//  to test the value
+	var result *reconcile.Result
+	ctx := context.TODO()
+	// set logger in context
+	ctx = log.IntoContext(ctx, log.Log)
+	rqTime := time.Duration(time.Second * 12)
+
+	// failure when result is nil
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
+
+	// failure when requeue time set it negative
+	rqTime = -12121
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
+
+	result = &reconcile.Result{
+		RequeueAfter: time.Duration(time.Second * 10),
+		Requeue:      true,
+	}
+
+	rqTime = time.Duration(time.Second * 5)
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
 }

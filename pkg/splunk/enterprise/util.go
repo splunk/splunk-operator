@@ -755,6 +755,11 @@ func (s3mgr *S3ClientManager) DownloadApp(ctx context.Context, remoteFile string
 	return err
 }
 
+var GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+	s3Response, err := s3ClientMgr.GetAppsList(ctx)
+	return s3Response, err
+}
+
 // GetAppListFromS3Bucket gets the list of apps from remote storage.
 func GetAppListFromS3Bucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
@@ -790,7 +795,7 @@ func GetAppListFromS3Bucket(ctx context.Context, client splcommon.ControllerClie
 		}
 
 		// Now, get the apps list from remote storage
-		s3Response, err = s3ClientMgr.GetAppsList(ctx)
+		s3Response, err = GetAppsList(ctx, s3ClientMgr)
 		if err != nil {
 			// move on to the next appSource if we are not able to get apps list
 			scopedLog.Error(err, "Unable to get apps list", "appSource", appSource.Name)

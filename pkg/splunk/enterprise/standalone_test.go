@@ -17,13 +17,16 @@ package enterprise
 
 import (
 	"context"
-	"os"
-	"testing"
-	"time"
-
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -947,5 +950,118 @@ func TestGetStandaloneList(t *testing.T) {
 
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of standalone objects. Expected=%d, Got=%d", 1, numOfObjects)
+	}
+}
+
+func TestStandaloneWitAppFramework(t *testing.T) {
+	// create directory for app framework
+	newpath := filepath.Join("/tmp", "appframework")
+	err := os.MkdirAll(newpath, os.ModePerm)
+
+	// adding getapplist to fix test case
+	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+		s3Response := splclient.S3Response{}
+		return s3Response, nil
+	}
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+
+	ctx := context.TODO()
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{
+		{
+			Name:      "testing",
+			Endpoint:  "/someendpoint",
+			Path:      "s3-test",
+			SecretRef: "secretRef",
+			Provider:  "aws",
+			Type:      "s3",
+			Region:    "west",
+		},
+	}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: "testing",
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{
+		{
+			Name:                 "appSourceName",
+			Location:             "appSourceLocation",
+			AppSourceDefaultSpec: appSourceDefaultSpec,
+		},
+	}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(60),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	// create standalone custom resource
+	standalone := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+			AppFrameworkConfig: appFrameworkSpec,
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 2,
+		},
+	}
+
+	replicas := int32(3)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create standalone instance before reconcilation
+	c.Create(ctx, standalone)
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
 	}
 }
