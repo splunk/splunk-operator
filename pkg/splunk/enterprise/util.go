@@ -755,6 +755,7 @@ func (s3mgr *S3ClientManager) DownloadApp(ctx context.Context, remoteFile string
 	return err
 }
 
+// GetAppsList this func pointer is to use this function in unit test cases
 var GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
 	s3Response, err := s3ClientMgr.GetAppsList(ctx)
 	return s3Response, err
