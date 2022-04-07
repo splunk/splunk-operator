@@ -760,7 +760,7 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 // getProbe returns the Probe for given values.
 func getProbe(command []string, delay, timeout, period int32) *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: command,
 			},

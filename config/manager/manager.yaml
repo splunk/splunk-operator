@@ -25,6 +25,8 @@ spec:
       labels:
         control-plane: controller-manager
         name: splunk-operator
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
     spec:
       securityContext:
         runAsUser: 1001
