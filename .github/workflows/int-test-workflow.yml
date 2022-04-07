@@ -76,7 +76,7 @@ jobs:
       - name: Install Go Lint
         run: |
           go version
-          go install golang.org/x/lint/golint
+          go get -u golang.org/x/lint/golint
       - name: Install Ginkgo 
         run: |
           go get github.com/onsi/ginkgo/ginkgo
