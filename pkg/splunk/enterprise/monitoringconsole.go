@@ -71,7 +71,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
@@ -82,7 +82,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = splcommon.PhaseError
+	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
@@ -134,7 +134,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
-	if cr.Status.Phase == splcommon.PhaseReady {
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
 			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes

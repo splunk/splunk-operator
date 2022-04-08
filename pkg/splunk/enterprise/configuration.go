@@ -113,7 +113,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
-		service = spec.Spec.ServiceTemplate.DeepCopy()
+		service = spec.ServiceTemplate.DeepCopy()
 	}
 	service.TypeMeta = metav1.TypeMeta{
 		Kind:       "Service",
@@ -195,7 +195,7 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
-	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
+	spec.Image = GetSplunkImage(spec.Image)
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{

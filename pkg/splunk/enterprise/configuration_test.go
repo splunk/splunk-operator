@@ -116,7 +116,7 @@ func TestGetService(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ServiceTemplate: corev1.Service{
 						Spec: corev1.ServiceSpec{
 							Ports: []corev1.ServicePort{{Name: "user-defined", Port: 32000, TargetPort: intstr.FromInt(6443)}},

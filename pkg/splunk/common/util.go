@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -367,7 +368,7 @@ func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.R
 }
 
 // ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
-func ValidateSpec(spec *Spec, defaultResources corev1.ResourceRequirements) error {
+func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
 	// make sure SchedulerName is not empty
 	if spec.SchedulerName == "" {
 		spec.SchedulerName = "default-scheduler"
@@ -383,7 +384,7 @@ func ValidateSpec(spec *Spec, defaultResources corev1.ResourceRequirements) erro
 }
 
 // setServiceTemplateDefaults sets default values for service templates
-func setServiceTemplateDefaults(spec *Spec) {
+func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range spec.ServiceTemplate.Spec.Ports {
 			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]

@@ -24,6 +24,7 @@ import (
 	"sync"
 	"testing"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -694,7 +695,7 @@ func TestAppendPodAffinity(t *testing.T) {
 }
 
 func TestValidateSpec(t *testing.T) {
-	spec := Spec{}
+	spec := enterpriseApi.Spec{}
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("0.1"),
@@ -744,7 +745,7 @@ func TestSetServiceTemplateDefaults(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: Spec{
+		Spec: enterpriseApi.Spec{
 			ServiceTemplate: corev1.Service{
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
