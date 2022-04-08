@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,13 +16,16 @@
 package enterprise
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	"github.com/stretchr/testify/require"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -47,12 +51,14 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	if string(got) != want {
-		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	}
+	//if string(got) != want {
+	//	t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
+	//}
+	require.JSONEq(t, string(got), want)
 }
 
 func TestGetSplunkService(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -62,7 +68,7 @@ func TestGetSplunkService(t *testing.T) {
 
 	test := func(instanceType InstanceType, isHeadless bool, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
 		}
 		configTester(t, fmt.Sprintf("getSplunkService(\"%s\",%t)", instanceType, isHeadless), f, want)
 	}
@@ -105,6 +111,8 @@ func TestGetSplunkDefaults(t *testing.T) {
 }
 
 func TestGetService(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -126,7 +134,7 @@ func TestGetService(t *testing.T) {
 
 	test := func(instanceType InstanceType, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
 		}
 		configTester(t, "getSplunkService()", f, want)
 	}
@@ -224,7 +232,7 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterManager(client, &cr)
+	_, err := ApplyClusterManager(context.Background(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
@@ -256,13 +264,14 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyStandalone(client, &cr)
+	_, err := ApplyStandalone(context.Background(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
 	}
 }
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -289,7 +298,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterManagerSpec(&cr)
+	err := validateClusterManagerSpec(ctx, &cr)
 
 	if err != nil {
 		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
@@ -298,7 +307,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 
 func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	var err error
-
+	ctx := context.TODO()
 	// Valid smartstore config
 	SmartStore := enterpriseApi.SmartStoreSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -320,7 +329,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStore)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStore)
 	if err != nil {
 		t.Errorf("Valid Smartstore configuration should not cause error: %v", err)
 	}
@@ -347,7 +356,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreMultipleVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreMultipleVolumes)
 	if err == nil {
 		t.Errorf("Missing Secret Object reference should error out")
 	}
@@ -359,7 +368,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreVolumeWithNoRemoteEndPoint)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeWithNoRemoteEndPoint)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Endpoint")
 	}
@@ -371,7 +380,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumeNameMissing)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumeNameMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remotename")
 	}
@@ -383,7 +392,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumePathMissing)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumePathMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remote Path")
 	}
@@ -409,7 +418,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexName)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexName)
 	if err == nil {
 		t.Errorf("Should not accept an Index with missing indexname ")
 	}
@@ -435,7 +444,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexLocation)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexLocation)
 	if err != nil {
 		t.Errorf("An index with missing remotePath should use index name as path, but failed with error: %v", err)
 	}
@@ -459,13 +468,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreConfWithDefaults)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreConfWithDefaults)
 	if err != nil {
 		t.Errorf("Should accept an Index with missing remotePath location, when defaults are configured. But, got the error: %v", err)
 	}
 
 	// Empty smartstore config
-	err = ValidateSplunkSmartstoreSpec(nil)
+	err = ValidateSplunkSmartstoreSpec(ctx, nil)
 	if err != nil {
 		t.Errorf("Smartstore config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -488,7 +497,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithoutVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithoutVolumes)
 	if err == nil {
 		t.Errorf("Smartstore config without volume details should return error")
 	}
@@ -516,7 +525,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateVolumes)
 	if err == nil {
 		t.Errorf("Duplicate volume configuration should return an error")
 	}
@@ -532,7 +541,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreDefaultsWithNonExistingVolume)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreDefaultsWithNonExistingVolume)
 	if err == nil {
 		t.Errorf("Volume referred in the indexes defaults should be a valid volume")
 	}
@@ -554,7 +563,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateIndexes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateIndexes)
 	if err == nil {
 		t.Errorf("Duplicate index names should return an error")
 	}
@@ -574,7 +583,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreVolumeMissingBothFromDefaultsAndIndex)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeMissingBothFromDefaultsAndIndex)
 	if err == nil {
 		t.Errorf("If no default volume, index with missing volume info should return an error")
 	}
@@ -592,7 +601,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreIndexesWithInvalidVolumeName)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreIndexesWithInvalidVolumeName)
 	if err == nil {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
@@ -600,6 +609,8 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
+	ctx := context.TODO()
+
 	// Valid app framework config
 	AppFramework := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -631,7 +642,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		AppsRepoStatusPollInterval: 60,
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("App Framework configuration should have returned error as we have not mounted app download volume: %v", err)
 	}
@@ -643,13 +654,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+
 	if err != nil {
 		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
 	}
 
 	AppFramework.VolList[0].SecretRef = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Missing Secret Object reference is a valid config that should not cause error: %v", err)
 	}
@@ -658,15 +670,16 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// App Framework config with missing App Source name
 	AppFramework.AppSources[0].Name = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "app Source name is missing for AppSource at:") {
+
 		t.Errorf("Should not accept an app source with missing name ")
 	}
 
 	//App Framework config app source config with missing location(withot default location) should errro out
 	AppFramework.AppSources[0].Name = "adminApps"
 	AppFramework.AppSources[0].Location = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "app Source location is missing for AppSource") {
 		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
 	}
@@ -677,7 +690,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	AppFramework.AppSources[0].Scope = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
@@ -685,7 +698,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
 	// Empty App Repo config should not cause an error
-	err = ValidateAppFrameworkSpec(nil, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, nil, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("App Repo config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -714,7 +727,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("App Repo config without volume details should return error")
 	}
@@ -723,7 +736,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	tmpVolume := AppFramework.Defaults.VolName
 	AppFramework.Defaults.VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Volume referred in the defaults should be a valid volume")
 	}
@@ -736,7 +749,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
 	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "duplicate App Source configured") {
 		t.Errorf("Duplicate app sources should return an error")
 	}
@@ -744,7 +757,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Duplicate App Source locations across different scopes should not return an error
 	tmpScope := AppFramework.AppSources[1].Scope
 	AppFramework.AppSources[1].Scope = enterpriseApi.ScopeCluster
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("App Sources with different app scopes can have duplicate paths, but failed with error: %v", err)
 	}
@@ -757,7 +770,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	tmpAppSourceName := AppFramework.AppSources[1].Name
 	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "multiple app sources with the name adminApps is not allowed") {
 		t.Errorf("Failed to detect duplicate app source names")
 	}
@@ -768,14 +781,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].VolName = ""
 	AppFramework.Defaults.VolName = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "volumeName is missing for App Source") {
 		t.Errorf("If no default volume, App Source with missing volume info should return an error")
 	}
 
 	// If the AppSource doesn't have VolName, and if the defaults have it, shouldn't cause an error
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("If default volume, App Source with missing volume should not return an error, but got error %v", err)
 	}
@@ -783,7 +796,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Volume referenced from an index must be a valid volume
 	AppFramework.AppSources[0].VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
@@ -791,14 +804,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeCluster
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for App Source") {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
 	}
 
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.Contains(err.Error(), "should be either local or cluster or clusterWithPreConfig") {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
@@ -808,7 +821,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for defaults config. Only local scope is supported for this kind of CR") {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
@@ -816,7 +829,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "scope for defaults should be either local") {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
@@ -825,7 +838,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Missing scope, if the default scope is not specified should return error
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "app Source scope is missing for") {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
@@ -836,7 +849,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = "clusterWithPreConfig"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Valid scope clusterWithPreConfig should not cause an error")
 	}
@@ -850,14 +863,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	AppFramework.AppsRepoPollInterval = 0
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	}
 
 	// Check for minAppsRepoPollInterval
 	AppFramework.AppsRepoPollInterval = splcommon.MinAppsRepoPollInterval - 1
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MinAppsRepoPollInterval {
@@ -866,7 +879,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Check for maxAppsRepoPollInterval
 	AppFramework.AppsRepoPollInterval = splcommon.MaxAppsRepoPollInterval + 1
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MaxAppsRepoPollInterval {
@@ -875,20 +888,20 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Invalid volume name in defaults should return an error
 	AppFramework.Defaults.VolName = "unknownVolume"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
 	AppFramework.VolList[0].Provider = "invalid-provider"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
@@ -1027,6 +1040,8 @@ maxGlobalRawDataSizeMB = 61440
 }
 
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1061,7 +1076,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	}
 
 	// Missing secret object should return an error
-	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged := AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if err == nil {
 		t.Errorf("Missing secret object should return an error. keyChangedFlag: %t", keysChanged)
 	} else if keysChanged {
@@ -1070,17 +1085,17 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// First time secret version reference should be updated
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-scret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_ = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	_ = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1091,14 +1106,14 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	resourceVersion := "3434"
 	secret.SetResourceVersion(resourceVersion)
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
 
 	// No change on the secret object should return false
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
@@ -1106,7 +1121,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// Empty volume list should return false
 	cr.Spec.SmartStore.VolList = nil
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if keysChanged {
 		t.Errorf("Empty volume should not report a key change")
 	}
@@ -1162,7 +1177,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1175,7 +1190,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1187,7 +1202,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1199,7 +1214,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1212,7 +1227,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1261,6 +1276,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 }
 
 func TestGetLivenessProbe(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1270,26 +1286,27 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(cr, SplunkClusterManager, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(cr, SplunkClusterManager, spec, 0)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(cr, SplunkClusterManager, spec, 20)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 20)
 	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
 }
 
 func TestGetReadinessProbe(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1299,20 +1316,20 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(cr, SplunkClusterManager, spec, 0)
+	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(cr, SplunkClusterManager, spec, 0)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(cr, SplunkClusterManager, spec, 20)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 20)
 	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Readiness probe initial delay value")
 	}
@@ -1338,6 +1355,7 @@ func TestGetProbe(t *testing.T) {
 }
 
 func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -1383,28 +1401,28 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	revised.ObjectMeta.Name = "standalone2"
 
 	// Create the configMap
-	configMap, err := createOrUpdateAppUpdateConfigMap(client, &cr)
+	configMap, err := createOrUpdateAppUpdateConfigMap(ctx, client, &cr)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}
 
 	configMapName := configMap.Name
 	// check the status and refCount
-	refCount := getManualUpdateRefCount(client, &cr, configMapName)
-	status := getManualUpdateStatus(client, &cr, configMapName)
+	refCount := getManualUpdateRefCount(ctx, client, &cr, configMapName)
+	status := getManualUpdateStatus(ctx, client, &cr, configMapName)
 	if refCount != 1 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	// update the configMap
-	_, err = createOrUpdateAppUpdateConfigMap(client, &revised)
+	_, err = createOrUpdateAppUpdateConfigMap(ctx, client, &revised)
 	if err != nil {
 		t.Errorf("manual app update configMap should have been created successfully")
 	}
 
 	// check the status and refCount
-	refCount = getManualUpdateRefCount(client, &revised, configMapName)
-	status = getManualUpdateStatus(client, &revised, configMapName)
+	refCount = getManualUpdateRefCount(ctx, client, &revised, configMapName)
+	status = getManualUpdateStatus(ctx, client, &revised, configMapName)
 	if refCount != 2 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}

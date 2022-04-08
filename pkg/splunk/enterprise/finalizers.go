@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -30,11 +32,12 @@ func init() {
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.
-func DeleteSplunkPvc(cr splcommon.MetaObject, c splcommon.ControllerClient) error {
-	objectKind := cr.GetObjectKind().GroupVersionKind().Kind
+func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+	var objectKind string
+	objectKind = cr.GetObjectKind().GroupVersionKind().Kind
 
-	scopedLog := log.WithName("DeleteSplunkPvc").WithValues("kind", objectKind,
-		"name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DeleteSplunkPvc")
 
 	var components []string
 	switch objectKind {

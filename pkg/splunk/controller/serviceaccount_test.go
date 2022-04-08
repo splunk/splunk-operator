@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -25,8 +26,11 @@ import (
 
 func TestApplyServiceAccount(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.ServiceAccount-test-defaults"}}
+	updateFunCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.ServiceAccount-test-defaults"},
+		{MetaName: "*v1.ServiceAccount-test-defaults"}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFunCalls, "Update": funcCalls}
 	current := corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",
@@ -36,13 +40,14 @@ func TestApplyServiceAccount(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.ResourceVersion = "dummy"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		err := ApplyServiceAccount(c, cr.(*corev1.ServiceAccount))
+		err := ApplyServiceAccount(context.TODO(), c, cr.(*corev1.ServiceAccount))
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyServiceAccount", &current, revised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestGetServiceAccount(t *testing.T) {
+	ctx := context.TODO()
 	current := corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "defaults",
@@ -54,19 +59,19 @@ func TestGetServiceAccount(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()}
 
 	// serviceAccount doesn't exist
-	_, err := GetServiceAccount(client, namespacedName)
+	_, err := GetServiceAccount(ctx, client, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error, when the serviceAccount doesn't exist")
 	}
 
 	// Create serviceAccount
-	err = ApplyServiceAccount(client, &current)
+	err = ApplyServiceAccount(context.TODO(), client, &current)
 	if err != nil {
 		t.Errorf("Failed to create the serviceAccount. Error: %s", err.Error())
 	}
 
 	// Make sure serviceAccount exists
-	got, err := GetServiceAccount(client, namespacedName)
+	got, err := GetServiceAccount(ctx, client, namespacedName)
 	if err != nil {
 		if got.GetName() != current.GetName() {
 			t.Errorf("Incorrect service account retrieved got %s want %s", got.GetName(), current.GetName())
@@ -78,13 +83,13 @@ func TestGetServiceAccount(t *testing.T) {
 
 	current.Name = dummySaName
 	// Update serviceAccount
-	err = ApplyServiceAccount(client, &current)
+	err = ApplyServiceAccount(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Failed to create the serviceAccount. Error: %s", err.Error())
 	}
 
 	// Make sure serviceAccount is updated
-	got, err = GetServiceAccount(client, namespacedName)
+	got, err = GetServiceAccount(ctx, client, namespacedName)
 	if err != nil {
 		if got.GetName() != dummySaName {
 			t.Errorf("Incorrect service account retrieved got %s want %s", got.GetName(), current.GetName())

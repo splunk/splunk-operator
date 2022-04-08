@@ -18,41 +18,51 @@ import (
 	"context"
 	"reflect"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyServiceAccount creates or updates a Kubernetes serviceAccount
-func ApplyServiceAccount(client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
-	scopedLog := log.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
+func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
 		"namespace", serviceAccount.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: serviceAccount.GetNamespace(), Name: serviceAccount.GetName()}
 	var current corev1.ServiceAccount
 
-	err := client.Get(context.TODO(), namespacedName, &current)
+	err := client.Get(ctx, namespacedName, &current)
 	if err == nil {
 		if !reflect.DeepEqual(serviceAccount, &current) {
 			scopedLog.Info("Updating service account")
 			current = *serviceAccount
-			err = splutil.UpdateResource(client, &current)
+			err = splutil.UpdateResource(ctx, client, &current)
+			if err != nil {
+				return err
+			}
+			// after update get the latest resource
+			err = client.Get(ctx, namespacedName, &current)
 		}
-	} else {
-		err = splutil.CreateResource(client, serviceAccount)
+	} else if k8serrors.IsNotFound(err) {
+		err = splutil.CreateResource(ctx, client, serviceAccount)
+	} else if err != nil {
+		return err
 	}
 
 	return err
 }
 
 // GetServiceAccount gets the serviceAccount resource in a given namespace
-func GetServiceAccount(client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ServiceAccount, error) {
+func GetServiceAccount(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName) (*corev1.ServiceAccount, error) {
 	var serviceAccount corev1.ServiceAccount
-	err := client.Get(context.TODO(), namespacedName, &serviceAccount)
+	err := client.Get(ctx, namespacedName, &serviceAccount)
 	if err != nil {
-		scopedLog := log.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
+		reqLogger := log.FromContext(ctx)
+		scopedLog := reqLogger.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
 			"namespace", namespacedName.Namespace, "error", err)
 		scopedLog.Info("ServiceAccount not found")
 		return nil, err

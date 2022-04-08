@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -148,9 +150,9 @@ func GetPodIP(ns string, podName string) string {
 }
 
 // GetMCConfigMap gets config map for give Monitoring Console Name
-func GetMCConfigMap(deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
+func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
 	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(mcName, enterprise.SplunkMonitoringConsole)
-	mcConfigMap, err := GetConfigMap(deployment, ns, mcConfigMapName)
+	mcConfigMap, err := GetConfigMap(ctx, deployment, ns, mcConfigMapName)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
 		return mcConfigMap, err

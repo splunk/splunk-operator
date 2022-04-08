@@ -21,7 +21,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
-
+  echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
     docker pull ${SPLUNK_OPERATOR_IMAGE}
@@ -57,12 +57,31 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
 fi
 
 
-# Install the CRDs
-echo "Installing enterprise CRDs..."
-kubectl apply -f ${topdir}/deploy/crds
+if [  "${CLUSTER_WIDE}" != "true" ]; then 
+  # Install the CRDs
+  echo "Installing enterprise CRDs..."
+  make kustomize
+  bin/kustomize build config/crd | kubectl apply -f -
+else
+  echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+fi
+
 if [ $? -ne 0 ]; then
-  echo "Unable to install the CRDs. Exiting..."
+  echo "Unable to install the operator. Exiting..."
   exit 1
+fi
+
+if [  "${CLUSTER_WIDE}" == "true" ]; then 
+  echo "wait for operator pod to be ready..."
+  # sleep before checking for deployment, in slow clusters deployment call may not even started
+  # in those cases, kubectl will fail with error:  no matching resources found
+  sleep 2
+  kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
+  if [ $? -ne 0 ]; then
+    echo "Operator installation not ready..."
+    exit 1
+  fi
 fi
 
 rc=$(which ginkgo)
@@ -125,10 +144,12 @@ if [[ -z "${DEBUG}" ]]; then
   export DEBUG="${DEBUG_RUN}"
 fi
 
+
+
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v --trace -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
 
 if [[ "${DEBUG}" != "True" ]]; then
   tools/cleanup.sh

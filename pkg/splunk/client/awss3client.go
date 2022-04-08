@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -29,6 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // blank assignment to verify that AWSS3Client implements S3Client
@@ -59,7 +62,7 @@ type AWSS3Client struct {
 var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
 
 // GetRegion extracts the region from the endpoint field
-func GetRegion(endpoint string, region *string) error {
+func GetRegion(ctx context.Context, endpoint string, region *string) error {
 	var err error
 	pattern := regexp.MustCompile(regionRegex)
 	if len(pattern.FindStringSubmatch(endpoint)) > 0 {
@@ -71,13 +74,14 @@ func GetRegion(endpoint string, region *string) error {
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientSession
-func InitAWSClientWrapper(region, accessKeyID, secretAccessKey string) interface{} {
-	return InitAWSClientSession(region, accessKeyID, secretAccessKey)
+func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	return InitAWSClientSession(ctx, region, accessKeyID, secretAccessKey)
 }
 
 // InitAWSClientSession initializes and returns a client session object
-func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
-	scopedLog := log.WithName("InitAWSClientSession")
+func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("InitAWSClientSession")
 
 	// Enforcing minimum version TLS1.2
 	tr := &http.Transport{
@@ -126,20 +130,20 @@ func InitAWSClientSession(region, accessKeyID, secretAccessKey string) SplunkAWS
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
 	// for backward compatibility, if `region` is not specified in the CR,
 	// then derive the region from the endpoint.
 	if region == "" {
-		err = GetRegion(endpoint, &region)
+		err = GetRegion(ctx, endpoint, &region)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	cl := fn(region, accessKeyID, secretAccessKey)
+	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -182,8 +186,9 @@ func getTLSVersion(tr *http.Transport) string {
 }
 
 // GetAppsList get the list of apps from remote storage
-func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
-	scopedLog := log.WithName("GetAppsList")
+func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (S3Response, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
 	s3Resp := S3Response{}
@@ -224,8 +229,9 @@ func (awsclient *AWSS3Client) GetAppsList() (S3Response, error) {
 }
 
 // DownloadApp downloads the app from remote storage to local file system
-func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile, etag string) (bool, error) {
-	scopedLog := log.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
+func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, remoteFile, localFile, etag string) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
 
 	var numBytes int64
 	file, err := os.Create(localFile)
@@ -254,12 +260,12 @@ func (awsclient *AWSS3Client) DownloadApp(remoteFile, localFile, etag string) (b
 }
 
 // GetInitContainerImage returns the initContainer image to be used with this s3 client
-func (awsclient *AWSS3Client) GetInitContainerImage() string {
+func (awsclient *AWSS3Client) GetInitContainerImage(ctx context.Context) string {
 	return ("amazon/aws-cli")
 }
 
 // GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
-func (awsclient *AWSS3Client) GetInitContainerCmd(endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
+func (awsclient *AWSS3Client) GetInitContainerCmd(ctx context.Context, endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
 	s3AppSrcPath := filepath.Join(bucket, path) + "/"
 	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
 

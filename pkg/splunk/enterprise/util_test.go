@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +16,10 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
+
+	//"io"
 	"os"
 	"strconv"
 	"strings"
@@ -26,8 +30,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -36,16 +42,24 @@ import (
 )
 
 func init() {
+	fmt.Printf("init is called here from test")
+	initGlobalResourceTracker()
+	/*cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
+		return nil
+	}*/
 }
 
 func TestApplySplunkConfig(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3]}}
 	searchHeadCR := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -60,7 +74,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.SearchHeadCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
@@ -84,19 +98,20 @@ func TestApplySplunkConfig(t *testing.T) {
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
 		return err
 	}
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -105,7 +120,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got := getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -119,7 +134,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got = getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
@@ -135,6 +150,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 }
 
 func TestApplySmartstoreConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -167,21 +183,21 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	test := func(client *spltest.MockClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplySmartstoreConfigMap(client, cr, smartstore)
+			configMap, _, err := ApplySmartstoreConfigMap(ctx, client, cr, smartstore)
 			configMap.Data["conftoken"] = "1601945361"
 			return configMap, err
 		}
@@ -192,13 +208,14 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
-	_, _, err = ApplySmartstoreConfigMap(client, &cr, &cr.Spec.SmartStore)
+	_, _, err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}
 }
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -234,25 +251,25 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Test existing secret
-	err = splutil.SetSecretOwnerRef(client, secret.GetName(), &cr)
+	err = splutil.SetSecretOwnerRef(ctx, client, secret.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", secret.GetName())
 	}
 
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 
 	if err != nil {
 		t.Errorf("Couldn't Remove S3 Secret object references %v", err)
@@ -278,19 +295,20 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	}
 
 	// S3 secret owner reference removal, with non-existing secret objects
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret object referenced in the volume config doesn't exist")
 	}
 
 	// Smartstore volume config with non-existing secret objects
-	err = DeleteOwnerReferencesForResources(client, &cr, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret objects doesn't exist")
 	}
 }
 
 func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -308,18 +326,18 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-secret object, hence create that secret object
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Missing S3 access key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 access key should return an error")
 	}
@@ -327,14 +345,14 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 
 	// Missing S3 secret key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 secret key should return an error")
 	}
 
 	// When access key and secret keys are present, returned keys should not be empty. Also, should not return an error
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if accessKey == "" || secretKey == "" || err != nil {
 		t.Errorf("Missing S3 Keys / Error not expected, when the Secret object with the S3 specific keys are present")
 	}
@@ -360,6 +378,8 @@ func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
 }
 
 func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
+	initGlobalResourceTracker()
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -407,7 +427,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
 	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
-	err := initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	err := initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
@@ -415,33 +435,33 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	var configMap *corev1.ConfigMap
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	_, err = splctrl.GetConfigMap(client, namespacedName)
+	_, err = splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Unable to get configMap")
 	}
 
 	// check the status and refCount first time
-	refCount := getManualUpdateRefCount(client, &cr, configMapName)
-	status := getManualUpdateStatus(client, &cr, configMapName)
+	refCount := getManualUpdateRefCount(ctx, client, &cr, configMapName)
+	status := getManualUpdateStatus(ctx, client, &cr, configMapName)
 	if refCount != 1 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	var appDeployContext2 enterpriseApi.AppDeploymentContext
 	appDeployContext2.AppFrameworkConfig = revised.Spec.AppFrameworkConfig
-	err = initAndCheckAppInfoStatus(client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	err = initAndCheckAppInfoStatus(ctx, client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
 
-	_, err = splctrl.GetConfigMap(client, namespacedName)
+	_, err = splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Unable to get configMap")
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	refCount = getManualUpdateRefCount(client, &revised, configMapName)
-	status = getManualUpdateStatus(client, &revised, configMapName)
+	refCount = getManualUpdateRefCount(ctx, client, &revised, configMapName)
+	status = getManualUpdateStatus(ctx, client, &revised, configMapName)
 	if refCount != 2 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
@@ -455,43 +475,43 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 
-	_, err = splctrl.ApplyConfigMap(client, configMap)
+	_, err = splctrl.ApplyConfigMap(ctx, client, configMap)
 	if err != nil {
 		t.Errorf("ApplyConfigMap should not have returned error")
 	}
 	// set this CR as the owner ref for the config map
-	err = SetConfigMapOwnerRef(client, &cr, configMap)
+	err = SetConfigMapOwnerRef(ctx, client, &cr, configMap)
 	if err != nil {
 		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
 	}
 
 	// set the second CR too as the owner ref for the config map
-	err = SetConfigMapOwnerRef(client, &revised, configMap)
+	err = SetConfigMapOwnerRef(ctx, client, &revised, configMap)
 	if err != nil {
 		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
 	}
 
-	err = initAndCheckAppInfoStatus(client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
+	err = initAndCheckAppInfoStatus(ctx, client, &revised, &revised.Spec.AppFrameworkConfig, &appDeployContext2)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	refCount = getManualUpdateRefCount(client, &revised, configMapName)
-	status = getManualUpdateStatus(client, &revised, configMapName)
+	refCount = getManualUpdateRefCount(ctx, client, &revised, configMapName)
+	status = getManualUpdateStatus(ctx, client, &revised, configMapName)
 	if refCount != 1 || status != "on" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=on, Got=%s. Expected refCount=1, Got=%d", status, refCount)
 	}
 
 	appDeployContext2.IsDeploymentInProgress = false
-	err = initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
+	err = initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext2)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
 
 	// check the status and refCount second time. We should have turned off manual update now.
-	refCount = getManualUpdateRefCount(client, &cr, configMapName)
-	status = getManualUpdateStatus(client, &cr, configMapName)
+	refCount = getManualUpdateRefCount(ctx, client, &cr, configMapName)
+	status = getManualUpdateStatus(ctx, client, &cr, configMapName)
 	if refCount != 2 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
@@ -499,6 +519,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 }
 
 func TestInitAndCheckAppInfoStatusShouldFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -543,13 +564,14 @@ func TestInitAndCheckAppInfoStatusShouldFail(t *testing.T) {
 	var appDeployContext enterpriseApi.AppDeploymentContext
 	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
 
-	initAndCheckAppInfoStatus(client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
 	if appDeployContext.LastAppInfoCheckTime != 0 {
 		t.Errorf("We should not have updated the LastAppInfoCheckTime as polling of apps repo is disabled.")
 	}
 }
 
 func TestHandleAppRepoChanges(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "Clustermaster",
@@ -599,7 +621,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	var S3Response splclient.S3Response
 
 	// Test-1: Empty remoteObjectList Map should return an error
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -613,7 +635,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Set the app source with a matching one
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -625,7 +647,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-3: If the App Resource is not found in the remote object listing, all the corresponding Apps should be deleted/disabled
 	delete(remoteObjListMap, appFramworkConf.AppSources[0].Name)
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -639,7 +661,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-4: If the App Resource is not found in the config, all the corresponding Apps should be deleted/disabled
 	tmpAppSrcName := appFramworkConf.AppSources[0].Name
 	appFramworkConf.AppSources[0].Name = "invalidName"
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -651,7 +673,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 
 	// Test-5: Changing the AppSource deployment info should change for all the Apps in the list
-	changeAppSrcDeployInfoStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusInProgress)
+	changeAppSrcDeployInfoStatus(ctx, appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusInProgress)
 	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 	if err != nil {
 		t.Errorf("Invalid AppSrc deployment info detected. Error: %v", err)
@@ -665,7 +687,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	tmpS3Response.Objects = append(tmpS3Response.Objects[:0], tmpS3Response.Objects[1:]...)
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpS3Response
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -681,7 +703,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -694,7 +716,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-8:  For an AppSrc, when all the Apps are deleted on remote store and re-introduced, should modify the state to active and pending
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -709,7 +731,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	invalidAppSourceName := "UnknownAppSourceInConfig"
 	remoteObjListMap[invalidAppSourceName] = S3Response
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err == nil {
 		t.Errorf("Unable to return an error, when the remote listing contain unknown App source")
@@ -728,7 +750,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete)
 		if err != nil {
@@ -750,7 +772,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 		if err != nil {
@@ -826,11 +848,12 @@ func TestAppPhaseStatusAsStr(t *testing.T) {
 }
 
 func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
+	ctx := context.TODO()
 	//add the directory to download apps
 	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	size, _ := getAvailableDiskSpace()
+	size, _ := getAvailableDiskSpace(ctx)
 	if size == 0 {
 		t.Errorf("getAvailableDiskSpace should have returned a non-zero size.")
 	}
@@ -847,22 +870,22 @@ func TestIsAppExtentionValid(t *testing.T) {
 }
 
 func TestHasAppRepoCheckTimerExpired(t *testing.T) {
-
+	ctx := context.TODO()
 	// Case 1. This is the case when we first enter the reconcile loop.
 	appInfoContext := &enterpriseApi.AppDeploymentContext{
 		LastAppInfoCheckTime: 0,
 	}
 
-	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 
 	appInfoContext.AppsRepoStatusPollInterval = 60
 
 	// Case 2. We just checked the apps status
-	SetLastAppInfoCheckTime(appInfoContext)
+	SetLastAppInfoCheckTime(ctx, appInfoContext)
 
-	if HasAppRepoCheckTimerExpired(appInfoContext) {
+	if HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
 	}
 
@@ -870,7 +893,7 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	// We do this by setting some random past timestamp.
 	appInfoContext.LastAppInfoCheckTime = 1591464060
 
-	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
@@ -933,8 +956,9 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 }
 
 func TestSetLastAppInfoCheckTime(t *testing.T) {
+	ctx := context.TODO()
 	appInfoStatus := &enterpriseApi.AppDeploymentContext{}
-	SetLastAppInfoCheckTime(appInfoStatus)
+	SetLastAppInfoCheckTime(ctx, appInfoStatus)
 
 	if appInfoStatus.LastAppInfoCheckTime != time.Now().Unix() {
 		t.Errorf("LastAppInfoCheckTime should have been set to current time")
@@ -942,15 +966,17 @@ func TestSetLastAppInfoCheckTime(t *testing.T) {
 }
 
 func TestGetNextRequeueTime(t *testing.T) {
+	ctx := context.TODO()
 	appFrameworkContext := enterpriseApi.AppDeploymentContext{}
 	appFrameworkContext.AppsRepoStatusPollInterval = 60
-	nextRequeueTime := GetNextRequeueTime(appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
+	nextRequeueTime := GetNextRequeueTime(ctx, appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
 	}
 }
 
 func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -975,7 +1001,7 @@ refCount: 1`)
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 
 	// Test1: with no confiMap added, we should return error
-	err := updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	err := updateManualAppUpdateConfigMapLocked(ctx, c, &cr, appStatusContext, kind, turnOffManualChecking)
 	if err == nil {
 		t.Errorf("updateManualAppUpdateConfigMapLocked should have returned error since there is no configMap yet.")
 	}
@@ -984,20 +1010,21 @@ refCount: 1`)
 	c.AddObject(configMap)
 
 	// Test2: This should not return error since we have added configMap now
-	err = updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	err = updateManualAppUpdateConfigMapLocked(ctx, c, &cr, appStatusContext, kind, turnOffManualChecking)
 	if err != nil {
 		t.Errorf("updateManualAppUpdateConfigMapLocked should not have returned error since we just added configMap. err=%v", err)
 	}
 
 	// Test3: now enable TurnOffManualChecking
 	turnOffManualChecking = true
-	err = updateManualAppUpdateConfigMapLocked(c, &cr, appStatusContext, kind, turnOffManualChecking)
+	err = updateManualAppUpdateConfigMapLocked(ctx, c, &cr, appStatusContext, kind, turnOffManualChecking)
 	if err != nil {
 		t.Errorf("updateManualAppUpdateConfigMapLocked should not have returned error. err=%v", err)
 	}
 }
 
 func TestShouldCheckAppRepoStatus(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -1041,7 +1068,7 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 	var appStatusContext enterpriseApi.AppDeploymentContext
 	appStatusContext.AppsRepoStatusPollInterval = 0
 	var turnOffManualChecking bool
-	shouldCheck := shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck := shouldCheckAppRepoStatus(ctx, c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck == true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned false as there is no configMap yet.")
 	}
@@ -1053,13 +1080,14 @@ refCount: 1`)
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 	c.AddObject(configMap)
-	shouldCheck = shouldCheckAppRepoStatus(c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
+	shouldCheck = shouldCheckAppRepoStatus(ctx, c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck != true {
 		t.Errorf("shouldCheckAppRepoStatus should have returned true.")
 	}
 }
 
 func TestValidateMonitoringConsoleRef(t *testing.T) {
+	ctx := context.TODO()
 	currentCM := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -1117,13 +1145,13 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	//create configmap
-	_, err := splctrl.ApplyConfigMap(client, &currentCM)
+	_, err := splctrl.ApplyConfigMap(ctx, client, &currentCM)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
 
 	// Create statefulset
-	err = splutil.CreateResource(client, current)
+	err = splutil.CreateResource(ctx, client, current)
 	if err != nil {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
@@ -1136,7 +1164,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
@@ -1161,13 +1189,14 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		},
 	}
 
-	err = validateMonitoringConsoleRef(client, revised, serviceURLs)
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
 	if err != nil {
 		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
 }
 
 func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
+	ctx := context.TODO()
 	stand1 := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -1209,7 +1238,7 @@ func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// To test the failure scenario, do not add the configMap to the client yet
-	err := UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
+	err := UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
 	if err == nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there is no configMap yet")
 	}
@@ -1230,13 +1259,13 @@ refCount: 1`)
 	client.AddObject(configMap)
 
 	// To test the failure scenario, do not add the standalone cr to the list yet
-	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
 	if err == nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there are no owner references in the configMap")
 	}
 
 	// set the second CR too as the owner ref for the config map
-	err = SetConfigMapOwnerRef(client, &stand1, configMap)
+	err = SetConfigMapOwnerRef(ctx, client, &stand1, configMap)
 	if err != nil {
 		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
 	}
@@ -1246,31 +1275,31 @@ refCount: 1`)
 	stand2.ObjectMeta.Name = "standalone2"
 
 	// set the second CR too as the owner ref for the config map
-	err = SetConfigMapOwnerRef(client, &stand2, configMap)
+	err = SetConfigMapOwnerRef(ctx, client, &stand2, configMap)
 	if err != nil {
 		t.Errorf("Unable to set owner reference for configMap: %s", configMap.Name)
 	}
 
 	// We should have decremented the refCount to 1
-	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand2, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand2, SplunkStandalone)
 	if err != nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
 
-	refCount := getManualUpdateRefCount(client, &stand1, configMapName)
+	refCount := getManualUpdateRefCount(ctx, client, &stand1, configMapName)
 	if refCount != 1 {
 		t.Errorf("Got wrong refCount. Expected=%d, Got=%d", 1, refCount)
 	}
 
 	// remove stand2 as the configMap owner reference
 	var ownerRefCount uint
-	ownerRefCount, err = RemoveConfigMapOwnerRef(client, &stand2, configMap.Name)
+	ownerRefCount, err = RemoveConfigMapOwnerRef(ctx, client, &stand2, configMap.Name)
 	if ownerRefCount != 1 || err != nil {
 		t.Errorf("RemoveConfigMapOwnerRef should not have returned error or number of owner references should be 1.")
 	}
 
 	// Now since there is only 1 standalone left, we should be removing the entry from the configMap
-	err = UpdateOrRemoveEntryFromConfigMapLocked(client, &stand1, SplunkStandalone)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
 	if err != nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
@@ -1281,6 +1310,7 @@ refCount: 1`)
 }
 
 func TestCreateDirOnSplunkPods(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone1",
@@ -1307,17 +1337,17 @@ func TestCreateDirOnSplunkPods(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnCtxts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
 
 	path := "/operator-staging/appframework/admin/"
 
-	err := createDirOnSplunkPods(&cr, cr.Spec.Replicas, path, mockPodExecClient)
+	err := createDirOnSplunkPods(ctx, &cr, cr.Spec.Replicas, path, mockPodExecClient)
 	if err == nil {
 		t.Errorf("createDirOnSplunkPods should have returned error since there is no actual pod")
 	}
 
 	mockPodExecReturnCtxts[0].StdErr = ""
-	err = createDirOnSplunkPods(&cr, cr.Spec.Replicas, path, mockPodExecClient)
+	err = createDirOnSplunkPods(ctx, &cr, cr.Spec.Replicas, path, mockPodExecClient)
 	if err != nil {
 		t.Errorf("createDirOnSplunkPods should not have returned error; err=%v", err)
 	}
@@ -1327,6 +1357,7 @@ func TestCreateDirOnSplunkPods(t *testing.T) {
 }
 
 func TestCopyFileToPod(t *testing.T) {
+	ctx := context.TODO()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
@@ -1369,21 +1400,21 @@ func TestCopyFileToPod(t *testing.T) {
 
 	podExecClient := splutil.GetPodExecClient(c, pod, pod.GetName())
 	// Test to detect invalid source file name
-	_, _, err := CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
+	_, _, err := CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "invalid file name") {
 		t.Errorf("Unable to detect invalid source file name")
 	}
 
 	// Test to detect relative source file path
 	fileOnOperator = "tmp/networkIntelligence.spl"
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for source path") {
 		t.Errorf("Unable to reject relative source path")
 	}
 	fileOnOperator = "/tmp/networkIntelligence.spl"
 
 	// Test to reject if the source file doesn't exist
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "unable to get the info for file") {
 		t.Errorf("If file doesn't exist, should return an error")
 	}
@@ -1398,7 +1429,7 @@ func TestCopyFileToPod(t *testing.T) {
 
 	// Test to detect relative destination file path
 	fileOnStandalonePod = fmt.Sprintf("%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
@@ -1417,32 +1448,33 @@ func TestCopyFileToPod(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnCtxts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
 
 	// If Pod destination path is directory, source file name is used, and should not cause an error
 	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/", appVolumeMntName)
 
 	// This should cause an error since stdOut != 0
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err == nil {
 		t.Errorf("CopyFileToPod should have returned error")
 	}
 
 	mockPodExecReturnCtxts[0].StdOut = ""
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
 	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	// Proper source and destination paths should not return an error
-	_, _, err = CopyFileToPod(c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
+	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Valid source and destination paths should not cause an error. Error: %s", err)
 	}
 }
 
 func TestSetInstallSetForClusterScopedApps(t *testing.T) {
+	ctx := context.TODO()
 	appFrameworkConfig := &enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
 			{
@@ -1495,7 +1527,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	// When the phase is not in podCopy complete, install state should not be set
-	setInstallStateForClusterScopedApps(appDeployContext)
+	setInstallStateForClusterScopedApps(ctx, appDeployContext)
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
@@ -1521,7 +1553,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 		appDeployInfoList[i].PhaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
 	}
 
-	setInstallStateForClusterScopedApps(appDeployContext)
+	setInstallStateForClusterScopedApps(ctx, appDeployContext)
 
 	for appSrcName, appSrcDeployInfo := range appDeployContext.AppsSrcDeployStatus {
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
@@ -1543,6 +1575,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 }
 
 func TestCheckIfFileExistsOnPod(t *testing.T) {
+	ctx := context.TODO()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
@@ -1595,21 +1628,22 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	fileExists := checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
+	fileExists := checkIfFileExistsOnPod(ctx, pod, filePathOnPod, mockPodExecClient)
 	if fileExists {
 		t.Errorf("When the file doesn't exist, should return false")
 	}
 
 	mockPodExecReturnContexts[0].StdErr = ""
-	fileExists = checkIfFileExistsOnPod(pod, filePathOnPod, mockPodExecClient)
+	fileExists = checkIfFileExistsOnPod(ctx, pod, filePathOnPod, mockPodExecClient)
 	if !fileExists {
 		t.Errorf("checkIfFileExistsOnPod should have returned true")
 	}
 }
 
 func TestGetAppPackageLocalPath(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -1661,7 +1695,7 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 
 	// When there is no explicit volume configured, should use the temp location, as set by the initStorageTracker()
 	expectedAppPkgLocalPath := "/tmp/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
-	calculatedAppPkgLocalPath := getAppPackageLocalPath(worker)
+	calculatedAppPkgLocalPath := getAppPackageLocalPath(ctx, worker)
 
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
@@ -1669,7 +1703,7 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 
 	// When the explicit volume is set for the app framework, that path should be used for the app package location
 	splcommon.AppDownloadVolume = "/opt/splunk/appframework"
-	calculatedAppPkgLocalPath = getAppPackageLocalPath(worker)
+	calculatedAppPkgLocalPath = getAppPackageLocalPath(ctx, worker)
 	expectedAppPkgLocalPath = "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
@@ -1705,16 +1739,17 @@ func TestGetResourceMutex(t *testing.T) {
 }
 
 func TestUpdateStorageTracker(t *testing.T) {
+	ctx := context.TODO()
 	// When the resource tracker is not initialized, should return an error
 	operatorResourceTracker = nil
-	err := updateStorageTracker()
+	err := updateStorageTracker(ctx)
 	if err == nil {
 		t.Errorf("When the operator resource tracker is not initialized, should return an error")
 	}
 
 	// When the volume is not configured, should return an error
 	splcommon.AppDownloadVolume = "/non-existingdir"
-	err = updateStorageTracker()
+	err = updateStorageTracker(ctx)
 	if err == nil {
 		t.Errorf("When the volume doesn't exist should return an error")
 	}
@@ -1724,7 +1759,7 @@ func TestUpdateStorageTracker(t *testing.T) {
 		storage: &storageTracker{},
 	}
 	splcommon.AppDownloadVolume = "/"
-	err = updateStorageTracker()
+	err = updateStorageTracker(ctx)
 	if err != nil {
 		t.Errorf("When the volume exists should not return an error. Error: %v", err)
 	}
@@ -1804,6 +1839,7 @@ func TestReleaseStorage(t *testing.T) {
 }
 
 func TestChangePhaseInfo(t *testing.T) {
+	ctx := context.TODO()
 	appSrcDeployStatus := make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
 
 	appDeployInfoList := []enterpriseApi.AppDeploymentInfo{
@@ -1839,7 +1875,7 @@ func TestChangePhaseInfo(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
-	changePhaseInfo(5, "appSrc1", appSrcDeployStatus)
+	changePhaseInfo(ctx, 5, "appSrc1", appSrcDeployStatus)
 
 	if len(appDeployInfoList[0].AuxPhaseInfo) != 5 {
 		t.Errorf("changePhaseInfo should have increased the size of AuxPhaseInfo")
@@ -1847,6 +1883,7 @@ func TestChangePhaseInfo(t *testing.T) {
 }
 
 func TestRemoveStaleEntriesFromAuxPhaseInfo(t *testing.T) {
+	ctx := context.TODO()
 	appSrcDeployStatus := make(map[string]enterpriseApi.AppSrcDeployInfo, 1)
 
 	appDeployInfoList := []enterpriseApi.AppDeploymentInfo{
@@ -1882,7 +1919,7 @@ func TestRemoveStaleEntriesFromAuxPhaseInfo(t *testing.T) {
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
-	removeStaleEntriesFromAuxPhaseInfo(1, "appSrc1", appSrcDeployStatus)
+	removeStaleEntriesFromAuxPhaseInfo(ctx, 1, "appSrc1", appSrcDeployStatus)
 
 	if len(appDeployInfoList[0].AuxPhaseInfo) > 1 {
 		t.Errorf("removeStaleEntriesFromAuxPhaseInfo should have cleared the last 2 entries from AuxPhaseInfo")
@@ -1890,6 +1927,7 @@ func TestRemoveStaleEntriesFromAuxPhaseInfo(t *testing.T) {
 }
 
 func TestMigrateAfwStatus(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -1914,7 +1952,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -1939,7 +1977,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	appDeployContext.Version = enterpriseApi.AfwPhase2
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
 
-	migrated := migrateAfwStatus(client, cr, appDeployContext)
+	migrated := migrateAfwStatus(ctx, client, cr, appDeployContext)
 	if !migrated {
 		t.Errorf("When there are objects to be migrated, should return true")
 	}
@@ -1979,7 +2017,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	appDeployContext.Version = enterpriseApi.AfwPhase2
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
 
-	migrated = migrateAfwStatus(client, cr, appDeployContext)
+	migrated = migrateAfwStatus(ctx, client, cr, appDeployContext)
 	if !migrated {
 		t.Errorf("When there are objects to be migrated, should return true")
 	}
@@ -2011,7 +2049,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	appDeployContext.Version = enterpriseApi.AfwPhase2
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeploymentInfo
 
-	migrated = migrateAfwStatus(client, cr, appDeployContext)
+	migrated = migrateAfwStatus(ctx, client, cr, appDeployContext)
 	if !migrated {
 		t.Errorf("When there are objects to be migrated, should return true")
 	}
@@ -2035,7 +2073,8 @@ func TestMigrateAfwStatus(t *testing.T) {
 	}
 }
 
-func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
+func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
+	ctx := context.TODO()
 	var appDeployContext *enterpriseApi.AppDeploymentContext
 
 	client := spltest.NewMockClient()
@@ -2075,7 +2114,7 @@ func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
 		},
 	}
 
-	err := checkAndMigrateAppDeployStatus(client, cr, appDeployContext, appFrameworkConfig, true)
+	err := checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)
 	if err != nil {
 		t.Errorf("When the app deploy context is nil, should not return an error")
 	}
@@ -2111,7 +2150,7 @@ func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
 		},
 	}
 
-	_, err = splctrl.ApplyStatefulSet(client, sts)
+	_, err = splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -2131,7 +2170,7 @@ func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
 		}
 	}
 
-	err = checkAndMigrateAppDeployStatus(client, cr, appDeployContext, appFrameworkConfig, true)
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)
 	if err != nil {
 		t.Errorf("With proper app spec and status contexts, migration should happen. error: %v", err)
 	}
@@ -2160,6 +2199,7 @@ func TestcheckAndMigrateAppDeployStatus(t *testing.T) {
 }
 
 func TestGetCleanObjectDigest(t *testing.T) {
+
 	// plain digest
 	var digests = []string{"\"b38a8f911e2b43982b71a979fe1d3c3f\"", "b38a8f911e2b43982b71a979fe1d3c3f"}
 	retDigest, err := getCleanObjectDigest(&digests[0])
@@ -2182,4 +2222,29 @@ func TestGetCleanObjectDigest(t *testing.T) {
 		t.Errorf("Converted digest value: %v is not equal to the expected digest value: %v", *retDigest, digests[1])
 	}
 
+}
+
+func TestUpdateReconcileRequeueTime(t *testing.T) {
+	// this test case for code coverage, function do not return anything
+	//  to test the value
+	var result *reconcile.Result
+	ctx := context.TODO()
+	// set logger in context
+	ctx = log.IntoContext(ctx, log.Log)
+	rqTime := time.Duration(time.Second * 12)
+
+	// failure when result is nil
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
+
+	// failure when requeue time set it negative
+	rqTime = -12121
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
+
+	result = &reconcile.Result{
+		RequeueAfter: time.Duration(time.Second * 10),
+		Requeue:      true,
+	}
+
+	rqTime = time.Duration(time.Second * 5)
+	updateReconcileRequeueTime(ctx, result, rqTime, true)
 }

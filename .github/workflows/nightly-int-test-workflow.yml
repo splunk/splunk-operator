@@ -7,18 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test:
-          [
-            appframeworks1,
-            appframeworkc3,
-            appframeworkm4,
-            secret,
-            smartstore,
-            monitoringconsole,
-            scaling,
-            crcrud,
-            licensemaster,
-          ]
+        test: [appframeworks1, appframeworkc3, appframeworkm4, secret, smartstore, monitoringconsole, scaling, crcrud, licensemaster]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -74,7 +63,7 @@ jobs:
       - name: Install Go Lint
         run: |
           go version
-          go get -u golang.org/x/lint/golint
+          go install golang.org/x/lint/golint
       - name: Install Ginkgo
         run: |
           go get github.com/onsi/ginkgo/ginkgo
@@ -109,11 +98,11 @@ jobs:
       - name: Make Splunk Operator Image
         run: |
           docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-          operator-sdk build --verbose ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Push Splunk Operator Image to ECR
         run: |
           echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
@@ -132,8 +121,7 @@ jobs:
         run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs
-        if: ${{ always() }}
+      - name: Archive Pod Logs if Failure in Smoke Test
         uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
@@ -149,32 +137,32 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: edge
     steps:
-      - uses: actions/checkout@v2
-        with:
+    - uses: actions/checkout@v2
+      with:
           ref: develop
-      - name: Dotenv Action
-        id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@v1
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-      - name: Pull Splunk Operator Image Locally
-        run: |
-          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-      - name: Change Operator Image Tag to edge
-        run: |
-          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
-      - name: Configure Docker Hub credentials
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-      - name: Push Splunk Operator Image to Docker Hub
-        run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Pull Splunk Operator Image Locally
+      run: |
+        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+    - name: Change Operator Image Tag to edge
+      run: |
+        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+    - name: Configure Docker Hub credentials
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+    - name: Push Splunk Operator Image to Docker Hub 
+      run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}

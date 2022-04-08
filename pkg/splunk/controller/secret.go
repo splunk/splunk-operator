@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,47 +18,57 @@ package controller
 import (
 	"context"
 	"errors"
-	"reflect"
-
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
-func ApplySecret(client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
+func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret *corev1.Secret) (*corev1.Secret, error) {
 	// Invalid secret object
 	if secret == nil {
 		return nil, errors.New(splcommon.InvalidSecretObjectError)
 	}
 
-	scopedLog := log.WithName("ApplySecret").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplySecret").WithValues(
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
 	var result corev1.Secret
 
 	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
-	err := client.Get(context.TODO(), namespacedName, &result)
+	err := client.Get(ctx, namespacedName, &result)
 	if err == nil {
 		scopedLog.Info("Found existing Secret, update if needed")
 		if !reflect.DeepEqual(&result, secret) {
 			result = *secret
-			err = splutil.UpdateResource(client, &result)
+			err = splutil.UpdateResource(ctx, client, &result)
 			if err != nil {
 				return nil, err
 			}
+			secret = &result
 		}
-	} else {
+	} else if k8serrors.IsNotFound(err) {
 		scopedLog.Info("Didn't find secret, creating one")
-		err = splutil.CreateResource(client, secret)
+		err = splutil.CreateResource(ctx, client, secret)
 		if err != nil {
 			return nil, err
 		}
+		gerr := client.Get(ctx, namespacedName, secret)
+		for ; gerr != nil; gerr = client.Get(ctx, namespacedName, secret) {
+			scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr.Error())
+			time.Sleep(10 * time.Microsecond)
+		}
 		result = *secret
+	} else {
+		return nil, err
 	}
-
-	return &result, nil
+	return &result, err
 }

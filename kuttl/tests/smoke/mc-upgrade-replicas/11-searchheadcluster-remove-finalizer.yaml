@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: example-shc
+  finalizers: []
+spec: 
+  replicas: 3
+  clusterMasterRef:
+    name: clustermaster
+  monitoringConsoleRef:
+    name: example

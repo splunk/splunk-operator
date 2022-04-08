@@ -1,0 +1,88 @@
+apiVersion: enterprise.splunk.com/v3
+kind: LicenseMaster
+metadata:
+  name: lm-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  volumes:
+    - name: licenses
+      configMap:
+        name: splunk-licenses
+  licenseUrl: /mnt/licenses/enterprise.lic
+---
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: cm-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  licenseMasterRef:
+    name: lm-example
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: cluster
+    appSources:
+      - name: idxApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: s3-secret
+  smartstore:
+    defaults:
+        volumeName: volume_smartstore
+    indexes:
+      - name: main
+        volumeName: volume_smartstore
+    volumes:
+     - name: volume_smartstore
+        path: <smartstore-path>
+        endpoint: https://<smartstore-endpoint>
+        secretRef: s3-secret
+---
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: idxc-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: <n>
+  clusterMasterRef:
+    name: cm-example
+  licenseMasterRef:
+    name: lm-example
+---
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: shc-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  clusterMasterRef:
+    name: cm-example
+  licenseMasterRef:
+    name: lm-example
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: cluster
+    appSources:
+      - name: shApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: s3-secret

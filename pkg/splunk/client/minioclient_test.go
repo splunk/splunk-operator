@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,41 +16,44 @@
 package client
 
 import (
+	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"os"
 	"reflect"
 	"testing"
 	"time"
-
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
 func TestInitMinioClientWrapper(t *testing.T) {
-
-	minioS3ClientSession := InitMinioClientWrapper("https://s3.us-east-1.amazonaws.com", "abcd", "1234")
+	ctx := context.TODO()
+	minioS3ClientSession := InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234")
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 }
 
 func TestNewMinioClient(t *testing.T) {
-
+	ctx := context.TODO()
 	fn := InitMinioClientWrapper
 
 	// Test1. Test for endpoint with https
-	minioS3Client, err := NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err := NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test2. Test for endpoint with http
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://s3.us-west-2.amazonaws.com", fn)
+	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://s3.us-west-2.amazonaws.com", fn)
+
 	if minioS3Client == nil || err != nil {
 		t.Errorf("NewMinioClient should have returned a valid Minio S3 client.")
 	}
 
 	// Test3. Test for invalid endpoint
-	minioS3Client, err = NewMinioClient("sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
+	minioS3Client, err = NewMinioClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
+
 	if minioS3Client != nil || err == nil {
 		t.Errorf("NewMinioClient should have returned a error.")
 	}
@@ -57,24 +61,25 @@ func TestNewMinioClient(t *testing.T) {
 
 func TestMinioGetInitContainerImage(t *testing.T) {
 	minioClient := &MinioClient{}
-
-	if minioClient.GetInitContainerImage() != "amazon/aws-cli" {
+	ctx := context.TODO()
+	if minioClient.GetInitContainerImage(ctx) != "amazon/aws-cli" {
 		t.Errorf("Got invalid init container image for Minio client.")
 	}
 }
 
 func TestGetMinioInitContainerCmd(t *testing.T) {
+	ctx := context.TODO()
 	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
 
 	minioClient := &MinioClient{}
-	gotCmd := minioClient.GetInitContainerCmd("https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
+	gotCmd := minioClient.GetInitContainerCmd(ctx, "https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin", "admin", "/mnt/apps-local/")
 	if !reflect.DeepEqual(wantCmd, gotCmd) {
 		t.Errorf("Got incorrect Init container cmd")
 	}
 }
 
 func TestMinioGetAppsListShouldNotFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
@@ -170,7 +175,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -178,27 +183,27 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock minio client
 		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockMinioS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-		initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockMinioS3Client{}
 			cl.Objects = mockMinioObjects[index].Objects
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
-		minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-		s3Response, err := minioClient.GetAppsList()
+		s3Response, err := minioClient.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		var mockResponse spltest.MockS3Client
-		mockResponse, err = ConvertS3Response(s3Response)
+		mockResponse, err = ConvertS3Response(ctx, s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -220,7 +225,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 }
 
 func TestMinioGetAppsListShouldFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
 			{Name: "msos_s2s3_vol",
@@ -271,34 +276,34 @@ func TestMinioGetAppsListShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetS3Client with our mock call which initializes mock minio client
 	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockMinioS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockMinioS3Client{}
 		// return empty objects list here to test the negative scenario
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
-	minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-	_, err = minioClient.GetAppsList()
+	_, err = minioClient.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error since we have empty objects in the response")
 	}
 }
 
 func TestMinioDownloadAppShouldNotFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
@@ -373,27 +378,27 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
 		// Update the GetS3Client with our mock call which initializes mock minio client
 		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockMinioS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-		initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockMinioS3Client{}
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-		minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-		downloadSuccess, err := minioClient.DownloadApp(RemoteFiles[index], LocalFiles[index], Etags[index])
+		downloadSuccess, err := minioClient.DownloadApp(ctx, RemoteFiles[index], LocalFiles[index], Etags[index])
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
@@ -415,7 +420,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 }
 
 func TestMinioDownloadAppShouldFail(t *testing.T) {
-
+	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
 			VolName: "msos_s2s3_vol2",
@@ -460,27 +465,27 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	appSource := appFrameworkRef.AppSources[0]
 
-	vol, err = GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
 	// Update the GetS3Client with our mock call which initializes mock minio client
 	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(vol.Provider, NewMockMinioS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-	initFn := func(region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockMinioS3Client{}
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(vol.Name, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr()
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-	minioClient.Client = getS3ClientFn("us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
 
-	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	_, err = minioClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
@@ -488,7 +493,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
 
-	_, err = minioClient.DownloadApp(RemoteFile, LocalFile[0], Etag)
+	_, err = minioClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")

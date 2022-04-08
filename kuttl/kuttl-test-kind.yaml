@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/smoke
+parallel: 1
+timeout: 1000
+startKIND: true
+artifactsDir: kuttl-artifacts
+kindNodeCache: true
+crdDir: config/crd/bases
+commands:
+  - command: bin/manager
+    background: true

@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -24,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -67,6 +68,7 @@ func TestIsFanOutApplicableToCR(t *testing.T) {
 }
 
 func TestCreateAndAddPipelineWorker(t *testing.T) {
+	ctx := context.TODO()
 	appDeployInfo := &enterpriseApi.AppDeploymentInfo{
 		AppName:          "testapp.spl",
 		LastModifiedTime: "testtime",
@@ -105,7 +107,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -144,9 +146,9 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	var statefulSet *appsv1.StatefulSet = &appsv1.StatefulSet{}
 
 	// Test for createAndAddPipelineWorker
-	afwPpln := initAppInstallPipeline(&appFrameworkContext, client, &cr)
+	afwPpln := initAppInstallPipeline(ctx, &appFrameworkContext, client, &cr)
 
-	afwPpln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)
+	afwPpln.createAndAddPipelineWorker(ctx, enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)
 	if len(afwPpln.pplnPhases[enterpriseApi.PhaseDownload].q) != 1 {
 		t.Errorf("Unable to add a worker to the pipeline phase")
 	}
@@ -291,10 +293,11 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 }
 
 func TestInitAppInstallPipeline(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{}
 	c := spltest.NewMockClient()
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(appDeployContext, c, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	if ppln == nil {
 		t.Errorf("Failed to create a new pipeline")
@@ -302,6 +305,7 @@ func TestInitAppInstallPipeline(t *testing.T) {
 }
 
 func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -318,7 +322,7 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 		},
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(appDeployContext, c, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	if len(ppln.pplnPhases[enterpriseApi.PhaseDownload].q)+len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q)+len(ppln.pplnPhases[enterpriseApi.PhaseInstall].q) > 0 {
 		t.Errorf("Initially Pipeline must be empty, but found as non-empty")
@@ -340,7 +344,7 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
 	// Make sure that the last element gets deleted
-	ppln.deleteWorkerFromPipelinePhase(enterpriseApi.PhaseDownload, workerList[capacity-1])
+	ppln.deleteWorkerFromPipelinePhase(ctx, enterpriseApi.PhaseDownload, workerList[capacity-1])
 	if len(ppln.pplnPhases[enterpriseApi.PhaseDownload].q) == capacity {
 		t.Errorf("Deleting the last element failed")
 	}
@@ -353,7 +357,7 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[capacity-1])
 
 	// Make sure the first element gets deleted
-	ppln.deleteWorkerFromPipelinePhase(enterpriseApi.PhaseDownload, workerList[0])
+	ppln.deleteWorkerFromPipelinePhase(ctx, enterpriseApi.PhaseDownload, workerList[0])
 	if len(ppln.pplnPhases[enterpriseApi.PhaseDownload].q) == capacity {
 		t.Errorf("Deleting the first element failed")
 	}
@@ -365,7 +369,7 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
 	// Make sure deleting an element in the middle works fine
-	ppln.deleteWorkerFromPipelinePhase(enterpriseApi.PhaseDownload, workerList[2])
+	ppln.deleteWorkerFromPipelinePhase(ctx, enterpriseApi.PhaseDownload, workerList[2])
 	for _, worker := range ppln.pplnPhases[enterpriseApi.PhaseDownload].q {
 		if worker == workerList[2] {
 			t.Errorf("Failed to delete the correct element from the list")
@@ -373,13 +377,14 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	}
 
 	// Call to delete a non-existing worker should return false
-	if ppln.deleteWorkerFromPipelinePhase(enterpriseApi.PhaseDownload, &PipelineWorker{}) {
+	if ppln.deleteWorkerFromPipelinePhase(ctx, enterpriseApi.PhaseDownload, &PipelineWorker{}) {
 		t.Errorf("Deletion of non-existing worker should return false, but received true")
 	}
 
 }
 
 func TestTransitionWorkerPhase(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -411,7 +416,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	ppln := initAppInstallPipeline(appDeployContext, c, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	var replicas int32 = 1
 	sts := &appsv1.StatefulSet{
@@ -445,7 +450,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 	for i := range workerList {
-		ppln.transitionWorkerPhase(workerList[i], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+		ppln.transitionWorkerPhase(ctx, workerList[i], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	}
 
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != len(workerList) {
@@ -458,7 +463,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 
 	// Make sure that the workers move from the podCopy phase to the install phase
 	for i := range workerList {
-		ppln.transitionWorkerPhase(workerList[i], enterpriseApi.PhasePodCopy, enterpriseApi.PhaseInstall)
+		ppln.transitionWorkerPhase(ctx, workerList[i], enterpriseApi.PhasePodCopy, enterpriseApi.PhaseInstall)
 	}
 
 	if len(ppln.pplnPhases[enterpriseApi.PhaseInstall].q) != len(workerList) {
@@ -490,7 +495,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList[0])
-	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+	ppln.transitionWorkerPhase(ctx, workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas) {
 		t.Errorf("Failed to create a separate worker for each replica member of a standalone statefulset")
 	}
@@ -514,7 +519,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[3].Phase = enterpriseApi.PhaseInstall
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[3].Status = enterpriseApi.AppPkgInstallComplete
 
-	ppln.transitionWorkerPhase(workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
+	ppln.transitionWorkerPhase(ctx, workerList[0], enterpriseApi.PhaseDownload, enterpriseApi.PhasePodCopy)
 	if len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q) != int(replicas)-2 {
 		t.Errorf("Failed to create the pod copy workers, according to the AuxPhaseInfo")
 	}
@@ -524,6 +529,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 }
 
 func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
+	ctx := context.TODO()
 	worker := &PipelineWorker{
 		isActive: false,
 		afwConfig: &enterpriseApi.AppFrameworkSpec{
@@ -536,32 +542,33 @@ func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 	}
 
 	// test for an eligible worker
-	if !checkIfWorkerIsEligibleForRun(worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
+	if !checkIfWorkerIsEligibleForRun(ctx, worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 		t.Errorf("Unable to detect an eligible worker")
 	}
 
 	// test for an active worker
 	worker.isActive = true
-	if checkIfWorkerIsEligibleForRun(worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
+	if checkIfWorkerIsEligibleForRun(ctx, worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 		t.Errorf("Unable to detect an ineligible worker(already active")
 	}
 	worker.isActive = false
 
 	// test for max retry
 	phaseInfo.FailCount = 4
-	if checkIfWorkerIsEligibleForRun(worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
+	if checkIfWorkerIsEligibleForRun(ctx, worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 		t.Errorf("Unable to detect an ineligible worker(max retries exceeded)")
 	}
 	phaseInfo.FailCount = 0
 
 	// test for already completed worker
 	phaseInfo.Status = enterpriseApi.AppPkgDownloadComplete
-	if checkIfWorkerIsEligibleForRun(worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
+	if checkIfWorkerIsEligibleForRun(ctx, worker, phaseInfo, enterpriseApi.AppPkgDownloadComplete) {
 		t.Errorf("Unable to detect an ineligible worker(already completed)")
 	}
 }
 
 func TestPhaseManagersTermination(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -591,22 +598,22 @@ func TestPhaseManagersTermination(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(c, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, c, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(appDeployContext, c, cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 
 	ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads = 1
 	ppln.phaseWaiter.Add(1)
-	go ppln.downloadPhaseManager()
+	go ppln.downloadPhaseManager(ctx)
 
 	ppln.phaseWaiter.Add(1)
-	go ppln.podCopyPhaseManager()
+	go ppln.podCopyPhaseManager(ctx)
 
 	ppln.phaseWaiter.Add(1)
-	go ppln.installPhaseManager()
+	go ppln.installPhaseManager(ctx)
 
 	// Make sure that the pipeline is not blocked and comes out after termination
 	// Terminate the scheduler, by closing the channel
@@ -616,6 +623,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 }
 
 func TestPhaseManagersMsgChannels(t *testing.T) {
+	ctx := context.TODO()
 	appDeployContext := &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 1,
 	}
@@ -686,7 +694,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	client.AddObject(pod)
 
 	// Create the statefulset
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -717,13 +725,13 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// test  all the pipeline phases are able to send the worker to the downstreams
-	ppln := initAppInstallPipeline(appDeployContext, client, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
 	// Start the download phase manager
 	ppln.phaseWaiter.Add(1)
-	go ppln.downloadPhaseManager()
+	go ppln.downloadPhaseManager(ctx)
 	// drain the download phase channel
 	var worker *PipelineWorker
 	var i int
@@ -750,7 +758,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 		})
 	ppln.pplnPhases[enterpriseApi.PhasePodCopy].q = append(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q, workerList...)
 
-	go ppln.podCopyPhaseManager()
+	go ppln.podCopyPhaseManager(ctx)
 	ppln.phaseWaiter.Add(1)
 
 	// drain the pod copy channel
@@ -779,7 +787,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 
 	// Start the install phase manager
 	ppln.phaseWaiter.Add(1)
-	go ppln.installPhaseManager()
+	go ppln.installPhaseManager(ctx)
 
 	worker.appDeployInfo.PhaseInfo.FailCount = 4
 	// Let the phase hop on empty channel, to get more coverage
@@ -792,6 +800,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 }
 
 func TestIsPipelineEmpty(t *testing.T) {
+	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -809,7 +818,7 @@ func TestIsPipelineEmpty(t *testing.T) {
 	}
 
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(appDeployContext, c, cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 
 	if !ppln.isPipelineEmpty() {
 		t.Errorf("Expected empty pipeline, but found some workers in pipeline")
@@ -986,6 +995,7 @@ func TestIsPhaseStatusComplete(t *testing.T) {
 }
 
 func TestIsPhaseMaxRetriesReached(t *testing.T) {
+	ctx := context.TODO()
 	phaseInfo := &enterpriseApi.PhaseInfo{
 		FailCount: 1,
 	}
@@ -995,18 +1005,19 @@ func TestIsPhaseMaxRetriesReached(t *testing.T) {
 	}
 
 	// should return false, when the retries are not maxed out
-	if isPhaseMaxRetriesReached(phaseInfo, afwConfig) {
+	if isPhaseMaxRetriesReached(ctx, phaseInfo, afwConfig) {
 		t.Errorf("Should return false, when the max retries are not reached")
 	}
 
 	// should return true, whe the max. retries are reached
 	phaseInfo.FailCount = afwConfig.PhaseMaxRetries + 1
-	if !isPhaseMaxRetriesReached(phaseInfo, afwConfig) {
+	if !isPhaseMaxRetriesReached(ctx, phaseInfo, afwConfig) {
 		t.Errorf("Should return true, when the max retries reached")
 	}
 }
 
 func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
+	ctx := context.TODO()
 	afwConfig := &enterpriseApi.AppFrameworkSpec{
 		PhaseMaxRetries: 3,
 		AppSources: []enterpriseApi.AppSourceSpec{
@@ -1036,46 +1047,47 @@ func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
 	}
 
 	// Should not be eligible once the max. retries are reached
-	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
+	if isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Should not be eligible once the max. retries reached")
 	}
 
 	phaseInfo.FailCount = 0
 	// For local scope, if the phase and status are not install complete, should return true
-	if !isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
+	if !isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Local scope: If the install is not complete, should be eligible to run")
 	}
 
 	// For local scope, once the app is install complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhaseInstall
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
+	if isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[0].Name, phaseInfo, afwConfig) {
 		t.Errorf("Local scope: When the install is complete, should not be eligible to run")
 	}
 
 	// For cluster scope, once the app is install complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhaseInstall
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
+	if isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: when the install is complete, should not be eligible to run")
 	}
 
 	// For cluster scope, once the podcopy is complete, should not be eligible to run
 	phaseInfo.Phase = enterpriseApi.PhasePodCopy
 	phaseInfo.Status = enterpriseApi.AppPkgPodCopyComplete
-	if isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
+	if isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: On podcopy complete, should not be eligible to run")
 	}
 
 	// For cluster scope, if the podCopy is not complete, should be able to run
 	phaseInfo.Phase = enterpriseApi.PhasePodCopy
 	phaseInfo.Status = enterpriseApi.AppPkgPodCopyPending
-	if !isPhaseInfoEligibleForSchedulerEntry(afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
+	if !isPhaseInfoEligibleForSchedulerEntry(ctx, afwConfig.AppSources[1].Name, phaseInfo, afwConfig) {
 		t.Errorf("Cluster scope: If the pod copy is not complete, should be eligible to run")
 	}
 }
 
 func TestGetPhaseInfoByPhaseType(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -1110,14 +1122,14 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 
 	// For download phase we should not use Aux phase info
 	expectedPhaseInfo := &worker.appDeployInfo.PhaseInfo
-	retPhaseInfo := getPhaseInfoByPhaseType(worker, enterpriseApi.PhaseDownload)
+	retPhaseInfo := getPhaseInfoByPhaseType(ctx, worker, enterpriseApi.PhaseDownload)
 	if expectedPhaseInfo != retPhaseInfo {
 		t.Errorf("Got the wrong phase info for download phase of Standalone")
 	}
 
 	// For non-download phases we should use Aux phase info
 	expectedPhaseInfo = &worker.appDeployInfo.AuxPhaseInfo[3]
-	retPhaseInfo = getPhaseInfoByPhaseType(worker, enterpriseApi.PhasePodCopy)
+	retPhaseInfo = getPhaseInfoByPhaseType(ctx, worker, enterpriseApi.PhasePodCopy)
 	if expectedPhaseInfo != retPhaseInfo {
 		t.Errorf("Got the wrong phase info for Standalone")
 	}
@@ -1125,7 +1137,7 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 	// For CRs that are not standalone, we should not use the Aux phase info
 	expectedPhaseInfo = &worker.appDeployInfo.PhaseInfo
 	cr.Kind = "ClusterMaster"
-	retPhaseInfo = getPhaseInfoByPhaseType(worker, enterpriseApi.PhasePodCopy)
+	retPhaseInfo = getPhaseInfoByPhaseType(ctx, worker, enterpriseApi.PhasePodCopy)
 	if expectedPhaseInfo != retPhaseInfo {
 		t.Errorf("Got the incorrect phase info for CM")
 	}
@@ -1134,12 +1146,13 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 	// For CRs that are not standalone, we should not use the Aux phase info
 	expectedPhaseInfo = nil
 	cr.Kind = "Standalone"
-	retPhaseInfo = getPhaseInfoByPhaseType(worker, enterpriseApi.PhasePodCopy)
+	retPhaseInfo = getPhaseInfoByPhaseType(ctx, worker, enterpriseApi.PhasePodCopy)
 	if expectedPhaseInfo != retPhaseInfo {
 		t.Errorf("Should get nil for invalid pod name of Standalone")
 	}
 }
 func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -1165,11 +1178,11 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(c, &current)
+	_, err := splctrl.ApplyStatefulSet(ctx, c, &current)
 	if err != nil {
 		return
 	}
-	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for CM")
 	}
 
@@ -1182,8 +1195,8 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(c, &current)
-	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
 
@@ -1196,8 +1209,8 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(c, &current)
-	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
 
@@ -1210,8 +1223,8 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(c, &current)
-	if afwGetReleventStatefulsetByKind(&cr, c) == nil {
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
 
@@ -1243,6 +1256,7 @@ func areAppsDownloadedSuccessfully(appDeployInfoList []*enterpriseApi.AppDeploym
 }
 
 func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "s1",
@@ -1330,18 +1344,18 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
 		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.Namespace, cr.Kind, cr.Name, appSrc.Scope, appSrc.Name) + "/"
 		// create the app download directory locally
-		err := createAppDownloadDir(localPath)
+		err := createAppDownloadDir(ctx, localPath)
 		if err != nil {
 			t.Errorf("Unable to create the download directory")
 		}
@@ -1358,11 +1372,11 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.S3Clients["aws"]
-		getClientWrapper.SetS3ClientFuncPtr("aws", splclient.NewMockAWSS3Client)
+		getClientWrapper.SetS3ClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 
-		initFunc := getClientWrapper.GetS3ClientInitFuncPtr()
+		initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-		s3ClientMgr, err := getS3ClientMgr(client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
+		s3ClientMgr, err := getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
 		if err != nil {
 			t.Errorf("unable to get S3ClientMgr instance")
 		}
@@ -1381,7 +1395,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		var downloadWorkersRunPool = make(chan struct{}, 1)
 		downloadWorkersRunPool <- struct{}{}
 		worker.waiter.Add(1)
-		go worker.download(pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+		go worker.download(ctx, pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
 		worker.waiter.Wait()
 	}
 
@@ -1392,6 +1406,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 }
 
 func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "s1",
@@ -1471,7 +1486,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	var downloadWorkersRunPool = make(chan struct{}, 1)
 	downloadWorkersRunPool <- struct{}{}
 	worker.waiter.Add(1)
-	go worker.download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1492,19 +1507,19 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client("aws")
+	splclient.RegisterS3Client(ctx, "aws")
 	// Update the GetS3Client with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.S3Clients["aws"]
-	getClientWrapper.SetS3ClientFuncPtr("aws", splclient.NewMockAWSS3Client)
+	getClientWrapper.SetS3ClientFuncPtr(ctx, "ctx, aws", splclient.NewMockAWSS3Client)
 
-	initFunc := getClientWrapper.GetS3ClientInitFuncPtr()
+	initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-	s3ClientMgr, err = getS3ClientMgr(client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
+	s3ClientMgr, err = getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
 	if err != nil {
 		t.Errorf("unable to get S3ClientMgr instance")
 	}
@@ -1513,7 +1528,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 
 	worker.waiter.Add(1)
 	downloadWorkersRunPool <- struct{}{}
-	go worker.download(pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
@@ -1523,6 +1538,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 }
 
 func TestScheduleDownloads(t *testing.T) {
+	ctx := context.TODO()
 	var ppln *AppInstallPipeline
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 
@@ -1588,7 +1604,7 @@ func TestScheduleDownloads(t *testing.T) {
 	sts.Spec.Replicas = new(int32)
 	*sts.Spec.Replicas = 1
 
-	ppln = initAppInstallPipeline(appDeployContext, client, &cr)
+	ppln = initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
 	testApps := []string{"app1.tgz", "app2.tgz", "app3.tgz"}
@@ -1611,7 +1627,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	// create the local directory
 	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
-	err := createAppDownloadDir(localPath)
+	err := createAppDownloadDir(ctx, localPath)
 	if err != nil {
 		t.Errorf("Unable to create the download directory")
 	}
@@ -1629,7 +1645,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	// create pipeline workers
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
-		ppln.createAndAddPipelineWorker(enterpriseApi.PhaseDownload, appDeployInfoList[index], appSrc.Name, "", &cr.Spec.AppFrameworkConfig, client, &cr, sts)
+		ppln.createAndAddPipelineWorker(ctx, enterpriseApi.PhaseDownload, appDeployInfoList[index], appSrc.Name, "", &cr.Spec.AppFrameworkConfig, client, &cr, sts)
 	}
 
 	maxWorkers := 3
@@ -1637,7 +1653,7 @@ func TestScheduleDownloads(t *testing.T) {
 
 	downloadPhaseWaiter.Add(1)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
 	for _, downloadWorker := range pplnPhase.q {
@@ -1651,12 +1667,13 @@ func TestScheduleDownloads(t *testing.T) {
 	downloadPhaseWaiter.Add(1)
 	close(ppln.sigTerm)
 	// schedule the download threads to do actual download work
-	go pplnPhase.downloadWorkerHandler(ppln, uint64(maxWorkers), downloadPhaseWaiter)
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
 
 	downloadPhaseWaiter.Wait()
 }
 
 func TestCreateDownloadDirOnOperator(t *testing.T) {
+	ctx := context.TODO()
 	standalone := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "s1",
@@ -1703,7 +1720,7 @@ func TestCreateDownloadDirOnOperator(t *testing.T) {
 		},
 	}
 
-	localPath, err := worker.createDownloadDirOnOperator()
+	localPath, err := worker.createDownloadDirOnOperator(ctx)
 	defer os.Remove(localPath)
 	if err != nil {
 		t.Errorf("we should have created the download directory=%s, err=%v", localPath, err)
@@ -1715,6 +1732,8 @@ func getConvertedClient(client splcommon.ControllerClient) splcommon.ControllerC
 }
 
 func TestExtractClusterScopedAppOnPod(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -1801,31 +1820,31 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	}
 
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Calling with wrong scope should just return, without error
-	err := extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeLocal, dstPath, srcPath, mockPodExecClient)
+	err := extractClusterScopedAppOnPod(ctx, worker, enterpriseApi.ScopeLocal, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
 	}
 
 	// CR kind other than SearchHeadCluster or Cluster Master should just return without an error
 	// Calling with wrong scope should just return, without error
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
+	err = extractClusterScopedAppOnPod(ctx, worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with non-cluster scope should just return, without error, but got error %v", err)
 	}
 
 	// Calling with correct params should not cause an error
 	cr.TypeMeta.Kind = "ClusterMaster"
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
+	err = extractClusterScopedAppOnPod(ctx, worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with correct parameters should not cause an error, but got error %v", err)
 	}
 
 	// now just introduce a StdErr so that we cover the error scenario too
 	mockPodExecReturnContexts[0].StdErr = "dummy error"
-	err = extractClusterScopedAppOnPod(worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
+	err = extractClusterScopedAppOnPod(ctx, worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err == nil {
 		t.Errorf("extractClusterScopedAppOnPod should have returned error since mockPodExecClient returns error")
 	}
@@ -1835,6 +1854,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 }
 
 func TestRunPodCopyWorker(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -1926,14 +1946,14 @@ func TestRunPodCopyWorker(t *testing.T) {
 		splcommon.AppDownloadVolume = defaultVol
 	}()
 
-	runPodCopyWorker(worker, ch)
+	runPodCopyWorker(ctx, worker, ch)
 	if worker.appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgMissingFromOperator {
 		t.Errorf("When the app pkg is not present on the Operator Pod volume, should throw an error")
 	}
 
 	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
 
-	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
+	appSrcScope := getAppSrcScope(ctx, worker.afwConfig, worker.appSrcName)
 	appPkgLocalDir := getAppPackageLocalDir(&cr, appSrcScope, worker.appSrcName)
 	appPkgLocalPath := filepath.Join(appPkgLocalDir, appPkgFileName)
 
@@ -1956,10 +1976,11 @@ func TestRunPodCopyWorker(t *testing.T) {
 	waiter.Add(1)
 	ch <- struct{}{}
 
-	runPodCopyWorker(worker, ch)
+	runPodCopyWorker(ctx, worker, ch)
 }
 
 func TestPodCopyWorkerHandler(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -2043,7 +2064,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
 
-	appSrcScope := getAppSrcScope(worker.afwConfig, worker.appSrcName)
+	appSrcScope := getAppSrcScope(ctx, worker.afwConfig, worker.appSrcName)
 	appPkgLocalDir := getAppPackageLocalDir(&cr, appSrcScope, worker.appSrcName)
 	appPkgLocalPath := filepath.Join(appPkgLocalDir, appPkgFileName)
 
@@ -2067,12 +2088,12 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 5,
 	}
-	ppln := initAppInstallPipeline(appDeployContext, client, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 
 	var handlerWaiter sync.WaitGroup
 	handlerWaiter.Add(1)
 	defer handlerWaiter.Wait()
-	go ppln.pplnPhases[enterpriseApi.PhaseInstall].podCopyWorkerHandler(&handlerWaiter, 5)
+	go ppln.pplnPhases[enterpriseApi.PhaseInstall].podCopyWorkerHandler(ctx, &handlerWaiter, 5)
 
 	worker.waiter = &ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter
 
@@ -2096,6 +2117,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 }
 
 func TestIDXCRunPlaybook(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -2135,14 +2157,14 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline := initAppInstallPipeline(appDeployContext, c, &cr)
+	afwPipeline := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
 
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 	podExecClient := splutil.GetPodExecClient(c, &cr, targetPodName)
-	playbookContext := getClusterScopePlaybookContext(c, &cr, afwPipeline, targetPodName, kind, podExecClient)
-	err := playbookContext.runPlaybook()
+	playbookContext := getClusterScopePlaybookContext(ctx, c, &cr, afwPipeline, targetPodName, kind, podExecClient)
+	err := playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error, since we dont get the required output")
 	}
@@ -2171,42 +2193,42 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	}
 
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: &cr}
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	playbookContext = getClusterScopePlaybookContext(c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
+	playbookContext = getClusterScopePlaybookContext(ctx, c, &cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
 	// If the podExec failed for changing the file permissions, should return an error
 	mockPodExecReturnContexts[0].StdErr = "Failed"
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should return an error if the command %v execution fails", podExecCommands[0])
 	}
 	mockPodExecReturnContexts[0].StdErr = ""
 
 	// Test bundle push status to move to In progress
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
-		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// test the case where we try to push same bundle again
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecReturnContexts[1].StdErr = idxcBundleAlreadyPresentStr
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
 	}
 
 	// test the case where bundle push is still in progress
 	mockPodExecReturnContexts[2].StdErr = ""
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
 	}
 
 	// test the case where bundle push is complete
 	mockPodExecReturnContexts[2].StdOut = "cluster_status=None"
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
 		t.Errorf("runPlaybook() should have not returned error since we did not get desired output")
 	}
@@ -2214,14 +2236,14 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	// now test the error scenario where we did not get OK in stdErr
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecReturnContexts[1].StdErr = ""
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error since we did not get desired output")
 	}
 
 	// now test the error scenario where we passed invalid bundle push state
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushComplete
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error since we passed invalid bundle push state")
 	}
@@ -2230,20 +2252,20 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	idxcplaybookContext := playbookContext.(*IdxcPlaybookContext)
 	// invalid scenario, where stdOut!="cluster_status=None"
-	if idxcplaybookContext.isBundlePushComplete() {
+	if idxcplaybookContext.isBundlePushComplete(ctx) {
 		t.Errorf("isBundlePushComplete() should have returned error since we did not get desired stdOut.")
 	}
 
 	// invalid scenario, where stdErr != ""
 	mockPodExecReturnContexts[2].StdErr = "error"
-	if idxcplaybookContext.isBundlePushComplete() {
+	if idxcplaybookContext.isBundlePushComplete(ctx) {
 		t.Errorf("isBundlePushComplete() should have returned false since we did not get desired stdOut.")
 	}
 
 	// valid scenario where bundle push is complete
 	mockPodExecReturnContexts[2].StdErr = ""
 	mockPodExecReturnContexts[2].StdOut = "cluster_status=None"
-	if !idxcplaybookContext.isBundlePushComplete() {
+	if !idxcplaybookContext.isBundlePushComplete(ctx) {
 		t.Errorf("isBundlePushComplete() should not have returned false.")
 	}
 
@@ -2251,6 +2273,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 }
 
 func TestSHCRunPlaybook(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -2291,7 +2314,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline := initAppInstallPipeline(appDeployContext, c, cr)
+	afwPipeline := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(cr, 0)
 
@@ -2332,64 +2355,64 @@ func TestSHCRunPlaybook(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
 
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Test1: just for the sake of code coverage, pass invalid kind to get nil context
-	playbookContext := getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, "InvalidKind", mockPodExecClient)
+	playbookContext := getClusterScopePlaybookContext(ctx, c, cr, afwPipeline, targetPodName, "InvalidKind", mockPodExecClient)
 	if playbookContext != nil {
 		t.Errorf("playbookContext should be nil here since we passed invalid kind")
 	}
 
-	playbookContext = getClusterScopePlaybookContext(c, cr, afwPipeline, targetPodName, kind, mockPodExecClient)
+	playbookContext = getClusterScopePlaybookContext(ctx, c, cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
 	// Test2: If the poxExec failed for changing the file permissions, should return an error
 	mockPodExecReturnContexts[0].StdErr = "Failed"
-	err := playbookContext.runPlaybook()
+	err := playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should should return an error if the command %v execution fails", podExecCommands[0])
 	}
 	mockPodExecReturnContexts[0].StdErr = ""
 
 	// Test3: invalid scenario where we get error while applying SHC bundle push
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
-		t.Errorf("runPlaybook() should not have returned error, err=%v; expected bundle push state=Bundle push Pending, got=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should not have returned error, err=%v; expected bundle push state=Bundle push Pending, got=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test4: valid scenario where bundle push state moves from Pending -> In Progress
 	mockPodExecReturnContexts[1].Err = nil
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil {
 		t.Errorf("runPlaybook() should not have returned error, err=%v", err)
 	}
 
 	// Test5: Invalid scenario where checking the status file and removing it returned error
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
-		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test6: Invalid scenario where checking the status file returned error but removing it is successful
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	mockPodExecReturnContexts[3].StdErr = ""
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
-		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test7: Bundle push is still in progress since stdOut = ""
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
 	mockPodExecReturnContexts[2].StdErr = ""
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
-		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test8: Bundle push is still in progress since stdOut != shcBundlePushCompleteStr
 	mockPodExecReturnContexts[2].StdOut = "Error while deploying apps"
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushPending {
-		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test9: SHC status file should have the desired SHC bundle push complete message in it now. But removing the status file
@@ -2397,21 +2420,21 @@ func TestSHCRunPlaybook(t *testing.T) {
 	mockPodExecReturnContexts[2].StdOut = shcBundlePushCompleteStr
 	mockPodExecReturnContexts[3].StdErr = "some dummy error"
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
-		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v,  got bundle push state=%s, expected shc bundle push state=Bundle Push In Progress", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v,  got bundle push state=%s, expected shc bundle push state=Bundle Push In Progress", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test10: now removing the bundle push status file should return success and hence the bundle push should be complete now.
 	mockPodExecReturnContexts[3].StdErr = ""
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushComplete {
-		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v,  got bundle push state=%s, expected shc bundle push state=Bundle Push Complete", err, bundlePushStateAsStr(getBundlePushState(afwPipeline)))
+		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v,  got bundle push state=%s, expected shc bundle push state=Bundle Push Complete", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
 	// Test11: now test the error scenario where we passed invalid bundle push state
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushComplete
-	err = playbookContext.runPlaybook()
+	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should have returned error since we passed invalid bundle push state")
 	}
@@ -2420,6 +2443,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 }
 
 func TestRunLocalScopedPlaybook(t *testing.T) {
+	ctx := context.TODO()
 	// Test for each phase can send the worker to down stream
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -2512,7 +2536,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	// now replace the pod exec client with our mock client
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Just make the lint conversion checks happy
 	var client splcommon.ControllerClient = getConvertedClient(c)
@@ -2544,7 +2568,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	// Test1: checkIfFileExistsOnPod returns error
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err := localInstallCtxt.runPlaybook()
+	err := localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
@@ -2553,7 +2577,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	mockPodExecReturnContexts[0].Err = nil
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err = localInstallCtxt.runPlaybook()
+	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
@@ -2562,7 +2586,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	mockPodExecReturnContexts[1].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err = localInstallCtxt.runPlaybook()
+	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
@@ -2571,7 +2595,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	mockPodExecReturnContexts[2].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
-	err = localInstallCtxt.runPlaybook()
+	err = localInstallCtxt.runPlaybook(ctx)
 	if err != nil {
 		t.Errorf("runPlayBook should not have returned error. err=%s", err.Error())
 	}
@@ -2580,6 +2604,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 }
 
 func TestDeleteAppPkgFromOperator(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -2653,7 +2678,7 @@ func TestDeleteAppPkgFromOperator(t *testing.T) {
 	defer os.Remove(appPkgLocalPath)
 
 	diskSpaceBeforeRemoval := operatorResourceTracker.storage.availableDiskSpace
-	deleteAppPkgFromOperator(worker)
+	deleteAppPkgFromOperator(ctx, worker)
 
 	if operatorResourceTracker.storage.availableDiskSpace != diskSpaceBeforeRemoval+worker.appDeployInfo.Size {
 		t.Errorf("Unable to clean up the app package on Operator pod")
@@ -2661,28 +2686,30 @@ func TestDeleteAppPkgFromOperator(t *testing.T) {
 }
 
 func TestGetInstallSlotForPod(t *testing.T) {
+	ctx := context.TODO()
 	podInstallTracker := make([]chan struct{}, 10)
 	for i := range podInstallTracker {
 		podInstallTracker[i] = make(chan struct{}, maxParallelInstallsPerPod)
 	}
 
 	var podName string
-	if getInstallSlotForPod(podInstallTracker, podName) {
+	if getInstallSlotForPod(ctx, podInstallTracker, podName) {
 		t.Errorf("invalid pod name should not return a install slot")
 	}
 
 	podName = "splunk-s2apps-standalone-0"
 
-	if !getInstallSlotForPod(podInstallTracker, podName) {
+	if !getInstallSlotForPod(ctx, podInstallTracker, podName) {
 		t.Errorf("Unable to allocate an install slot, when the slot is available")
 	}
 
-	if getInstallSlotForPod(podInstallTracker, podName) {
+	if getInstallSlotForPod(ctx, podInstallTracker, podName) {
 		t.Errorf("Should not allocate an install slot, when the slot is already occupied")
 	}
 }
 
 func TestFreeInstallSlotForPod(t *testing.T) {
+	ctx := context.TODO()
 	podInstallTracker := make([]chan struct{}, 10)
 	for i := range podInstallTracker {
 		podInstallTracker[i] = make(chan struct{}, maxParallelInstallsPerPod)
@@ -2690,16 +2717,16 @@ func TestFreeInstallSlotForPod(t *testing.T) {
 
 	var podName string
 	// invalid pod name should not block
-	freeInstallSlotForPod(podInstallTracker, podName)
+	freeInstallSlotForPod(ctx, podInstallTracker, podName)
 
 	podName = "splunk-s2apps-standalone-0"
 
 	// when the slot is not allocated, should not block
-	freeInstallSlotForPod(podInstallTracker, podName)
+	freeInstallSlotForPod(ctx, podInstallTracker, podName)
 
 	// when the slot is allocated, should free the slot without blocking
 	podInstallTracker[0] <- struct{}{}
-	freeInstallSlotForPod(podInstallTracker, podName)
+	freeInstallSlotForPod(ctx, podInstallTracker, podName)
 }
 
 func TestIsPendingClusterScopeWork(t *testing.T) {
@@ -2749,6 +2776,7 @@ func TestIsPendingClusterScopeWork(t *testing.T) {
 }
 
 func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -2791,7 +2819,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -2801,8 +2829,9 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	}
 
 	cr.TypeMeta.Kind = "ClusterMaster"
-	afwPipeline = initAppInstallPipeline(appDeployContext, client, cr)
+	afwPipeline = initAppInstallPipeline(ctx, appDeployContext, client, cr)
 	podCopyWorker := &PipelineWorker{appDeployInfo: &enterpriseApi.AppDeploymentInfo{PhaseInfo: enterpriseApi.PhaseInfo{FailCount: 10}}}
+
 	afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q = append(afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q, podCopyWorker)
 
 	// When the pipeline are not empty, should return false
@@ -2833,6 +2862,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 }
 
 func TestHandleAppPkgInstallComplete(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -2883,7 +2913,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		splcommon.AppDownloadVolume = defaultVol
 	}()
 
-	appPkgLocalPath := getAppPackageLocalPath(worker)
+	appPkgLocalPath := getAppPackageLocalPath(ctx, worker)
 	appPkgLocalDir := path.Dir(appPkgLocalPath)
 
 	_, err := os.Stat(appPkgLocalDir)
@@ -2914,7 +2944,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		t.Errorf("Unable to create the local package file, error: %v", err)
 	}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
+	tryAppPkgCleanupFromOperatorPod(ctx, worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if os.IsNotExist(err) {
 		t.Errorf("App pkg should not be deleted when the install is not complete on all the Pods ")
@@ -2930,7 +2960,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		Phase:  enterpriseApi.PhaseInstall,
 		Status: enterpriseApi.AppPkgInstallComplete}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
+	tryAppPkgCleanupFromOperatorPod(ctx, worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if err == nil || !os.IsNotExist(err) {
 		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
@@ -2951,7 +2981,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		t.Errorf("Unable to create the local package file, error: %v", err)
 	}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
+	tryAppPkgCleanupFromOperatorPod(ctx, worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if os.IsNotExist(err) {
 		t.Errorf("App pkg should not be deleted when the install is not complete on all the Pods ")
@@ -2967,7 +2997,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		Phase:  enterpriseApi.PhaseInstall,
 		Status: enterpriseApi.AppPkgInstallComplete}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
+	tryAppPkgCleanupFromOperatorPod(ctx, worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if err == nil || !os.IsNotExist(err) {
 		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
@@ -2980,7 +3010,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	// For a CR, other than standalone, whenever the install is complete, should also delete the app pkg from operator pod
 	cr.TypeMeta.Kind = "ClusterMaster"
 	worker.appDeployInfo.AuxPhaseInfo = nil
-	appPkgLocalPath = getAppPackageLocalPath(worker)
+	appPkgLocalPath = getAppPackageLocalPath(ctx, worker)
 	appPkgLocalDir = path.Dir(appPkgLocalPath)
 
 	_, err = os.Stat(appPkgLocalDir)
@@ -2996,7 +3026,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		t.Errorf("Unable to create the local package file, error: %v", err)
 	}
 
-	tryAppPkgCleanupFromOperatorPod(worker)
+	tryAppPkgCleanupFromOperatorPod(ctx, worker)
 	_, err = os.Stat(appPkgLocalPath)
 	if err == nil || !os.IsNotExist(err) {
 		t.Errorf("App pkg should be deleted when the install is complete on all the Pods ")
@@ -3004,6 +3034,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 }
 
 func TestInstallWorkerHandler(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -3075,7 +3106,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -3101,7 +3132,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 5,
 	}
-	ppln := initAppInstallPipeline(appDeployContext, client, &cr)
+	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 
 	podInstallTracker := make([]chan struct{}, *sts.Spec.Replicas)
 	for i := range podInstallTracker {
@@ -3111,7 +3142,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 	var handlerWaiter sync.WaitGroup
 	handlerWaiter.Add(1)
 	defer handlerWaiter.Wait()
-	go ppln.pplnPhases[enterpriseApi.PhaseInstall].installWorkerHandler(ppln, &handlerWaiter, podInstallTracker)
+	go ppln.pplnPhases[enterpriseApi.PhaseInstall].installWorkerHandler(ctx, ppln, &handlerWaiter, podInstallTracker)
 
 	// Send a worker to the install handler
 	podInstallTracker[0] <- struct{}{}
@@ -3135,6 +3166,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 }
 
 func TestAfwYieldWatcher(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -3165,7 +3197,7 @@ func TestAfwYieldWatcher(t *testing.T) {
 	afwPipeline.phaseWaiter.Add(1)
 
 	// When the pipeline is empty, should break
-	afwPipeline.afwYieldWatcher()
+	afwPipeline.afwYieldWatcher(ctx)
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen := <-afwPipeline.sigTerm
@@ -3187,7 +3219,8 @@ func TestAfwYieldWatcher(t *testing.T) {
 	afwPipeline.phaseWaiter.Add(1)
 	// When the pipeline is empty, should break
 	afwPipeline.appDeployContext.AppFrameworkConfig.SchedulerYieldInterval = 10
-	afwPipeline.afwYieldWatcher()
+	afwPipeline.afwYieldWatcher(ctx)
+
 	afwPipeline.phaseWaiter.Wait()
 
 	_, channelOpen = <-afwPipeline.sigTerm
@@ -3205,6 +3238,7 @@ func TestAfwYieldWatcher(t *testing.T) {
 // When there are no workers pending, the scheduler should return immediately.
 // If the scheduler is blocked for an extended period of time, it should fail at infra level.
 func TestAfwSchedulerEntry(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -3253,13 +3287,13 @@ func TestAfwSchedulerEntry(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
 
 	startTime := time.Now().Unix()
-	afwSchedulerEntry(client, &cr, appDeployContext, appFrameworkConfig)
+	afwSchedulerEntry(ctx, client, &cr, appDeployContext, appFrameworkConfig)
 	// Assuming the test is returning sooner, testing it for a 2 seconds value, which should be optimal for now
 	waitTime := time.Now().Unix() - startTime
 	if waitTime > 2 {
@@ -3295,6 +3329,7 @@ func TestGetClusterScopedAppsLocOnPod(t *testing.T) {
 }
 
 func TestAdjustClusterAppsFilePermissions(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -3317,24 +3352,24 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	}
 
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
-	mockPodExecClient.AddMockPodExecReturnContexts(podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// For a CR with no cluster scope, should return an error
-	err := adjustClusterAppsFilePermissions(mockPodExecClient)
+	err := adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err == nil || strings.Compare(err.Error(), "invalid Cluster apps location") != 0 {
 		t.Errorf("For CR kind Standalone, should return an error")
 	}
 
 	// For CM, should not return an error
 	cr.TypeMeta.Kind = "ClusterMaster"
-	err = adjustClusterAppsFilePermissions(mockPodExecClient)
+	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err != nil {
 		t.Errorf("For CM CR kind should not cause an error, but got error: %v", err)
 	}
 
 	// When the permissions changes fails, should return an error
 	mockPodExecReturnContexts[0].StdErr = "Failed"
-	err = adjustClusterAppsFilePermissions(mockPodExecClient)
+	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err == nil {
 		t.Errorf("When the file permissions can't be modified, should return an error")
 	}
@@ -3342,14 +3377,14 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 
 	// For SHC, should not return an error
 	cr.TypeMeta.Kind = "SearchHeadCluster"
-	err = adjustClusterAppsFilePermissions(mockPodExecClient)
+	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err != nil {
 		t.Errorf("For SHC CR kind should not cause an error, but got error: %v", err)
 	}
 
 	// When the permissions changes fails, should return an error
 	mockPodExecReturnContexts[1].StdErr = "Invalid path"
-	err = adjustClusterAppsFilePermissions(mockPodExecClient)
+	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err == nil {
 		t.Errorf("When the file permissions can't be modified, should return an error")
 	}

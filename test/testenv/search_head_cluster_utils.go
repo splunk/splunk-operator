@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -50,12 +52,12 @@ func SHCInNamespace(ns string) bool {
 }
 
 // DeployerAppChecksum Get the checksum for each app on the deployer
-func DeployerAppChecksum(deployment *Deployment) map[string]string {
+func DeployerAppChecksum(ctx context.Context, deployment *Deployment) map[string]string {
 	appChecksum := make(map[string]string)
 	podName := fmt.Sprintf(DeployerPod, deployment.GetName())
 	stdin := "/opt/splunk/bin/splunk list shcluster-bundle -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return appChecksum
@@ -81,13 +83,13 @@ func DeployerAppChecksum(deployment *Deployment) map[string]string {
 }
 
 // DeployerBundlePushstatus Get the bundle push status on Deployer
-func DeployerBundlePushstatus(deployment *Deployment, ns string) map[string]int {
+func DeployerBundlePushstatus(ctx context.Context, deployment *Deployment, ns string) map[string]int {
 	appBundlePush := make(map[string]int)
-	appChecksum := DeployerAppChecksum(deployment)
+	appChecksum := DeployerAppChecksum(ctx, deployment)
 	podName := fmt.Sprintf(DeployerPod, deployment.GetName())
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk list shcluster-bundle -member_uri https://splunk-%s-shc-search-head-0.splunk-%s-shc-search-head-headless.%s.svc.cluster.local:8089 -auth admin:$(cat /mnt/splunk-secrets/password)", deployment.GetName(), deployment.GetName(), ns)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return appBundlePush

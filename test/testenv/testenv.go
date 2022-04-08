@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,12 +22,10 @@ import (
 	"os"
 	"time"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,18 +35,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 const (
+	defaultOperatorInstallation = "false"
+
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 1500
+	defaultTestTimeout = 3000
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second
@@ -123,8 +125,11 @@ var (
 	specifiedSplunkImage     = defaultSplunkImage
 	specifiedSkipTeardown    = false
 	specifiedLicenseFilePath = ""
-	specifiedTestTimeout     = defaultTestTimeout
 	specifiedCommitHash      = ""
+	// SpecifiedTestTimeout exported test timeout time as this can be
+	// configured per test case if needed
+	SpecifiedTestTimeout       = defaultTestTimeout
+	installOperatorClusterWide = defaultOperatorInstallation
 )
 
 // OperatorFSGroup is the fsGroup value for Splunk Operator
@@ -162,7 +167,7 @@ type TestEnv struct {
 }
 
 func init() {
-	l := zap.LoggerTo(ginkgo.GinkgoWriter)
+	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true))
 	l.WithName("testenv")
 	logf.SetLogger(l)
 
@@ -170,8 +175,9 @@ func init() {
 	flag.StringVar(&specifiedOperatorImage, "operator-image", defaultOperatorImage, "Splunk Operator image to use")
 	flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
-	flag.IntVar(&specifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
+	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
+	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -228,7 +234,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeAPIServer = cfg.Host
 	testenv.Log.Info("Using kube-apiserver\n", "kube-apiserver", cfg.Host)
 
-	//
 	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+ginkgoconfig.GinkgoConfig.ParallelNode)
 
 	kubeManager, err := manager.New(cfg, manager.Options{
@@ -253,10 +258,10 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		}
 	}()
 
-	if err := testenv.setup(); err != nil {
+	/*if err := testenv.setup(); err != nil {
 		// teardown() should still be invoked
 		return nil, err
-	}
+	} */
 
 	return testenv, nil
 }
@@ -280,20 +285,22 @@ func (testenv *TestEnv) setup() error {
 		return err
 	}
 
-	err = testenv.createRole()
-	if err != nil {
-		return err
-	}
+	/*
+		err = testenv.createRole()
+		if err != nil {
+			return err
+		}
 
-	err = testenv.createRoleBinding()
-	if err != nil {
-		return err
-	}
+		err = testenv.createRoleBinding()
+		if err != nil {
+			return err
+		}
 
-	err = testenv.createOperator()
-	if err != nil {
-		return err
-	}
+		err = testenv.createOperator()
+		if err != nil {
+			return err
+		}
+	*/
 
 	// Create s3 secret object for index test
 	testenv.createIndexSecret()
@@ -669,12 +676,13 @@ func (testenv *TestEnv) GetIndexSecretName() string {
 	return testenv.s3IndexSecret
 }
 
+/*
 // NewDeployment creates a new deployment
 func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 	d := Deployment{
 		name:              testenv.GetName() + "-" + name,
 		testenv:           testenv,
-		testTimeoutInSecs: time.Duration(specifiedTestTimeout) * time.Second,
+		testTimeoutInSecs: time.Duration(SpecifiedTestTimeout) * time.Second,
 	}
 
 	// Wait for cleanup to happen
@@ -682,6 +690,7 @@ func (testenv *TestEnv) NewDeployment(name string) (*Deployment, error) {
 
 	return &d, nil
 }
+*/
 
 // GetLMConfigMap Return name of license config map
 func (testenv *TestEnv) GetLMConfigMap() string {
