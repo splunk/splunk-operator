@@ -173,5 +173,6 @@ jobs:
         title: "Splunk Operator ${{ github.event.inputs.release_version }} release"
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
-          Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
-          Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
+          ### Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
+          * Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
+          * Delete ChangeLog-New.md
