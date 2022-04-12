@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
@@ -82,6 +83,68 @@ func TestGetSplunkService(t *testing.T) {
 
 	test(SplunkSearchHead, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-service","namespace":"test","creationTimestamp":null,"labels":{"1":"2","app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head","one":"two"},"annotations":{"a":"b"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089}],"selector":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"type":"LoadBalancer"},"status":{"loadBalancer":{}}}`)
 	test(SplunkSearchHead, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head","one":"two"},"annotations":{"a":"b"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089}],"selector":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"clusterIP":"None","type":"ClusterIP","publishNotReadyAddresses":true},"status":{"loadBalancer":{}}}`)
+}
+
+func TestValidateImagePullSecrets(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	css := enterpriseApi.CommonSplunkSpec{}
+	cr := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idx1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: css,
+		},
+	}
+
+	// Validate empty imagePullSecrets configuration
+	err := ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err == nil {
+		var nilImagePullSecrets []corev1.LocalObjectReference
+		if !reflect.DeepEqual(css.ImagePullSecrets, nilImagePullSecrets) {
+			t.Errorf("Wanted an empty ImagePullSecrets got %x", css.ImagePullSecrets)
+		}
+	} else {
+		t.Errorf("Unexpected error validating imagePullSecrets %s ", err.Error())
+	}
+
+	// Create a secret
+	secret1 := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "secret1",
+			Namespace: "test",
+		},
+	}
+	err = splutil.CreateResource(ctx, c, &secret1)
+	if err != nil {
+		t.Errorf("Error creating secret %x", secret1)
+	}
+
+	// Create a valid imagePullSecrets config
+	ips := corev1.LocalObjectReference{
+		Name: secret1.GetName(),
+	}
+	css.ImagePullSecrets = append(css.ImagePullSecrets, ips)
+
+	// Validate a valid imagePullSecrets config
+	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err != nil {
+		t.Errorf("Unexpected error validating imagePullSecrets %s ", err.Error())
+	}
+
+	// Create an invalid imagePullSecrets config
+	ipsInvalid := corev1.LocalObjectReference{
+		Name: "nonExistentSecret",
+	}
+	css.ImagePullSecrets = append(css.ImagePullSecrets, ipsInvalid)
+
+	// Validate a invalid imagePullSecrets config
+	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err == nil {
+		t.Errorf("Should thrown an error for invalid imagePullSecrets config")
+	}
 }
 
 func TestGetSplunkDefaults(t *testing.T) {

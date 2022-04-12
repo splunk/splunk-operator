@@ -241,7 +241,7 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 	for _, secret := range spec.ImagePullSecrets {
 		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
 		if err != nil {
-			scopedLog.Error(err, "Secret in the imagePullSecrets config is not found", secret.Name)
+			scopedLog.Error(err, "Secret in the imagePullSecrets config is not found ", secret.Name)
 			return err
 		}
 	}
