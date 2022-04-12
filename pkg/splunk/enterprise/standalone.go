@@ -48,7 +48,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateStandaloneSpec(ctx, cr)
+	err := validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate standalone spec")
@@ -253,7 +253,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(ctx context.Context, cr *enterpriseApi.Standalone) error {
+func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
 	}
@@ -272,5 +272,5 @@ func validateStandaloneSpec(ctx context.Context, cr *enterpriseApi.Standalone) e
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }

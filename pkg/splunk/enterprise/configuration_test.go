@@ -267,6 +267,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	ctx := context.TODO()
+	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -293,7 +294,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterManagerSpec(ctx, &cr)
+	err := validateClusterManagerSpec(ctx, c, &cr)
 
 	if err != nil {
 		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)

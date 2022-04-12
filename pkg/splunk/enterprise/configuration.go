@@ -36,8 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//var log = logf.Log.WithName("splunk.enterprise.configValidation")
-
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -193,7 +191,7 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 }
 
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, cr splcommon.MetaObject) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
 
@@ -216,9 +214,39 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
+	// if not provided, set default values for imagePullSecrets
+	err := ValidateImagePullSecrets(ctx, c, cr, spec)
+	if err != nil {
+		return err
+	}
+
 	setVolumeDefaults(spec)
 
 	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
+}
+
+// ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
+func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ValidateImagePullSecrets").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// If no imagePullSecrets are configured
+	var nilImagePullSecrets []corev1.LocalObjectReference
+	if len(spec.ImagePullSecrets) == 0 {
+		spec.ImagePullSecrets = nilImagePullSecrets
+		return nil
+	}
+
+	// If configured, validated if the secret/s exist
+	for _, secret := range spec.ImagePullSecrets {
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		if err != nil {
+			scopedLog.Error(err, "Secret in the imagePullSecrets config is not found", secret.Name)
+			return err
+		}
+	}
+
+	return nil
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
@@ -424,9 +452,10 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      affinity,
-				Tolerations:   spec.Tolerations,
-				SchedulerName: spec.SchedulerName,
+				Affinity:         affinity,
+				Tolerations:      spec.Tolerations,
+				SchedulerName:    spec.SchedulerName,
+				ImagePullSecrets: spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -858,7 +887,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)

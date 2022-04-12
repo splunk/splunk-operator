@@ -53,7 +53,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// validate and updates defaults for CR
-	err := validateMonitoringConsoleSpec(ctx, cr)
+	err := validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -194,14 +194,14 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 }
 
 // validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
-func validateMonitoringConsoleSpec(ctx context.Context, cr *enterpriseApi.MonitoringConsole) error {
+func validateMonitoringConsoleSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) error {
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
 		if err != nil {
 			return err
 		}
 	}
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 //ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod

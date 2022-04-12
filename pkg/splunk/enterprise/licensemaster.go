@@ -45,7 +45,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateLicenseManagerSpec(ctx, cr)
+	err := validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -175,7 +175,7 @@ func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.Controll
 }
 
 // validateLicenseManagerSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMaster) error {
+func validateLicenseManagerSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
@@ -184,5 +184,5 @@ func validateLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMa
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
