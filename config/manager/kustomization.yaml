@@ -11,3 +11,10 @@ configMapGenerator:
 - envs:
   - config.properties
   name: config
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: controller
+  newName: splunk/splunk-operator
+  newTag: 1.1.0
