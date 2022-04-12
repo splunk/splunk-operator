@@ -1024,11 +1024,11 @@ func WaitForSplunkPodCleanup(deployment *Deployment, testenvInstance *TestEnv) {
 }
 
 // WaitforAppInstallState Wait for App to reach state specified in conf file
-func WaitforAppInstallState(deployment *Deployment, testenvInstance *TestEnv, podNames []string, ns string, appName string, newState string, clusterWideInstall bool) {
+func WaitforAppInstallState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podNames []string, ns string, appName string, newState string, clusterWideInstall bool) {
 	testenvInstance.Log.Info("Retrieve App state on pod")
 	for _, podName := range podNames {
 		gomega.Eventually(func() string {
-			status, _, err := GetPodAppStatus(deployment, podName, ns, appName, clusterWideInstall)
+			status, _, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
 			logf.Log.Info("App details", "App", appName, "Status", status, "Error", err, "podName", podName)
 			return status
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(strings.ToUpper(newState)))
@@ -1036,10 +1036,10 @@ func WaitforAppInstallState(deployment *Deployment, testenvInstance *TestEnv, po
 }
 
 // VerifyAppRepoState verify given app repo state is equal to given value for app for given CR Kind
-func VerifyAppRepoState(deployment *Deployment, testenvInstance *TestEnv, name string, crKind string, appSourceName string, repoValue int, appName string) {
+func VerifyAppRepoState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, repoValue int, appName string) {
 	testenvInstance.Log.Info("Check for app repo state in CR")
 	gomega.Eventually(func() int {
-		appDeploymentInfo, err := GetAppDeploymentInfo(deployment, testenvInstance, name, crKind, appSourceName, appName)
+		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get app deployment info")
 			return 0

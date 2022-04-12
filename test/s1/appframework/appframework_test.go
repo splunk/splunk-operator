@@ -1131,7 +1131,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
-			testenvInstance.Log.Info("Upload big-size app to S3 for Standalone")
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1150,7 +1150,7 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
-			testenvInstance.Log.Info("Deploy Standalone")
+			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
@@ -1158,14 +1158,14 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenv.DeletePod(testenvInstance.GetName(), opPod)
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
+			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -1200,7 +1200,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to download apps")
 
 			// Upload big-size app to S3 for Standalone
-			testenvInstance.Log.Info("Upload big-size app to S3 for Standalone")
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1219,7 +1219,7 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
-			testenvInstance.Log.Info("Deploy Standalone")
+			testcaseEnvInst.Log.Info("Deploy Standalone")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
@@ -1227,14 +1227,14 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testenvInstance.GetName())
-			testenv.DeletePod(testenvInstance.GetName(), opPod)
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
+			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -1271,7 +1271,7 @@ var _ = Describe("s1appfw test", func() {
 			// Upload V1 apps to S3 for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testenvInstance.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
@@ -1281,7 +1281,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testenvInstance, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1294,48 +1294,48 @@ var _ = Describe("s1appfw test", func() {
 			}
 
 			// Deploy Standalone
-			testenvInstance.Log.Info("Deploy Standalone")
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(deployment.GetName(), spec)
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testenvInstance.GetName())
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			// ############ VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(deployment, testenvInstance, allAppSourceInfo, splunkPodAge, "")
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############ Upload Disabled App ###########
 			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
-			testenv.VerifyAppRepoState(deployment, testenvInstance, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])
+			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])
 
 			// Download disabled version of app from S3
-			testenvInstance.Log.Info("Download disabled version of apps from S3 for this test")
+			testcaseEnvInst.Log.Info("Download disabled version of apps from S3 for this test")
 			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirDisabled, downloadDirV1, appFileName)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Upload disabled version of app to S3
-			testenvInstance.Log.Info("Upload disabled version of app to S3 for this test")
+			testcaseEnvInst.Log.Info("Upload disabled version of app to S3 for this test")
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileName, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testenv.WaitforPhaseChange(deployment, testenvInstance, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
 
 			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Wait for App state to update after config file change
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.WaitforAppInstallState(deployment, testenvInstance, []string{standalonePodName}, testenvInstance.GetName(), appName, "disabled", false)
+			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, []string{standalonePodName}, testcaseEnvInst.GetName(), appName, "disabled", false)
 
 			//Delete the file from s3
 			s3Filepath := filepath.Join(s3TestDir, appFileName[0])
@@ -1343,7 +1343,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
 
 			// Verify repo state is set to  2 (i.e app deleted from S3 bucket)
-			testenv.VerifyAppRepoState(deployment, testenvInstance, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])
+			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])
 
 		})
 	})
