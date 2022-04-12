@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v2
 kind: Standalone
 metadata:
   name: s1
