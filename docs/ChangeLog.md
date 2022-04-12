@@ -1,35 +1,4 @@
 # Splunk Operator for Kubernetes Change Log
-
-## 1.1.0 (2022-04-12)
-
-* This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
-
-* Operator SDK upgraded to version 1.15.0. Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.mdr)
-
-* Introducing Monitoring Console CRD
-
-* Functional QA automation enhancements
-
-* Documentation Updates
-
-* CSPL-1660: Diagnostic tools added to gather information about Kubernetes environment as well as Splunk diag files
-
-* CSPL-1652: Set `podSecurityContext` `runAsNonRoot` to `true` by default
-
-* CSPL-1649: `SPLUNK_LICENSE_MASTER_URL` duplicated if licenseMasterRef defined in SHC and CM resources
-
-* CSPL-1632: Fix home directory of init-container to allow App framework to be successful using IAM with Service account
-
-* CSPL-1455: Update required go version to 1.17.3
-
-* CSPL-1379 IDXC fails to scale up when MC CR is deployed with pre-existing IDXC
-
-* CSPL-1306: Remove bias language from Functions, Local variables, Paths, URLs
-
-* CSPL-1327: App framework: App installation isn't triggered if one appsource is empty
-
-* fix: For Minio connections trust admin to pick protocol
-
 ## 1.0.5 (2021-12-17)
 * This is the 1.0.5 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#prerequisites-for-the-splunk-operator)
 

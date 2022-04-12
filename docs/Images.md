@@ -2,8 +2,8 @@
 
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.1.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.6 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.5 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.3.3 or later)
 
 All of these images are publicly available, and published on [Docker Hub](https://hub.docker.com/).
 

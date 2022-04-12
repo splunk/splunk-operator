@@ -143,10 +143,6 @@ jobs:
       run: |
         make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC 
 
-    - name: Revert Manifest file release version 
-      run: |
-        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
-
     - name: Update Operator Image name in Release Folder
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
@@ -173,6 +169,5 @@ jobs:
         title: "Splunk Operator ${{ github.event.inputs.release_version }} release"
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
-          ### Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
-          * Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
-          * Delete ChangeLog-New.md
+          Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
+          Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
