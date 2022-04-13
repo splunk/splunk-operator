@@ -19,14 +19,19 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 ## Upgrading Splunk Operator and Splunk Operator Deployment
 
 1. Download the upgrade script.
+
 ```
 wget -O upgrade-to-1.1.0.sh https://github.com/splunk/splunk-operator/releases/download/1.1.0/upgrade-to-1.1.0.sh
 ```
+
 2. Download the latest Splunk Operator installation yaml file.
+
 ```
 wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
 ```
+
 3. (Optional) Review the file and update it with your specific customizations used during your install. 
+
 4. Upgrade the Splunk Operator.
 # Splunk Operator Upgrade
 
