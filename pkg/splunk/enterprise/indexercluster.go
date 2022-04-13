@@ -170,7 +170,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			//if MC pod already exists
 			if err == nil {
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
-				err := c.AutomateMCApplyChanges(false)
+				err := c.AutomateMCApplyChanges()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChanges", fmt.Sprintf("get monitoring console client failed %s", err.Error()))
 					return result, err
