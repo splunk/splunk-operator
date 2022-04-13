@@ -212,7 +212,7 @@ deploy_operator() {
     echo "Operator installation not ready..."
     exit 1
   fi
-  echo "deployment of new splunk opearator 1.1.0 complete"
+  echo "deployment of new splunk operator 1.1.0 complete"
 }
 
 parse_options "$@"
