@@ -7,7 +7,7 @@ metadata:
 spec:
   clusterMasterRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
     replicas: 1
   appRepo:

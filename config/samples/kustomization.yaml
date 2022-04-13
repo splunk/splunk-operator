@@ -3,6 +3,7 @@ resources:
 - enterprise_v3_clustermaster.yaml
 - enterprise_v3_indexercluster.yaml
 - enterprise_v3_licensemaster.yaml
+- enterprise_v3_licensemanager.yaml
 - enterprise_v3_monitoringconsole.yaml
 - enterprise_v3_searchheadcluster.yaml
 - enterprise_v3_standalone.yaml

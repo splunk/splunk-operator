@@ -171,22 +171,44 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+	if spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
 		return []corev1.EnvVar{
 			{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Name:  splcommon.LicenseManagerURL,
 				Value: licenseManagerURL,
 			},
 		}
 	}
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  splcommon.LicenseManagerURL,
 			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
+		},
+	}
+}
+
+// getObsoleteLicenseManagerURL returns URL of license manager
+func getObsoleteLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.ObsoleteLicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkObsoleteLicenseManager, spec.ObsoleteLicenseManagerRef.Name, false)
+		if spec.ObsoleteLicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.ObsoleteLicenseManagerRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  splcommon.LicenseManagerURL,
+				Value: licenseManagerURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.LicenseManagerURL,
+			Value: GetSplunkServiceName(SplunkObsoleteLicenseManager, cr.GetName(), false),
 		},
 	}
 }

@@ -107,10 +107,10 @@ func newStandaloneWithGivenSpec(name, ns string, spec enterpriseApi.StandaloneSp
 	return &new
 }
 
-func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
-	new := enterpriseApi.LicenseMaster{
+func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseManager {
+	new := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseMaster",
+			Kind: "LicenseManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -118,7 +118,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{
 					{
@@ -162,7 +162,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				LicenseMasterRef: corev1.ObjectReference{
+				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
@@ -192,7 +192,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				LicenseMasterRef: corev1.ObjectReference{
+				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
@@ -253,7 +253,7 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string,
 				ClusterMasterRef: corev1.ObjectReference{
 					Name: clusterMasterRef,
 				},
-				LicenseMasterRef: corev1.ObjectReference{
+				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
@@ -421,7 +421,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				LicenseMasterRef: corev1.ObjectReference{
+				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
 				},
 				Volumes: []corev1.Volume{},
@@ -468,7 +468,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 }
 
 // newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
-func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
+func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) *enterpriseApi.MonitoringConsole {
 	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
@@ -484,8 +484,8 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				LicenseMasterRef: corev1.ObjectReference{
-					Name: LicenseMasterRef,
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: LicenseManagerRef,
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -704,10 +704,10 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseAp
 }
 
 // newLicenseManagerWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
-func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
-	new := enterpriseApi.LicenseMaster{
+func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseManagerSpec) *enterpriseApi.LicenseManager {
+	new := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseMaster",
+			Kind: "LicenseManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,

@@ -6,43 +6,32 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: clustermasters.enterprise.splunk.com
+  name: licensemanagers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: ClusterMaster
-    listKind: ClusterMasterList
-    plural: clustermasters
+    kind: LicenseManager
+    listKind: LicenseManagerList
+    plural: licensemanagers
     shortNames:
-    - cm-idxc
-    singular: clustermaster
+    - lm
+    singular: licensemanager
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of cluster manager
+    - description: Status of license manager
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of cluster manager
-      jsonPath: .status.clusterMasterPhase
-      name: Master
-      type: string
-    - description: Desired number of indexer peers
-      jsonPath: .status.replicas
-      name: Desired
-      type: integer
-    - description: Current number of ready indexer peers
-      jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
-    - description: Age of cluster manager
+    - description: Age of license manager
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v3
     schema:
       openAPIV3Schema:
-        description: ClusterMaster is the Schema for the cluster manager API
+        description: LicenseManager is the Schema for a Splunk Enterprise license
+          manager.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -57,7 +46,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: ClusterMasterSpec defines the desired state of ClusterMaster
+            description: LicenseManagerSpec defines the desired state of a Splunk
+              Enterprise license manager.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -889,7 +879,7 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
+                description: Splunk enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
                   appSources:
@@ -1803,116 +1793,6 @@ spec:
                             type: array
                         type: object
                     type: object
-                type: object
-              smartstore:
-                description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                  and server.conf.spec on docs.splunk.com
-                properties:
-                  cacheManager:
-                    description: Defines Cache manager settings
-                    properties:
-                      evictionPadding:
-                        description: Additional size beyond 'minFreeSize' before eviction
-                          kicks in
-                        type: integer
-                      evictionPolicy:
-                        description: Eviction policy to use
-                        type: string
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxCacheSize:
-                        description: Max cache size per partition
-                        type: integer
-                      maxConcurrentDownloads:
-                        description: Maximum number of buckets that can be downloaded
-                          from remote storage in parallel
-                        type: integer
-                      maxConcurrentUploads:
-                        description: Maximum number of buckets that can be uploaded
-                          to remote storage in parallel
-                        type: integer
-                    type: object
-                  defaults:
-                    description: Default configuration for indexes
-                    properties:
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  indexes:
-                    description: List of Splunk indexes
-                    items:
-                      description: IndexSpec defines Splunk index name and storage
-                        path
-                      properties:
-                        hotlistBloomFilterRecencyHours:
-                          description: Time period relative to the bucket's age, during
-                            which the bloom filter file is protected from cache eviction
-                          type: integer
-                        hotlistRecencySecs:
-                          description: Time period relative to the bucket's age, during
-                            which the bucket is protected from cache eviction
-                          type: integer
-                        maxGlobalDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of space for warm and cold buckets of an index
-                          type: integer
-                        maxGlobalRawDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of cumulative space for warm and cold buckets of an index
-                          type: integer
-                        name:
-                          description: Splunk index name
-                          type: string
-                        remotePath:
-                          description: Index location relative to the remote volume
-                            path
-                          type: string
-                        volumeName:
-                          description: Remote Volume name
-                          type: string
-                      type: object
-                    type: array
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3'
-                          type: string
-                      type: object
-                    type: array
                 type: object
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
@@ -3445,10 +3325,11 @@ spec:
                 type: array
             type: object
           status:
-            description: ClusterMasterStatus defines the observed state of ClusterMaster
+            description: LicenseManagerStatus defines the observed state of a Splunk
+              Enterprise license manager.
             properties:
               appContext:
-                description: App Framework status
+                description: App Framework Context
                 properties:
                   appRepo:
                     description: List of App package (*.spl, *.tgz) locations on remote
@@ -3583,17 +3464,8 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              bundlePushInfo:
-                description: Bundle push status tracker
-                properties:
-                  lastCheckInterval:
-                    format: int64
-                    type: integer
-                  needToPushMasterApps:
-                    type: boolean
-                type: object
               phase:
-                description: current phase of the cluster manager
+                description: current phase of the license manager
                 enum:
                 - Pending
                 - Ready
@@ -3603,124 +3475,6 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              resourceRevMap:
-                additionalProperties:
-                  type: string
-                description: Resource Revision tracker
-                type: object
-              selector:
-                description: selector for pods, used by HorizontalPodAutoscaler
-                type: string
-              smartstore:
-                description: Splunk Smartstore configuration. Refer to indexes.conf.spec
-                  and server.conf.spec on docs.splunk.com
-                properties:
-                  cacheManager:
-                    description: Defines Cache manager settings
-                    properties:
-                      evictionPadding:
-                        description: Additional size beyond 'minFreeSize' before eviction
-                          kicks in
-                        type: integer
-                      evictionPolicy:
-                        description: Eviction policy to use
-                        type: string
-                      hotlistBloomFilterRecencyHours:
-                        description: Time period relative to the bucket's age, during
-                          which the bloom filter file is protected from cache eviction
-                        type: integer
-                      hotlistRecencySecs:
-                        description: Time period relative to the bucket's age, during
-                          which the bucket is protected from cache eviction
-                        type: integer
-                      maxCacheSize:
-                        description: Max cache size per partition
-                        type: integer
-                      maxConcurrentDownloads:
-                        description: Maximum number of buckets that can be downloaded
-                          from remote storage in parallel
-                        type: integer
-                      maxConcurrentUploads:
-                        description: Maximum number of buckets that can be uploaded
-                          to remote storage in parallel
-                        type: integer
-                    type: object
-                  defaults:
-                    description: Default configuration for indexes
-                    properties:
-                      maxGlobalDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of space for warm and cold buckets of an index
-                        type: integer
-                      maxGlobalRawDataSizeMB:
-                        description: MaxGlobalDataSizeMB defines the maximum amount
-                          of cumulative space for warm and cold buckets of an index
-                        type: integer
-                      volumeName:
-                        description: Remote Volume name
-                        type: string
-                    type: object
-                  indexes:
-                    description: List of Splunk indexes
-                    items:
-                      description: IndexSpec defines Splunk index name and storage
-                        path
-                      properties:
-                        hotlistBloomFilterRecencyHours:
-                          description: Time period relative to the bucket's age, during
-                            which the bloom filter file is protected from cache eviction
-                          type: integer
-                        hotlistRecencySecs:
-                          description: Time period relative to the bucket's age, during
-                            which the bucket is protected from cache eviction
-                          type: integer
-                        maxGlobalDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of space for warm and cold buckets of an index
-                          type: integer
-                        maxGlobalRawDataSizeMB:
-                          description: MaxGlobalDataSizeMB defines the maximum amount
-                            of cumulative space for warm and cold buckets of an index
-                          type: integer
-                        name:
-                          description: Splunk index name
-                          type: string
-                        remotePath:
-                          description: Index location relative to the remote volume
-                            path
-                          type: string
-                        volumeName:
-                          description: Remote Volume name
-                          type: string
-                      type: object
-                    type: array
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3'
-                          type: string
-                      type: object
-                    type: array
-                type: object
             type: object
         type: object
     served: true

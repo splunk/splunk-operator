@@ -172,7 +172,7 @@ var _ = Describe("Licensemanager test", func() {
 				AppSources:           appSourceSpec,
 			}
 
-			spec := enterpriseApi.LicenseMasterSpec{
+			spec := enterpriseApi.LicenseManagerSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Volumes: []corev1.Volume{
 						{

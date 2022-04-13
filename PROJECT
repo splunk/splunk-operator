@@ -40,6 +40,15 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
+  kind: LicenseManager
+  path: github.com/splunk/splunk-operator/api/v3
+  version: v3
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: splunk.com
+  group: enterprise
   kind: MonitoringConsole
   path: github.com/splunk/splunk-operator/api/v3
   version: v3

@@ -31,21 +31,21 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// LicenseMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// LicenseManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LicenseMasterPausedAnnotation = "licensemaster.enterprise.splunk.com/paused"
+	LicenseManagerPausedAnnotation = "licensemanager.enterprise.splunk.com/paused"
 )
 
-// LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
-type LicenseMasterSpec struct {
+// LicenseManagerSpec defines the desired state of a Splunk Enterprise license manager.
+type LicenseManagerSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// LicenseMasterStatus defines the observed state of a Splunk Enterprise license manager.
-type LicenseMasterStatus struct {
+// LicenseManagerStatus defines the observed state of a Splunk Enterprise license manager.
+type LicenseManagerStatus struct {
 	// current phase of the license manager
 	Phase splcommon.Phase `json:"phase"`
 
@@ -55,37 +55,37 @@ type LicenseMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise Obsolete license master.
+// LicenseManager is the Schema for a Splunk Enterprise license manager.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=obsoletelm
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
+// +kubebuilder:resource:path=licensemanagers,scope=Namespaced,shortName=lm
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
 // +kubebuilder:storageversion
-type LicenseMaster struct {
+type LicenseManager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LicenseMasterSpec   `json:"spec,omitempty"`
-	Status LicenseMasterStatus `json:"status,omitempty"`
+	Spec   LicenseManagerSpec   `json:"spec,omitempty"`
+	Status LicenseManagerStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// LicenseMasterList contains a list of LicenseMaster
-type LicenseMasterList struct {
+// LicenseManagerList contains a list of LicenseManager
+type LicenseManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LicenseMaster `json:"items"`
+	Items           []LicenseManager `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&LicenseMaster{}, &LicenseMasterList{})
+	SchemeBuilder.Register(&LicenseManager{}, &LicenseManagerList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to the kubernetes API.
-func (lmstr *LicenseMaster) NewEvent(eventType, reason, message string) corev1.Event {
+func (lmstr *LicenseManager) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -93,7 +93,7 @@ func (lmstr *LicenseMaster) NewEvent(eventType, reason, message string) corev1.E
 			Namespace:    lmstr.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "LicenseMaster",
+			Kind:       "LicenseManager",
 			Namespace:  lmstr.Namespace,
 			Name:       lmstr.Name,
 			UID:        lmstr.UID,
@@ -102,12 +102,12 @@ func (lmstr *LicenseMaster) NewEvent(eventType, reason, message string) corev1.E
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-licensemaster-controller",
+			Component: "splunk-licensemanager-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/licensemaster-controller",
+		ReportingController: "enterprise.splunk.com/licensemanager-controller",
 	}
 }

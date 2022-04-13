@@ -10,6 +10,6 @@ spec:
     imagePullPolicy: "IfNotPresent"
   clusterMasterRef: 
     name: test
-  licenseMasterRef: 
+  licenseManagerRef: 
     name: ""
   defaults: ""

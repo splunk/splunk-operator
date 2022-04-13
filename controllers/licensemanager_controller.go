@@ -37,15 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// ObsoleteLicenseManagerReconciler reconciles a LicenseMaster object
-type ObsoleteLicenseManagerReconciler struct {
+// LicenseManagerReconciler reconciles a LicenseManager object
+type LicenseManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -62,23 +62,23 @@ type ObsoleteLicenseManagerReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the LicenseMaster object against the actual cluster state, and then
+// the LicenseManager object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
+	reconcileCounters.With(getPrometheusLabels(req, "LicenseManager")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseManager")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("licensemaster", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("licensemanager", req.NamespacedName)
 	reqLogger.Info("start")
 
-	// Fetch the LicenseMaster
-	instance := &enterprisev3.LicenseMaster{}
+	// Fetch the LicenseManager
+	instance := &enterprisev3.LicenseManager{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -95,18 +95,18 @@ func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ct
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.LicenseMasterPausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.LicenseManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return enterprise.ApplyObsoleteLicenseManager(ctx, r.Client, instance)
+	return enterprise.ApplyLicenseManager(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ObsoleteLicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.LicenseMaster{}).
+		For(&enterprisev3.LicenseManager{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -120,22 +120,22 @@ func (r *ObsoleteLicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) er
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,

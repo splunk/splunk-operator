@@ -204,7 +204,7 @@ For more information, see the [Description of App Framework Specification fields
 
 
 ## Description of App Framework Specification fields
-App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework involves the following steps:
+App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework involves the following steps:
 
 * Remote Source of Apps: Define the remote location including the bucket(s) and path for each bucket
 * Destination of Apps: Define where the Apps need to be installed (in other words, which Custom resources need to be configured)

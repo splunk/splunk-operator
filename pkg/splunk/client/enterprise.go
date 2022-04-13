@@ -661,7 +661,7 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 	if mock {
 		return nil
 	}
-	var configuredPeers, indexerMemberList, licenseMasterMemberList string
+	var configuredPeers, indexerMemberList, licenseManagerMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
 	if err != nil {
 		return err
@@ -690,8 +690,8 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 			if s == "indexer" {
 				indexerMemberList = indexerMemberList + "&member=" + e.Name
 			}
-			if s == "license_master" {
-				licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
+			if s == "license_master" || s == "license_manager" {
+				licenseManagerMemberList = licenseManagerMemberList + "&member=" + e.Name
 			}
 		}
 	}
@@ -700,17 +700,17 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 		if e == "indexer" {
 			indexerMemberList = "&member=localhost:localhost" + indexerMemberList
 		}
-		if e == "license_master" {
-			licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
+		if e == "license_master" || e == "license_manager" {
+			licenseManagerMemberList = licenseManagerMemberList + "&member=localhost:localhost"
 		}
 	}
 	reqBodyIndexer := indexerMemberList + "&default=true"
-	reqBodyLicenseMaster := licenseMasterMemberList + "&default=false"
+	reqBodyLicenseManager := licenseManagerMemberList + "&default=false"
 	err = c.UpdateDMCGroups("dmc_group_indexer", reqBodyIndexer)
 	if err != nil {
 		return err
 	}
-	err = c.UpdateDMCGroups(splcommon.LicenseManagerDMCGroup, reqBodyLicenseMaster)
+	err = c.UpdateDMCGroups(splcommon.LicenseManagerDMCGroup, reqBodyLicenseManager)
 	if err != nil {
 		return err
 	}
