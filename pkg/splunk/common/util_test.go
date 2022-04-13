@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -572,12 +573,12 @@ func TestGetLabels(t *testing.T) {
 		}
 	}
 
-	test("indexer", "cluster-master", "t1", "t1", map[string]string{
+	test("indexer", ClusterManager, "t1", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
-		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/name":       ClusterManager,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+		"app.kubernetes.io/instance":   fmt.Sprintf(TestClusterManager, "t1"),
 	})
 
 	// Multipart IndexerCluster - selector of indexer service for main part
@@ -609,24 +610,24 @@ func TestGetLabels(t *testing.T) {
 
 	// Test all labels using selectFew option
 	selectAll := []string{"manager", "component", "name", "partof", "instance"}
-	testNew("indexer", "cluster-master", "t1", "t1", selectAll, map[string]string{
+	testNew("indexer", ClusterManager, "t1", "t1", selectAll, map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
-		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/name":       ClusterManager,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+		"app.kubernetes.io/instance":   fmt.Sprintf(TestClusterManager, "t1"),
 	}, "")
 
 	// Test a few labels using selectFew option
 	selectFewPartial := []string{"manager", "component"}
-	testNew("indexer", "cluster-master", "t1", "t1", selectFewPartial, map[string]string{
+	testNew("indexer", ClusterManager, "t1", "t1", selectFewPartial, map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
 	}, "")
 
 	// Test incorrect label
 	selectFewIncorrect := []string{"randomvalue"}
-	testNew("indexer", "cluster-master", "t1", "t1", selectFewIncorrect, map[string]string{}, "Incorrect label type randomvalue")
+	testNew("indexer", ClusterManager, "t1", "t1", selectFewIncorrect, map[string]string{}, "Incorrect label type randomvalue")
 }
 
 func TestAppendPodAffinity(t *testing.T) {

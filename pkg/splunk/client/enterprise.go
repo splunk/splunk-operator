@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -372,7 +375,7 @@ type ClusterBundleInfo struct {
 }
 
 // ClusterMasterInfo represents the status of the indexer cluster manager.
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Finfo
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
 type ClusterMasterInfo struct {
 	// Indicates if the cluster is initialized.
 	Initialized bool `json:"initialized_flag"`
@@ -403,16 +406,16 @@ type ClusterMasterInfo struct {
 	StartTime int64 `json:"start_time"`
 }
 
-// GetClusterMasterInfo queries the cluster manager for info about the indexer cluster.
+// GetClusterManagerInfo queries the cluster manager for info about the indexer cluster.
 // You can only use this on a cluster manager.
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Finfo
-func (c *SplunkClient) GetClusterMasterInfo() (*ClusterMasterInfo, error) {
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
+func (c *SplunkClient) GetClusterManagerInfo() (*ClusterMasterInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Content ClusterMasterInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/info"
+	path := splcommon.URIClusterManagerGetInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -459,7 +462,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 			Content IndexerClusterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/slave/info"
+	path := splcommon.URIPeerGetInfo
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -572,17 +575,17 @@ type ClusterMasterPeerInfo struct {
 	} `json:"status_counter"`
 }
 
-// GetClusterMasterPeers queries the cluster manager for info about indexer cluster peers.
+// GetClusterManagerPeers queries the cluster manager for info about indexer cluster peers.
 // You can only use this on a cluster manager.
-// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmaster.2Fpeers
-func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo, error) {
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
+func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Name    string                `json:"name"`
 			Content ClusterMasterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := "/services/cluster/master/peers"
+	path := splcommon.URIClusterManagerGetPeers
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -599,10 +602,10 @@ func (c *SplunkClient) GetClusterMasterPeers() (map[string]ClusterMasterPeerInfo
 
 // RemoveIndexerClusterPeer removes peer from an indexer cluster, where id=unique GUID for the peer.
 // You can only use this on a cluster manager.
-// See https://docs.splunk.com/Documentation/Splunk/8.0.2/Indexer/Removepeerfrommasterlist
+// See https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Removepeerfrommanagerlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	// sent request to remove a peer from Cluster Manager peers list
-	endpoint := fmt.Sprintf("%s/services/cluster/master/control/control/remove_peers?peers=%s", c.ManagementURI, id)
+	endpoint := fmt.Sprintf("%s%s?peers=%s", c.ManagementURI, splcommon.URIClusterManagerRemovePeers, id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -619,7 +622,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s/services/cluster/slave/control/control/decommission?enforce_counts=%d", c.ManagementURI, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s%s?enforce_counts=%d", c.ManagementURI, splcommon.URIPeerDecommission, enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -630,7 +633,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 
 // BundlePush pushes the Cluster manager apps bundle to all the indexer peers
 func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
-	endpoint := fmt.Sprintf("%s/services/cluster/master/control/default/apply", c.ManagementURI)
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, splcommon.URIClusterManagerApplyBundle)
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
 
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBody))
@@ -707,7 +710,7 @@ func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
 	if err != nil {
 		return err
 	}
-	err = c.UpdateDMCGroups("dmc_group_license_master", reqBodyLicenseMaster)
+	err = c.UpdateDMCGroups(splcommon.LicenseManagerDMCGroup, reqBodyLicenseMaster)
 	if err != nil {
 		return err
 	}
@@ -897,7 +900,7 @@ type ClusterInfo struct {
 }
 
 // GetClusterInfo queries the cluster about multi-site or single-site.
-//See https://docs.splunk.com/Documentation/Splunk/8.0.6/RESTREF/RESTcluster#cluster.2Fconfig
+//See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig
 func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 	if mockCall {
 		return nil, nil
@@ -920,7 +923,7 @@ func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 
 // SetIdxcSecret sets idxc_secret for a Splunk Instance
 // Can be used on any peer in an indexer cluster as long as the idxc_secret matches the cluster manager
-// See https://docs.splunk.com/Documentation/Splunk/7.0.0/RESTREF/RESTcluster#cluster.2Fconfig.2Fconfig
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig.2Fconfig
 func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	endpoint := fmt.Sprintf("%s/services/cluster/config/config?secret=%s", c.ManagementURI, idxcSecret)
 	request, err := http.NewRequest("POST", endpoint, nil)
@@ -934,7 +937,7 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 
 // RestartSplunk restarts specific Splunk instance
 // Can be used for any Splunk Instance
-// See https://docs.splunk.com/Documentation/Splunk/8.0.5/RESTREF/RESTsystem#server.2Fcontrol.2Frestart
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTsystem#server.2Fcontrol.2Frestart
 func (c *SplunkClient) RestartSplunk() error {
 	endpoint := fmt.Sprintf("%s/services/server/control/restart", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)

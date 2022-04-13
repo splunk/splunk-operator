@@ -59,8 +59,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.0.5 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.3.3 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.1.0 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.6 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -76,7 +76,6 @@ Based on Splunk Enterprise [Reference Hardware documentation](https://docs.splun
 | ---------- | ------- | ------- |
 | _Each Standalone Pod: 12 Physical CPU Cores or 24 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Search Head Pod: 16 Physical CPU Cores or 32 vCPU at 2Ghz or greater per core, 12GB RAM._| _Each Indexer Pod: 12 Physical CPU cores, or 24 vCPU at 2GHz or greater per core, 12GB RAM._ |
 
-Splunk Operator does not support ___vCPU licensing___.
 
 #### _Using Kubernetes Quality of Service Classes_
 
@@ -109,7 +108,7 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.0.5/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
@@ -135,7 +134,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: s1

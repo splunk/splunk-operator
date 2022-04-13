@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +16,14 @@
 package testenv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 
-	gomega "github.com/onsi/gomega"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	corev1 "k8s.io/api/core/v1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -73,8 +76,8 @@ func CheckMCPodReady(ns string) bool {
 }
 
 // GetConfiguredPeers get list of Peers Configured on Montioring Console
-func GetConfiguredPeers(ns string) []string {
-	podName := fmt.Sprintf(MonitoringConsolePod, ns, 0)
+func GetConfiguredPeers(ns string, mcName string) []string {
+	podName := fmt.Sprintf(MonitoringConsolePod, mcName, 0)
 	var peerList []string
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
@@ -97,6 +100,7 @@ func GetConfiguredPeers(ns string) []string {
 			}
 		}
 	}
+	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
 	return peerList
 }
 
@@ -112,29 +116,10 @@ func DeleteMCPod(ns string) {
 	}
 }
 
-// MCPodReady waits for MC pod to be in ready state
-func MCPodReady(ns string, deployment *Deployment) {
-	// Monitoring Console Pod is in Ready State
-	gomega.Eventually(func() bool {
-		logf.Log.Info("Checking status of Monitoring Console Pod")
-		check := CheckMCPodReady(ns)
-		DumpGetPods(ns)
-		return check
-	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
-
-	// Verify MC Pod Stays in ready state
-	gomega.Consistently(func() bool {
-		logf.Log.Info("Checking status of Monitoring Console Pod")
-		check := CheckMCPodReady(ns)
-		DumpGetPods(ns)
-		return check
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
-}
-
-// CheckPodNameOnMC Check Standalone Pod configured on MC
-func CheckPodNameOnMC(ns string, podName string) bool {
+// CheckPodNameOnMC Check given pod is configured on Monitoring console pod
+func CheckPodNameOnMC(ns string, mcName string, podName string) bool {
 	// Get Peers configured on Monitoring Console
-	peerList := GetConfiguredPeers(ns)
+	peerList := GetConfiguredPeers(ns, mcName)
 	logf.Log.Info("Peer List", "instance", peerList)
 	found := false
 	for _, peer := range peerList {
@@ -162,4 +147,22 @@ func GetPodIP(ns string, podName string) string {
 		return ""
 	}
 	return restResponse.Status.PodIP
+}
+
+// GetMCConfigMap gets config map for give Monitoring Console Name
+func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
+	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(mcName, enterprise.SplunkMonitoringConsole)
+	mcConfigMap, err := GetConfigMap(ctx, deployment, ns, mcConfigMapName)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")
+		return mcConfigMap, err
+	}
+	logf.Log.Info("MC Config Map contents", "MC CONFIG MAP NAME", mcConfigMapName, "Data", mcConfigMap.Data)
+	return mcConfigMap, err
+}
+
+// CheckPodNameInString checks for pod name in string
+func CheckPodNameInString(podName string, configString string) bool {
+	logf.Log.Info("Check MC Config String has Pod configured", "Monitoring Console Config Map Pod Config String", configString, "POD String", podName)
+	return strings.Contains(configString, podName)
 }

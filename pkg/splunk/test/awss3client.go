@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +22,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/s3"
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 // MockAWSS3Object struct contains contents returned as part of S3 response

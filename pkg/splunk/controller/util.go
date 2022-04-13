@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +17,6 @@ package controller
 
 import (
 	"reflect"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,6 +78,15 @@ func MergePodMetaUpdates(current *metav1.ObjectMeta, revised *metav1.ObjectMeta,
 func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name string) bool {
 	scopedLog := log.WithName("MergePodUpdates").WithValues("name", name)
 	result := false
+
+	// check for changes in ServiceAccount
+	if splcommon.CompareByMarshall(current.ServiceAccountName, revised.ServiceAccountName) {
+		scopedLog.Info("Pod service account differs",
+			"current", current.ServiceAccountName,
+			"revised", revised.ServiceAccountName)
+		current.ServiceAccountName = revised.ServiceAccountName
+		result = true
+	}
 
 	// check for changes in Affinity
 	if splcommon.CompareByMarshall(current.Affinity, revised.Affinity) {
@@ -169,14 +178,7 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 			}
 
 			// check Env
-			// Skip this check for the Monitoring Console
-			// This is temporary until the MC has it's own CR to control the MC pod env.
-			skipForMC := false
-			if strings.Contains(name, "monitoring-console") {
-				scopedLog.Info("Ignoring Pod Container Envs differences for MC pods", "name", name)
-				skipForMC = true
-			}
-			if !skipForMC && splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
+			if splcommon.CompareEnvs(current.Containers[idx].Env, revised.Containers[idx].Env) {
 				scopedLog.Info("Pod Container Envs differ",
 					"current", current.Containers[idx].Env,
 					"revised", revised.Containers[idx].Env)

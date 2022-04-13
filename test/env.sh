@@ -13,14 +13,18 @@
 # Below env variables required to run license manager test cases
 : "${ENTERPRISE_LICENSE_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
-# Below env variables requried to run remote indexes test cases
+# Below env variables required to run remote indexes test cases
 : "${INDEXES_S3_BUCKET:=}"
 : "${AWS_S3_REGION:=}"
+# set when operator need to be installed clusterwide
+: "${CLUSTER_WIDE:=false}"
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test
 # Acceptable input is a regex matching test names
 : "${TEST_REGEX:=smoke}"
 # Regex to skip Test Cases
 : "${SKIP_REGEX:=}"
+# Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
+: "${DEBUG_RUN:=False}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then

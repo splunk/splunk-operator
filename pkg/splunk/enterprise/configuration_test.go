@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +16,12 @@
 package enterprise
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -51,6 +53,7 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 }
 
 func TestGetSplunkService(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -60,7 +63,7 @@ func TestGetSplunkService(t *testing.T) {
 
 	test := func(instanceType InstanceType, isHeadless bool, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, isHeadless), nil
 		}
 		configTester(t, fmt.Sprintf("getSplunkService(\"%s\",%t)", instanceType, isHeadless), f, want)
 	}
@@ -103,6 +106,8 @@ func TestGetSplunkDefaults(t *testing.T) {
 }
 
 func TestGetService(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -124,7 +129,7 @@ func TestGetService(t *testing.T) {
 
 	test := func(instanceType InstanceType, want string) {
 		f := func() (interface{}, error) {
-			return getSplunkService(&cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
+			return getSplunkService(ctx, &cr, &cr.Spec.CommonSplunkSpec, instanceType, false), nil
 		}
 		configTester(t, "getSplunkService()", f, want)
 	}
@@ -199,7 +204,7 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 }
 
-func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T) {
+func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -222,9 +227,9 @@ func TestSmartstoreApplyClusterMasterFailsOnInvalidSmartStoreConfig(t *testing.T
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterMaster(client, &cr)
+	_, err := ApplyClusterManager(context.Background(), client, &cr)
 	if err == nil {
-		t.Errorf("ApplyClusterMaster should fail on invalid smartstore config")
+		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
 }
 
@@ -254,13 +259,14 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyStandalone(client, &cr)
+	_, err := ApplyStandalone(context.Background(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
 	}
 }
 
-func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
+func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -287,16 +293,16 @@ func TestSmartStoreConfigDoesNotFailOnClusterMasterCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterMasterSpec(&cr)
+	err := validateClusterManagerSpec(ctx, &cr)
 
 	if err != nil {
-		t.Errorf("Smartstore configuration should not fail on ClusterMaster CR: %v", err)
+		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
 	}
 }
 
 func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	var err error
-
+	ctx := context.TODO()
 	// Valid smartstore config
 	SmartStore := enterpriseApi.SmartStoreSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -318,7 +324,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStore)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStore)
 	if err != nil {
 		t.Errorf("Valid Smartstore configuration should not cause error: %v", err)
 	}
@@ -345,7 +351,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreMultipleVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreMultipleVolumes)
 	if err == nil {
 		t.Errorf("Missing Secret Object reference should error out")
 	}
@@ -357,7 +363,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreVolumeWithNoRemoteEndPoint)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeWithNoRemoteEndPoint)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Endpoint")
 	}
@@ -369,7 +375,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumeNameMissing)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumeNameMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remotename")
 	}
@@ -381,7 +387,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithVolumePathMissing)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumePathMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remote Path")
 	}
@@ -407,7 +413,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexName)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexName)
 	if err == nil {
 		t.Errorf("Should not accept an Index with missing indexname ")
 	}
@@ -433,7 +439,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithMissingIndexLocation)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexLocation)
 	if err != nil {
 		t.Errorf("An index with missing remotePath should use index name as path, but failed with error: %v", err)
 	}
@@ -457,13 +463,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreConfWithDefaults)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreConfWithDefaults)
 	if err != nil {
 		t.Errorf("Should accept an Index with missing remotePath location, when defaults are configured. But, got the error: %v", err)
 	}
 
 	// Empty smartstore config
-	err = ValidateSplunkSmartstoreSpec(nil)
+	err = ValidateSplunkSmartstoreSpec(ctx, nil)
 	if err != nil {
 		t.Errorf("Smartstore config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -486,7 +492,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithoutVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithoutVolumes)
 	if err == nil {
 		t.Errorf("Smartstore config without volume details should return error")
 	}
@@ -514,7 +520,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateVolumes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateVolumes)
 	if err == nil {
 		t.Errorf("Duplicate volume configuration should return an error")
 	}
@@ -530,7 +536,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreDefaultsWithNonExistingVolume)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreDefaultsWithNonExistingVolume)
 	if err == nil {
 		t.Errorf("Volume referred in the indexes defaults should be a valid volume")
 	}
@@ -552,7 +558,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreWithDuplicateIndexes)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateIndexes)
 	if err == nil {
 		t.Errorf("Duplicate index names should return an error")
 	}
@@ -572,7 +578,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreVolumeMissingBothFromDefaultsAndIndex)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeMissingBothFromDefaultsAndIndex)
 	if err == nil {
 		t.Errorf("If no default volume, index with missing volume info should return an error")
 	}
@@ -590,7 +596,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(&SmartStoreIndexesWithInvalidVolumeName)
+	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreIndexesWithInvalidVolumeName)
 	if err == nil {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
@@ -598,6 +604,8 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
+	ctx := context.TODO()
+
 	// Valid app framework config
 	AppFramework := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -629,13 +637,13 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		AppsRepoStatusPollInterval: 60,
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
 	}
 
 	AppFramework.VolList[0].SecretRef = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Missing Secret Object reference is a valid config that should not cause error: %v", err)
 	}
@@ -644,7 +652,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// App Framework config with missing App Source name
 	AppFramework.AppSources[0].Name = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Should not accept an app source with missing name ")
 	}
@@ -652,7 +660,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	//App Framework config app source config with missing location(withot default location) should errro out
 	AppFramework.AppSources[0].Name = "adminApps"
 	AppFramework.AppSources[0].Location = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
 	}
@@ -663,14 +671,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	AppFramework.AppSources[0].Scope = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
 
 	// Empty App Repo config should not cause an error
-	err = ValidateAppFrameworkSpec(nil, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, nil, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("App Repo config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -699,7 +707,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateAppFrameworkSpec(&AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("App Repo config without volume details should return error")
 	}
@@ -707,7 +715,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Defaults with invalid volume reference should return error
 	AppFramework.Defaults.VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Volume referred in the defaults should be a valid volume")
 	}
@@ -719,7 +727,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
 	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Duplicate app sources should return an error")
 	}
@@ -731,7 +739,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	tmpAppSourceName := AppFramework.AppSources[1].Name
 	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Failed to detect duplicate app source names")
 	}
@@ -742,14 +750,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].VolName = ""
 	AppFramework.Defaults.VolName = ""
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("If no default volume, App Source with missing volume info should return an error")
 	}
 
 	// If the AppSource doesn't have VolName, and if the defaults have it, shouldn't cause an error
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
 	}
@@ -757,7 +765,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Volume referenced from an index must be a valid volume
 	AppFramework.AppSources[0].VolName = "UnknownVolume"
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
@@ -765,14 +773,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeCluster
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
 	}
 
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
@@ -782,7 +790,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, true)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
 	if err == nil {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
@@ -790,7 +798,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
@@ -799,7 +807,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Missing scope, if the default scope is not specified should return error
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = ""
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
@@ -810,7 +818,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = "clusterWithPreConfig"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Valid scope clusterWithPreConfig should not cause an error")
 	}
@@ -824,7 +832,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	appFrameworkContext.AppsRepoStatusPollInterval = 0
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
@@ -833,7 +841,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Check for minAppsRepoPollInterval
 	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
@@ -842,7 +850,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Check for maxAppsRepoPollInterval
 	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
 	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
@@ -851,20 +859,20 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// Invalid volume name in defaults should return an error
 	AppFramework.Defaults.VolName = "unknownVolume"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
 	AppFramework.VolList[0].Provider = "invalid-provider"
-	err = ValidateAppFrameworkSpec(&AppFramework, &appFrameworkContext, false)
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err == nil {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
@@ -1003,6 +1011,8 @@ maxGlobalRawDataSizeMB = 61440
 }
 
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
+
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1037,7 +1047,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	}
 
 	// Missing secret object should return an error
-	keysChanged := AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged := AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if err == nil {
 		t.Errorf("Missing secret object should return an error. keyChangedFlag: %t", keysChanged)
 	} else if keysChanged {
@@ -1046,17 +1056,17 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// First time secret version reference should be updated
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-scret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1067,14 +1077,14 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	resourceVersion := "3434"
 	secret.SetResourceVersion(resourceVersion)
 
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated, ok := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
 
 	// No change on the secret object should return false
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
@@ -1082,7 +1092,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// Empty volume list should return false
 	cr.Spec.SmartStore.VolList = nil
-	keysChanged = AreRemoteVolumeKeysChanged(client, &cr, SplunkClusterMaster, &cr.Spec.SmartStore, ResourceRev, &err)
+	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 	if keysChanged {
 		t.Errorf("Empty volume should not report a key change")
 	}
@@ -1237,6 +1247,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 }
 
 func TestGetLivenessProbe(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1246,26 +1257,27 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 0)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(cr, SplunkClusterMaster, spec, 20)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 20)
 	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
 }
 
 func TestGetReadinessProbe(t *testing.T) {
+	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -1275,20 +1287,20 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
+	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 0)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
 
 	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(cr, SplunkClusterMaster, spec, 20)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 20)
 	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
 		t.Errorf("Failed to set the configured Readiness probe initial delay value")
 	}

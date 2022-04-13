@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,5 +32,5 @@ const (
 	SecretTokenNotRetrievable = "Couldn't retrieve %s from secret data"
 
 	// EmptyClusterMasterRef indicates an empty cluster manager reference
-	EmptyClusterMasterRef = "Empty cluster master reference"
+	EmptyClusterMasterRef = "Empty cluster manager reference"
 )

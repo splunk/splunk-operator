@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +26,7 @@ import (
 )
 
 func TestCreateResource(t *testing.T) {
+	ctx := context.TODO()
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secret",
@@ -34,7 +36,7 @@ func TestCreateResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := CreateResource(c, &secret)
+	err := CreateResource(ctx, c, &secret)
 	if err != nil {
 		t.Errorf("CreateResource() returned %v; want nil", err)
 	}
@@ -55,7 +57,7 @@ func TestUpdateResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := UpdateResource(c, &secret)
+	err := UpdateResource(context.TODO(), c, &secret)
 	if err != nil {
 		t.Errorf("UpdateResource() returned %v; want nil", err)
 	}
@@ -76,7 +78,7 @@ func TestDeleteResource(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	err := DeleteResource(c, &secret)
+	err := DeleteResource(context.TODO(), c, &secret)
 	if err != nil {
 		t.Errorf("DeleteResource() returned %v; want nil", err)
 	}
@@ -157,12 +159,12 @@ func TestPodExecCommand(t *testing.T) {
 
 	// Create client and add object
 	c := spltest.NewMockClient()
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
 
 	// Add object
 	c.AddObject(pod)
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
 
 	// Hit some error legs
-	_, _, _ = PodExecCommand(c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, false)
+	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, false)
 }

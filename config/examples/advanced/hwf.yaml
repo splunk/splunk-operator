@@ -1,0 +1,30 @@
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: hwf-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  clusterMasterRef:
+    name: cm-example
+  licenseMasterRef:
+    name: lm-example
+    replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: hwfApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: s3-secret
+  defaults: |-
+    splunk:
+      set_search_peers: false 

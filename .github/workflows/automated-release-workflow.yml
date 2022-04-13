@@ -23,7 +23,7 @@ jobs:
 
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v0.2.7
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
 
     - name: Install yq
       run: |
@@ -52,30 +52,41 @@ jobs:
     - name: Install golint
       run: |
         go version
-        go get -u golang.org/x/lint/golint
+        go install golang.org/x/lint/golint
     
     - name: Install goveralls
       run: |
         go version
-        go get github.com/mattn/goveralls@latest
+        go install github.com/mattn/goveralls@latest
     
     - name: Install Operator SDK
       run: |
-        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-        sudo chmod +x /usr/local/bin/operator-sdk
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
     - name: Make Splunk Operator Image
       run: |
-        make image
+        make docker-build IMG="docker.io/splunk/splunk-operator:latest" 
         docker images
 
     - name: Run Make Package
       run: |
-        build/package.sh
-        docker images
+        make docker-build IMG=splunk/splunk-operator:latest
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}" VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk/${{ github.event.inputs.new_enterprise_version }}
+  
+    - name: Update Operator Image name in Release Folder
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
+        replace: "splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}"
+        include: "release-${{ env.SHORT_SHA }}/**"
   
     - name: Upload Release Artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
       with:
         name: "release-artifacts-${{ github.event.inputs.release_version }}"
         path: "release-**"
@@ -87,7 +98,7 @@ jobs:
         sed -n "4,${a}p" docs/ChangeLog.md >> docs/ReleaseNotes.md >> docs/ReleaseNotes.md
 
     - name: Create Release
-      uses: ncipollo/release-action@v1
+      uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
       with:
         artifacts: "release-${{ env.SHORT_SHA }}/splunk-operator-install.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-cluster.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-noadmin.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-crds.yaml"
         bodyFile: "docs/ReleaseNotes.md"

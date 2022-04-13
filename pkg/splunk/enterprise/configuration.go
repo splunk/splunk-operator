@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,20 +22,21 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var logC = logf.Log.WithName("splunk.enterprise.configValidation")
+//var log = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -100,7 +102,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 }
 
 // getSplunkService returns a Kubernetes Service object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
+func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, isHeadless bool) *corev1.Service {
 
 	// use template if not headless
 	var service *corev1.Service
@@ -122,10 +124,6 @@ func getSplunkService(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkS
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
-	if instanceType == SplunkMonitoringConsole {
-		service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetNamespace(), isHeadless)
-		instanceIdentifier = cr.GetNamespace()
-	}
 	if instanceType == SplunkIndexer {
 		if len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
@@ -372,7 +370,7 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -386,42 +384,55 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 		labels[k] = v
 	}
 
-	// create statefulset configuration
-	statefulSet := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StatefulSet",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
-			Namespace: cr.GetNamespace(),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectLabels,
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := client.Get(ctx, namespacedName, statefulSet)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if k8serrors.IsNotFound(err) {
+		// create statefulset configuration
+		statefulSet = &appsv1.StatefulSet{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StatefulSet",
+				APIVersion: "apps/v1",
 			},
-			ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
-			Replicas:            &replicas,
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+				Namespace: cr.GetNamespace(),
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
-					Annotations: annotations,
-				},
-				Spec: corev1.PodSpec{
-					Affinity:      affinity,
-					Tolerations:   spec.Tolerations,
-					SchedulerName: spec.SchedulerName,
-					Containers: []corev1.Container{
-						{
-							Image:           spec.Image,
-							ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
-							Name:            "splunk",
-							Ports:           ports,
-						},
+		}
+	}
+
+	statefulSet.Spec = appsv1.StatefulSetSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: selectLabels,
+		},
+		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
+		Replicas:            &replicas,
+		PodManagementPolicy: appsv1.ParallelPodManagement,
+		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.OnDeleteStatefulSetStrategyType,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      labels,
+				Annotations: annotations,
+			},
+			Spec: corev1.PodSpec{
+				Affinity:      affinity,
+				Tolerations:   spec.Tolerations,
+				SchedulerName: spec.SchedulerName,
+				Containers: []corev1.Container{
+					{
+						Image:           spec.Image,
+						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+						Name:            "splunk",
+						Ports:           ports,
 					},
 				},
 			},
@@ -429,7 +440,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	}
 
 	// Add storage volumes
-	err := addStorageVolumes(cr, spec, statefulSet, labels)
+	err = addStorageVolumes(cr, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
 	}
@@ -437,7 +448,7 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	// add serviceaccount if configured
 	if spec.ServiceAccount != "" {
 		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
-		_, err := splctrl.GetServiceAccount(client, namespacedName)
+		_, err := splctrl.GetServiceAccount(ctx, client, namespacedName)
 		if err == nil {
 			// serviceAccount exists
 			statefulSet.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
@@ -448,13 +459,13 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
 
 	// retrieve the secret to upload to the statefulSet pod
-	statefulSetSecret, err := splutil.GetLatestVersionedSecret(client, cr, cr.GetNamespace(), statefulSet.GetName())
+	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
 	if err != nil || statefulSetSecret == nil {
 		return statefulSet, err
 	}
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+	updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
@@ -463,36 +474,36 @@ func getSplunkStatefulSet(client splcommon.ControllerClient, cr splcommon.MetaOb
 }
 
 // getAppListingConfigMap returns the App listing configMap, if it exists and applicable for that instanceType
-func getAppListingConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+func getAppListingConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	// ToDo: Exclude MC, once it's own CR is available
-	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead && instanceType != SplunkMonitoringConsole {
+	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
-		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
+		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
 	}
 
 	return configMap
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
-func getSmartstoreConfigMap(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
+func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterMaster {
+	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
-		configMap, _ = splctrl.GetConfigMap(client, namespacedName)
+		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
 	}
 
 	return configMap
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
-	scopedLog := log.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
@@ -508,7 +519,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	}
 
 	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
-	if spec.Volumes != nil && instanceType != SplunkMonitoringConsole {
+	if spec.Volumes != nil {
 		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
 		for idx := range podTemplateSpec.Spec.Containers {
 			for v := range spec.Volumes {
@@ -533,7 +544,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
-	if spec.Defaults != "" && instanceType != SplunkMonitoringConsole {
+	if spec.Defaults != "" {
 		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -548,7 +559,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 		// We will update the annotation for resource version in the pod template spec
 		// so that any change in the ConfigMap will lead to recycle of the pod.
-		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(client, namespacedName)
+		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(ctx, client, namespacedName)
 		if err == nil {
 			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
 		} else {
@@ -556,7 +567,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	smartstoreConfigMap := getSmartstoreConfigMap(client, cr, instanceType)
+	smartstoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, instanceType)
 	if smartstoreConfigMap != nil {
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -581,7 +592,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		}
 	}
 
-	appListingConfigMap := getAppListingConfigMap(client, cr, instanceType)
+	appListingConfigMap := getAppListingConfigMap(ctx, client, cr, instanceType)
 	if appListingConfigMap != nil {
 		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
@@ -597,9 +608,11 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
+	runAsNonRoot := true
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser: &runAsUser,
-		FSGroup:   &fsGroup,
+		RunAsUser:    &runAsUser,
+		FSGroup:      &fsGroup,
+		RunAsNonRoot: &runAsNonRoot,
 	}
 
 	var additionalDelayForAppInstallation int32
@@ -614,22 +627,18 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 		// Always sort the slice, so that map entries are ordered, to avoid pod resets
 		sort.Strings(appListingFiles)
 
-		if instanceType == SplunkDeployer || instanceType == SplunkClusterMaster || instanceType == SplunkStandalone || instanceType == SplunkLicenseMaster {
+		if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
 		}
 	}
 
-	livenessProbe := getLivenessProbe(cr, instanceType, spec, additionalDelayForAppInstallation)
-	readinessProbe := getReadinessProbe(cr, instanceType, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec, additionalDelayForAppInstallation)
+	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec, 0)
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
-	// Check for apps defaults and add it to only the standalone or deployer/cm instances
-	if spec.DefaultsURLApps != "" &&
-		(instanceType == SplunkDeployer ||
-			instanceType == SplunkStandalone ||
-			instanceType == SplunkClusterMaster ||
-			instanceType == SplunkLicenseMaster) {
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
 		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
 	}
 	if spec.DefaultsURL != "" {
@@ -666,64 +675,70 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 			Value: spec.LicenseURL,
 		})
 	}
-	if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+	if instanceType != SplunkLicenseManager && spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
-			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: licenseMasterURL,
+			Value: licenseManagerURL,
 		})
 	}
 
 	// append URL for cluster manager, if configured
-	var clusterMasterURL string
-	if instanceType == SplunkClusterMaster {
+	var clusterManagerURL string
+	if instanceType == SplunkClusterManager {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
-		clusterMasterURL = "localhost"
+		clusterManagerURL = "localhost"
 	} else if spec.ClusterMasterRef.Name != "" {
-		clusterMasterURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
-			clusterMasterURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterMasterURL)
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
-		//Check if CM is connected to a LicenseMaster
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      spec.ClusterMasterRef.Name,
-		}
-		masterIdxCluster := &enterpriseApi.ClusterMaster{}
-		err := client.Get(context.TODO(), namespacedName, masterIdxCluster)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get ClusterMaster")
-		}
-
-		if masterIdxCluster.Spec.LicenseMasterRef.Name != "" {
-			licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, masterIdxCluster.Spec.LicenseMasterRef.Name, false)
-			if masterIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-				licenseMasterURL = splcommon.GetServiceFQDN(masterIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		if spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			namespacedName := types.NamespacedName{
+				Namespace: cr.GetNamespace(),
+				Name:      spec.ClusterMasterRef.Name,
 			}
-			env = append(env, corev1.EnvVar{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
-				Value: licenseMasterURL,
-			})
+			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get ClusterManager")
+			}
+
+			if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  "SPLUNK_LICENSE_MASTER_URL",
+					Value: licenseManagerURL,
+				})
+			}
 		}
 	}
 
-	if clusterMasterURL != "" {
+	if clusterManagerURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
 			Name:  "SPLUNK_CLUSTER_MASTER_URL",
-			Value: clusterMasterURL,
+			Value: clusterManagerURL,
+		})
+	}
+
+	// append REF for monitoring console if configured
+	if spec.MonitoringConsoleRef.Name != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+			Value: spec.MonitoringConsoleRef.Name,
 		})
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	// Exclude MC as it derives the Spec from multiple CRs
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		for _, envVar := range spec.ExtraEnv {
-			extraEnv = append(extraEnv, envVar)
-		}
+	for _, envVar := range spec.ExtraEnv {
+		extraEnv = append(extraEnv, envVar)
 	}
 
 	// append any extra variables
@@ -731,10 +746,7 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
-		//Used pre-defined resource values for MC
-		if instanceType != SplunkMonitoringConsole {
-			podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
-		}
+		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
@@ -743,22 +755,18 @@ func updateSplunkPodTemplateWithConfig(client splcommon.ControllerClient, podTem
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 // uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	livenessDelay := int32(livenessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the Liveness initial delay from the CR
-		if spec.LivenessInitialDelaySeconds != 0 {
-			livenessDelay = spec.LivenessInitialDelaySeconds
-		} else {
-			livenessDelay += additionalDelay
-		}
+	// If configured, always use the Liveness initial delay from the CR
+	if spec.LivenessInitialDelaySeconds != 0 {
+		livenessDelay = spec.LivenessInitialDelaySeconds
+	} else {
+		livenessDelay += additionalDelay
 	}
-
 	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
 
 	livenessCommand := []string{
@@ -770,20 +778,17 @@ func getLivenessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *
 
 // getReadinessProbe provides the probe for checking the readiness of the Pod
 // pod is ready if container artifact file is created with contents of "started".
-func getReadinessProbe(cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
-	scopedLog := log.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getReadinessProbe")
 
 	readinessDelay := int32(readinessProbeDefaultDelaySec)
 
-	// Exclude MC, as it derives the spec from Multiple CRs.
-	// ToDo: Remove the Check once the MC CRD is in place
-	if instanceType != SplunkMonitoringConsole {
-		// If configured, always use the readiness initial delay from the CR
-		if spec.ReadinessInitialDelaySeconds != 0 {
-			readinessDelay = spec.ReadinessInitialDelaySeconds
-		} else {
-			readinessDelay += additionalDelay
-		}
+	// If configured, always use the readiness initial delay from the CR
+	if spec.ReadinessInitialDelaySeconds != 0 {
+		readinessDelay = spec.ReadinessInitialDelaySeconds
+	} else {
+		readinessDelay += additionalDelay
 	}
 
 	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
@@ -841,18 +846,19 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 }
 
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
-func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
+func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
 	if isSmartstoreConfigured(smartstore) == false {
 		return false
 	}
 
-	scopedLog := log.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(client, cr, volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
@@ -880,14 +886,14 @@ func AreRemoteVolumeKeysChanged(client splcommon.ControllerClient, cr splcommon.
 }
 
 // initAppFrameWorkContext used to initialize the app frame work context
-func initAppFrameWorkContext(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
+func initAppFrameWorkContext(ctx context.Context, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
 		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-			splclient.RegisterS3Client(vol.Provider)
+			splclient.RegisterS3Client(ctx, vol.Provider)
 		}
 	}
 }
@@ -996,13 +1002,14 @@ func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
+func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
 	}
 
-	scopedLog := log.WithName("ValidateAppFrameworkSpec")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ValidateAppFrameworkSpec")
 
 	scopedLog.Info("configCheck", "scope", localScope)
 
@@ -1020,7 +1027,7 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
-	err = validateRemoteVolumeSpec(appFramework.VolList, true)
+	err = validateRemoteVolumeSpec(ctx, appFramework.VolList, true)
 	if err != nil {
 		return err
 	}
@@ -1034,11 +1041,12 @@ func ValidateAppFrameworkSpec(appFramework *enterpriseApi.AppFrameworkSpec, appC
 }
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec
-func validateRemoteVolumeSpec(volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
+func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.VolumeSpec, isAppFramework bool) error {
 
 	duplicateChecker := make(map[string]bool)
 
-	scopedLog := log.WithName("validateRemoteVolumeSpec")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateRemoteVolumeSpec")
 
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
@@ -1117,7 +1125,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 }
 
 // ValidateSplunkSmartstoreSpec checks and validates the smartstore config
-func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
+func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi.SmartStoreSpec) error {
 	var err error
 
 	// Smartstore is an optional config (at least) for now
@@ -1131,7 +1139,7 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
-	err = validateRemoteVolumeSpec(smartstore.VolList, false)
+	err = validateRemoteVolumeSpec(ctx, smartstore.VolList, false)
 	if err != nil {
 		return err
 	}
@@ -1150,15 +1158,16 @@ func ValidateSplunkSmartstoreSpec(smartstore *enterpriseApi.SmartStoreSpec) erro
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
+func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
-	scopedLog := log.WithName("GetSmartstoreVolumesConfig")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetSmartstoreVolumesConfig")
 
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {
 		if volumes[i].SecretRef != "" {
-			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(volumes[i], client, cr, smartstore)
+			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volumes[i], client, cr, smartstore)
 			if err != nil {
 				return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 			}

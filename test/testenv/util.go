@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -26,14 +28,14 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -43,9 +45,8 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	l := zap.LoggerTo(ginkgo.GinkgoWriter)
-	l.WithName("util")
-	logf.SetLogger(l)
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
+
 }
 
 // RandomDNSName returns a random string that is a valid DNS name
@@ -106,7 +107,7 @@ func newStandaloneWithGivenSpec(name, ns string, spec enterpriseApi.StandaloneSp
 	return &new
 }
 
-func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
+func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
 	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
@@ -144,7 +145,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.Lice
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -162,7 +163,7 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -173,7 +174,7 @@ func newClusterMaster(name, ns, licenseMasterName string, ansibleConfig string) 
 }
 
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
+func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -192,7 +193,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -203,7 +204,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseMasterName string, ansibl
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseMasterName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
 	new := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -232,7 +233,7 @@ func newIndexerCluster(name, ns, licenseMasterName string, replicas int, cluster
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
 	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -253,7 +254,7 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseMasterName string, 
 					Name: clusterMasterRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -278,7 +279,7 @@ func newRole(name, ns string) *rbacv1.Role {
 			{
 				APIGroups: []string{""},
 				Resources: []string{"events"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"create", "delete", "get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"apps"},
@@ -403,7 +404,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 }
 
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
-func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseApi.Standalone {
+func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterpriseApi.Standalone {
 
 	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -421,7 +422,7 @@ func newStandaloneWithLM(name, ns string, licenseMasterName string) *enterpriseA
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseManagerName,
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -466,19 +467,125 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 	return &new
 }
 
+// newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
+func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: LicenseMasterRef,
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	return &mcSpec
+}
+
+// newMonitoringConsoleSpecWithGivenSpec returns MC Spec with given name, namespace and Spec
+func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpriseApi.MonitoringConsoleSpec) *enterpriseApi.MonitoringConsole {
+	mcSpec := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+	return &mcSpec
+}
+
 // DumpGetPods prints and returns list of pods in the namespace
 func DumpGetPods(ns string) []string {
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
-		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
-		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
 		return nil
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		logf.Log.Info(line)
 		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
 			splunkPods = append(splunkPods, strings.Fields(line)[0])
+		}
+	}
+	return splunkPods
+}
+
+// DumpGetTopNodes prints and returns Node load information
+func DumpGetTopNodes() []string {
+	output, err := exec.Command("kubectl", "top", "nodes").Output()
+	var splunkNodes []string
+	if err != nil {
+		//cmd := "kubectl top nodes"
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkNodes = append(splunkNodes, strings.Fields(line)[0])
+			}
+		}
+	}
+	return splunkNodes
+}
+
+// DumpGetTopPods prints and returns Node load information
+func DumpGetTopPods(ns string) []string {
+	output, err := exec.Command("kubectl", "top", "pods", "-n", ns).Output()
+	var splunkPods []string
+	if err != nil {
+		//cmd := fmt.Sprintf("kubectl top pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	if len(output) > 0 {
+		for _, line := range strings.Split(string(output), "\n") {
+			if len(line) > 0 {
+				logf.Log.Info(line)
+				splunkPods = append(splunkPods, strings.Fields(line)[0])
+			}
+		}
+	}
+	return splunkPods
+}
+
+// GetOperatorPodName returns name of operator pod in the namespace
+func GetOperatorPodName(ns string) string {
+	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	var splunkPods string
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return splunkPods
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk-operator-controller-manager") {
+			splunkPods = strings.Fields(line)[0]
+			return splunkPods
+		} else if strings.HasPrefix(line, "splunk-op") {
+			splunkPods = strings.Fields(line)[0]
+			return splunkPods
 		}
 	}
 	return splunkPods
@@ -531,7 +638,7 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 			}
 			continue
 		} else if strings.HasPrefix(line, configName) {
-			logf.Log.Info("Configuration found.", "Config", configName, "Line", line)
+			logf.Log.Info(fmt.Sprintf("Configuration %s found at line %s", configName, line))
 			config = line
 			break
 		}
@@ -543,15 +650,25 @@ func GetConfLineFromPod(podName string, filePath string, ns string, configName s
 }
 
 // ExecuteCommandOnPod execute command on given pod and return result
-func ExecuteCommandOnPod(deployment *Deployment, podName string, stdin string) (string, error) {
+func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(podName, command, stdin, false)
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return "", err
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return stdout, nil
+}
+
+// GetConfigMap Gets the config map for a given k8 config map name
+func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
+	configMap := &corev1.ConfigMap{}
+	err := deployment.GetInstance(ctx, configMapName, configMap)
+	if err != nil {
+		deployment.testenv.Log.Error(err, "Unable to get config map", "Config Map Name", configMap, "Namespace", ns)
+	}
+	return configMap, err
 }
 
 // newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
@@ -586,8 +703,8 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseAp
 	return &new
 }
 
-// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
-func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
+// newLicenseManagerWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
+func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
 	new := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
@@ -605,14 +722,14 @@ func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMa
 }
 
 // GetDirsOrFilesInPath returns subdirectory under given path on the given POD
-func GetDirsOrFilesInPath(deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
 	var cmd string
 	if dirOnly {
 		cmd = fmt.Sprintf("cd %s; ls -d */", path)
 	} else {
 		cmd = fmt.Sprintf("cd %s; ls ", path)
 	}
-	stdout, err := ExecuteCommandOnPod(deployment, podName, cmd)
+	stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -642,4 +759,21 @@ func CheckStringInSlice(stringSlice []string, compString string) bool {
 		}
 	}
 	return false
+}
+
+// GeneratePodNameSlice returns slice of PodNames based on given key and count.
+func GeneratePodNameSlice(formatString string, key string, count int, multisite bool, siteCount int) []string {
+	var podNames []string
+	if multisite {
+		for site := 1; site <= siteCount; site++ {
+			for i := 0; i < count; i++ {
+				podNames = append(podNames, fmt.Sprintf(formatString, key, site, i))
+			}
+		}
+	} else {
+		for i := 0; i < count; i++ {
+			podNames = append(podNames, fmt.Sprintf(formatString, key, i))
+		}
+	}
+	return podNames
 }

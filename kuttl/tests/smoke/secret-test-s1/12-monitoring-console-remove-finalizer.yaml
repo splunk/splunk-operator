@@ -1,0 +1,39 @@
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  finalizers: []
+  name: mc-test
+spec:
+  Mock: false
+  affinity: {}
+  appRepo:
+    defaults: {}
+  clusterMasterRef: {}
+  defaults: ""
+  defaultsUrl: ""
+  defaultsUrlApps: ""
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  image: ""
+  imagePullPolicy: IfNotPresent
+  licenseMasterRef:
+    name: lc-test
+  licenseUrl: ""
+  livenessInitialDelaySeconds: 0
+  monitoringConsoleRef: {}
+  readinessInitialDelaySeconds: 0
+  resources: {}
+  schedulerName: ""
+  serviceAccount: ""
+  serviceTemplate:
+    metadata: {}
+    spec: {}
+    status:
+      loadBalancer: {}
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: ""
+    storageClassName: ""
+  volumes: []

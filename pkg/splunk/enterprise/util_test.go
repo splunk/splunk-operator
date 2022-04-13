@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +16,17 @@
 package enterprise
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	enterpriseApi "github.com/splunk/splunk-operator/pkg/apis/enterprise/v2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -35,13 +38,16 @@ func init() {
 }
 
 func TestApplySplunkConfig(t *testing.T) {
+	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[2]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[2]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3]}}
 	searchHeadCR := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -56,7 +62,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	searchHeadRevised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.SearchHeadCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkSearchHead)
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
@@ -80,19 +86,19 @@ func TestApplySplunkConfig(t *testing.T) {
 	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
-		_, err := ApplySplunkConfig(c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
+		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
 		return err
 	}
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 }
 
-func TestGetLicenseMasterURL(t *testing.T) {
+func TestGetLicenseManagerURL(t *testing.T) {
 	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -101,36 +107,37 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service",
+			Value: splcommon.TestStack1LicenseManagerService,
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
 	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: "splunk-stack1-license-master-service.test.svc.cluster.local",
+			Value: splcommon.TestStack1LicenseManagerClusterLocal,
 		},
 	}
 
 	result = splcommon.CompareEnvs(got, want)
 	//if differ then CompareEnvs returns true
 	if result == true {
-		t.Errorf("getLicenseMasterURL(\"%s\") = %s; want %s", SplunkLicenseMaster, got, want)
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 }
 
 func TestApplySmartstoreConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -163,21 +170,21 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	test := func(client *spltest.MockClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplySmartstoreConfigMap(client, cr, smartstore)
+			configMap, _, err := ApplySmartstoreConfigMap(ctx, client, cr, smartstore)
 			configMap.Data["conftoken"] = "1601945361"
 			return configMap, err
 		}
@@ -188,13 +195,14 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
-	_, _, err = ApplySmartstoreConfigMap(client, &cr, &cr.Spec.SmartStore)
+	_, _, err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}
 }
 
 func TestApplyAppListingConfigMap(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -257,9 +265,9 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 	remoteObjListMap[cr.Spec.AppFrameworkConfig.AppSources[2].Name] = S3Response
 
 	// set the status context
-	initAppFrameWorkContext(&cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+	initAppFrameWorkContext(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 
-	appsModified, err := handleAppRepoChanges(client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
+	appsModified, err := handleAppRepoChanges(ctx, client, &cr, &cr.Status.AppContext, remoteObjListMap, &cr.Spec.AppFrameworkConfig)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -267,7 +275,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testAppListingConfigMap := func(client *spltest.MockClient, cr splcommon.MetaObject, appConf *enterpriseApi.AppFrameworkSpec, appsSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplyAppListingConfigMap(client, cr, appConf, appsSrcDeployStatus, appsModified)
+			configMap, _, err := ApplyAppListingConfigMap(ctx, client, cr, appConf, appsSrcDeployStatus, appsModified)
 			// Make the config token as predictable
 			configMap.Data[appsUpdateToken] = "1601945361"
 			return configMap, err
@@ -283,30 +291,31 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	// Now test the Cluster manager stateful set, to validate the Pod updates with the app listing config map
 	cr.Kind = "ClusterMaster"
-	_, err = splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	_, err = splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
 
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterMasterSpec(&cr); err != nil {
-				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
+			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
+				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
-			return getClusterMasterStatefulSet(client, &cr)
+			return getClusterManagerStatefulSet(ctx, client, &cr)
 		}
-		configTester(t, fmt.Sprintf("getClusterMasterStatefulSet"), f, want)
+		configTester(t, fmt.Sprintf("getClusterManagerStatefulSet"), f, want)
 	}
 
-	testStsWithAppListVolMounts(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-example-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"},"annotations":{"appListingRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-example-cluster-master-secret-v1","defaultMode":420}},{"name":"mnt-app-listing","configMap":{"name":"splunk-example-clustermaster-app-list","items":[{"key":"app-list-cluster-with-pre-config.yaml","path":"app-list-cluster-with-pre-config.yaml","mode":420},{"key":"app-list-cluster.yaml","path":"app-list-cluster.yaml","mode":420},{"key":"app-list-local.yaml","path":"app-list-local.yaml","mode":420},{"key":"appsUpdateToken","path":"appsUpdateToken","mode":420}],"defaultMode":420}},{"name":"init-apps","emptyDir":{}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/app-listing/app-list-local.yaml,/mnt/app-listing/app-list-cluster.yaml,/mnt/app-listing/app-list-cluster-with-pre-config.yaml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-app-listing","mountPath":"/mnt/app-listing/"},{"name":"init-apps","mountPath":"/init-apps/"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":1800,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-example-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-example-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-example-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-example-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+	testStsWithAppListVolMounts(splcommon.TestApplyAppListingConfigMap)
 
 	// Test to ensure that the Applisting config map is empty after the apps are installed successfully
-	markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
+	markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
 	testAppListingConfigMap(client, &cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus, `{"metadata":{"name":"splunk-example-clustermaster-app-list","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"ClusterMaster","name":"example","uid":"","controller":true}]},"data":{"appsUpdateToken":"1601945361"}}`)
 
 }
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -342,25 +351,25 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	client := spltest.NewMockClient()
 
 	// Create namespace scoped secret
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Test existing secret
-	err = splutil.SetSecretOwnerRef(client, secret.GetName(), &cr)
+	err = splutil.SetSecretOwnerRef(ctx, client, secret.GetName(), &cr)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for secret %s", secret.GetName())
 	}
 
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 
 	if err != nil {
 		t.Errorf("Couldn't Remove S3 Secret object references %v", err)
@@ -386,19 +395,20 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	}
 
 	// S3 secret owner reference removal, with non-existing secret objects
-	err = DeleteOwnerReferencesForS3SecretObjects(client, secret, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForS3SecretObjects(ctx, client, secret, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret object referenced in the volume config doesn't exist")
 	}
 
 	// Smartstore volume config with non-existing secret objects
-	err = DeleteOwnerReferencesForResources(client, &cr, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret objects doesn't exist")
 	}
 }
 
 func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -416,18 +426,18 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Just to simplify the test, assume that the keys are stored as part of the splunk-test-secret object, hence create that secret object
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(client, "test")
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(client, secret)
+	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	// Missing S3 access key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 access key should return an error")
 	}
@@ -435,14 +445,14 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 
 	// Missing S3 secret key should return error
-	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if err == nil {
 		t.Errorf("Missing S3 secret key should return an error")
 	}
 
 	// When access key and secret keys are present, returned keys should not be empty. Also, should not return an error
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if accessKey == "" || secretKey == "" || err != nil {
 		t.Errorf("Missing S3 Keys / Error not expected, when the Secret object with the S3 specific keys are present")
 	}
@@ -468,6 +478,7 @@ func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
 }
 
 func TestHandleAppRepoChanges(t *testing.T) {
+	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "Clustermaster",
@@ -513,7 +524,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	var S3Response splclient.S3Response
 
 	// Test-1: Empty remoteObjectList Map should return an error
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err != nil {
 		t.Errorf("Empty remote Object list should not trigger an error, but got error : %v", err)
@@ -527,7 +538,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Set the app source with a matching one
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -539,7 +550,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-3: If the App Resource is not found in the remote object listing, all the corresponding Apps should be deleted/disabled
 	delete(remoteObjListMap, appFramworkConf.AppSources[0].Name)
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -553,7 +564,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-4: If the App Resource is not found in the config, all the corresponding Apps should be deleted/disabled
 	tmpAppSrcName := appFramworkConf.AppSources[0].Name
 	appFramworkConf.AppSources[0].Name = "invalidName"
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -565,7 +576,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 
 	// Test-5: Changing the AppSource deployment info should change for all the Apps in the list
-	changeAppSrcDeployInfoStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusInProgress)
+	changeAppSrcDeployInfoStatus(ctx, appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusInProgress)
 	_, err = validateAppSrcDeployInfoByStateAndStatus(appFramworkConf.AppSources[0].Name, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 	if err != nil {
 		t.Errorf("Invalid AppSrc deployment info detected. Error: %v", err)
@@ -579,7 +590,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	tmpS3Response.Objects = append(tmpS3Response.Objects[:0], tmpS3Response.Objects[1:]...)
 	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpS3Response
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -595,7 +606,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -608,7 +619,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-8:  For an AppSrc, when all the Apps are deleted on remote store and re-introduced, should modify the state to active and pending
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
 		t.Errorf("Could not handle a valid remote listing. Error: %v", err)
 	}
@@ -623,7 +634,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	invalidAppSourceName := "UnknownAppSourceInConfig"
 	remoteObjListMap[invalidAppSourceName] = S3Response
-	_, err = handleAppRepoChanges(client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
+	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err == nil {
 		t.Errorf("Unable to return an error, when the remote listing contain unknown App source")
@@ -642,7 +653,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete)
 		if err != nil {
@@ -664,7 +675,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 
-		markAppsStatusToComplete(client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
+		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
 
 		matchCount, err := validateAppSrcDeployInfoByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 		if err != nil {
@@ -687,22 +698,22 @@ func TestIsAppExtentionValid(t *testing.T) {
 }
 
 func TestHasAppRepoCheckTimerExpired(t *testing.T) {
-
+	ctx := context.TODO()
 	// Case 1. This is the case when we first enter the reconcile loop.
 	appInfoContext := &enterpriseApi.AppDeploymentContext{
 		LastAppInfoCheckTime: 0,
 	}
 
-	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 
 	appInfoContext.AppsRepoStatusPollInterval = 60
 
 	// Case 2. We just checked the apps status
-	SetLastAppInfoCheckTime(appInfoContext)
+	SetLastAppInfoCheckTime(ctx, appInfoContext)
 
-	if HasAppRepoCheckTimerExpired(appInfoContext) {
+	if HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
 	}
 
@@ -710,7 +721,7 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	// We do this by setting some random past timestamp.
 	appInfoContext.LastAppInfoCheckTime = 1591464060
 
-	if !HasAppRepoCheckTimerExpired(appInfoContext) {
+	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
@@ -773,8 +784,9 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 }
 
 func TestSetLastAppInfoCheckTime(t *testing.T) {
+	ctx := context.TODO()
 	appInfoStatus := &enterpriseApi.AppDeploymentContext{}
-	SetLastAppInfoCheckTime(appInfoStatus)
+	SetLastAppInfoCheckTime(ctx, appInfoStatus)
 
 	if appInfoStatus.LastAppInfoCheckTime != time.Now().Unix() {
 		t.Errorf("LastAppInfoCheckTime should have been set to current time")
@@ -782,10 +794,120 @@ func TestSetLastAppInfoCheckTime(t *testing.T) {
 }
 
 func TestGetNextRequeueTime(t *testing.T) {
+	ctx := context.TODO()
 	appFrameworkContext := enterpriseApi.AppDeploymentContext{}
 	appFrameworkContext.AppsRepoStatusPollInterval = 60
-	nextRequeueTime := GetNextRequeueTime(appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
+	nextRequeueTime := GetNextRequeueTime(ctx, appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
+	}
+}
+
+func TestValidateMonitoringConsoleRef(t *testing.T) {
+	ctx := context.TODO()
+	currentCM := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"a": "b"},
+	}
+
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	revised := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+									Value: "abc",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	//create configmap
+	_, err := splctrl.ApplyConfigMap(ctx, client, &currentCM)
+	if err != nil {
+		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
+	}
+
+	// Create statefulset
+	err = splutil.CreateResource(ctx, client, current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	var serviceURLs []corev1.EnvVar
+	serviceURLs = []corev1.EnvVar{
+		{
+			Name:  "A",
+			Value: "a",
+		},
+	}
+
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
+	}
+
+	revised = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Env: []corev1.EnvVar{
+								{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err = validateMonitoringConsoleRef(ctx, client, revised, serviceURLs)
+	if err != nil {
+		t.Errorf("Couldn't validate monitoring console ref %s", current.GetName())
 	}
 }

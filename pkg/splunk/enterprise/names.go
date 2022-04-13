@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -75,7 +76,7 @@ const (
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
 
 	// command for init container on a CM
-	commandForCMSmartstore = "mkdir -p /opt/splk/etc/master-apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/master-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/master-apps/splunk-operator/local/server.conf"
+	commandForCMSmartstore = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal + " && ln -sfn " + splcommon.OperatorMountLocalIndexesConf + " " + splcommon.OperatorClusterManagerAppsLocalIndexesConf + " && ln -sfn " + splcommon.OperatorMountLocalServerConf + " " + splcommon.OperatorClusterManagerAppsLocalServerConf
 
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"

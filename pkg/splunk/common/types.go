@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,8 @@
 package common
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -120,14 +123,14 @@ type ControllerClient interface {
 // StatefulSetPodManager is used to manage the pods within a StatefulSet
 type StatefulSetPodManager interface {
 	// Update handles all updates for a statefulset and all of its pods
-	Update(ControllerClient, *appsv1.StatefulSet, int32) (Phase, error)
+	Update(context.Context, ControllerClient, *appsv1.StatefulSet, int32) (Phase, error)
 
 	// PrepareScaleDown prepares pod to be removed via scale down event; it returns true when ready
-	PrepareScaleDown(int32) (bool, error)
+	PrepareScaleDown(context.Context, int32) (bool, error)
 
 	// PrepareRecycle prepares pod to be recycled for updates; it returns true when ready
-	PrepareRecycle(int32) (bool, error)
+	PrepareRecycle(context.Context, int32) (bool, error)
 
 	// FinishRecycle completes recycle event for pod and returns true, or returns false if nothing to do
-	FinishRecycle(int32) (bool, error)
+	FinishRecycle(context.Context, int32) (bool, error)
 }

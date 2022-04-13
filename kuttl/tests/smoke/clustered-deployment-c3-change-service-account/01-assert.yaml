@@ -1,0 +1,30 @@
+---
+# assert for clustre master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: test
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-test-cluster-master
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-test-cluster-master-secret-v1
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: splunk-test-cluster-master-0

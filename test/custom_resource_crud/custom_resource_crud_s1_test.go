@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +15,7 @@
 package crcrud
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -26,57 +28,77 @@ import (
 
 var _ = Describe("Crcrud test for SVA S1", func() {
 
+	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 	var defaultCPULimits string
 	var newCPULimits string
+	var ctx context.Context
 
 	BeforeEach(func() {
 		var err error
-		deployment, err = testenvInstance.NewDeployment(testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 		defaultCPULimits = "4"
 		newCPULimits = "2"
+		ctx = context.TODO()
 	})
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
 		if CurrentGinkgoTestDescription().Failed {
-			testenvInstance.SkipTeardown = true
+			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
 			deployment.Teardown()
 		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+		}
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("crcrud: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("crcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
-			standalone, err := deployment.DeployStandalone(deployment.GetName())
+			mcRef := deployment.GetName()
+			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Verify Standalone goes to ready state
-			testenv.StandaloneReady(deployment, deployment.GetName(), standalone, testenvInstance)
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Deploy Monitoring Console CRD
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits before updating the CR
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), standalonePodName, defaultCPULimits)
+			testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), standalonePodName, defaultCPULimits)
 
 			// Change CPU limits to trigger CR update
 			standalone.Spec.Resources.Limits = corev1.ResourceList{
 				"cpu": resource.MustParse(newCPULimits),
 			}
-			err = deployment.UpdateCR(standalone)
+			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with updated CR ")
 
 			// Verify Standalone is updating
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
 
 			// Verify Standalone goes to ready state
-			testenv.VerifyStandalonePhase(deployment, testenvInstance, deployment.GetName(), splcommon.PhaseReady)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseReady)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits after updating the CR
-			testenv.VerifyCPULimits(deployment, testenvInstance.GetName(), standalonePodName, newCPULimits)
+			testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), standalonePodName, newCPULimits)
 		})
 	})
 })

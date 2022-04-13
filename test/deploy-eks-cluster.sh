@@ -11,11 +11,18 @@ if [[ -z "${EKS_VPC_PRIVATE_SUBNET_STRING}" ]]; then
 fi
 
 if [[ -z "${ECR_REPOSITORY}" ]]; then
-  echo "ECR_REPOSITORY not set. Chaning to env.sh value"
+  echo "ECR_REPOSITORY not set. Changing to env.sh value"
   export ECR_REPOSITORY="${PRIVATE_REGISTRY}"
 fi
 
 function deleteCluster() {
+  NODE_GROUP=$(eksctl get nodegroup --cluster=${TEST_CLUSTER_NAME} | sed -n 4p | awk '{ print $2 }')
+  if [[  ! -z "${NODE_GROUP}" ]]; then
+    eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
+    if [ $? -ne 0 ]; then
+      echo "Unable to delete Nodegroup ${NODE_GROUP}. For Cluster - ${TEST_CLUSTER_NAME}"
+    fi
+  fi
   eksctl delete cluster --name=${TEST_CLUSTER_NAME}
   if [ $? -ne 0 ]; then
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
@@ -35,7 +42,7 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
-    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING}
+    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1

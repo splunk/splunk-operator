@@ -27,6 +27,11 @@ jobs:
   automated-release:
     name: Automated Pre Release
     runs-on: ubuntu-latest
+    if:
+      contains('
+        refs/heads/develop
+        refs/heads/sdk-release-changes
+        ', github.ref)
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -45,7 +50,7 @@ jobs:
         echo $SHORT_SHA
     - name: Dotenv Action
       id: dotenv
-      uses: falti/dotenv-action@v0.2.7
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
 
     - name: Install yq
       run: |
@@ -78,81 +83,79 @@ jobs:
 
     - name: Install Operator SDK
       run: |
-        sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-        sudo chmod +x /usr/local/bin/operator-sdk
-
-    - name: Update Operator Version in version.go
-      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@master
-      with:
-        find: "${{ github.event.inputs.old_operator_version }}"
-        replace: "${{ github.event.inputs.new_operator_version }}"
-        include: "version.go"
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
         replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
-        include: ".*.md"
+        include: "**.md"
 
     - name: Update Splunk Operator Install URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator"
         replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator"
         exclude: "ChangeLog.md"
-        include: ".*.md"
+        include: "**.md"
 
     - name: Update Splunk Operator VERSION in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_operator_version }} or later"
         replace: "${{ github.event.inputs.new_operator_version }} or later"
         exclude: "ChangeLog.md"
-        include: ".*.md"
+        include: "**.md"
 
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
-        include: "operator.yaml"
+        include: "**operator.yaml"
 
     - name: Update Splunk Enterprise image in DOCS
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }} or later"
         replace: "${{ github.event.inputs.new_enterprise_version }} or later"
         exclude: "ChangeLog.md"
+        include: "**.md"
 
     - name: Run Make Package
       run: |
-        make package
+        make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
+        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
   
     - name: Tag and Push release RC Image
       run: |
-        docker images
-        docker tag splunk/splunk-operator:latest splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        docker push splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        docker images
+        make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC 
+
+    - name: Revert Manifest file release version 
+      run: |
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
 
     - name: Update Operator Image name in Release Folder
-      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@master
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
         find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
         replace: "splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}"
-        include: "release-${{ env.SHORT_SHA }}/"
+        include: "release-${{ env.SHORT_SHA }}/**"
 
     - name: Upload Release Artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
       with:
         name: "release-artifacts-${{ github.event.inputs.release_version }}"
         path: "release-**"
@@ -170,5 +173,6 @@ jobs:
         title: "Splunk Operator ${{ github.event.inputs.release_version }} release"
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
-          Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
-          Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
+          ### Automated Pull Request for Splunk Operator Release ${{ github.event.inputs.release_version }}
+          * Changes added to docs/ChangeLog-NEW.md. Please filter and update ChangeLog.md
+          * Delete ChangeLog-New.md

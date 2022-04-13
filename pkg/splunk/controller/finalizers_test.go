@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +16,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 )
 
 func TestCheckForDeletion(t *testing.T) {
+	ctx := context.TODO()
 	cr := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ConfigMap",
@@ -43,14 +46,14 @@ func TestCheckForDeletion(t *testing.T) {
 	c.AddObject(&cr)
 
 	gotCallback := false
-	SplunkFinalizerRegistry[dummyFinalizer] = func(cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+	SplunkFinalizerRegistry[dummyFinalizer] = func(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
 		gotCallback = true
 		return nil
 	}
 
 	mockCalls := make(map[string][]spltest.MockFuncCall)
 	mockCalls["Update"] = []spltest.MockFuncCall{{MetaName: "*v1.ConfigMap-test-defaults"}}
-	_, err := CheckForDeletion(&cr, c)
+	_, err := CheckForDeletion(ctx, &cr, c)
 	if err != nil {
 		t.Errorf("TestCheckForDeletion() returned %v; want nil", err)
 	}

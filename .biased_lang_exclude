@@ -1,0 +1,26 @@
+pkg/splunk/common/urls.go
+pkg/splunk/common/urls_testingcode.go
+pkg/splunk/common/paths.go
+deploy/olm-catalog/
+go.sum
+.github/
+.circleci/
+#this is only for testing, this need to be reviewed
+main.go
+PROJECT
+controllers
+tools
+images
+apibundle
+config
+bundle
+api
+#Below should be reviewed once CRDs have no bias lang
+pkg/
+deploy/
+test/
+docs/
+README.md
+build/make_bundle.sh
+helm-chart/
+kuttl/

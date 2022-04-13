@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,13 +16,16 @@
 package enterprise
 
 import (
+	"fmt"
 	"os"
 	"testing"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
-	got := GetSplunkDeploymentName(SplunkClusterMaster, "t1")
-	want := "splunk-t1-cluster-master"
+	got := GetSplunkDeploymentName(SplunkClusterManager, "t1")
+	want := fmt.Sprintf(splcommon.TestClusterManager, "t1")
 	if got != want {
 		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkIndexer.ToString(), "t1", got, want)
 	}
@@ -54,10 +58,10 @@ func TestGetSplunkServiceName(t *testing.T) {
 
 	test("splunk-t1-deployer-headless", SplunkDeployer, "t1", true)
 	test("splunk-t2-search-head-service", SplunkSearchHead, "t2", false)
-	test("splunk-t3-license-master-service", SplunkLicenseMaster, "t3", false)
+	test(splcommon.TestT3LicenseManagerService, SplunkLicenseManager, "t3", false)
 
 	LicenseMasterRefName := "stack1"
-	test("splunk-stack1-license-master-service", SplunkLicenseMaster, LicenseMasterRefName, false)
+	test(splcommon.TestStack1LicenseManagerService, SplunkLicenseManager, LicenseMasterRefName, false)
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {

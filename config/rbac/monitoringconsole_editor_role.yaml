@@ -1,0 +1,24 @@
+# permissions for end users to edit monitoringconsoles.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoringconsole-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - monitoringconsoles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - monitoringconsoles/status
+  verbs:
+  - get
