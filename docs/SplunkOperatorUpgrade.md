@@ -35,7 +35,7 @@ wget -O upgrade-to-1.1.0.sh https://github.com/splunk/splunk-operator/releases/d
 4. Upgrade the Splunk Operator.
 # Splunk Operator Upgrade
 
-Upgrading the Splunk operator to Version 1.1.0 is a new installation rather than an upgrade from the current operator. The older Splunk operator must be cleaned up before installing the new version. Script `tools/upgrade-to-1.1.0.sh` helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the 1.1.0 manifest file. The script performs the following steps
+Upgrading the Splunk operator to Version 1.1.0 is a new installation rather than an upgrade from the current operator. The older Splunk operator must be cleaned up before installing the new version. Script `upgrade-to-1.1.0.sh` helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the 1.1.0 manifest file. The script performs the following steps
 
 * Backup of all the operator resources within the namespace like
 ** service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
