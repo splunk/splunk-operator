@@ -147,13 +147,6 @@ jobs:
       run: |
         make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
 
-    - name: Update Operator Image name in Release Folder
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
-      with:
-        find: "splunk/splunk-operator:${{ env.SHORT_SHA }}"
-        replace: "splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}"
-        include: "release-${{ env.SHORT_SHA }}/**"
-
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
       with:
