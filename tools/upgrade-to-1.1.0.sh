@@ -32,7 +32,7 @@
 # manifest_file: path where 1.1.0 Splunk operator manifest file exist
 #
 # example 
-# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=release-v1.1.0/splunk-operator-install.yaml
+# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=splunk-operator-install.yaml
 #
 # Note: This script can be run from Mac or Linux system. To run this script on Windows, use cygwin.
 #
