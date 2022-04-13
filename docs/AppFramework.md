@@ -223,7 +223,7 @@ By default, the App Framework polls the remote object storage location for new o
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
 ## Description of App Framework Specification fields
-The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseMaster. Configuring the App framework requires:
+The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
 
 * Remote Source of Apps: Define the remote storage location, including unique folders, and the path to each folder.
 * Destination of Apps: Define which Custom Resources need to be configured.

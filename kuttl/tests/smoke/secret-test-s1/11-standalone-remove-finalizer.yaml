@@ -18,7 +18,7 @@ spec:
     storageClassName: ""
   image: ""
   imagePullPolicy: IfNotPresent
-  licenseMasterRef:
+  licenseManagerRef:
     name: lc-test
   licenseUrl: ""
   livenessInitialDelaySeconds: 0

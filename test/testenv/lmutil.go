@@ -57,5 +57,5 @@ func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, 
 	}
 	licenseManager := restResponse.Entry[0].Content.MasterURI
 	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
-	return strings.Contains(licenseManager, splcommon.TestLicenseManagerMgmtPort)
+	return strings.Contains(licenseManager, "splunk-t3-license-manager-service-service:8089")
 }

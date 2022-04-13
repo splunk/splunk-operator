@@ -34,19 +34,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// MonitoringConsoleReconciler reconciles a MonitoringConsole object
-type MonitoringConsoleReconciler struct {
+// LicenseManagerReconciler reconciles a LicenseManager object
+type LicenseManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemanagers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -63,22 +62,23 @@ type MonitoringConsoleReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the MonitoringConsole object against the actual cluster state, and then
+// the LicenseManager object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "MonitoringConsole")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
+	reconcileCounters.With(getPrometheusLabels(req, "LicenseManager")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseManager")
+
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("monitoringconsole", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("licensemanager", req.NamespacedName)
 	reqLogger.Info("start")
 
-	// Fetch the MonitoringConsole
-	instance := &enterprisev3.MonitoringConsole{}
+	// Fetch the LicenseManager
+	instance := &enterprisev3.LicenseManager{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -89,29 +89,24 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.MonitoringConsolePausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.LicenseManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyMonitoringConsole(ctx, r.Client, instance)
-}
-
-// ApplyMonitoringConsole adding to handle unit test case
-var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
-	return enterprise.ApplyMonitoringConsole(ctx, client, instance)
+	return enterprise.ApplyLicenseManager(ctx, r.Client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.MonitoringConsole{}).
+		For(&enterprisev3.LicenseManager{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -125,35 +120,23 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterprisev3.LicenseManager{},
 			}).
-		Watches(&source.Kind{Type: &enterprisev3.Standalone{}},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.LicenseMaster{}},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.LicenseManager{}},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.IndexerCluster{}},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.SearchHeadCluster{}},
-			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
-			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

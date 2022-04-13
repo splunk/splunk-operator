@@ -8,7 +8,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [Metadata Parameters](#metadata-parameters)
   - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
   - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
-  - [LicenseMaster Resource Spec Parameters](#licensemaster-resource-spec-parameters)
+  - [LicenseManager Resource Spec Parameters](#LicenseManager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterMaster Resource Spec Parameters](#clustermaster-resource-spec-parameters)
@@ -108,7 +108,7 @@ spec:
     - name: licenses
       configMap:
         name: splunk-licenses
-  licenseMasterRef:
+  licenseManagerRef:
     name: example
   clusterMasterRef:
     name: example
@@ -116,7 +116,7 @@ spec:
 ```
 
 The following additional configuration parameters may be used for all Splunk
-Enterprise resources, including: `Standalone`, `LicenseMaster`,
+Enterprise resources, including: `Standalone`, `LicenseManager`,
 `SearchHeadCluster`, `ClusterMaster` and `IndexerCluster`:
 
 | Key                | Type    | Description                                                                   |
@@ -127,16 +127,16 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
 | defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
 | licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
-| licenseMasterRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseMaster` instance (via `name` and optionally `namespace`) to use for licensing |
+| licenseManagerRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseManager` instance (via `name` and optionally `namespace`) to use for licensing |
 | clusterMasterRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterMaster` instance (via `name` and optionally `namespace`) to use for indexing |
 | monitoringConsoleRef  | string     | Logical name assigned to the Monitoring Console pod. You can set the name before or after the MC pod creation.|
 | serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
 
-## LicenseMaster Resource Spec Parameters
+## LicenseManager Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   name: example
 spec:
@@ -149,7 +149,7 @@ spec:
 
 Please see [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources).
-The `LicenseMaster` resource does not provide any additional configuration parameters.
+The `LicenseManager` resource does not provide any additional configuration parameters.
 
 
 ## Standalone Resource Spec Parameters

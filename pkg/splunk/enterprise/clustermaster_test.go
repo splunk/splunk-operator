@@ -147,11 +147,11 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test(splcommon.TestGetCMStatefulSet)
 
-	cr.Spec.LicenseMasterRef.Name = "stack1"
-	cr.Spec.LicenseMasterRef.Namespace = "test"
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	cr.Spec.LicenseManagerRef.Namespace = "test"
 	test(splcommon.TestGetCMStatefulSetLicense)
 
-	cr.Spec.LicenseMasterRef.Name = ""
+	cr.Spec.LicenseManagerRef.Name = ""
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
 	test(splcommon.TestGetCMStatefulSetURL)
 

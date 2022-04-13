@@ -6,44 +6,32 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: searchheadclusters.enterprise.splunk.com
+  name: licensemanagers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: SearchHeadCluster
-    listKind: SearchHeadClusterList
-    plural: searchheadclusters
+    kind: LicenseManager
+    listKind: LicenseManagerList
+    plural: licensemanagers
     shortNames:
-    - shc
-    singular: searchheadcluster
+    - lm
+    singular: licensemanager
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of search head cluster
+    - description: Status of license manager
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Status of the deployer
-      jsonPath: .status.deployerPhase
-      name: Deployer
-      type: string
-    - description: Desired number of search head cluster members
-      jsonPath: .status.replicas
-      name: Desired
-      type: integer
-    - description: Current number of ready search head cluster members
-      jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
-    - description: Age of search head cluster
+    - description: Age of license manager
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v3
     schema:
       openAPIV3Schema:
-        description: SearchHeadCluster is the Schema for a Splunk Enterprise search
-          head cluster
+        description: LicenseManager is the Schema for a Splunk Enterprise license
+          manager.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -58,8 +46,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: SearchHeadClusterSpec defines the desired state of a Splunk
-              Enterprise search head cluster
+            description: LicenseManagerSpec defines the desired state of a Splunk
+              Enterprise license manager.
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -891,18 +879,9 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk Enterprise App repository. Specifies remote App
+                description: Splunk enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
-                  appInstallPeriodSeconds:
-                    default: 90
-                    description: 'App installation period within a reconcile. Apps
-                      will be installed during this period before the next reconcile
-                      is attempted. Note: Do not change this setting unless instructed
-                      to do so by Splunk Support'
-                    format: int64
-                    minimum: 30
-                    type: integer
                   appSources:
                     description: List of App sources on remote storage
                     items:
@@ -931,10 +910,10 @@ spec:
                       App changes. The default value for this config is 1 hour(3600
                       sec), minimum value is 1 minute(60sec) and maximum value is
                       1 day(86400 sec). We assign the value based on following conditions
-                      -    1. If no value or 0 is specified then it means periodic
-                      polling is disabled.    2. If anything less than min is specified
-                      then we set it to 1 min.    3. If anything more than the max
-                      value is specified then we set it to 1 day.
+                      -    1. If no value or 0 is specified then it will be defaulted
+                      to 1 hour.    2. If anything less than min is specified then
+                      we set it to 1 min.    3. If anything more than the max value
+                      is specified then we set it to 1 day.
                     format: int64
                     type: integer
                   defaults:
@@ -950,17 +929,6 @@ spec:
                         description: Remote Storage Volume name
                         type: string
                     type: object
-                  installMaxRetries:
-                    default: 2
-                    description: Maximum number of retries to install Apps
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  maxConcurrentAppDownloads:
-                    description: Maximum number of apps that can be downloaded at
-                      same time
-                    format: int64
-                    type: integer
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -978,10 +946,6 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
-                          type: string
-                        region:
-                          description: Region of the remote storage volume where apps
-                            reside
                           type: string
                         secretRef:
                           description: Secret object name
@@ -1048,7 +1012,6 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
-                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -1261,7 +1224,6 @@ spec:
                   for the Liveness probe Note: If needed, Operator overrides with
                   a higher value'
                 format: int32
-                minimum: 0
                 type: integer
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
@@ -1305,12 +1267,6 @@ spec:
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
                   for Readiness probe Note: If needed, Operator overrides with a higher
                   value'
-                format: int32
-                minimum: 0
-                type: integer
-              replicas:
-                description: Number of search head pods; a search head cluster will
-                  be created if > 1
                 format: int32
                 type: integer
               resources:
@@ -1423,11 +1379,14 @@ spec:
                           a Service to type ExternalName.  If this field is not specified,
                           it will be initialized from the clusterIP field.  If this
                           field is specified, clients must ensure that clusterIPs[0]
-                          and clusterIP have the same value. \n This field may hold
-                          a maximum of two entries (dual-stack IPs, in either order).
-                          These IPs must correspond to the values of the ipFamilies
-                          field. Both clusterIPs and ipFamilies are governed by the
-                          ipFamilyPolicy field. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies"
+                          and clusterIP have the same value. \n Unless the \"IPv6DualStack\"
+                          feature gate is enabled, this field is limited to one value,
+                          which must be the same as the clusterIP field.  If the feature
+                          gate is enabled, this field may hold a maximum of two entries
+                          (dual-stack IPs, in either order).  These IPs must correspond
+                          to the values of the ipFamilies field. Both clusterIPs and
+                          ipFamilies are governed by the ipFamilyPolicy field. More
+                          info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies"
                         items:
                           type: string
                         type: array
@@ -1482,17 +1441,18 @@ spec:
                         type: string
                       ipFamilies:
                         description: "IPFamilies is a list of IP families (e.g. IPv4,
-                          IPv6) assigned to this service. This field is usually assigned
-                          automatically based on cluster configuration and the ipFamilyPolicy
-                          field. If this field is specified manually, the requested
-                          family is available in the cluster, and ipFamilyPolicy allows
-                          it, it will be used; otherwise creation of the service will
-                          fail. This field is conditionally mutable: it allows for
+                          IPv6) assigned to this service, and is gated by the \"IPv6DualStack\"
+                          feature gate.  This field is usually assigned automatically
+                          based on cluster configuration and the ipFamilyPolicy field.
+                          If this field is specified manually, the requested family
+                          is available in the cluster, and ipFamilyPolicy allows it,
+                          it will be used; otherwise creation of the service will
+                          fail.  This field is conditionally mutable: it allows for
                           adding or removing a secondary IP family, but it does not
-                          allow changing the primary IP family of the Service. Valid
+                          allow changing the primary IP family of the Service.  Valid
                           values are \"IPv4\" and \"IPv6\".  This field only applies
                           to Services of types ClusterIP, NodePort, and LoadBalancer,
-                          and does apply to \"headless\" services. This field will
+                          and does apply to \"headless\" services.  This field will
                           be wiped when updating a Service to type ExternalName. \n
                           This field may hold a maximum of two entries (dual-stack
                           families, in either order).  These families must correspond
@@ -1508,14 +1468,15 @@ spec:
                         x-kubernetes-list-type: atomic
                       ipFamilyPolicy:
                         description: IPFamilyPolicy represents the dual-stack-ness
-                          requested or required by this Service. If there is no value
-                          provided, then this field will be set to SingleStack. Services
-                          can be "SingleStack" (a single IP family), "PreferDualStack"
+                          requested or required by this Service, and is gated by the
+                          "IPv6DualStack" feature gate.  If there is no value provided,
+                          then this field will be set to SingleStack. Services can
+                          be "SingleStack" (a single IP family), "PreferDualStack"
                           (two IP families on dual-stack configured clusters or a
                           single IP family on single-stack clusters), or "RequireDualStack"
                           (two IP families on dual-stack configured clusters, otherwise
                           fail). The ipFamilies and clusterIPs fields depend on the
-                          value of this field. This field will be wiped when updating
+                          value of this field.  This field will be wiped when updating
                           a service to type ExternalName.
                         type: string
                       loadBalancerClass:
@@ -1878,7 +1839,6 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
-                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -2289,7 +2249,9 @@ spec:
                         volumes if the CSI driver is meant to be used that way - see
                         the documentation of the driver for more information. \n A
                         pod can use both types of ephemeral volumes and persistent
-                        volumes at the same time."
+                        volumes at the same time. \n This is a beta feature and only
+                        available when the GenericEphemeralVolume feature gate is
+                        enabled."
                       properties:
                         volumeClaimTemplate:
                           description: "Will be used to create a stand-alone PVC to
@@ -2406,11 +2368,7 @@ spec:
                                   type: object
                                 resources:
                                   description: 'Resources represents the minimum resources
-                                    the volume should have. If RecoverVolumeExpansionFailure
-                                    feature is enabled users are allowed to specify
-                                    resource requirements that are lower than previous
-                                    value but must still be higher than capacity recorded
-                                    in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources'
+                                    the volume should have. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources'
                                   properties:
                                     limits:
                                       additionalProperties:
@@ -3367,20 +3325,9 @@ spec:
                 type: array
             type: object
           status:
-            description: SearchHeadClusterStatus defines the observed state of a Splunk
-              Enterprise search head cluster
+            description: LicenseManagerStatus defines the observed state of a Splunk
+              Enterprise license manager.
             properties:
-              adminPasswordChangedSecrets:
-                additionalProperties:
-                  type: boolean
-                description: Holds secrets whose admin password has changed
-                type: object
-              adminSecretChangedFlag:
-                description: Indicates when the admin password has been changed for
-                  a peer
-                items:
-                  type: boolean
-                type: array
               appContext:
                 description: App Framework Context
                 properties:
@@ -3388,15 +3335,6 @@ spec:
                     description: List of App package (*.spl, *.tgz) locations on remote
                       volume
                     properties:
-                      appInstallPeriodSeconds:
-                        default: 90
-                        description: 'App installation period within a reconcile.
-                          Apps will be installed during this period before the next
-                          reconcile is attempted. Note: Do not change this setting
-                          unless instructed to do so by Splunk Support'
-                        format: int64
-                        minimum: 30
-                        type: integer
                       appSources:
                         description: List of App sources on remote storage
                         items:
@@ -3427,10 +3365,10 @@ spec:
                           hour(3600 sec), minimum value is 1 minute(60sec) and maximum
                           value is 1 day(86400 sec). We assign the value based on
                           following conditions -    1. If no value or 0 is specified
-                          then it means periodic polling is disabled.    2. If anything
-                          less than min is specified then we set it to 1 min.    3.
-                          If anything more than the max value is specified then we
-                          set it to 1 day.
+                          then it will be defaulted to 1 hour.    2. If anything less
+                          than min is specified then we set it to 1 min.    3. If
+                          anything more than the max value is specified then we set
+                          it to 1 day.
                         format: int64
                         type: integer
                       defaults:
@@ -3446,17 +3384,6 @@ spec:
                             description: Remote Storage Volume name
                             type: string
                         type: object
-                      installMaxRetries:
-                        default: 2
-                        description: Maximum number of retries to install Apps
-                        format: int32
-                        minimum: 0
-                        type: integer
-                      maxConcurrentAppDownloads:
-                        description: Maximum number of apps that can be downloaded
-                          at same time
-                        format: int64
-                        type: integer
                       volumes:
                         description: List of remote storage volumes
                         items:
@@ -3474,10 +3401,6 @@ spec:
                             provider:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio'
-                              type: string
-                            region:
-                              description: Region of the remote storage volume where
-                                apps reside
                               type: string
                             secretRef:
                               description: Secret object name
@@ -3504,54 +3427,14 @@ spec:
                                 type: integer
                               appName:
                                 type: string
-                              auxPhaseInfo:
-                                description: Used to track the copy and install status
-                                  for each replica member. Each Pod's phase info is
-                                  mapped to its ordinal value. Ignored, once the DeployStatus
-                                  is marked as Complete
-                                items:
-                                  description: PhaseInfo defines the status to track
-                                    the App framework installation phase
-                                  properties:
-                                    failCount:
-                                      description: represents number of failures
-                                      format: int32
-                                      type: integer
-                                    phase:
-                                      description: Phase type
-                                      type: string
-                                    status:
-                                      description: Status of the phase
-                                      format: int32
-                                      type: integer
-                                  type: object
-                                type: array
                               deployStatus:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
-                              isUpdate:
-                                type: boolean
                               lastModifiedTime:
                                 type: string
                               objectHash:
                                 type: string
-                              phaseInfo:
-                                description: App phase info to track download, copy
-                                  and install
-                                properties:
-                                  failCount:
-                                    description: represents number of failures
-                                    format: int32
-                                    type: integer
-                                  phase:
-                                    description: Phase type
-                                    type: string
-                                  status:
-                                    description: Status of the phase
-                                    format: int32
-                                    type: integer
-                                type: object
                               repoState:
                                 description: AppRepoState represent the App state
                                   on remote store
@@ -3568,24 +3451,6 @@ spec:
                       are different.
                     format: int64
                     type: integer
-                  appsStatusMaxConcurrentAppDownloads:
-                    description: Represents the Status field for maximum number of
-                      apps that can be downloaded at same time
-                    format: int64
-                    type: integer
-                  bundlePushStatus:
-                    description: Internal to the App framework. Used in case of CM(IDXC)
-                      and deployer(SHC)
-                    properties:
-                      bundlePushStage:
-                        description: Represents the current stage. Internal to the
-                          App framework
-                        type: integer
-                      retryCount:
-                        description: defines the number of retries completed so far
-                        format: int32
-                        type: integer
-                    type: object
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment
                       is in progress
@@ -3599,67 +3464,8 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              captain:
-                description: name or label of the search head captain
-                type: string
-              captainReady:
-                description: true if the search head cluster's captain is ready to
-                  service requests
-                type: boolean
-              deployerPhase:
-                description: current phase of the deployer
-                enum:
-                - Pending
-                - Ready
-                - Updating
-                - ScalingUp
-                - ScalingDown
-                - Terminating
-                - Error
-                type: string
-              initialized:
-                description: true if the search head cluster has finished initialization
-                type: boolean
-              maintenanceMode:
-                description: true if the search head cluster is in maintenance mode
-                type: boolean
-              members:
-                description: status of each search head cluster member
-                items:
-                  description: SearchHeadClusterMemberStatus is used to track the
-                    status of each search head cluster member
-                  properties:
-                    active_historical_search_count:
-                      description: Number of currently running historical searches.
-                      type: integer
-                    active_realtime_search_count:
-                      description: Number of currently running realtime searches.
-                      type: integer
-                    adhoc_searchhead:
-                      description: Flag that indicates if this member can run scheduled
-                        searches.
-                      type: boolean
-                    is_registered:
-                      description: Indicates if this member is registered with the
-                        searchhead cluster captain.
-                      type: boolean
-                    name:
-                      description: Name of the search head cluster member
-                      type: string
-                    status:
-                      description: Indicates the status of the member.
-                      type: string
-                  type: object
-                type: array
-              minPeersJoined:
-                description: true if the minimum number of search head cluster members
-                  have joined
-                type: boolean
-              namespace_scoped_secret_resource_version:
-                description: Indicates resource version of namespace scoped secret
-                type: string
               phase:
-                description: current phase of the search head cluster
+                description: current phase of the license manager
                 enum:
                 - Pending
                 - Ready
@@ -3669,32 +3475,11 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              readyReplicas:
-                description: current number of ready search head cluster members
-                format: int32
-                type: integer
-              replicas:
-                description: desired number of search head cluster members
-                format: int32
-                type: integer
-              selector:
-                description: selector for pods, used by HorizontalPodAutoscaler
-                type: string
-              shcSecretChangedFlag:
-                description: Indicates when the shc_secret has been changed for a
-                  peer
-                items:
-                  type: boolean
-                type: array
             type: object
         type: object
     served: true
     storage: true
     subresources:
-      scale:
-        labelSelectorPath: .status.selector
-        specReplicasPath: .spec.replicas
-        statusReplicasPath: .status.replicas
       status: {}
 status:
   acceptedNames:

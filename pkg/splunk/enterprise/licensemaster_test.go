@@ -60,9 +60,9 @@ func TestApplyLicenseManager(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls = append(updateFuncCalls[:2], updateFuncCalls[3:]...)
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
-	current := enterpriseApi.LicenseMaster{
+	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseMaster",
+			Kind: "LicenseManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -72,7 +72,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -82,7 +82,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -90,7 +90,7 @@ func TestApplyLicenseManager(t *testing.T) {
 
 func TestGetLicenseManagerStatefulSet(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -147,15 +147,15 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseMaster",
+			Kind: "LicenseManager",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
@@ -215,12 +215,12 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
@@ -389,15 +389,15 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
-func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+func TestLicenseManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{
+	lm := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",

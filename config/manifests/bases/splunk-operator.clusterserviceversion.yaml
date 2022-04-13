@@ -22,7 +22,12 @@ spec:
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v3
-    - description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
+    - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
+      displayName: License Manager
+      kind: LicenseManager
+      name: licensemanagers.enterprise.splunk.com
+      version: v3
+    - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
       displayName: License Master
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com

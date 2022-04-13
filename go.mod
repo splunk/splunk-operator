@@ -6,9 +6,13 @@ require (
 	github.com/aws/aws-sdk-go v1.42.16
 	github.com/go-logr/logr v1.2.0
 	github.com/google/go-cmp v0.5.6
+	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mikefarah/yq/v3 v3.0.0-20201202084205-8846255d1c37 // indirect
 	github.com/minio/minio-go/v7 v7.0.16
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
+	github.com/peterh/liner v1.2.2 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/stretchr/testify v1.7.0

@@ -18,7 +18,7 @@ This document includes various examples for configuring Splunk Enterprise deploy
   - [Using Default Settings](#using-default-settings)
   - [Installing Splunk Apps](#installing-splunk-apps)
   - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
-  - [Creating a LicenseMaster Using a ConfigMap](#creating-a-licensemaster-using-a-configmap)
+  - [Creating a LicenseManager Using a ConfigMap](#creating-a-LicenseManager-using-a-configmap)
   - [Configuring Standalone to use License Manager](#configuring-standalone-to-use-license-manager)
   - [Configuring Indexer Clusters to use License Manager](#configuring-indexer-clusters-to-use-license-manager)
   - [Using an External License Manager](#using-an-external-license-manager)
@@ -163,7 +163,7 @@ For efficiency, note that you can use the following short names with `kubectl`:
 * `clustermaster`: `cm-idxc`
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
-* `licensemaster`: `lm`
+* `LicenseManager`: `lm`
 * `monitoringconsole`: `mc`
 
 All CR's that support a `replicas` field can be scaled using the `kubectl scale` command. For example:
@@ -623,9 +623,9 @@ that can be automatically deployed to your Splunk Enterprise clusters by
 following instructions from the [previous example](#installing-splunk-apps).
 
 
-## Creating a LicenseMaster Using a ConfigMap
+## Creating a LicenseManager Using a ConfigMap
 
-We recommend that you create a `LicenseMaster` instance to share a license
+We recommend that you create a `LicenseManager` instance to share a license
 with all the components in your Splunk Enterprise deployment.
 
 First, you can create a ConfigMap named `splunk-licenses` that includes
@@ -636,12 +636,12 @@ kubectl create configmap splunk-licenses --from-file=enterprise.lic
 ```
 Your ConfigMap can contain multiple licenses ```--from-file=enterprise1.lic,enterprise2.lic```
 
-You can create a `LicenseMaster` that references this license by
+You can create a `LicenseManager` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   name: example
   finalizers:
@@ -654,7 +654,7 @@ spec:
   licenseUrl: /mnt/licenses/enterprise.lic
 ```
 
-`volumes` will mount the ConfigMap in your `LicenseMaster` pod under the
+`volumes` will mount the ConfigMap in your `LicenseManager` pod under the
 `/mnt/licenses` directory, and `licenseUrl` will configure Splunk to use
 the `enterprise.lic` file within it.
 
@@ -669,8 +669,8 @@ be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/con
 
 ## Configuring Standalone to use License Manager
 
-Once a LicenseMaster is created, you can configure your `Standalone` to use
-the `LicenseMaster` by adding `licenseMasterRef` to its spec as follows:
+Once a LicenseManager is created, you can configure your `Standalone` to use
+the `LicenseManager` by adding `licenseManagerRef` to its spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
@@ -680,13 +680,13 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  licenseMasterRef:
+  licenseManagerRef:
     name: example
 ```
 
 ## Configuring Indexer Clusters to use License Manager
 
-While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseMaster`, you need to add `licenseMasterRef` only to the `ClusterMaster` spec as follows:
+While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseManager`, you need to add `licenseManagerRef` only to the `ClusterMaster` spec as follows:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -697,7 +697,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  licenseMasterRef:
+  licenseManagerRef:
     name: example
 ---
 apiVersion: enterprise.splunk.com/v3
@@ -712,11 +712,11 @@ spec:
 EOF
 ```
 
-In order to forward `LicenseMaster` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseMaster` spec as follows:
+In order to forward `LicenseManager` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseManager` spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   name: example
   finalizers:
@@ -770,18 +770,18 @@ There are two ways to configure `pass4Symmkey` with an External LM:
 
 ### Configuring license_master_url:
 
-Assuming that the hostname for your LM is `license-master.splunk.mydomain.com`,
+Assuming that the hostname for your LM is `license-manager.splunk.mydomain.com`,
 you should create a `default.yml` file with the following contents:
 
 ```yaml
 splunk:
-  license_master_url: license-master.splunk.mydomain.com
+  license_master_url: license-manager.splunk.mydomain.com
 ```
 
-Next, save this file as a secret. In this example we are calling it `splunk-license-master`:
+Next, save this file as a secret. In this example we are calling it `splunk-license-manager`:
 
 ```
-kubectl create secret generic splunk-license-master --from-file=default.yml
+kubectl create secret generic splunk-license-manager --from-file=default.yml
 ```
 
 You can then use the `defaultsUrl` parameter and a reference to the secret object created above to configure any Splunk
@@ -796,10 +796,10 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
-    - name: license-master
+    - name: license-manager
       secret:
-        secretName: splunk-license-master
-  defaultsUrl: /mnt/license-master/default.yml
+        secretName: splunk-license-manager
+  defaultsUrl: /mnt/license-manager/default.yml
 ```
 
 ## Using an External Indexer Cluster
@@ -807,7 +807,7 @@ spec:
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external cluster of
-indexers with its `Standalone`, `SearchHeadCluster` and `LicenseMaster`
+indexers with its `Standalone`, `SearchHeadCluster` and `LicenseManager`
 resources. To do this, you will share the same `IDXC pass4Symmkey` between the global secret object setup by the
 operator & the external indexer cluster, and configure the `splunk.cluster_master_url`.
 

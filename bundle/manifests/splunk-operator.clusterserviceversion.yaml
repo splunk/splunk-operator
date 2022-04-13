@@ -22,6 +22,14 @@ metadata:
         },
         {
           "apiVersion": "enterprise.splunk.com/v3",
+          "kind": "LicenseManager",
+          "metadata": {
+            "name": "licensemanager-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v3",
           "kind": "LicenseMaster",
           "metadata": {
             "name": "licensemaster-sample"
@@ -78,6 +86,11 @@ spec:
       displayName: License Master
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
+      version: v3
+    - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
+      displayName: License Manager
+      kind: LicenseManager
+      name: licensemanagers.enterprise.splunk.com
       version: v3
     - description: MonitoringConsole is the Schema for the monitoringconsole API
       displayName: Monitoring Console

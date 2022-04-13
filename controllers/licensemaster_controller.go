@@ -38,8 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// LicenseMasterReconciler reconciles a LicenseMaster object
-type LicenseMasterReconciler struct {
+// ObsoleteLicenseManagerReconciler reconciles a LicenseMaster object
+type ObsoleteLicenseManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -69,7 +69,7 @@ type LicenseMasterReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
@@ -96,21 +96,21 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.LicenseManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.LicenseMasterPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyLicenseManager(ctx, r.Client, instance)
+	return ApplyObsoleteLicenseManager(ctx, r.Client, instance)
 }
 
 // ApplyLicenseManager adding to handle unit test case
-var ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+var ApplyObsoleteLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 	return enterprise.ApplyLicenseManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ObsoleteLicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(

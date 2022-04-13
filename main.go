@@ -112,11 +112,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		os.Exit(1)
 	}
-	if err = (&controllers.LicenseMasterReconciler{
+	if err = (&controllers.ObsoleteLicenseManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "ObsoleteLicenseManager")
+		os.Exit(1)
+	}
+	if err = (&controllers.LicenseManagerReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		os.Exit(1)
 	}
 	if err = (&controllers.MonitoringConsoleReconciler{
