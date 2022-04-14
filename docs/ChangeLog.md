@@ -237,7 +237,7 @@
   9997 to indexer pod specs, added splunk-indexer-service, doc updates
 
 * Fixed bugs and updated docs, YAML deployment files, roles and bindings
-  to better accomodate using a single instance of the Splunk operator to
+  to better accomodate using a single instance of the Splunk Operator to
   manage SplunkEnterprise stacks across an entire cluster (cluster scope).
 
 * Fixed deadlock condition between deployer and search heads when
