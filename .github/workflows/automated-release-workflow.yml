@@ -8,9 +8,12 @@ on:
       operator_image_tag:
         description: 'Tag for Splunk Operator Image'
         required: true
+      enterprise_version:
+        description: 'Enterprise Image Version. Should match with Tag on Splunk Enterprise Docker Repo'
+        required: true
 jobs:
   automated-release:
-    name: Automated Pre Release
+    name: Automated Release Workflow
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     steps:
@@ -76,7 +79,7 @@ jobs:
     - name: Run Make Package
       run: |
         make docker-build IMG=splunk/splunk-operator:latest
-        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}" VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk/${{ github.event.inputs.new_enterprise_version }}
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk/${{ github.event.inputs.enterprise_version }}
   
     - name: Update Operator Image name in Release Folder
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
@@ -100,7 +103,7 @@ jobs:
     - name: Create Release
       uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
       with:
-        artifacts: "release-${{ env.SHORT_SHA }}/splunk-operator-install.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-cluster.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-noadmin.yaml,release-${{ env.SHORT_SHA }}/splunk-operator-crds.yaml"
+        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-install.yaml"
         bodyFile: "docs/ReleaseNotes.md"
         tag: "${{ github.event.inputs.release_version }}"
         draft: true
