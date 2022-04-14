@@ -5,6 +5,7 @@ on:
       - develop
       - master
       - sdk-upgrade-feature-appframework
+      - CSPL-1589
 jobs:
   int-tests:
     strategy:
