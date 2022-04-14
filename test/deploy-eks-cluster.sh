@@ -16,6 +16,8 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
 fi
 
 function deleteCluster() {
+  echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
+  tools/cleanup.sh
   NODE_GROUP=$(eksctl get nodegroup --cluster=${TEST_CLUSTER_NAME} | sed -n 4p | awk '{ print $2 }')
   if [[  ! -z "${NODE_GROUP}" ]]; then
     eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
