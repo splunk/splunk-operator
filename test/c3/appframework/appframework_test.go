@@ -2524,8 +2524,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
+			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
