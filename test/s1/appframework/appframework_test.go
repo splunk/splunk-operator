@@ -1158,8 +1158,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
+			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -1227,8 +1226,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
+			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)

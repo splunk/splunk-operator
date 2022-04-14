@@ -1000,7 +1000,7 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 }
 
 // VerifyNoPodReset verify that no pod reset during App install using phase3 framework
-func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
+func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
 	// Get current Age on all splunk pods and compare with previous
 	currentSplunkPodAge := GetPodsStartTime(ns)
 	for podName, currentpodAge := range currentSplunkPodAge {
@@ -1016,7 +1016,7 @@ func VerifyNoPodReset(deployment *Deployment, testenvInstance *TestCaseEnv, ns s
 }
 
 // WaitForSplunkPodCleanup Wait for cleanup to happend
-func WaitForSplunkPodCleanup(deployment *Deployment, testenvInstance *TestEnv) {
+func WaitForSplunkPodCleanup(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() int {
 		testenvInstance.Log.Info("Waiting for Splunk Pods to be deleted before running test")
 		return len(DumpGetPods(testenvInstance.GetName()))

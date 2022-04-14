@@ -210,7 +210,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -278,7 +278,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 		})
 	})
@@ -418,7 +418,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############## DOWNGRADE APPS ###############
 			// Delete apps on S3
@@ -486,7 +486,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -590,7 +590,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//#############  SCALING UP ###################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -648,7 +648,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify no pods reset by checking the pod age
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			shcPodNames = append(shcPodNames, testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)...)
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
 
 			//############### SCALING DOWN ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -698,7 +698,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, shcPodNames)
 
 		})
 	})
@@ -790,7 +790,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -838,7 +838,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -1084,7 +1084,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -1151,7 +1151,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 		})
 	})
@@ -1292,7 +1292,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############# DOWNGRADE APPS ################
 			// Delete apps on S3
@@ -1359,7 +1359,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 		})
 	})
@@ -1452,7 +1452,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -1583,7 +1583,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			// ############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1696,7 +1696,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -1790,7 +1790,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3
@@ -1879,7 +1879,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -2017,7 +2017,7 @@ var _ = Describe("c3appfw test", func() {
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
@@ -2103,7 +2103,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 
@@ -2430,8 +2430,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
+			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -2460,7 +2459,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 		})
 	})
@@ -2525,8 +2524,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgDownloadComplete, enterpriseApi.AppPkgDownloadPending)
 
 			// Delete Operator pod while Install in progress
-			opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			testenv.DeletePod(testcaseEnvInst.GetName(), opPod)
+			testenv.DeleteOperatorPod(testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -2555,7 +2553,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
-			testenv.VerifyNoPodReset(deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 		})
 	})
