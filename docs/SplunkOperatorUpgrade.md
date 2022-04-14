@@ -68,7 +68,7 @@ Edit `configmap` `splunk-operator-config` in `splunk-operator` namespace, set `W
 apiVersion: v1
 data:
   OPERATOR_NAME: "splunk-operator"
-  RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:latest
+  RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:8.2.6
   WATCH_NAMESPACE: "add namespace here"
 kind: ConfigMap
 metadata:
@@ -104,7 +104,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:<enterprise_image_name>
+image: splunk/splunk:8.2.6
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade example
