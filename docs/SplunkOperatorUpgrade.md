@@ -32,6 +32,7 @@ wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/r
 
 3. (Optional) Review the file and update it with your specific customizations used during your install. 
 
+
 4. Upgrade the Splunk Operator.
 # Splunk Operator Upgrade
 
