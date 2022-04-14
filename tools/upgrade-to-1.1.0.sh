@@ -15,24 +15,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Upgrading the Splunk operator to Version 1.1.0 is a new installation rather than an 
-# upgrade from the current operator. The older Splunk operator must be cleaned up before 
+# Upgrading the Splunk Operator to Version 1.1.0 is a new installation rather than an 
+# upgrade from the current operator. The older Splunk Operator must be cleaned up before 
 # installing the new version. This script helps you to do the cleanup. The script expects 
 # the current namespace where the operator is installed and the path to the 1.1.0 
 # manifest file. The script performs the following steps
 # * Backup of all the operator resources within the namespace like
 #   - service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
-# * Deletes all the old Splunk operator resources and deployment
+# * Deletes all the old Splunk Operator resources and deployment
 # * Installs the operator 1.1.0 in Splunk-operator namespace. 
 # 
-# By default Splunk operator 1.1.0 will be installed to watch cluster-wide
+# By default Splunk Operator 1.1.0 will be installed to watch cluster-wide
 # Steps for upgrade from 1.0.5 to 1.1.0
 # Set KUBECONFIG environment variable and run upgrade-to-1.1.0.sh script with the following mandatory arguments
 # current_namespace: current namespace where operator is installed
-# manifest_file: path where 1.1.0 Splunk operator manifest file exist
+# manifest_file: path where 1.1.0 Splunk Operator manifest file exist
 #
 # example 
-# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=release-v1.1.0/splunk-operator-install.yaml
+# >upgrade-to-1.1.0.sh --current_namespace=splunk-operator manifest_file=splunk-operator-install.yaml
 #
 # Note: This script can be run from Mac or Linux system. To run this script on Windows, use cygwin.
 #
@@ -212,7 +212,7 @@ deploy_operator() {
     echo "Operator installation not ready..."
     exit 1
   fi
-  echo "deployment of new splunk opearator 1.1.0 complete"
+  echo "deployment of new splunk operator 1.1.0 complete"
 }
 
 parse_options "$@"
