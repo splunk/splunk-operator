@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -62,22 +62,22 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme

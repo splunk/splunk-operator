@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -77,7 +77,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	reqLogger.Info("start")
 
 	// Fetch the MonitoringConsole
-	instance := &enterprisev3.MonitoringConsole{}
+	instance := &enterpriseApi.MonitoringConsole{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -94,7 +94,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.MonitoringConsolePausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.MonitoringConsolePausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
@@ -105,7 +105,7 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // SetupWithManager sets up the controller with the Manager.
 func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.MonitoringConsole{}).
+		For(&enterpriseApi.MonitoringConsole{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -119,35 +119,35 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.MonitoringConsole{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
-		Watches(&source.Kind{Type: &enterprisev3.Standalone{}},
+		Watches(&source.Kind{Type: &enterpriseApi.Standalone{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.LicenseMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApi.LicenseMaster{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.IndexerCluster{}},
+		Watches(&source.Kind{Type: &enterpriseApi.IndexerCluster{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.SearchHeadCluster{}},
+		Watches(&source.Kind{Type: &enterpriseApi.SearchHeadCluster{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApi.ClusterMaster{}},
 			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterprisev3.TotalWorker,
+			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
 }
