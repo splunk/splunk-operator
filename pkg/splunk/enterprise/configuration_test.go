@@ -152,7 +152,7 @@ func TestValidateImagePullSecrets(t *testing.T) {
 	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
 	if err == nil {
 		t.Errorf("Should thrown an error for invalid imagePullSecrets config")
-  }
+	}
 }
 
 func TestValidateSpec(t *testing.T) {
