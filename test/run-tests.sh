@@ -21,7 +21,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
-  # Don't pull splunk operator if exists locally since we maybe building it locally
+  # Don't pull Splunk Operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
     docker pull ${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
@@ -62,7 +62,7 @@ if [  "${CLUSTER_WIDE}" != "true" ]; then
   make kustomize
   bin/kustomize build config/crd | kubectl apply -f -
 else
-  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing Splunk Operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 

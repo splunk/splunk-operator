@@ -57,7 +57,7 @@ readonly PROGRAM_NAME=$(basename "$0")
 
 help() {
   echo ""
-  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<fulepath with filename of splunk operator 1.1.0 manfiests file>] "
+  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<fulepath with filename of Splunk Operator 1.1.0 manfiests file>] "
   echo ""
   echo "OPTIONS:"
   echo ""
@@ -65,7 +65,7 @@ help() {
        "                          script will delete existing serviceaccount, deployment, role and " \
        "                          rolebinding and install the operator in splunk-operator namespace"
   echo ""
-  echo "   --manifest_file splunk operator 1.1.0 manifest file path, this can be url link or full path of the file"
+  echo "   --manifest_file Splunk Operator 1.1.0 manifest file path, this can be url link or full path of the file"
   echo ""
   echo ""
   echo "   --help  Show this help message."
@@ -139,28 +139,28 @@ backup() {
         echo "" >> ${backup_file_name}
         echo "---" >> ${backup_file_name}
     fi
-    echo "backup if there are any role defined for splunk operator"
+    echo "backup if there are any role defined for Splunk Operator"
     kubectl get role splunk:operator:namespace-manager -n ${current_namespace} -o yaml >> ${backup_file_name}
     if [ $? == 0 ] 
     then 
         echo "" >> ${backup_file_name}
         echo "---" >> ${backup_file_name}
     fi
-    echo "backup if there are any role-biding defined for splunk operator"
+    echo "backup if there are any role-biding defined for Splunk Operator"
     kubectl get rolebinding splunk:operator:namespace-manager -n ${current_namespace}  -o yaml >> ${backup_file_name}
     if [ $? == 0 ] 
     then 
         echo "" >> ${backup_file_name}
         echo "---" >> ${backup_file_name}
     fi
-    echo "backup if there are any cluster-role defined for splunk operator"
+    echo "backup if there are any cluster-role defined for Splunk Operator"
     kubectl get clusterrole splunk:operator:resource-manager -o yaml  >> ${backup_file_name}
     if [ $? == 0 ] 
     then 
         echo "" >> ${backup_file_name}
         echo "---" >> ${backup_file_name}
     fi
-    echo "backup if there are any cluster-role-binding defined for splunk operator"
+    echo "backup if there are any cluster-role-binding defined for Splunk Operator"
     kubectl get clusterrolebinding splunk:operator:resource-manager -o yaml >> ${backup_file_name}
     if [ $? == 0 ] 
     then 
@@ -175,12 +175,12 @@ backup() {
         echo "---" >> ${backup_file_name}
     fi
     echo "--------------------------------------------------------------"
-    echo "backup of all the previsou splunk operator installation is complete, backup file is found in current diretory ${backup_file_name}"
+    echo "backup of all the previsou Splunk Operator installation is complete, backup file is found in current diretory ${backup_file_name}"
 }
 
 delete_operator() {
     echo "--------------------------------------------------------------"
-    echo "deleting all the previsous splunk operator resources....."
+    echo "deleting all the previsous Splunk Operator resources....."
     echo "deletign deployment"
     kubectl delete deployment splunk-operator -n ${current_namespace}
     echo "deleting clusterrole"
@@ -195,12 +195,12 @@ delete_operator() {
     echo "deleting rolebinding"
     kubectl delete rolebinding splunk:operator:namespace-manager -n ${current_namespace}
     echo "--------------------------------------------------------------"
-    echo "previous instance of splunk operator removed"
+    echo "previous instance of Splunk Operator removed"
 }
 
 deploy_operator() {
     echo "--------------------------------------------------------------"
-    echo "installing splunk operator 1.1.0....." 
+    echo "installing Splunk Operator 1.1.0....." 
     kubectl apply -f ${manifest_file}
     echo "--------------------------------------------------------------"
   echo "wait for operator pod to be ready..."
@@ -212,7 +212,7 @@ deploy_operator() {
     echo "Operator installation not ready..."
     exit 1
   fi
-  echo "deployment of new splunk operator 1.1.0 complete"
+  echo "deployment of new Splunk Operator 1.1.0 complete"
 }
 
 parse_options "$@"
