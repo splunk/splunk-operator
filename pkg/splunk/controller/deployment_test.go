@@ -22,7 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -45,10 +45,10 @@ func TestApplyDeployment(t *testing.T) {
 			UpdatedReplicas: 1,
 		},
 	}
-	wantPhases := []splcommon.Phase{
-		splcommon.PhasePending,
-		splcommon.PhaseReady,
-		splcommon.PhaseUpdating,
+	wantPhases := []enterpriseApi.Phase{
+		enterpriseApi.PhasePending,
+		enterpriseApi.PhaseReady,
+		enterpriseApi.PhaseUpdating,
 	}
 	wantPhaseNum := 0
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
@@ -68,10 +68,10 @@ func TestApplyDeployment(t *testing.T) {
 	// test scale up
 	revised = current.DeepCopy()
 	*revised.Spec.Replicas = 3
-	wantPhases = []splcommon.Phase{
-		splcommon.PhasePending,
-		splcommon.PhaseReady,
-		splcommon.PhaseScalingUp,
+	wantPhases = []enterpriseApi.Phase{
+		enterpriseApi.PhasePending,
+		enterpriseApi.PhaseReady,
+		enterpriseApi.PhaseScalingUp,
 	}
 	wantPhaseNum = 0
 	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile, false)
@@ -83,10 +83,10 @@ func TestApplyDeployment(t *testing.T) {
 	current.Status.UpdatedReplicas = 5
 	revised = current.DeepCopy()
 	*revised.Spec.Replicas = 3
-	wantPhases = []splcommon.Phase{
-		splcommon.PhasePending,
-		splcommon.PhaseReady,
-		splcommon.PhaseScalingDown,
+	wantPhases = []enterpriseApi.Phase{
+		enterpriseApi.PhasePending,
+		enterpriseApi.PhaseReady,
+		enterpriseApi.PhaseScalingDown,
 	}
 	wantPhaseNum = 0
 	spltest.ReconcileTester(t, "TestApplyDeployment", &current, revised, createCalls, updateCalls, reconcile, false)
@@ -97,7 +97,7 @@ func TestApplyDeployment(t *testing.T) {
 	current.Status.Replicas = 5
 	current.Status.ReadyReplicas = 5
 	current.Status.UpdatedReplicas = 3
-	wantPhase := splcommon.PhaseUpdating
+	wantPhase := enterpriseApi.PhaseUpdating
 	gotPhase, err := ApplyDeployment(context.TODO(), c, &current)
 	if gotPhase != wantPhase {
 		t.Errorf("TestApplyDeployment() got phase = %s; want %s", gotPhase, wantPhase)
@@ -113,7 +113,7 @@ func TestApplyDeployment(t *testing.T) {
 	current.Status.Replicas = 5
 	current.Status.ReadyReplicas = 3
 	current.Status.UpdatedReplicas = 5
-	wantPhase = splcommon.PhaseScalingUp
+	wantPhase = enterpriseApi.PhaseScalingUp
 	gotPhase, err = ApplyDeployment(context.TODO(), c, &current)
 	if gotPhase != wantPhase {
 		t.Errorf("TestApplyDeployment() got phase = %s; want %s", gotPhase, wantPhase)

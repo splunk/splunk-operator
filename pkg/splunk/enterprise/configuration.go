@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -113,7 +114,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
-		service = spec.Spec.ServiceTemplate.DeepCopy()
+		service = spec.ServiceTemplate.DeepCopy()
 	}
 	service.TypeMeta = metav1.TypeMeta{
 		Kind:       "Service",
@@ -192,10 +193,101 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 	}
 }
 
+// ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
+func ValidateImagePullPolicy(imagePullPolicy *string) error {
+	// ImagePullPolicy
+	if *imagePullPolicy == "" {
+		*imagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	}
+	switch *imagePullPolicy {
+	case "":
+		*imagePullPolicy = "IfNotPresent"
+		break
+	case "Always":
+		break
+	case "IfNotPresent":
+		break
+	default:
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+	}
+	return nil
+}
+
+// ValidateResources checks resource requests and limits and sets defaults if not provided
+func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+	// check for nil maps
+	if resources.Requests == nil {
+		resources.Requests = make(corev1.ResourceList)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(corev1.ResourceList)
+	}
+
+	// if not given, use default cpu requests
+	_, ok := resources.Requests[corev1.ResourceCPU]
+	if !ok {
+		resources.Requests[corev1.ResourceCPU] = defaults.Requests[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory requests
+	_, ok = resources.Requests[corev1.ResourceMemory]
+	if !ok {
+		resources.Requests[corev1.ResourceMemory] = defaults.Requests[corev1.ResourceMemory]
+	}
+
+	// if not given, use default cpu limits
+	_, ok = resources.Limits[corev1.ResourceCPU]
+	if !ok {
+		resources.Limits[corev1.ResourceCPU] = defaults.Limits[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory limits
+	_, ok = resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		resources.Limits[corev1.ResourceMemory] = defaults.Limits[corev1.ResourceMemory]
+	}
+}
+
+// ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
+func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
+	// make sure SchedulerName is not empty
+	if spec.SchedulerName == "" {
+		spec.SchedulerName = "default-scheduler"
+	}
+
+	// set default values for service template
+	setServiceTemplateDefaults(spec)
+
+	// if not provided, set default resource requests and limits
+	ValidateResources(&spec.Resources, defaultResources)
+
+	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
+}
+
+// setServiceTemplateDefaults sets default values for service templates
+func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range spec.ServiceTemplate.Spec.Ports {
+			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
+			if p.Protocol == "" {
+				p.Protocol = corev1.ProtocolTCP
+			}
+
+			if p.TargetPort.IntValue() == 0 {
+				p.TargetPort.IntVal = p.Port
+			}
+		}
+	}
+
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+}
+
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
-	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
+	spec.Image = GetSplunkImage(spec.Image)
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -218,7 +310,7 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 
 	setVolumeDefaults(spec)
 
-	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
+	return ValidateSpec(&spec.Spec, defaultResources)
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
