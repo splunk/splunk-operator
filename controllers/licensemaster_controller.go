@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -78,7 +78,7 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	reqLogger.Info("start")
 
 	// Fetch the LicenseMaster
-	instance := &enterprisev3.LicenseMaster{}
+	instance := &enterpriseApi.LicenseMaster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -95,7 +95,7 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.LicenseManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.LicenseManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
@@ -106,7 +106,7 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.LicenseMaster{}).
+		For(&enterpriseApi.LicenseMaster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -120,25 +120,25 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterpriseApi.LicenseMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterpriseApi.LicenseMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterpriseApi.LicenseMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.LicenseMaster{},
+				OwnerType:    &enterpriseApi.LicenseMaster{},
 			}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterprisev3.TotalWorker,
+			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
 }

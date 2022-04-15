@@ -646,7 +646,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
-func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
