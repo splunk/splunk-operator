@@ -4,7 +4,7 @@
 
 * This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
-* Operator SDK upgraded to version 1.15.0. Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.mdr)
+* Operator SDK upgraded to version 1.15.0. Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
 
 * Introducing Monitoring Console CRD
 
@@ -237,7 +237,7 @@
   9997 to indexer pod specs, added splunk-indexer-service, doc updates
 
 * Fixed bugs and updated docs, YAML deployment files, roles and bindings
-  to better accomodate using a single instance of the Splunk operator to
+  to better accomodate using a single instance of the Splunk Operator to
   manage SplunkEnterprise stacks across an entire cluster (cluster scope).
 
 * Fixed deadlock condition between deployer and search heads when
