@@ -867,3 +867,22 @@ func DeletePod(ns string, podName string) error {
 	}
 	return nil
 }
+
+// DeleteOperatorPod Delete Operator Pod in the namespace
+func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
+	var podName string
+	var ns string
+	if testcaseEnvInst.clusterWideOperator != "true" {
+		ns = testcaseEnvInst.GetName()
+	} else {
+		ns = "splunk-operator"
+	}
+	podName = GetOperatorPodName(ns)
+
+	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		return err
+	}
+	return nil
+}
