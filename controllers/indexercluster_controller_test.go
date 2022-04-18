@@ -25,10 +25,6 @@ import (
 
 var _ = Describe("IndexerCluster Controller", func() {
 
-	var (
-		namespace = "ns-splunk-idx"
-	)
-
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
 	})
@@ -39,17 +35,52 @@ var _ = Describe("IndexerCluster Controller", func() {
 
 	Context("IndexerCluster Management", func() {
 
-		It("Create IndexerCluster custom resource should succeeded", func() {
+		It("Get IndexerCluster custom resource should failed", func() {
+			namespace := "ns-splunk-ic-1"
 			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
-
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
-			CreateIndexerCluster("test", nsSpecs.Name, splcommon.PhaseReady)
+			// check when resource not found
+			_, err := GetIndexerCluster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("indexerclusters.enterprise.splunk.com \"test\" not found"))
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Create IndexerCluster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-ic-2"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			annotations[enterprisev3.IndexerClusterPausedAnnotation] = ""
+			CreateIndexerCluster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			ssSpec, _ := GetIndexerCluster("test", nsSpecs.Name)
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			ssSpec.Status.Phase = "Ready"
+			ssSpec.Status.ClusterMasterPhase = "Ready"
+			UpdateIndexerCluster(ssSpec, splcommon.PhaseReady)
 			DeleteIndexerCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
+
+		It("Create IndexerCluster custom resource should succeeded", func() {
+			namespace := "ns-splunk-ic-3"
+			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			CreateIndexerCluster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			DeleteIndexerCluster("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
 		It("Cover Unused methods", func() {
 			// Create New Manager for controllers
 			//k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -64,15 +95,30 @@ var _ = Describe("IndexerCluster Controller", func() {
 	})
 })
 
-func CreateIndexerCluster(name string, namespace string, status splcommon.Phase) *enterprisev3.IndexerCluster {
+func GetIndexerCluster(name string, namespace string) (*enterprisev3.IndexerCluster, error) {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	By("Expecting IndexerCluster custom resource to be created successfully")
+	ss := &enterprisev3.IndexerCluster{}
+	err := k8sClient.Get(context.Background(), key, ss)
+	if err != nil {
+		return nil, err
+	}
+	return ss, err
+}
+
+func CreateIndexerCluster(name string, namespace string, annotations map[string]string, status splcommon.Phase) *enterprisev3.IndexerCluster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 	ssSpec := &enterprisev3.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: annotations,
 		},
 		Spec: enterprisev3.IndexerClusterSpec{},
 	}
@@ -88,6 +134,34 @@ func CreateIndexerCluster(name string, namespace string, status splcommon.Phase)
 			fmt.Printf("status is set to %v", status)
 			ss.Status.Phase = status
 			ss.Status.ClusterMasterPhase = status
+			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+			time.Sleep(2 * time.Second)
+		}
+		return true
+	}, timeout, interval).Should(BeTrue())
+
+	return ss
+}
+
+func UpdateIndexerCluster(instance *enterprisev3.IndexerCluster, status splcommon.Phase) *enterprisev3.IndexerCluster {
+	key := types.NamespacedName{
+		Name:      instance.Name,
+		Namespace: instance.Namespace,
+	}
+
+	ssSpec := testutils.NewIndexerCluster(instance.Name, instance.Namespace, "image")
+	ssSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	time.Sleep(2 * time.Second)
+
+	By("Expecting IndexerCluster custom resource to be created successfully")
+	ss := &enterprisev3.IndexerCluster{}
+	Eventually(func() bool {
+		_ = k8sClient.Get(context.Background(), key, ss)
+		if status != "" {
+			fmt.Printf("status is set to %v", status)
+			ss.Status.Phase = status
+			ssSpec.Status.ClusterMasterPhase = "Ready"
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
