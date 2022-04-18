@@ -150,9 +150,10 @@ func TestValidateImagePullSecrets(t *testing.T) {
 
 	// Validate an invalid imagePullSecrets config
 	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
-	if err == nil {
-		t.Errorf("Should thrown an error for invalid imagePullSecrets config")
+	if err != nil {
+		t.Errorf("Shouldn't thrown an error as we assume the image might be from a public repo")
 	}
+
 }
 
 func TestValidateSpec(t *testing.T) {

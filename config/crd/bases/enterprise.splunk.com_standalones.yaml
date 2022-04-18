@@ -1150,7 +1150,7 @@ spec:
                 type: string
               imagePullSecrets:
                 description: Sets imagePullSecrets if image is being pulled from a
-                  private registry See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+                  private registry. See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
                 items:
                   description: LocalObjectReference contains enough information to
                     let you locate the referenced object inside the same namespace.
