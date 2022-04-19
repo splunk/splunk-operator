@@ -4,7 +4,7 @@ on:
     branches:
       - develop
       - master
-      - sdk-upgrade-feature-appframework
+      - feature-appframework
 jobs:
   int-tests:
     strategy:
