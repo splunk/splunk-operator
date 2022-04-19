@@ -98,29 +98,29 @@ const (
 // Test K8s components for License Manager based on Stack1
 const (
 
-	//TestStack1LicenseManager = "test-splunk-stack1-license-manager"
-	TestStack1LicenseManager = "test-splunk-stack1-" + "license-manager"
+//TestStack1LicenseManager = "test-splunk-stack1-license-manager"
+// TestStack1LicenseManager = "test-splunk-stack1-" + "license-manager"
 
-	//TestStack1LicenseManagerService = "splunk-stack1-license-manager-service"
-	TestStack1LicenseManagerService = "splunk-stack1-license-manager-service"
+//TestStack1LicenseManagerService = "splunk-stack1-license-manager-service"
+// TestStack1LicenseManagerService = "splunk-stack1-license-manager-service"
 
-	//TestStack1LicenseManagerServiceTest = "Service-test-splunk-stack1-licese-master"
-	TestStack1LicenseManagerServiceTest = "Service-test-splunk-stack1-" + "license-manager"
+//TestStack1LicenseManagerServiceTest = "Service-test-splunk-stack1-licese-master"
+// TestStack1LicenseManagerServiceTest = "Service-test-splunk-stack1-" + "license-manager"
 
-	//TestStack1LicenseManagerServiceTestService = "Service-test-splunk-stack1-license-manager-service"
-	TestStack1LicenseManagerServiceTestService = TestStack1LicenseManagerServiceTest + "-service"
+//TestStack1LicenseManagerServiceTestService = "Service-test-splunk-stack1-license-manager-service"
+// TestStack1LicenseManagerServiceTestService = TestStack1LicenseManagerServiceTest + "-service"
 
-	//TestStack1LicenseManagerSecret = "Secret-test-splunk-stack1-license-manager-secret-v1"
-	TestStack1LicenseManagerSecret = "Secret-" + TestStack1LicenseManager + "-secret-v1"
+//TestStack1LicenseManagerSecret = "Secret-test-splunk-stack1-license-manager-secret-v1"
+// TestStack1LicenseManagerSecret = "Secret-" + TestStack1LicenseManager + "-secret-v1"
 
-	//TestStack1LicenseManagerConfigMapAppList = "ConfigMap-test-splunk-stack1-licensemanager-app-list"
-	TestStack1LicenseManagerConfigMapAppList = "ConfigMap-test-splunk-stack1-licensemanager-app-list"
+//TestStack1LicenseManagerConfigMapAppList = "ConfigMap-test-splunk-stack1-licensemanager-app-list"
+// TestStack1LicenseManagerConfigMapAppList = "ConfigMap-test-splunk-stack1-licensemanager-app-list"
 
-	//TestStack1LicenseManagerStatefulSet = "StatefulSet-test-splunk-stack1-license-manager"
-	TestStack1LicenseManagerStatefulSet = "StatefulSet-" + TestStack1LicenseManager
+//TestStack1LicenseManagerStatefulSet = "StatefulSet-test-splunk-stack1-license-manager"
+// TestStack1LicenseManagerStatefulSet = "StatefulSet-" + TestStack1LicenseManager
 
-	//TestStack1LicenseManagerClusterLocal = "splunk-stack1-license-manager-service.test.svc.cluster.local"
-	TestStack1LicenseManagerClusterLocal = TestStack1LicenseManagerService + ".test.svc.cluster.local"
+//TestStack1LicenseManagerClusterLocal = "splunk-stack1-license-manager-service.test.svc.cluster.local"
+// TestStack1LicenseManagerClusterLocal = TestStack1LicenseManagerService + ".test.svc.cluster.local"
 )
 
 // Test K8s components for License Manager Single Exceptions
@@ -137,8 +137,8 @@ const (
 // Single Exceptions
 const (
 
-	//TestDeployerDashed = "-deployer-"
-	TestDeployerDashed = "-deployer-"
+//TestDeployerDashed = "-deployer-"
+// TestDeployerDashed = "-deployer-"
 )
 
 // ***** Body Responses *****

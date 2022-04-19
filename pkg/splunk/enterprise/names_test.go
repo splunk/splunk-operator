@@ -61,7 +61,7 @@ func TestGetSplunkServiceName(t *testing.T) {
 	test("splunk-t3-license-manager-service", SplunkLicenseManager, "t3", false)
 
 	LicenseManagerRefName := "stack1"
-	test(splcommon.TestStack1LicenseManagerService, SplunkLicenseManager, LicenseManagerRefName, false)
+	test("splunk-stack1-license-manager-service", SplunkLicenseManager, LicenseManagerRefName, false)
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {
