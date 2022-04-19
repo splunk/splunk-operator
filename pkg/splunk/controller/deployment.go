@@ -23,12 +23,13 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
-func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.Deployment) (splcommon.Phase, error) {
+func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.Deployment) (enterpriseApi.Phase, error) {
 	scopedLog := log.WithName("ApplyDeployment").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
@@ -38,9 +39,9 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 
 	err := c.Get(ctx, namespacedName, &current)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return splcommon.PhasePending, splutil.CreateResource(ctx, c, revised)
+		return enterpriseApi.PhasePending, splutil.CreateResource(ctx, c, revised)
 	} else if err != nil {
-		return splcommon.PhasePending, err
+		return enterpriseApi.PhasePending, err
 	}
 
 	// found an existing Deployment
@@ -55,35 +56,35 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 		if *revised.Spec.Replicas < desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas up to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingUp, splutil.UpdateResource(ctx, c, revised)
+			return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, revised)
 		} else if *revised.Spec.Replicas > desiredReplicas {
 			scopedLog.Info(fmt.Sprintf("Scaling replicas down to %d", desiredReplicas))
 			*revised.Spec.Replicas = desiredReplicas
-			return splcommon.PhaseScalingDown, splutil.UpdateResource(ctx, c, revised)
+			return enterpriseApi.PhaseScalingDown, splutil.UpdateResource(ctx, c, revised)
 		}
 	}
 
 	// only update if there are material differences, as determined by comparison function
 	if hasUpdates {
-		return splcommon.PhaseUpdating, splutil.UpdateResource(ctx, c, revised)
+		return enterpriseApi.PhaseUpdating, splutil.UpdateResource(ctx, c, revised)
 	}
 
 	// check if updates are in progress
 	if revised.Status.UpdatedReplicas < revised.Status.Replicas {
 		scopedLog.Info("Waiting for updates to complete")
-		return splcommon.PhaseUpdating, nil
+		return enterpriseApi.PhaseUpdating, nil
 	}
 
 	// check if replicas are not yet ready
 	if revised.Status.ReadyReplicas < desiredReplicas {
 		scopedLog.Info("Waiting for pods to become ready")
 		if revised.Status.ReadyReplicas > 0 {
-			return splcommon.PhaseScalingUp, nil
+			return enterpriseApi.PhaseScalingUp, nil
 		}
-		return splcommon.PhasePending, nil
+		return enterpriseApi.PhasePending, nil
 	}
 
 	// all is good!
 	scopedLog.Info("All pods are ready")
-	return splcommon.PhaseReady, nil
+	return enterpriseApi.PhaseReady, nil
 }

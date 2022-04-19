@@ -57,7 +57,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = splcommon.PhaseError
+	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
@@ -121,7 +121,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
@@ -164,7 +164,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
-	if cr.Status.Phase == splcommon.PhaseReady {
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)

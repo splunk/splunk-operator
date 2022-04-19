@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/google/go-cmp/cmp"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -135,7 +135,7 @@ func ResourceFailedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
-			if _, ok := e.ObjectNew.(*enterprisev3.Standalone); !ok {
+			if _, ok := e.ObjectNew.(*enterpriseApi.Standalone); !ok {
 				return false
 			}
 
@@ -144,7 +144,7 @@ func ResourceFailedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*enterprisev3.Standalone)
+			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.Standalone)
 			//oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
 			//return !cmp.Equal(newObj.Spec, oldObj.Spec)
 			return newObj.Status.Phase == "Error"
@@ -197,7 +197,7 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
-			if _, ok := e.ObjectNew.(*enterprisev3.ClusterMaster); !ok {
+			if _, ok := e.ObjectNew.(*enterpriseApi.ClusterMaster); !ok {
 				return false
 			}
 
@@ -206,8 +206,8 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*enterprisev3.ClusterMaster)
-			oldObj := e.ObjectOld.DeepCopyObject().(*enterprisev3.ClusterMaster)
+			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.ClusterMaster)
+			oldObj := e.ObjectOld.DeepCopyObject().(*enterpriseApi.ClusterMaster)
 			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {

@@ -21,7 +21,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
-  # Don't pull splunk operator if exists locally since we maybe building it locally
+  # Don't pull Splunk Operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
     docker pull ${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
@@ -62,7 +62,7 @@ if [  "${CLUSTER_WIDE}" != "true" ]; then
   make kustomize
   bin/kustomize build config/crd | kubectl apply -f -
 else
-  echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing Splunk Operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
@@ -149,8 +149,3 @@ echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 ginkgo -v --trace --failFast -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
-
-# Cleanup namespace and pvc after test run is finished
-if [[ "${DEBUG}" != "True" ]]; then
-  tools/cleanup.sh
-fi

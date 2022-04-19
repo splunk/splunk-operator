@@ -24,7 +24,6 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -140,7 +139,7 @@ var _ = Describe("Smoke test", func() {
 
 			standaloneSpec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes:        []corev1.Volume{},
