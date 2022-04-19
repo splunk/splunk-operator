@@ -309,8 +309,8 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), licenseManager)
-		return licenseManager.Status.Phase
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		return LicenseManager.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 

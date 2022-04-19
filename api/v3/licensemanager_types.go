@@ -17,7 +17,6 @@ limitations under the License.
 package v3
 
 import (
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -47,7 +46,7 @@ type LicenseManagerSpec struct {
 // LicenseManagerStatus defines the observed state of a Splunk Enterprise license manager.
 type LicenseManagerStatus struct {
 	// current phase of the license manager
-	Phase splcommon.Phase `json:"phase"`
+	Phase Phase `json:"phase"`
 
 	// App Framework Context
 	AppContext AppDeploymentContext `json:"appContext"`
