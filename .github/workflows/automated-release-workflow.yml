@@ -79,7 +79,7 @@ jobs:
     - name: Run Make Package
       run: |
         make docker-build IMG=splunk/splunk-operator:latest
-        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk/${{ github.event.inputs.enterprise_version }}
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
   
     - name: Update Operator Image name in Release Folder
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
