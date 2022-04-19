@@ -912,7 +912,7 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 	_, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	secretName := splcommon.GetNamespaceScopedSecretName("test")
 
-	secret, err := GetSecretByName(ctx, c, &cr, secretName)
+	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secretName)
 	if secret == nil || err != nil {
 		t.Errorf(err.Error())
 	}
