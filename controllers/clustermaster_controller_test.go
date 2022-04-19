@@ -10,6 +10,7 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	//ctrl "sigs.k8s.io/controller-runtime"
@@ -20,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	//"k8s.io/client-go/kubernetes/scheme"
 )
 
@@ -33,7 +35,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 	})
 
-	Context("ClusterMaster Management", func() {
+	Context("ClusterMaster Management failed", func() {
 
 		It("Get ClusterMaster custom resource should failed", func() {
 			namespace := "ns-splunk-cm-1"
@@ -47,6 +49,9 @@ var _ = Describe("ClusterMaster Controller", func() {
 			Expect(err.Error()).Should(Equal("clustermasters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
+	})
+
+	Context("ClusterMaster Management with annotations", func() {
 
 		It("Create ClusterMaster custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-cm-2"
@@ -66,7 +71,8 @@ var _ = Describe("ClusterMaster Controller", func() {
 			DeleteClusterMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-
+	})
+	Context("ClusterMaster Management", func() {
 		It("Create ClusterMaster custom resource should succeeded", func() {
 			namespace := "ns-splunk-cm-3"
 			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {
@@ -89,6 +95,48 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 			//rr, err := New(k8sManager)
 			//callUnsedMethods(rr.(*ClusterMasterReconciler), namespace)
+			namespace := "ns-splunk-cm-4"
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder()
+			c := builder.Build()
+			instance := ClusterMasterReconciler{
+				Client: c,
+				Scheme: scheme.Scheme,
+			}
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test",
+					Namespace: namespace,
+				},
+			}
+			// econcile for the first time err is resource not found
+			_, err := instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// create resource first adn then reconcile for the first time
+			ssSpec := testutils.NewClusterMaster("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+			// reconcile with updated annotations for pause
+			annotations := make(map[string]string)
+			annotations[enterprisev3.ClusterManagerPausedAnnotation] = ""
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// reconcile after removing annotations for pause
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			// reconcile after adding delete timestamp
+			Expect(err).ToNot(HaveOccurred())
+			ssSpec.DeletionTimestamp = &metav1.Time{}
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 	})
