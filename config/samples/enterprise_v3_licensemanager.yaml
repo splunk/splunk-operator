@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
-  name: licensemaster-sample
+  name: licensemanager-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}
