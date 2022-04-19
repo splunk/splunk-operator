@@ -129,7 +129,7 @@ func GetKeysToMatch(podName string) []string {
 		keysToMatch = []string{"pass4SymmKey"}
 	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, splcommon.ClusterManager) {
 		keysToMatch = []string{"pass4SymmKey", "idxc_secret"}
-	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, splcommon.TestDeployerDashed) {
+	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, "-deployer-") {
 		keysToMatch = []string{"pass4SymmKey", "shc_secret"}
 	}
 	return keysToMatch

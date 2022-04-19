@@ -111,7 +111,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,
-			Value: splcommon.TestStack1LicenseManagerService,
+			Value: "splunk-stack1-license-manager-service",
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -125,7 +125,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	want = []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,
-			Value: splcommon.TestStack1LicenseManagerClusterLocal,
+			Value: "splunk-stack1-license-manager-service.test.svc.cluster.local",
 		},
 	}
 
