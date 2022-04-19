@@ -4,8 +4,7 @@ on:
     branches:
       - develop
       - master
-      - sdk-upgrade-feature-appframework
-      - CSPL-1589
+      - feature-appframework
 jobs:
   int-tests:
     strategy:

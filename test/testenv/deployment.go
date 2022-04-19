@@ -759,8 +759,6 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name 
 	if err != nil {
 		return nil, err
 	}
-	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
