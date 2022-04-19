@@ -152,6 +152,11 @@ func CompareTolerations(a []corev1.Toleration, b []corev1.Toleration) bool {
 	return sortAndCompareSlices(a, b, SortFieldKey)
 }
 
+// CompareImagePullSecrets compares the 2 list of imagePullSecrets
+func CompareImagePullSecrets(a []corev1.LocalObjectReference, b []corev1.LocalObjectReference) bool {
+	return sortAndCompareSlices(a, b, SortFieldName)
+}
+
 // CompareVolumes is a generic comparer of two Kubernetes Volumes.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {

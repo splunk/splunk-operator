@@ -105,7 +105,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, &cr); err != nil {
+			if err := validateLicenseManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
 			return getLicenseManagerStatefulSet(ctx, c, &cr)

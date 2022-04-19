@@ -298,7 +298,7 @@ func TestApplyAppListingConfigMap(t *testing.T) {
 
 	testStsWithAppListVolMounts := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
+			if err := validateClusterManagerSpec(ctx, client, &cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
 			return getClusterManagerStatefulSet(ctx, client, &cr)
