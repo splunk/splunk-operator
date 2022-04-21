@@ -2,7 +2,9 @@ name: Generic
 description: File generic requests under this template(use only if the issue does not match any of the other templates)
 title: "Splunk Operator: "
 assignees:
-  - akondur
+  - jryb
+  - kumarajeet
+  - vivekr-splunk
 
 body:
   - type: dropdown

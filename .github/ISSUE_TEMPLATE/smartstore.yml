@@ -3,7 +3,9 @@ description: File any issues related to smart store under this template
 title: "Smartstore: "
 labels: "smartstore"
 assignees:
-  - akondur
+  - gaurav-splunk
+  - sgontla
+  - vivekr-splunk
 
 body:
   - type: dropdown

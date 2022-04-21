@@ -3,7 +3,9 @@ description: File any requests related to app framework under this template
 title: "App Framework: "
 labels: "app framework"
 assignees:
-  - akondur
+  - gaurav-splunk
+  - jryb
+  - sgontla
 
 body:
   - type: dropdown
