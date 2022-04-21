@@ -1478,4 +1478,140 @@ var _ = Describe("s1appfw test", func() {
 
 		})
 	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Standalone
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############ V1 APP VERIFICATION FOR STANDALONE###########
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
+			   // ############  Modify secret key ###########
+			   * Create App framework volume with random credentials and apply to Spec
+			   * Check for changes in App phase to determine if next poll has been triggered
+			   ############ UPGRADE V2 APPS ###########
+			   * Upload V2 apps to S3 App Source
+			   * Check no apps are updated as auth key is incorrect
+			   ############  Modify secret key to correct one###########
+			   * Apply spec with correct credentails
+			   * Wait for the pod to be ready
+			   ############ V2 APP VERIFICATION###########
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
+			*/
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Upload V1 apps to S3 for Standalone
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Maximum apps to be downloaded in parallel
+			maxConcurrentAppDownloads := 5
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			secretref := standalone.Spec.AppFrameworkConfig.VolList[0].SecretRef
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
+			secretData := secretStruct.Data
+			modifiedSecretData := map[string][]byte{"s3_access_key": []byte(testenv.RandomDNSName(5)), "s3_secret_key": []byte(testenv.RandomDNSName(5))}
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// ############ INITIAL VERIFICATION ###########
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############  Modify secret key ###########
+			// Create App framework volume with invalid credentials and apply to Spec
+			testcaseEnvInst.Log.Info("Update Standalone spec with invalid credentials")
+			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), secretref, modifiedSecretData)
+			Expect(err).To(Succeed(), "Unable to update secret Object")
+
+			// ############## UPGRADE APPS #################
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// Upload V2 apps to S3 for Standalone
+			appVersion = "V2"
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			appFileList = testenv.GetAppFileList(appListV2)
+
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
+			// Check no apps are updated as auth key is incorrect
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############  Modify secret key to correct one###########
+			// Apply spec with correct credentials
+			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), secretref, secretData)
+			Expect(err).To(Succeed(), "Unable to update secret Object")
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############ UPGRADE VERIFICATION ###########
+			standaloneAppSourceInfo.CrAppVersion = appVersion
+			standaloneAppSourceInfo.CrAppList = appListV2
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+		})
+	})
 })
