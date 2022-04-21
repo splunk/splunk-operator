@@ -1,7 +1,8 @@
 name: Smartstore
 description: File any issues related to smart store under this template
 title: "Smartstore: "
-labels: "smartstore"
+labels:
+  - smartstore
 assignees:
   - gaurav-splunk
   - sgontla

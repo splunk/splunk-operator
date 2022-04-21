@@ -1,7 +1,8 @@
 name: Monitoring Console
 description: File any requests related to monitoring console under this template
 title: "Monitoring Console: "
-labels: "monitoring console"
+labels:
+  - monitoring console
 assignees:
   - kashok-splunk
 

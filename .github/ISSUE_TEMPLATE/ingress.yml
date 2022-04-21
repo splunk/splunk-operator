@@ -1,7 +1,8 @@
 name: Ingestion
 description: File any requests related to ingestion under this template
 title: "Ingestion: "
-labels: "ingestion"
+labels:
+  - ingestion
 assignees:
   - vebken-splunk
   - mgaldino-splunk
