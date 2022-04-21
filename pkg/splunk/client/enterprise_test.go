@@ -399,7 +399,7 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 		"",
 	}
 	test := func(c SplunkClient) error {
-		return c.AutomateMCApplyChanges(false)
+		return c.AutomateMCApplyChanges()
 	}
 	status := []int{
 		200, 200, 200, 200, 200, 200, 201, 200, 200, 200, 200,

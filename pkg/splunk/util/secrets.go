@@ -113,7 +113,7 @@ func GetSecretLabels() map[string]string {
 func SetSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient, secretObjectName string, cr splcommon.MetaObject) error {
 	var err error
 
-	secret, err := GetSecretByName(ctx, client, cr, secretObjectName)
+	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), secretObjectName)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func RemoveSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient
 	var err error
 	var refCount uint = 0
 
-	secret, err := GetSecretByName(ctx, client, cr, secretObjectName)
+	secret, err := GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), secretObjectName)
 	if err != nil {
 		return 0, err
 	}
@@ -495,14 +495,13 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 }
 
 // GetSecretByName retrieves namespace scoped secret object for a given name
-func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, name string) (*corev1.Secret, error) {
+func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, logHandle string, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
-	scopedLog := log.WithName("GetSecretByName").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := log.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
 
 	// Check if a namespace scoped secret exists
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
+	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
 	err := c.Get(ctx, namespacedName, &namespaceScopedSecret)
-
 	if err != nil {
 		// Didn't find it
 		scopedLog.Error(err, "Unable to get secret", "secret name", name)

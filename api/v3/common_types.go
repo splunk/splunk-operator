@@ -181,6 +181,10 @@ type CommonSplunkSpec struct {
 	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
 	// Note: If needed, Operator overrides with a higher value
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
+
+	// Sets imagePullSecrets if image is being pulled from a private registry.
+	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
