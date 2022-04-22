@@ -147,8 +147,8 @@ func NewClusterMaster(name, ns, image string) *enterprisev3.ClusterMaster {
 	return ad
 }
 
-// NewLicenseMaster returns new serach head cluster instance with its config hash
-func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
+// NewLicenseManager returns new serach head cluster instance with its config hash
+func NewLicenseManager(name, ns, image string) *enterprisev3.LicenseManager {
 
 	c := &commonapi.Spec{
 		ImagePullPolicy: string(pullPolicy),
@@ -163,10 +163,10 @@ func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
 		},
 	}
 
-	ad := &enterprisev3.LicenseMaster{
+	ad := &enterprisev3.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
-			Kind:       "LicenseMaster",
+			Kind:       "LicenseManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -175,7 +175,7 @@ func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
 		},
 	}
 
-	ad.Spec = enterprisev3.LicenseMasterSpec{
+	ad.Spec = enterprisev3.LicenseManagerSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad

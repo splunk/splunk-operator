@@ -111,7 +111,7 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
-	ctx := context.TODO()
+	//ctx := context.TODO()
 	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -120,7 +120,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseManagerRef.Name = "stack1"
-	got := getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,
@@ -134,7 +134,7 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 
 	cr.Spec.LicenseManagerRef.Namespace = "test"
-	got = getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,

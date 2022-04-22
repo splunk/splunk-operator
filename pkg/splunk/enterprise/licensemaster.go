@@ -87,7 +87,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
@@ -129,7 +129,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getObsoleteLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
@@ -150,7 +150,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
 			if err != nil {
 				return result, err
 			}
@@ -194,9 +194,9 @@ func validateObsoleteLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.L
 }
 
 // helper function to get the list of LicenseMaster types in the current namespace
-func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getObsoleteLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("getObsoleteLicenseManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.LicenseMasterList{}
 

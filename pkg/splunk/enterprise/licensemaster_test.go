@@ -546,17 +546,17 @@ func TestLicenseManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 }
 
-func TestApplyLicenseMasterDeletion(t *testing.T) {
+func TestApplyLicenseManagerDeletion(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{
+	lm := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseMaster",
+			Kind: "LicenseManager",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -634,13 +634,13 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 
 	_, err = ApplyLicenseManager(ctx, c, &lm)
 	if err != nil {
-		t.Errorf("ApplyLicenseMaster should not have returned error here.")
+		t.Errorf("ApplyLicenseManager should not have returned error here.")
 	}
 }
 
-func TestGetLicenseMasterList(t *testing.T) {
+func TestLicenseManagerList(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{}
+	lm := enterpriseApi.LicenseManager{}
 
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -650,22 +650,22 @@ func TestGetLicenseMasterList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added license master to the list yet
-	_, err := getLicenseMasterList(ctx, client, &lm, listOpts)
+	_, err := getLicenseManagerList(ctx, client, &lm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
 
-	lmList := &enterpriseApi.LicenseMasterList{}
+	lmList := &enterpriseApi.LicenseManagerList{}
 	lmList.Items = append(lmList.Items, lm)
 
 	client.ListObj = lmList
 
-	numOfObjects, err = getLicenseMasterList(ctx, client, &lm, listOpts)
+	numOfObjects, err = getLicenseManagerList(ctx, client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
 	if numOfObjects != 1 {
-		t.Errorf("Got wrong number of LicenseMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
+		t.Errorf("Got wrong number of LicenseManager objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

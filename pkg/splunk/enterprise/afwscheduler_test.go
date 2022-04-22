@@ -270,8 +270,8 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
-	cr.TypeMeta.Kind = "LicenseMaster"
-	expectedPodName = "splunk-stack1-license-master-0"
+	cr.TypeMeta.Kind = "LicenseManager"
+	expectedPodName = "splunk-stack1-license-manager-0"
 	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -1201,7 +1201,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	}
 
 	// Test if STS works for LM
-	cr.TypeMeta.Kind = "LicenseMaster"
+	cr.TypeMeta.Kind = "LicenseManager"
 	current = appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-license-master",

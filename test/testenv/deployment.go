@@ -805,7 +805,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
@@ -834,7 +834,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
@@ -867,7 +867,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, LicenseManager)
+		_, err := d.DeployLicenseManager(ctx, licenseManager)
 		if err != nil {
 			return cm, idxc, sh, err
 		}
@@ -895,7 +895,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
@@ -938,7 +938,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
@@ -962,7 +962,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 // DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
 func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx context.Context, name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
 
-	LicenseManager := ""
+	licenseManager := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -972,7 +972,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 			return err
 		}
 
-		LicenseManager = name
+		licenseManager = name
 	}
 
 	// Deploy the cluster manager
@@ -983,7 +983,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
@@ -996,7 +996,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", LicenseManager, indexerReplicas, name, "")
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
 	if err != nil {
 		return err
 	}
@@ -1011,7 +1011,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
@@ -1032,7 +1032,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 // DeployMultisiteClusterWithMonitoringConsole deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with monitoring console
 func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
-	LicenseManager := ""
+	licenseManager := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -1042,7 +1042,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 			return err
 		}
 
-		LicenseManager = name
+		licenseManager = name
 	}
 
 	// Deploy the cluster-manager
@@ -1067,7 +1067,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			Defaults: defaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
@@ -1088,7 +1088,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -1109,7 +1109,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: LicenseManager,
+				Name: licenseManager,
 			},
 			Defaults: siteDefaults,
 			MonitoringConsoleRef: corev1.ObjectReference{

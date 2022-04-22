@@ -257,7 +257,7 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 }
 
 // getLicenseManagerURL returns URL of license manager
-func getLicenseManagerURL(ctx context.Context, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {
 		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
 		if spec.LicenseManagerRef.Namespace != "" {

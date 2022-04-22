@@ -106,7 +106,7 @@ func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ct
 
 // ApplyLicenseManager adding to handle unit test case
 var ApplyObsoleteLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
-	return enterprise.ApplyLicenseManager(ctx, client, instance)
+	return enterprise.ApplyObsoleteLicenseManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
