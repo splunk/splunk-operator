@@ -417,7 +417,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
-		mgr.log.Info("Cluster Manager is not ready yet", "error ", err)
+		mgr.log.Info("Cluster Manager is not ready yet", "reason ", err)
 	}
 
 	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
@@ -429,7 +429,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// update CR status with IDXC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
-		mgr.log.Info("Indexer cluster is not ready", "error ", err)
+		mgr.log.Info("Indexer cluster is not ready", "reason ", err)
 		return enterpriseApi.PhasePending, nil
 	}
 
