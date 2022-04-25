@@ -43,7 +43,7 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 	switch objectKind {
 	case "Standalone":
 		components = append(components, "standalone")
-	case "LicenseMaster":
+	case splcommon.ObsoleteLicenseManager:
 		components = append(components, splcommon.LicenseManager)
 	case "LicenseManager":
 		components = append(components, "license-manager")

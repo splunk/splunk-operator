@@ -98,6 +98,9 @@ const (
 	//LicenseManager = "license-master"
 	LicenseManager = "license-master"
 
+	//ObsoleteLicenseManager = "LicenseMaster"
+	ObsoleteLicenseManager = "LicenseMaster"
+
 	// LicenseManagerRole = "splunk_license_master"
 	LicenseManagerRole = "splunk_license_master"
 
