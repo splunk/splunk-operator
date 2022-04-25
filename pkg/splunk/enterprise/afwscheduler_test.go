@@ -1204,7 +1204,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	cr.TypeMeta.Kind = "LicenseManager"
 	current = appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-license-master",
+			Name:      "splunk-stack1-license-manager",
 			Namespace: "test",
 		},
 	}
