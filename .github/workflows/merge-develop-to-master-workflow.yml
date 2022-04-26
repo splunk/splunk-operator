@@ -5,6 +5,12 @@ on:
       release_version:
         description: 'Version of Splunk Operator Release'
         required: true
+      enterprise_version:
+        description: 'Version of Splunk Enterprise Image'
+        required: true
+      release_candiate_version:
+        description: 'Enter number to indicate version of Release Candidate'
+        required: true
 jobs:
   pull-request:
     runs-on: ubuntu-latest
@@ -29,3 +35,74 @@ jobs:
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
           Automated Pull Request To Merge Develop To Master For Release Version ${{ github.event.inputs.release_version }}
+  
+  rc-release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        ref: "promote-develop-to-master-${{ github.event.inputs.release_version }}"
+
+    - name: Deep Fetch 
+      run: |
+        git fetch --prune --unshallow
+
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+
+    - name: Configure Docker Credentials
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+    
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+    
+    - name: Install golint
+      run: |
+        go get -u golang.org/x/lint/golint
+    
+    - name: Install goveralls
+      run: |
+        go get github.com/mattn/goveralls@latest
+
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+
+    - name: Build Splunk Operator Image
+      run: |
+        make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
+        
+    - name: Generate Release Artifacts
+      run: |    
+        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
+    
+    - name: Push release RC Versioned Image
+      run: |
+        make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
+
+    - name: Tag default Release Candidate Image and Push
+      run: |
+        docker tag splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
+        docker push splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
+    
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+      with:
+        name: "release-artifacts-${{ github.event.inputs.release_version }}-RC"
+        path: "release-**"
