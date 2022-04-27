@@ -5,7 +5,9 @@ go 1.17
 require (
 	github.com/aws/aws-sdk-go v1.42.16
 	github.com/go-logr/logr v1.2.0
+	github.com/go-resty/resty/v2 v2.7.0
 	github.com/google/go-cmp v0.5.6
+	github.com/jarcoal/httpmock v1.1.0
 	github.com/minio/minio-go/v7 v7.0.16
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0

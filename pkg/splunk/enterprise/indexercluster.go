@@ -38,6 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// NewSplunkClientFunc funciton pointer type
+type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
+
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
 func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
@@ -103,10 +106,12 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	} else {
 		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
-	mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+
+	//mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	mgr := NewIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
-		err = mgr.verifyRFPeers(ctx, client)
+		err = VerifyRFPeers(ctx, mgr, client)
 		if err != nil {
 			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peer failed %s", err.Error()))
 			return result, err
@@ -222,6 +227,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	return result, nil
 }
 
+// VerifyRFPeers function pointer to mock
+var VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
+	return mgr.verifyRFPeers(ctx, client)
+}
+
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
 	c               splcommon.ControllerClient
@@ -229,6 +239,15 @@ type indexerClusterPodManager struct {
 	cr              *enterpriseApi.IndexerCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+var NewIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+	return indexerClusterPodManager{
+		log:             log,
+		cr:              cr,
+		secrets:         secret,
+		newSplunkClient: newSplunkClient,
+	}
 }
 
 //getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
@@ -554,7 +573,7 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 	podName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod %v", err.Error())
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
