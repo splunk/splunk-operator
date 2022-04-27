@@ -315,6 +315,32 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
+// ObsoleteLicenseManagerReady verify LM is in ready status and does not flip flop
+func ObsoleteLicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	LicenseManager := &enterpriseApi.LicenseMaster{}
+
+	testenvInstance.Log.Info("Verifying Obsolete License Manager becomes READY")
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Obsolete License Manager instance status to be ready",
+			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+
+		return LicenseManager.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() splcommon.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		return LicenseManager.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+}
+
 // VerifyLMConfiguredOnPod verify LM is configured on given POD
 func VerifyLMConfiguredOnPod(ctx context.Context, deployment *Deployment, podName string) {
 	gomega.Consistently(func() bool {

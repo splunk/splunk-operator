@@ -81,6 +81,13 @@ const (
 	TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089" + URIPeerDecommission
 )
 
+// Test K8s components for License Manager Single Exceptions
+const (
+
+	//TestLicenseManagerMgmtPort = "license-master-service:8089"
+	TestObsoleteLicenseManagerMgmtPort = LicenseManager + "-service:8089"
+)
+
 // ***** Body Responses *****
 
 // JSON body responses Testing code

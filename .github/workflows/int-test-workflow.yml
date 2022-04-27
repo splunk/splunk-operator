@@ -5,6 +5,7 @@ on:
       - develop
       - master
       - feature-appframework
+      - CSPL-1421-LicenseManager
 jobs:
   int-tests:
     strategy:

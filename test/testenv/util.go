@@ -145,6 +145,43 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 	return &new
 }
 
+func newObsoleteLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
+	new := enterpriseApi.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.LicenseMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "licenses",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: licenseConfigMapName,
+								},
+							},
+						},
+					},
+				},
+				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
+				LicenseURL: "/mnt/licenses/enterprise.lic",
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+			},
+		},
+	}
+
+	return &new
+}
+
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
 func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
 	new := enterpriseApi.ClusterMaster{
