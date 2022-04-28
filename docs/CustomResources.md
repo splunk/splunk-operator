@@ -134,7 +134,7 @@ Enterprise resources, including: `Standalone`, `LicenseMaster`,
 | extraEnv | Extra environment variables | Extra environment variables to be passed to the Splunk instance containers
 | readinessInitialDelaySeconds | readinessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) | Defines `initialDelaySeconds` for Readiness probe
 | livenessInitialDelaySeconds | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe
-| imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | `imagePullSecrets` config for images from private registry. Can use more than one entry wherein atleast one entry has to have the right credentials. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources)
+| imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources)
 ## LicenseMaster Resource Spec Parameters
 
 ```yaml
