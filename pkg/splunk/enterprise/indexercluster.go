@@ -241,6 +241,7 @@ type indexerClusterPodManager struct {
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
+// NewIndexerClusterPodManager function to create pod manager this is added to write unit test case
 var NewIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
 	return indexerClusterPodManager{
 		log:             log,

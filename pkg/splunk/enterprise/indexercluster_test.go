@@ -1679,11 +1679,11 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 	httpmock.Reset()
 	fixture := `{"status":{"message": "Your message", "code": 200}}`
 	_ = httpmock.NewStringResponder(200, fixture)
-	fakeUrl := "https://api.mybiz.com/articles.json"
+	fakeURL := "https://api.mybiz.com/articles.json"
 
 	// fetch the article into struct
 	client := resty.New()
-	_, err = client.R().Get(fakeUrl)
+	_, err = client.R().Get(fakeURL)
 
 	indexercluster.Status.Initialized = true
 	indexercluster.Status.IndexingReady = true
@@ -1695,8 +1695,4 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 	httpmock.DeactivateAndReset()
-}
-
-func testFunc(managementURI, username, password string) *splclient.SplunkClient {
-	return splclient.NewSplunkClient(managementURI, username, password)
 }
