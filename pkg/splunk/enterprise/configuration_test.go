@@ -643,10 +643,9 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	// FIXME os.stat is not failing when directory do not exist, not sure why
-	//if err == nil {
-	//	t.Errorf("App Framework configuration should have returned error as we have not mounted app download volume: %v", err)
-	//}
+	if err == nil {
+		t.Errorf("App Framework configuration should have returned error as we have not mounted app download volume: %v", err)
+	}
 
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
