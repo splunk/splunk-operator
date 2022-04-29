@@ -207,7 +207,6 @@ metadata:
 spec:
   smartstore:
     defaults:
-        remotePath: $_index_name
         volumeName: msos_s2s3_vol
     indexes:
       - name: salesdata1
