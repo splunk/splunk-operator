@@ -5,12 +5,11 @@ import (
 	//"reflect"
 	"time"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,24 +52,24 @@ func callUnsedMethods(rr *StandaloneReconciler, namespace string) {
 	_ = k8sClient.Get(context.TODO(), key, secret)
 }
 
-func CreateStandlaone(name string, namespace string, status splcommon.Phase) *enterprisev3.Standalone {
+func CreateStandalone(name string, namespace string, status enterpriseApi.Phase) *enterpriseApi.Standalone {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterprisev3.Standalone{
+	ssSpec := &enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: enterprisev3.StandaloneSpec{},
+		Spec: enterpriseApi.StandaloneSpec{},
 	}
 	ssSpec = testutils.NewStandalone(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting Standalone custom resource to be created successfully")
-	ss := &enterprisev3.Standalone{}
+	ss := &enterpriseApi.Standalone{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -92,7 +91,7 @@ func DeleteStandalone(name string, namespace string) {
 
 	By("Expecting Standalone Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterprisev3.Standalone{}
+		ssys := &enterpriseApi.Standalone{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

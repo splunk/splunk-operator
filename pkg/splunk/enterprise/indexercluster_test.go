@@ -95,7 +95,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 			},
 		},
 	}
-	current.Status.ClusterMasterPhase = splcommon.PhaseReady
+	current.Status.ClusterMasterPhase = enterpriseApi.PhaseReady
 	current.Status.IndexerSecretChanged = append(current.Status.IndexerSecretChanged, true)
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
@@ -137,7 +137,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ClusterMasterPhase: splcommon.PhaseReady,
+			ClusterMasterPhase: enterpriseApi.PhaseReady,
 		},
 	}
 	secrets := &corev1.Secret{
@@ -187,7 +187,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ClusterMasterPhase: splcommon.PhaseReady,
+			ClusterMasterPhase: enterpriseApi.PhaseReady,
 		},
 	}
 	cr.Status.IndexerSecretChanged = append(cr.Status.IndexerSecretChanged, true)
@@ -217,7 +217,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 
 // indexerClusterpodManagerVerifyRFPeersTester is used to verify replicas against RF using a indexerClusterPodManager
 func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mgr *indexerClusterPodManager,
-	desiredReplicas int32, wantPhase splcommon.Phase, wantCalls map[string][]spltest.MockFuncCall, wantError error) {
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, wantCalls map[string][]spltest.MockFuncCall, wantError error) {
 
 	ctx := context.TODO()
 
@@ -240,7 +240,7 @@ func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mg
 }
 
 func indexerClusterPodManagerReplicasTester(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler,
-	replicas int32, desiredReplicas int32, wantPhase splcommon.Phase,
+	replicas int32, desiredReplicas int32, wantPhase enterpriseApi.Phase,
 	wantCalls map[string][]spltest.MockFuncCall, wantError error) {
 
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -272,19 +272,19 @@ func TestVerifyRFPeers(t *testing.T) {
 
 	method := "indexerClusterPodManager.verifyRFPeers(All pods ready)"
 	// test for singlesite i.e. with replication_factor=3(on ClusterMaster) and replicas=3(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 3 /*replicas*/, 3 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 3 /*replicas*/, 3 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	// test for singlesite i.e. with replication_factor=3(on ClusterMaster) and replicas=1(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 3 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 3 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	// Now test for multi-site too
 	mockHandlers[0].Body = splcommon.TestVerifyRFPeersMultiSite
 
 	//test for multisite i.e. with site_replication_factor=origin:2,total:2(on ClusterMaster) and replicas=2(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 2 /*replicas*/, 2 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 2 /*replicas*/, 2 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	//test for multisite i.e. with site_replication_factor=origin:2,total:2(on ClusterMaster) and replicas=1(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 2 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 2 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 }
 
 func checkResponseFromUpdateStatus(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler, replicas int32, statefulSet *appsv1.StatefulSet, retry bool) error {
@@ -493,7 +493,7 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 }
 
 func indexerClusterPodManagerUpdateTester(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler,
-	desiredReplicas int32, wantPhase splcommon.Phase, statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, statefulSet *appsv1.StatefulSet,
 	wantCalls map[string][]spltest.MockFuncCall, wantError error, initObjects ...client.Object) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
@@ -578,7 +578,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		},
 	}
 	method := "indexerClusterPodManager.Update(All pods ready)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => decommission
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
@@ -599,7 +599,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 	}
 	wantDecomPodCalls := map[string][]spltest.MockFuncCall{"Get": decommisonFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantDecomPodCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantDecomPodCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for decommission to complete
 	reassigningFuncCalls := []spltest.MockFuncCall{
@@ -613,19 +613,19 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"Up"`, `"status":"ReassigningPrimaries"`, 1)
 	method = "indexerClusterPodManager.Update(ReassigningPrimaries)"
 	wantReasCalls := map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantReasCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantReasCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for decommission to complete
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"ReassigningPrimaries"`, `"status":"Decommissioning"`, 1)
 	method = "indexerClusterPodManager.Update(Decommissioning)"
 	wantDecomCalls := map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantDecomCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantDecomCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"Decommissioning"`, `"status":"Down"`, 1)
 	method = "indexerClusterPodManager.Update(Delete Pod)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => pod not found
 	pod.ObjectMeta.Name = "splunk-stack1-2"
@@ -635,7 +635,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	statefulSet.Status.UpdatedReplicas = 2
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4]}, "Create": {funcCalls[1]}}
 	method = "indexerClusterPodManager.Update(Pod Not Found)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => decommission pod
 	mockHandlers[1].Body = `{"entry":[{"name":"aa45bf46-7f46-47af-a760-590d5c606d10","content":{"status":"Up","label":"splunk-stack1-indexer-0"}},{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","content":{"status":"GracefulShutdown","label":"splunk-stack1-indexer-1"}}]}`
@@ -667,7 +667,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	}
 	method = "indexerClusterPodManager.Update(Decommission)"
 	pod.ObjectMeta.Name = "splunk-stack1-0"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
 }
 
 func TestSetClusterMaintenanceMode(t *testing.T) {
@@ -1035,7 +1035,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	c := spltest.NewMockClient()
 	c.AddObject(&cm)
 
-	cm.Status.Phase = splcommon.PhaseReady
+	cm.Status.Phase = enterpriseApi.PhaseReady
 	// Empty ClusterMasterRef should return an error
 	cr.Spec.ClusterMasterRef.Name = ""
 	if _, err := ApplyIndexerCluster(context.Background(), c, &cr); err == nil {
@@ -1048,7 +1048,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
-	cm.Status.Phase = splcommon.PhaseError
+	cm.Status.Phase = enterpriseApi.PhaseError
 	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
 	if _, err := ApplyIndexerCluster(context.Background(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
@@ -1074,7 +1074,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	cr.Spec.ClusterMasterRef.Name = "master1"
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateIndexerClusterSpec(ctx, &cr); err != nil {
+			if err := validateIndexerClusterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateIndexerClusterSpec() returned error: %v", err)
 			}
 			return getIndexerStatefulSet(ctx, c, &cr)
@@ -1117,7 +1117,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	test(splcommon.TestGetIndexerStatefulSettest5)
 
 	cr.Spec.ClusterMasterRef.Namespace = "other"
-	if err := validateIndexerClusterSpec(ctx, &cr); err == nil {
+	if err := validateIndexerClusterSpec(ctx, c, &cr); err == nil {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")
 	}
 }

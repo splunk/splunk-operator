@@ -63,7 +63,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		secretAccessKey = ""
 	} else {
 		// Get credentials through the secretRef
-		s3ClientSecret, err := splutil.GetSecretByName(ctx, client, cr, appSecretRef)
+		s3ClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
 		if err != nil {
 			return s3Client, err
 		}
@@ -219,7 +219,7 @@ func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
-	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -511,20 +511,22 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 // remote volume end points
 func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForS3Secrets").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForS3SecretObjects").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error = nil
-	if isSmartstoreConfigured(smartstore) == false {
+	if !isSmartstoreConfigured(smartstore) {
 		return err
 	}
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
-		if err == nil {
-			scopedLog.Info("Success", "Removed references for Secret Object %s", volume.SecretRef)
-		} else {
-			scopedLog.Error(err, "Owner reference removal failed for Secret Object %s", volume.SecretRef)
+		if volume.SecretRef != "" {
+			_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
+			if err == nil {
+				scopedLog.Info("Removed references for Secret Object", "secret", volume.SecretRef)
+			} else {
+				scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", volume.SecretRef))
+			}
 		}
 	}
 
@@ -729,7 +731,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
 				if !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
-					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
+					scopedLog.Info("App is deleted from remote store", "appName", currentList[appIdx].AppName)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending)
 				}
 			}

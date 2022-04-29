@@ -241,7 +241,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateStandaloneSpec(ctx, &cr); err != nil {
+			if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateStandaloneSpec() returned error: %v", err)
 			}
 			return getStandaloneStatefulSet(ctx, c, &cr)
@@ -646,7 +646,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
-func TestStandlaoneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{

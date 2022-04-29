@@ -69,7 +69,7 @@ func TestDefaultStatefulSetPodManager(t *testing.T) {
 	spltest.PodManagerTester(t, method, &mgr)
 }
 
-func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManager, statefulSet *appsv1.StatefulSet, desiredReplicas int32, initObjects ...client.Object) (splcommon.Phase, error) {
+func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManager, statefulSet *appsv1.StatefulSet, desiredReplicas int32, initObjects ...client.Object) (enterpriseApi.Phase, error) {
 	// initialize client
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
@@ -116,9 +116,9 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		},
 	}
 
-	var phase splcommon.Phase
+	var phase enterpriseApi.Phase
 	phase, err := updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err != nil && phase != splcommon.PhaseUpdating {
+	if err != nil && phase != enterpriseApi.PhaseUpdating {
 		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
@@ -127,14 +127,14 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Spec.Replicas = &replicas
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err != nil && phase != splcommon.PhaseUpdating {
+	if err != nil && phase != enterpriseApi.PhaseUpdating {
 		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
 	// CurrentRevision = UpdateRevision
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseScalingUp {
+	if err == nil && phase != enterpriseApi.PhaseScalingUp {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
 
@@ -144,14 +144,14 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	statefulSet.Spec.Replicas = &replicas
 	statefulSet.Status.CurrentRevision = ""
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseScalingDown {
+	if err == nil && phase != enterpriseApi.PhaseScalingDown {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
 
 	// CurrentRevision = UpdateRevision
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != splcommon.PhaseScalingDown {
+	if err == nil && phase != enterpriseApi.PhaseScalingDown {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
 }

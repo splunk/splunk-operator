@@ -97,7 +97,7 @@ func TestApplyClusterManager(t *testing.T) {
 		},
 	}
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
@@ -132,7 +132,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
+			if err := validateClusterManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
 			return getClusterManagerStatefulSet(ctx, c, &cr)
@@ -280,7 +280,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err

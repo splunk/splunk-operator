@@ -97,11 +97,21 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 		result = true
 	}
 
+	// check for changes in Tolerations
 	if splcommon.CompareTolerations(current.Tolerations, revised.Tolerations) {
 		scopedLog.Info("Pod Tolerations differs",
 			"current", current.Tolerations,
 			"revised", revised.Tolerations)
 		current.Tolerations = revised.Tolerations
+		result = true
+	}
+
+	// check for changes in ImagePullSecrets
+	if splcommon.CompareImagePullSecrets(current.ImagePullSecrets, revised.ImagePullSecrets) {
+		scopedLog.Info("Pod ImagePullSecrets differs",
+			"current", current.ImagePullSecrets,
+			"revised", revised.ImagePullSecrets)
+		current.ImagePullSecrets = revised.ImagePullSecrets
 		result = true
 	}
 
@@ -130,6 +140,17 @@ func MergePodSpecUpdates(current *corev1.PodSpec, revised *corev1.PodSpec, name 
 			"revised", len(revised.InitContainers))
 		current.InitContainers = revised.InitContainers
 		result = true
+	} else {
+		for idx := range current.InitContainers {
+			// check Image
+			if current.InitContainers[idx].Image != revised.InitContainers[idx].Image {
+				scopedLog.Info("Init Container Images differ",
+					"current", current.InitContainers[idx].Image,
+					"revised", revised.InitContainers[idx].Image)
+				current.InitContainers[idx].Image = revised.InitContainers[idx].Image
+				result = true
+			}
+		}
 	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
@@ -212,6 +233,9 @@ func SortStatefulSetSlices(current *corev1.PodSpec, name string) error {
 
 	// Sort volumes
 	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)
+
+	// Sort ImagePullSecrets
+	splcommon.SortSlice(current.ImagePullSecrets, splcommon.SortFieldName)
 
 	// Sort slices inside container specs
 	for idx := range current.Containers {

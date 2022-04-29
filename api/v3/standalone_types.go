@@ -17,7 +17,6 @@ limitations under the License.
 package v3
 
 import (
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +25,6 @@ import (
 // +kubebuilder:validation:Optional
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
@@ -53,7 +51,7 @@ type StandaloneSpec struct {
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
 type StandaloneStatus struct {
 	// current phase of the standalone instances
-	Phase splcommon.Phase `json:"phase"`
+	Phase Phase `json:"phase"`
 
 	// number of desired standalone instances
 	Replicas int32 `json:"replicas"`

@@ -45,7 +45,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateLicenseManagerSpec(ctx, cr)
+	err := validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -64,7 +64,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = splcommon.PhaseError
+	cr.Status.Phase = enterpriseApi.PhaseError
 	defer func() {
 		client.Status().Update(context.TODO(), cr)
 	}()
@@ -88,7 +88,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
@@ -124,7 +124,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
-	if cr.Status.Phase == splcommon.PhaseReady {
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -175,7 +175,7 @@ func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.Controll
 }
 
 // validateLicenseManagerSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMaster) error {
+func validateLicenseManagerSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
@@ -184,5 +184,5 @@ func validateLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMa
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
