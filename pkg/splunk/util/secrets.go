@@ -293,6 +293,19 @@ func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.Controlle
 
 // GetLatestVersionedSecret is used to create/retrieve latest versionedSecretIdentifier based secret, cr is optional for owner references(pass nil if not required)
 func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, namespace string, versionedSecretIdentifier string) (*corev1.Secret, error) {
+	scopedLog := log.WithName("GetLatestVersionedSecret").WithValues(
+		"versionedSecretIdentifier", versionedSecretIdentifier,
+		"namespace", namespace)
+
+	// If CR is passed log it as well
+	if cr != nil {
+		scopedLog = log.WithName("GetLatestVersionedSecret").WithValues(
+			"versionedSecretIdentifier", versionedSecretIdentifier,
+			"cr", cr.GetName(),
+			"kind", cr.GetObjectKind(),
+			"namespace", namespace)
+	}
+
 	var latestVersionedSecret *corev1.Secret
 	var err error
 
@@ -308,12 +321,15 @@ func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient,
 	// Check if there is atleast one versionedSecretIdentifier based secret
 	if existingLatestVersion == -1 {
 		// No secret based on versionedSecretIdentifier, create one with version v1
+		scopedLog.Info("Creating first version secret")
 		latestVersionedSecret, err = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, splcommon.FirstVersion), namespace)
 	} else {
 		// Check if contents of latest versionedSecretIdentifier based secret is different from that of namespace scoped secrets object
 		if !reflect.DeepEqual(splunkReadableData, existingLatestVersionedSecret.Data) {
 			// Different, create a newer version versionedSecretIdentifier based secret
 			latestVersionedSecret, err = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, strconv.Itoa(existingLatestVersion+1)), namespace)
+			scopedLog.Info("Data in the latest versioned secret is different from the namespace scoped secret, hence creating a new secret", "newSecretName", latestVersionedSecret.GetName(),
+				"newSecretVersion", existingLatestVersion+1, "oldSecretName", existingLatestVersionedSecret.GetName(), "oldSecretVersion", existingLatestVersion)
 			return latestVersionedSecret, err
 		}
 
@@ -418,13 +434,13 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 	return &current, nil
 }
 
-// ApplyNamespaceScopedSecretObject creates/updates the namespace scoped "splunk-secrets" K8S secret object
+// ApplyNamespaceScopedSecretObject creates/updates the namespace scoped K8S secret object
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
 
-	scopedLog := log.WithName("ApplyConfigMap").WithValues(
+	scopedLog := log.WithName("ApplyNamespaceScopedSecretObject").WithValues(
 		"name", splcommon.GetNamespaceScopedSecretName(namespace),
 		"namespace", namespace)
 
@@ -436,6 +452,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		var updateNeeded bool = false
 		for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 			if _, ok := current.Data[tokenType]; !ok {
+				scopedLog.Info("Namespace scoped secret exists, missing value for token", "missingTokenType", tokenType)
 				if current.Data == nil || reflect.ValueOf(current.Data).Kind() != reflect.Map {
 					current.Data = make(map[string][]byte)
 				}
@@ -451,6 +468,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 
 		// Updated the secret if needed
 		if updateNeeded {
+			scopedLog.Info("Updating namespace scoped secret due to a missing value for token")
 			err = UpdateResource(ctx, client, &current)
 			if err != nil {
 				return nil, err
@@ -459,11 +477,13 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 
 		return &current, nil
 	} else if err != nil && !k8serrors.IsNotFound(err) {
-		// get secret call failed with othert than NotFound error return the err
+		// get secret call failed with other than NotFound error return the err
 		return nil, err
 	}
 
 	// Make data
+	scopedLog.Info("Namespace scoped secret does not exist, creating it ",
+		"and filling it with new values for all token types")
 	current.Data = make(map[string][]byte)
 	// Not found, update data by generating values for all types of tokens
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
