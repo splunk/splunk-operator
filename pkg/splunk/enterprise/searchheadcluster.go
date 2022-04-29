@@ -401,7 +401,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		mgr.log.Error(err, "Search head cluster is not ready")
+		mgr.log.Info("Search head cluster is not ready", "reason ", err)
 		return enterpriseApi.PhasePending, nil
 	}
 
