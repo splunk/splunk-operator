@@ -333,7 +333,7 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 	for _, secret := range spec.ImagePullSecrets {
 		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
 		if err != nil {
-			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config, ", "Secret: ", secret.Name)
+			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
 		}
 	}
 
@@ -1137,13 +1137,13 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
 
 	if appContext.AppsRepoStatusPollInterval == 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "default value", splcommon.DefaultAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "finalized value", splcommon.MinAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "finalized value", splcommon.MaxAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
