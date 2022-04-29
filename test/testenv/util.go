@@ -182,8 +182,21 @@ func newObsoleteLicenseManager(name, ns, licenseConfigMapName string) *enterpris
 	return &new
 }
 
+// This helper function and its references should be removed when the ObsoleteLicenseManager is deprecated
+// swapObsoleteLicenseManager Enables both License CRDs to be tested with minimal duplication
+func swapObsoleteLicenseManager(name string, licenseManagerName string) (string, string) {
+	ObsoletelicenseManagerName := ""
+	if strings.Contains(name, "obsolete") {
+		ObsoletelicenseManagerName, licenseManagerName = licenseManagerName, ObsoletelicenseManagerName
+	}
+	return ObsoletelicenseManagerName, licenseManagerName
+}
+
 // newClusterMaster creates and initialize the CR for ClusterMaster Kind
 func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+
+	obsoletelicenseManagerName, licenseManagerName := swapObsoleteLicenseManager(name, licenseManagerName)
+
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
@@ -202,6 +215,9 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
+				},
+				ObsoleteLicenseManagerRef: corev1.ObjectReference{
+					Name: obsoletelicenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -272,6 +288,9 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 }
 
 func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+
+	obsoletelicenseManagerName, licenseManagerName := swapObsoleteLicenseManager(name, licenseManagerName)
+
 	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -293,6 +312,9 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
+				},
+				ObsoleteLicenseManagerRef: corev1.ObjectReference{
+					Name: obsoletelicenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -535,6 +557,9 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 
 // newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
 func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) *enterpriseApi.MonitoringConsole {
+
+	obsoletelicenseManagerName, LicenseManagerRef := swapObsoleteLicenseManager(name, LicenseManagerRef)
+
 	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
@@ -552,6 +577,9 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: LicenseManagerRef,
+				},
+				ObsoleteLicenseManagerRef: corev1.ObjectReference{
+					Name: obsoletelicenseManagerName,
 				},
 				Volumes: []corev1.Volume{},
 			},

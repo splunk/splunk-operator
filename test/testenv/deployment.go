@@ -377,7 +377,7 @@ func (d *Deployment) DeployObsoleteLicenseManager(ctx context.Context, name stri
 
 //DeployClusterMaster deploys the cluster manager
 func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
+	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
 	if mcRef != "" {
 		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
