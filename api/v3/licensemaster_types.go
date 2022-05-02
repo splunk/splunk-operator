@@ -55,7 +55,7 @@ type LicenseMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise Obsolete license master.
+// LicenseMaster is the Schema for a Splunk Enterprise Obsolete license manager.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=obsoletelm
