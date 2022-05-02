@@ -482,8 +482,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	}
 
 	// Make data
-	scopedLog.Info("Namespace scoped secret does not exist, creating it ",
-		"and filling it with new values for all token types")
+	scopedLog.Info("Namespace scoped secret does not exist, creating and filling it with new values for all token types")
 	current.Data = make(map[string][]byte)
 	// Not found, update data by generating values for all types of tokens
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
