@@ -1370,19 +1370,6 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		},
 	}
 
-	/*cservice := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master-headless",
-			Namespace: "default",
-		},
-	} */
-
-	// simulate service
-	//c.Create(ctx, cservice)
-
-	// simulate create stateful set
-	//c.Create(ctx, cstatefulset)
-
 	// simulate create clustermaster instance before reconcilation
 	c.Create(ctx, clustermaster)
 

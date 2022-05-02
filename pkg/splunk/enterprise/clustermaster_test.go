@@ -1003,7 +1003,7 @@ func TestGetClusterManagerList(t *testing.T) {
 	// Invalid scenario since we haven't added clustermanager to the list yet
 	_, err := getClusterManagerList(ctx, client, &cm, listOpts)
 	if err == nil {
-		t.Errorf("getNumOfObjects should have returned error as we haven't added clustermaster to the list yet")
+		t.Errorf("getNumOfObjects should have returned error as we haven't added cluster manager to the list yet")
 	}
 
 	cmList := &enterpriseApi.ClusterMasterList{}
