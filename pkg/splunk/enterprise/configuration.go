@@ -630,7 +630,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: spec.LicenseURL,
 		})
 	}
-
 	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
 		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
 		if spec.LicenseManagerRef.Namespace != "" {

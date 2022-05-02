@@ -1,17 +1,6 @@
 # Build the manager binary
 FROM golang:1.17 as builder
 
-RUN apt-get update && apt-get install -y ca-certificates openssl
-
-ARG cert_location=/usr/local/share/ca-certificates
-
-# Get certificate from "github.com"
-RUN openssl s_client -showcerts -connect github.com:443 </dev/null 2>/dev/null|openssl x509 -outform PEM > ${cert_location}/github.crt
-# Get certificate from "proxy.golang.org"
-RUN openssl s_client -showcerts -connect proxy.golang.org:443 </dev/null 2>/dev/null|openssl x509 -outform PEM >  ${cert_location}/proxy.golang.crt
-# Update certificates
-RUN update-ca-certificates
-
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
@@ -39,7 +28,7 @@ ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
 
-# RUN yum -y install shadow-utils
+RUN yum -y install shadow-utils
 RUN useradd -ms /bin/bash nonroot -u 1001
 
 LABEL name="splunk" \
