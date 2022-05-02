@@ -1337,6 +1337,9 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},

@@ -219,6 +219,92 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	newURLsAdded = true
 
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "SPLUNK_MULTISITE_MASTER", Value: "test-a"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"SPLUNK_MULTISITE_MASTER": "test-a", "SPLUNK_SITE": "abc"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a,test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b,test-c"},
+	}
+
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = true
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
