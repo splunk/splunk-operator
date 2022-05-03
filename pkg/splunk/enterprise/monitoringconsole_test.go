@@ -1135,7 +1135,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	}
 
 	stNamespacedName = types.NamespacedName{
-		Name:      "splunk-test-indexer",
+		Name:      "splunk-test-monitoring-console",
 		Namespace: "default",
 	}
 	err = c.Get(ctx, stNamespacedName, statefulset)
