@@ -38,8 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// ObsoleteLicenseManagerReconciler reconciles a LicenseMaster object
-type ObsoleteLicenseManagerReconciler struct {
+// LicenseMasterReconciler reconciles a LicenseMaster object
+type LicenseMasterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -69,7 +69,7 @@ type ObsoleteLicenseManagerReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
@@ -101,16 +101,16 @@ func (r *ObsoleteLicenseManagerReconciler) Reconcile(ctx context.Context, req ct
 		}
 	}
 
-	return ApplyObsoleteLicenseManager(ctx, r.Client, instance)
+	return ApplyLicenseMaster(ctx, r.Client, instance)
 }
 
-// ApplyObsoleteLicenseManager adding to handle unit test case
-var ApplyObsoleteLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
-	return enterprise.ApplyObsoleteLicenseManager(ctx, client, instance)
+// ApplyLicenseMaster adding to handle unit test case
+var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ObsoleteLicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(

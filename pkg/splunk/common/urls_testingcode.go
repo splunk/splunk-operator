@@ -85,7 +85,7 @@ const (
 const (
 
 	//TestLicenseManagerMgmtPort = "license-master-service:8089"
-	TestObsoleteLicenseManagerMgmtPort = LicenseManager + "-service:8089"
+	TestLicenseManagerMgmtPort = LicenseManager + "-service:8089"
 )
 
 // ***** Body Responses *****

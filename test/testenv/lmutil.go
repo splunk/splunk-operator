@@ -57,5 +57,5 @@ func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, 
 	}
 	licenseManager := restResponse.Entry[0].Content.ManagerURI
 	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
-	return strings.Contains(licenseManager, "license-manager-service:8089") || strings.Contains(licenseManager, splcommon.TestObsoleteLicenseManagerMgmtPort)
+	return strings.Contains(licenseManager, "license-manager-service:8089") || strings.Contains(licenseManager, "license-master-service:8089")
 }

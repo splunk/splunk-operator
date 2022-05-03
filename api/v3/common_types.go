@@ -104,8 +104,8 @@ type CommonSplunkSpec struct {
 	// Full path or URL for a Splunk Enterprise license file
 	LicenseURL string `json:"licenseUrl"`
 
-	// ObsoleteLicenseManagerRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
-	ObsoleteLicenseManagerRef corev1.ObjectReference `json:"licenseMasterRef"`
+	// LicenseMasterRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
+	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
 
 	// LicenseManagerRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
 	LicenseManagerRef corev1.ObjectReference `json:"licenseManagerRef"`

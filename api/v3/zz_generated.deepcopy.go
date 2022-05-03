@@ -311,7 +311,7 @@ func (in *CommonSplunkSpec) DeepCopyInto(out *CommonSplunkSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	out.ObsoleteLicenseManagerRef = in.ObsoleteLicenseManagerRef
+	out.LicenseMasterRef = in.LicenseMasterRef
 	out.LicenseManagerRef = in.LicenseManagerRef
 	out.ClusterMasterRef = in.ClusterMasterRef
 	out.MonitoringConsoleRef = in.MonitoringConsoleRef

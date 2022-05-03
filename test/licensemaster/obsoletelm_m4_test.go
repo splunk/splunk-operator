@@ -24,7 +24,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Obsolete Licensemanager test", func() {
+var _ = Describe("Licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -32,7 +32,7 @@ var _ = Describe("Obsolete Licensemanager test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", "obsolete"+testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -53,7 +53,7 @@ var _ = Describe("Obsolete Licensemanager test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("obsolete licensemanager, integration, m4: Splunk Operator can configure obsolete license manager with indexers and search head in M4 SVA", func() {
+		It("licensemaster, integration, m4: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()

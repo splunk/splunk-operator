@@ -53,8 +53,8 @@ const (
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
-	// SplunkObsoleteLicenseManager controls one or more license nodes
-	SplunkObsoleteLicenseManager InstanceType = splcommon.LicenseManager
+	// SplunkLicenseMaster controls one or more license nodes
+	SplunkLicenseMaster InstanceType = splcommon.LicenseManager
 
 	// SplunkLicenseManager controls one or more license nodes
 	SplunkLicenseManager InstanceType = "license-manager"
@@ -220,7 +220,7 @@ func (instanceType InstanceType) ToRole() string {
 		role = "splunk_indexer"
 	case SplunkDeployer:
 		role = "splunk_deployer"
-	case SplunkObsoleteLicenseManager:
+	case SplunkLicenseMaster:
 		role = splcommon.LicenseManagerRole
 	case SplunkLicenseManager:
 		role = splcommon.LicenseManagerRole
@@ -244,7 +244,7 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "search-head"
 	case SplunkDeployer:
 		kind = "search-head"
-	case SplunkObsoleteLicenseManager:
+	case SplunkLicenseMaster:
 		kind = splcommon.LicenseManager
 	case SplunkLicenseManager:
 		kind = "license-manager"

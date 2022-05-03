@@ -639,14 +639,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Name:  splcommon.LicenseManagerURL,
 			Value: licenseManagerURL,
 		})
-	} else if instanceType != SplunkObsoleteLicenseManager && spec.ObsoleteLicenseManagerRef.Name != "" {
-		ObsoletelicenseManagerURL := GetSplunkServiceName(SplunkObsoleteLicenseManager, spec.ObsoleteLicenseManagerRef.Name, false)
-		if spec.ObsoleteLicenseManagerRef.Namespace != "" {
-			ObsoletelicenseManagerURL = splcommon.GetServiceFQDN(spec.ObsoleteLicenseManagerRef.Namespace, ObsoletelicenseManagerURL)
+	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
+		LicenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			LicenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, LicenseMasterURL)
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  splcommon.LicenseManagerURL,
-			Value: ObsoletelicenseManagerURL,
+			Value: LicenseMasterURL,
 		})
 	}
 
@@ -660,7 +660,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseManagerRef.Name == "" || spec.ObsoleteLicenseManagerRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
 			namespacedName := types.NamespacedName{
 				Namespace: cr.GetNamespace(),
@@ -681,14 +681,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
 				})
-			} else if managerIdxCluster.Spec.ObsoleteLicenseManagerRef.Name != "" {
-				ObsoletelicenseManagerURL := GetSplunkServiceName(SplunkObsoleteLicenseManager, managerIdxCluster.Spec.ObsoleteLicenseManagerRef.Name, false)
-				if managerIdxCluster.Spec.ObsoleteLicenseManagerRef.Namespace != "" {
-					ObsoletelicenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.ObsoleteLicenseManagerRef.Namespace, ObsoletelicenseManagerURL)
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				LicenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					LicenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, LicenseMasterURL)
 				}
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
-					Value: ObsoletelicenseManagerURL,
+					Value: LicenseMasterURL,
 				})
 			}
 		}

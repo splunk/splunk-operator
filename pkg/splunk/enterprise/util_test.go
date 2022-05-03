@@ -111,7 +111,6 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
-	//ctx := context.TODO()
 	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",

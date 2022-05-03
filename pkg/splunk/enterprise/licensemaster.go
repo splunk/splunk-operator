@@ -33,8 +33,8 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 )
 
-// ApplyObsoleteLicenseManager reconciles the state for the Splunk Enterprise license manager.
-func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
+// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
+func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -42,11 +42,11 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyObsoleteLicenseManager")
+	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateObsoleteLicenseManagerSpec(ctx, cr)
+	err := validateLicenseMasterSpec(ctx, cr)
 	if err != nil {
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
@@ -77,7 +77,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	}()
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkObsoleteLicenseManager)
+	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
@@ -87,7 +87,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
@@ -117,19 +117,19 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	}
 
 	// create or update a service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkObsoleteLicenseManager, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, false))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update statefulset
-	statefulSet, err := getObsoleteLicenseManagerStatefulSet(ctx, client, cr)
+	statefulSet, err := getLicenseMasterStatefulSet(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
@@ -150,7 +150,7 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getObsoleteLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
 			if err != nil {
 				return result, err
 			}
@@ -167,9 +167,9 @@ func ApplyObsoleteLicenseManager(ctx context.Context, client splcommon.Controlle
 	return result, nil
 }
 
-// getObsoleteLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getObsoleteLicenseManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkObsoleteLicenseManager, 1, []corev1.EnvVar{})
+// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseMaster) (*appsv1.StatefulSet, error) {
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
 	}
@@ -180,8 +180,8 @@ func getObsoleteLicenseManagerStatefulSet(ctx context.Context, client splcommon.
 	return ss, err
 }
 
-// validateObsoleteLicenseManagerSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
-func validateObsoleteLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.LicenseMaster) error {
+// validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
+func validateLicenseMasterSpec(ctx context.Context, cr *enterpriseApi.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
@@ -194,9 +194,9 @@ func validateObsoleteLicenseManagerSpec(ctx context.Context, cr *enterpriseApi.L
 }
 
 // helper function to get the list of LicenseMaster types in the current namespace
-func getObsoleteLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getObsoleteLicenseManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.LicenseMasterList{}
 

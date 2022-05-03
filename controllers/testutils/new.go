@@ -181,6 +181,40 @@ func NewLicenseManager(name, ns, image string) *enterprisev3.LicenseManager {
 	return ad
 }
 
+// NewLicenseMaster returns new serach head cluster instance with its config hash
+func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
+
+	c := &commonapi.Spec{
+		ImagePullPolicy: string(pullPolicy),
+	}
+
+	cs := &enterprisev3.CommonSplunkSpec{
+		Mock:    true,
+		Spec:    *c,
+		Volumes: []corev1.Volume{},
+		MonitoringConsoleRef: corev1.ObjectReference{
+			Name: "mcName",
+		},
+	}
+
+	ad := &enterprisev3.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v3",
+			Kind:       "LicenseMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+	}
+
+	ad.Spec = enterprisev3.LicenseMasterSpec{
+		CommonSplunkSpec: *cs,
+	}
+	return ad
+}
+
 // NewIndexerCluster returns new serach head cluster instance with its config hash
 func NewIndexerCluster(name, ns, image string) *enterprisev3.IndexerCluster {
 

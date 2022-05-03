@@ -55,12 +55,12 @@ type LicenseMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise Obsolete license manager.
+// LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=obsoletelm
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license master"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license master"
+// +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lmaster
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
 // +kubebuilder:storageversion
 type LicenseMaster struct {
 	metav1.TypeMeta   `json:",inline"`

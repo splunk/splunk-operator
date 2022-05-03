@@ -357,20 +357,20 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 	return deployed.(*enterpriseApi.LicenseManager), err
 }
 
-//DeployObsoleteLicenseManager deploys the license manager instance
-func (d *Deployment) DeployObsoleteLicenseManager(ctx context.Context, name string) (*enterpriseApi.LicenseMaster, error) {
+//DeployLicenseMaster deploys the license manager instance
+func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*enterpriseApi.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
 		return nil, fmt.Errorf("no license file path specified")
 	}
 
-	lm := newObsoleteLicenseManager(name, d.testenv.namespace, d.testenv.licenseCMName)
+	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
 	deployed, err := d.deployCR(ctx, name, lm)
 	if err != nil {
 		return nil, err
 	}
 	// Verify standalone goes to ready state
-	ObsoleteLicenseManagerReady(ctx, d, d.testenv)
+	LicenseMasterReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.LicenseMaster), err
 }
@@ -550,10 +550,10 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Enable obsolete LM to be tested
-		if strings.Contains(name, "obsolete") {
-			// Deploy the Obsolete license manager
-			_, err := d.DeployObsoleteLicenseManager(ctx, name)
+		// Enable LM to be tested
+		if strings.Contains(name, "master") {
+			// Deploy the license master
+			_, err := d.DeployLicenseMaster(ctx, name)
 			if err != nil {
 				return err
 			}

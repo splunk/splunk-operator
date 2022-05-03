@@ -5,7 +5,7 @@ pkg/splunk/common/paths.go
 PROJECT
 ChangeLog.md
 .rgignore
-# Exceptions for Obsolete CRDs
+# Exceptions for CRDs
 config/crd/bases/
 bundle/manifests/
 config/rbac/role.yaml
