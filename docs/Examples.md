@@ -10,7 +10,7 @@ This document includes various examples for configuring Splunk Enterprise deploy
       - [Scaling cluster peers using replicas](#scaling-cluster-peers-using-replicas)
       - [Scaling cluster peers using pod autoscaling](#scaling-cluster-peers-using-pod-autoscaling)
       - [Create a search head for your index cluster](#create-a-search-head-for-your-index-cluster)
-    - [Monitoring Clonsole](#monitoring-console)
+    - [Monitoring Console](#monitoring-console)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
     - [Cleaning Up](#cleaning-up)
@@ -70,7 +70,7 @@ The Splunk Operator is responsible for configuring and maintaing the connection 
 
 The Splunk Operator also controls the upgrade cycle, and implements the recommended order of cluster manager, search heads, and indexers, by defining and updating the docker image used by each IndexerCluster part.
 
-This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console), or use the example below:
+This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -309,7 +309,7 @@ spec:
 EOF
 ```
 
-This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod.  To start the monitoring console pod, see [Monitoring Clonsole](#monitoring-console), or use the example below:
+This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod.  To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
