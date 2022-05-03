@@ -277,8 +277,10 @@ run_clair_scan:
 generate-artifacts: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	mkdir -p release-${VERSION}
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-install.yaml
-
+	sed -i "s/ClusterRole/Role/g"  release-${VERSION}/splunk-operator-install.yaml
+	sed -i "s/ClusterRoleBinding/RoleBinding/g" release-${VERSION}/splunk-operator-install.yaml
 
 #############################
 export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
