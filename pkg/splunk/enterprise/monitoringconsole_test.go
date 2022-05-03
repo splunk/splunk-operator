@@ -1007,11 +1007,11 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	replicas := int32(1)
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer",
+			Name:      "splunk-test-monitoring-console",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-indexer-headless",
+			ServiceName: "splunk-test-monitoring-console-headless",
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -1034,7 +1034,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer-headless",
+			Name:      "splunk-test-monitoring-console-headless",
 			Namespace: "default",
 		},
 	}
@@ -1066,11 +1066,11 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
 	}
 	monitoringconsole.Spec.ServiceTemplate.Labels = map[string]string{
-		"app.kubernetes.io/instance":   "splunk-test-indexer-cluster",
+		"app.kubernetes.io/instance":   "splunk-test-monitoring-console",
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/component":  "indexer-cluster",
-		"app.kubernetes.io/name":       "indexer-cluster",
-		"app.kubernetes.io/part-of":    "splunk-test-indexer-cluster",
+		"app.kubernetes.io/component":  "monitoring-console",
+		"app.kubernetes.io/name":       "monitoring-console",
+		"app.kubernetes.io/part-of":    "splunk-test-monitoring-console",
 	}
 	err = c.Status().Update(ctx, monitoringconsole)
 	if err != nil {
@@ -1094,7 +1094,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	// create pod
 	stpod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer-0",
+			Name:      "splunk-test-monitoring-console-0",
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
