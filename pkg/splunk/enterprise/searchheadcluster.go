@@ -182,7 +182,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	mgr := searchHeadClusterPodManager{c: client, log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	mgr := NewSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -236,6 +236,17 @@ type searchHeadClusterPodManager struct {
 	cr              *enterpriseApi.SearchHeadCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+// NewSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
+var NewSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+	return searchHeadClusterPodManager{
+		log:             log,
+		cr:              cr,
+		secrets:         secret,
+		newSplunkClient: newSplunkClient,
+		c:               client,
+	}
 }
 
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
