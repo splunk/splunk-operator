@@ -107,7 +107,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ClusterMasterPhase = splcommon.PhaseError
 	}
 
-	//mgr := indexerClusterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	mgr := NewIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
