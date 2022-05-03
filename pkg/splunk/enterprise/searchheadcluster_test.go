@@ -1395,9 +1395,25 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/peers?count=0&output_mode=json", nil)
 	wantRequest3, _ := http.NewRequest("GET", "https://splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
 
-	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
-	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
+	wantRequest4, _ := http.NewRequest("GET", "https://splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json", nil)
+	wantRequest5, _ := http.NewRequest("GET", "https://splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/peers?count=0&output_mode=json", nil)
+	wantRequest6, _ := http.NewRequest("GET", "https://splunk-test-search-head-1.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
+
+	wantRequest7, _ := http.NewRequest("GET", "https://splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json", nil)
+	wantRequest8, _ := http.NewRequest("GET", "https://splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/peers?count=0&output_mode=json", nil)
+	wantRequest9, _ := http.NewRequest("GET", "https://splunk-test-search-head-2.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
+
+	mclient.AddHandler(wantRequest1, 200, string(response2), nil)
+	mclient.AddHandler(wantRequest2, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest3, 200, string(response3), nil)
+
+	mclient.AddHandler(wantRequest4, 200, string(response2), nil)
+	mclient.AddHandler(wantRequest5, 200, string(response1), nil)
+	mclient.AddHandler(wantRequest6, 200, string(response3), nil)
+
+	mclient.AddHandler(wantRequest7, 200, string(response2), nil)
+	mclient.AddHandler(wantRequest8, 200, string(response1), nil)
+	mclient.AddHandler(wantRequest9, 200, string(response3), nil)
 
 	// mock the verify RF peer funciton
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
@@ -1659,7 +1675,8 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-search-head-headless",
+			PodManagementPolicy: "Parallel",
+			ServiceName:         "splunk-test-deployer-headless",
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -1672,6 +1689,12 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 									Value: "test",
 								},
 							},
+							LivenessProbe: &corev1.Probe{
+								InitialDelaySeconds: 300,
+							},
+							ReadinessProbe: &corev1.Probe{
+								InitialDelaySeconds: 300,
+							},
 						},
 					},
 				},
@@ -1682,7 +1705,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-search-head-headless",
+			Name:      "splunk-test-deployer-headless",
 			Namespace: "default",
 		},
 	}
@@ -1756,6 +1779,12 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 							Value: "test",
 						},
 					},
+					LivenessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
+					ReadinessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
 				},
 			},
 		},
@@ -1768,7 +1797,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// create pod
-	stpod2 := &corev1.Pod{
+	stpod1 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-search-head-1",
 			Namespace: "default",
@@ -1784,19 +1813,25 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 							Value: "test",
 						},
 					},
+					LivenessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
+					ReadinessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
 				},
 			},
 		},
 	}
 	// simulate create stateful set
-	c.Create(ctx, stpod2)
+	c.Create(ctx, stpod1)
 	if err != nil {
 		t.Errorf("Unexpected create pod failed %v", err)
 		debug.PrintStack()
 	}
 
 	// create pod
-	stpod3 := &corev1.Pod{
+	stpod2 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-search-head-2",
 			Namespace: "default",
@@ -1812,18 +1847,58 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 							Value: "test",
 						},
 					},
+					LivenessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
+					ReadinessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
 				},
 			},
 		},
 	}
 	// simulate create stateful set
-	c.Create(ctx, stpod3)
+	c.Create(ctx, stpod2)
 	if err != nil {
 		t.Errorf("Unexpected create pod failed %v", err)
 		debug.PrintStack()
 	}
 
-	// update statefulset
+	// create pod
+	stpoddeployer := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-deployer-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+					LivenessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
+					ReadinessProbe: &corev1.Probe{
+						InitialDelaySeconds: 300,
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpoddeployer)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update stateful set pod
 	stpod.Status.Phase = corev1.PodRunning
 	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
 		{
@@ -1834,11 +1909,26 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 	err = c.Status().Update(ctx, stpod)
 	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
+		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
 
-	// update statefulset
+	// update stateful set pod
+	stpod1.Status.Phase = corev1.PodRunning
+	stpod1.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod1)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+
+	// update stateful set pod
 	stpod2.Status.Phase = corev1.PodRunning
 	stpod2.Status.ContainerStatuses = []corev1.ContainerStatus{
 		{
@@ -1849,20 +1939,20 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 	err = c.Status().Update(ctx, stpod2)
 	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
+		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
 
 	// update statefulset
-	stpod3.Status.Phase = corev1.PodRunning
-	stpod3.Status.ContainerStatuses = []corev1.ContainerStatus{
+	stpoddeployer.Status.Phase = corev1.PodRunning
+	stpoddeployer.Status.ContainerStatuses = []corev1.ContainerStatus{
 		{
 			Image: "splunk/splunk:latest",
 			Name:  "splunk",
 			Ready: true,
 		},
 	}
-	err = c.Status().Update(ctx, stpod3)
+	err = c.Status().Update(ctx, stpoddeployer)
 	if err != nil {
 		t.Errorf("Unexpected update statefulset  %v", err)
 		debug.PrintStack()
@@ -1877,9 +1967,31 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected get searchhead cluster %v", err)
 		debug.PrintStack()
 	}
+
 	// update statefulset
 	statefulset.Status.ReadyReplicas = 3
 	statefulset.Status.Replicas = 3
+	err = c.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset for deployer
+
+	stNamespacedName = types.NamespacedName{
+		Name:      "splunk-test-deployer",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get searchhead cluster %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	statefulset.Status.ReadyReplicas = 1
+	statefulset.Status.Replicas = 1
 	err = c.Status().Update(ctx, statefulset)
 	if err != nil {
 		t.Errorf("Unexpected update statefulset  %v", err)
