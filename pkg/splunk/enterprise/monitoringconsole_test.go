@@ -769,207 +769,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
-	// Create App framework volume
-	volumeSpec := []enterpriseApi.VolumeSpec{
-		{
-			Name:      "testing",
-			Endpoint:  "/someendpoint",
-			Path:      "s3-test",
-			SecretRef: "secretRef",
-			Provider:  "aws",
-			Type:      "s3",
-			Region:    "west",
-		},
-	}
 
-	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
-	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
-		VolName: "testing",
-		Scope:   "local",
-	}
-
-	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
-	appSourceSpec := []enterpriseApi.AppSourceSpec{
-		{
-			Name:                 "appSourceName",
-			Location:             "appSourceLocation",
-			AppSourceDefaultSpec: appSourceDefaultSpec,
-		},
-	}
-
-	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
-	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
-		Defaults:             appSourceDefaultSpec,
-		AppsRepoPollInterval: int64(60),
-		VolList:              volumeSpec,
-		AppSources:           appSourceSpec,
-	}
-
-	// create clustermaster custom resource
-	clustermaster := &enterpriseApi.ClusterMaster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: enterpriseApi.ClusterMasterSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
-					ImagePullPolicy: "Always",
-				},
-				Volumes: []corev1.Volume{},
-			},
-			AppFrameworkConfig: appFrameworkSpec,
-		},
-	}
-
-	creplicas := int32(1)
-	cstatefulset := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master",
-			Namespace: "default",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-cluster-master-headless",
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "splunk",
-							Image: "splunk/splunk:latest",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "test",
-									Value: "test",
-								},
-							},
-						},
-					},
-				},
-			},
-			Replicas: &creplicas,
-		},
-	}
-
-	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, clustermaster)
-
-	// simulate Ready state
-	namespacedName := types.NamespacedName{
-		Name:      clustermaster.Name,
-		Namespace: clustermaster.Namespace,
-	}
-
-	clustermaster.Status.Phase = splcommon.PhaseReady
-	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
-		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
-		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
-	}
-	clustermaster.Spec.ServiceTemplate.Labels = map[string]string{
-		"app.kubernetes.io/instance":   "splunk-test-cluster-master",
-		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/component":  "cluster-master",
-		"app.kubernetes.io/name":       "cluster-master",
-		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
-	}
-	err = c.Status().Update(ctx, clustermaster)
-	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
-		debug.PrintStack()
-	}
-
-	err = c.Get(ctx, namespacedName, clustermaster)
-	if err != nil {
-		t.Errorf("Unexpected get cluster master %v", err)
-		debug.PrintStack()
-	}
-
-	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
-	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
-		debug.PrintStack()
-	}
-
-	// create pod
-	stpod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master-0",
-			Namespace: "default",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "splunk",
-					Image: "splunk/splunk:latest",
-					Env: []corev1.EnvVar{
-						{
-							Name:  "test",
-							Value: "test",
-						},
-					},
-				},
-			},
-		},
-	}
-	// simulate create stateful set
-	c.Create(ctx, stpod)
-	if err != nil {
-		t.Errorf("Unexpected create pod failed %v", err)
-		debug.PrintStack()
-	}
-
-	// update statefulset
-	stpod.Status.Phase = corev1.PodRunning
-	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
-		{
-			Image: "splunk/splunk:latest",
-			Name:  "splunk",
-			Ready: true,
-		},
-	}
-	err = c.Status().Update(ctx, stpod)
-	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
-		debug.PrintStack()
-	}
-
-	stNamespacedName := types.NamespacedName{
-		Name:      "splunk-test-cluster-master",
-		Namespace: "default",
-	}
-	err = c.Get(ctx, stNamespacedName, cstatefulset)
-	if err != nil {
-		t.Errorf("Unexpected get cluster manager %v", err)
-		debug.PrintStack()
-	}
-	// update statefulset
-	cstatefulset.Status.ReadyReplicas = 1
-	cstatefulset.Status.Replicas = 1
-	err = c.Status().Update(ctx, cstatefulset)
-	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
-		debug.PrintStack()
-	}
-
-	err = c.Get(ctx, namespacedName, clustermaster)
-	if err != nil {
-		t.Errorf("Unexpected get cluster manager %v", err)
-		debug.PrintStack()
-	}
-
-	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
-	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
-		debug.PrintStack()
-	}
-
-	clusterObjRef := corev1.ObjectReference{
-		Kind:      clustermaster.Kind,
-		Name:      clustermaster.Name,
-		Namespace: clustermaster.Namespace,
-		UID:       clustermaster.UID,
-	}
 
 	// create monitoringconsole custom resource
 	monitoringconsole := &enterpriseApi.MonitoringConsole{
@@ -983,7 +783,6 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes:          []corev1.Volume{},
-				ClusterMasterRef: clusterObjRef,
 			},
 		},
 	}
@@ -1038,7 +837,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	namespacedName = types.NamespacedName{
+	namespacedName := types.NamespacedName{
 		Name:      monitoringconsole.Name,
 		Namespace: monitoringconsole.Namespace,
 	}
@@ -1076,7 +875,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	}
 
 	// create pod
-	stpod = &corev1.Pod{
+	stpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console-0",
 			Namespace: "default",
@@ -1118,7 +917,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	stNamespacedName = types.NamespacedName{
+	stNamespacedName := types.NamespacedName{
 		Name:      "splunk-test-monitoring-console",
 		Namespace: "default",
 	}
