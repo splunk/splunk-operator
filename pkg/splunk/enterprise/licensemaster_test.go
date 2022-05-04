@@ -1134,9 +1134,6 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	//licensemanager.Status.Initialized = true
-	//licensemanager.Status.IndexingReady = true
-	//licensemanager.Status.ServiceReady = true
 	// call reconciliation
 	_, err = ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {

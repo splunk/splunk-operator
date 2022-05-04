@@ -37,8 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/go-logr/logr"
-	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -1420,7 +1418,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	NewSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+	newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 		return searchHeadClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -2004,27 +2002,15 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	httpmock.ActivateNonDefault(resty.New().GetClient())
-	httpmock.Reset()
-	fixture := `{"status":{"message": "Your message", "code": 200}}`
-	_ = httpmock.NewStringResponder(200, fixture)
-	fakeURL := "https://api.mybiz.com/articles.json"
-
-	// fetch the article into struct
-	client := resty.New()
-	_, err = client.R().Get(fakeURL)
-
 	searchheadcluster.Status.Initialized = true
 	searchheadcluster.Status.CaptainReady = true
 	searchheadcluster.Status.ReadyReplicas = 3
 	searchheadcluster.Status.Replicas = 3
-	//searchheadcluster.Status.S = true
-	//searchheadcluster.Status.ServiceReady = true
+
 	// call reconciliation
 	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
 		debug.PrintStack()
 	}
-	httpmock.DeactivateAndReset()
 }

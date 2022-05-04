@@ -182,7 +182,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	mgr := NewSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -238,8 +238,8 @@ type searchHeadClusterPodManager struct {
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
-// NewSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
-var NewSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+// newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
+var newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 	return searchHeadClusterPodManager{
 		log:             log,
 		cr:              cr,

@@ -34,9 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/go-logr/logr"
-	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -757,19 +754,6 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	NewIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
-		return indexerClusterPodManager{
-			log:     log,
-			cr:      cr,
-			secrets: secret,
-			newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
-				c := splclient.NewSplunkClient(managementURI, username, password)
-				c.Client = mclient
-				return c
-			},
-		}
-	}
-
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	err = os.MkdirAll(newpath, os.ModePerm)
@@ -1158,24 +1142,10 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	httpmock.ActivateNonDefault(resty.New().GetClient())
-	httpmock.Reset()
-	fixture := `{"status":{"message": "Your message", "code": 200}}`
-	_ = httpmock.NewStringResponder(200, fixture)
-	fakeURL := "https://api.mybiz.com/articles.json"
-
-	// fetch the article into struct
-	client := resty.New()
-	_, err = client.R().Get(fakeURL)
-
-	//monitoringconsole.Status.Initialized = true
-	//monitoringconsole.Status.IndexingReady = true
-	//monitoringconsole.Status.ServiceReady = true
 	// call reconciliation
 	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
 		debug.PrintStack()
 	}
-	httpmock.DeactivateAndReset()
 }
