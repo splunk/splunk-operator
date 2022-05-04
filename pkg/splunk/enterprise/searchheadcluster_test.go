@@ -1419,7 +1419,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	// mock new search pod manager 
+	// mock new search pod manager
 	newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 		return searchHeadClusterPodManager{
 			log:     log,
@@ -1459,7 +1459,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
 				},
-				Volumes:          []corev1.Volume{},
+				Volumes: []corev1.Volume{},
 				//ClusterMasterRef: clusterObjRef,
 			},
 			Replicas: 3,
@@ -1549,7 +1549,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 
 	err = c.Get(ctx, namespacedName, searchheadcluster)
 	if err != nil {
-		t.Errorf("Unexpected get indexer cluster %v", err)
+		t.Errorf("Unexpected get search head cluster %v", err)
 		debug.PrintStack()
 	}
 
@@ -1810,7 +1810,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	// call reconciliation
 	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework  %v", err)
 		debug.PrintStack()
 	}
 }

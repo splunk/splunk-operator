@@ -769,8 +769,6 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
-
-
 	// create monitoringconsole custom resource
 	monitoringconsole := &enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -782,7 +780,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
 				},
-				Volumes:          []corev1.Volume{},
+				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -863,14 +861,14 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 
 	err = c.Get(ctx, namespacedName, monitoringconsole)
 	if err != nil {
-		t.Errorf("Unexpected get indexer cluster %v", err)
+		t.Errorf("Unexpected get monitoring console %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
 	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for monitoring console with app framework  %v", err)
 		debug.PrintStack()
 	}
 
@@ -923,7 +921,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	}
 	err = c.Get(ctx, stNamespacedName, statefulset)
 	if err != nil {
-		t.Errorf("Unexpected get indexer cluster %v", err)
+		t.Errorf("Unexpected get monitoring console %v", err)
 		debug.PrintStack()
 	}
 	// update statefulset
@@ -937,14 +935,14 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 
 	err = c.Get(ctx, namespacedName, monitoringconsole)
 	if err != nil {
-		t.Errorf("Unexpected get indexer cluster %v", err)
+		t.Errorf("Unexpected get monitoring console %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
 	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for monitoring console with app framework  %v", err)
 		debug.PrintStack()
 	}
 }
