@@ -559,8 +559,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -627,8 +627,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 
 	// test scale down (2 ready scaling down to 1)
 	pvcCalls := []MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-etc-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
 		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
@@ -636,8 +636,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		"Delete": pvcCalls,
 	}
 	pvcList := []*corev1.PersistentVolumeClaim{
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var-splunk-stack1-1", Namespace: "test"}},
 	}
 	replicas = 2
 	current.Status.Replicas = 2

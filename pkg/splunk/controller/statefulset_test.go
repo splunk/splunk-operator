@@ -89,8 +89,8 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{

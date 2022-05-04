@@ -79,7 +79,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	// Create a persistent volume claim
 	volumeClaim := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypePvc, volumeType),
 			Namespace: cr.GetNamespace(),
 			Labels:    labels,
 		},
@@ -446,13 +446,13 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 	}
 	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
 		corev1.Volume{
-			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType), VolumeSource: emptyVolumeSource,
+			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, volumeType), VolumeSource: emptyVolumeSource,
 		})
 
 	// add volume mounts to splunk container for the ephemeral volumes
 	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
 		corev1.VolumeMount{
-			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
+			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, volumeType),
 			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
 		})
 

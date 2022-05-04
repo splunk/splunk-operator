@@ -42,11 +42,20 @@ const (
 	// PvcNamePrefix is a helper string representing prefix for persistent volume claim names
 	PvcNamePrefix = "pvc-%s"
 
+	// SplunkMountTypePvc represents a persistent volume storage volume type
+	SplunkMountTypePvc = "pvc"
+
+	// SplunkMountTypeEph represents a ephemeral storage volume type
+	SplunkMountTypeEph = "eph"
+
 	// SplunkMountNamePrefix is a helper string representing Splunk Volume mount names
-	SplunkMountNamePrefix = "mnt-splunk-%s"
+	SplunkMountNamePrefix = "mnt-splunk-%s-%s"
 
 	// SplunkMountDirecPrefix is a helper string representing Splunk Volume mount directory
 	SplunkMountDirecPrefix = "/opt/splunk/%s"
+
+	// SplunkSmartStoreInitContMount represents mount for init container
+	SplunkSmartStoreInitContMount = "/opt/splk/etc"
 
 	// EtcVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
 	EtcVolumeStorage = "etc"

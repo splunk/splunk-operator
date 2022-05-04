@@ -243,7 +243,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
 
 	if smartStoreConfigMap != nil {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore)
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 
 	// Setup App framework init containers
