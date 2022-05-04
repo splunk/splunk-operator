@@ -1159,6 +1159,9 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 				},
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 				Mock: true,
 			},
 		},

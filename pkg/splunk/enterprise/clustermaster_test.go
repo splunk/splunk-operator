@@ -606,6 +606,9 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 				},
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 				Mock: true,
 			},
 		},
@@ -1130,7 +1133,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// create clustermaster custom resource
-	clustermaster := &enterpriseApi.ClusterMaster{
+	clustermaster := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
@@ -1141,6 +1144,9 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -1188,9 +1194,9 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, clustermaster)
+	c.Create(ctx, &clustermaster)
 
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermaster with app framework  %v", err)
 		debug.PrintStack()
@@ -1213,20 +1219,20 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-master",
 		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
 	}
-	err = c.Status().Update(ctx, clustermaster)
+	err = c.Status().Update(ctx, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster master %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1293,14 +1299,53 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
 	}
 
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &clustermaster, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
