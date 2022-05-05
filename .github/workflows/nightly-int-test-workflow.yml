@@ -112,9 +112,8 @@ jobs:
            make cluster-up
       - name: Run Integration test
         run: |
+          export SPLUNK_OPERATOR_IMAGE_NAME=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
-        env:
-          SPLUNK_OPERATOR_IMAGE_NAME: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Collect Test Logs
         if: ${{ always() }}
         run: |
