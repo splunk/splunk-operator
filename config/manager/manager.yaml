@@ -25,6 +25,9 @@ spec:
       labels:
         control-plane: controller-manager
         name: splunk-operator
+      annotations:
+        kubectl.kubernetes.io/default-logs-container: manager
+        kubectl.kubernetes.io/default-container: manager
     spec:
       securityContext:
         runAsUser: 1001
@@ -72,22 +75,9 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        #resources:
-        #  limits:
-        #    cpu: 1000m
-        #    memory: 1000Mi
-        #  requests:
-        #    cpu: 1000m
-        #    memory: 1000Mi
-        #volumeMounts:
-        #  - mountPath: /opt/splunk/appframework/
-        #    name: app-staging
       serviceAccountName: controller-manager
       volumes:
       - configMap:
           name: config
         name: splunk-operator-config
-      #  - name:  app-staging
-      #    persistentVolumeClaim:
-      #      claimName: tmp-app-download
       terminationGracePeriodSeconds: 10
