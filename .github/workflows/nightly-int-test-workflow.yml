@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: int-tests
     env:
-      SPLUNK_OPERATOR_IMAGE_NAME: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: edge
     steps:
     - uses: actions/checkout@v2

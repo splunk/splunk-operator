@@ -142,7 +142,7 @@ jobs:
     needs: int-tests
     if: github.ref == 'refs/heads/develop'
     env:
-      SPLUNK_OPERATOR_IMAGE_NAME: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: int
     steps:
     - uses: actions/checkout@v2
