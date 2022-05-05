@@ -17,10 +17,7 @@ package enterprise
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -689,80 +686,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 }
 
-func TestMonitoringConnsoleWithReadyState(t *testing.T) {
-
-	mclient := &spltest.MockHTTPClient{}
-	type Entry1 struct {
-		Content splclient.ClusterMasterInfo `json:"content"`
-	}
-
-	apiResponse1 := struct {
-		Entry []Entry1 `json:"entry"`
-	}{
-		Entry: []Entry1{
-			{
-				Content: splclient.ClusterMasterInfo{
-					Initialized:     true,
-					IndexingReady:   true,
-					ServiceReady:    true,
-					MaintenanceMode: true,
-				},
-			},
-			{
-				Content: splclient.ClusterMasterInfo{
-					Initialized:     true,
-					IndexingReady:   true,
-					ServiceReady:    true,
-					MaintenanceMode: true,
-				},
-			},
-		},
-	}
-
-	type Entry struct {
-		Name    string                          `json:"name"`
-		Content splclient.ClusterMasterPeerInfo `json:"content"`
-	}
-
-	apiResponse2 := struct {
-		Entry []Entry `json:"entry"`
-	}{
-		Entry: []Entry{
-			{
-				Name: "testing",
-				Content: splclient.ClusterMasterPeerInfo{
-					ID:             "testing",
-					Status:         "Up",
-					ActiveBundleID: "testing",
-					BucketCount:    2,
-					Searchable:     true,
-					Label:          "splunk-test-indexer-0",
-				},
-			},
-		},
-	}
-
-	response1, err := json.Marshal(apiResponse1)
-	response2, err := json.Marshal(apiResponse2)
-	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
-	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
-	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
-	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
-
-	// mock the verify RF peer funciton
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
-	}
-
-	// create directory for app framework
-	newpath := filepath.Join("/tmp", "appframework")
-	err = os.MkdirAll(newpath, os.ModePerm)
-
-	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
-		s3Response := splclient.S3Response{}
-		return s3Response, nil
-	}
+func TestMonitoringConsoleWithReadyState(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
@@ -829,7 +753,7 @@ func TestMonitoringConnsoleWithReadyState(t *testing.T) {
 	// simulate create clustermaster instance before reconcilation
 	c.Create(ctx, monitoringconsole)
 
-	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
+	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()

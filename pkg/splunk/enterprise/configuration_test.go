@@ -19,10 +19,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"testing"
-	"math/rand"
 
 	"github.com/stretchr/testify/require"
 
@@ -611,17 +611,17 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
-	
+
 	currentDownloadVolume := splcommon.AppDownloadVolume
 	splcommon.AppDownloadVolume = fmt.Sprintf("/tmp/appdownload-%d", rand.Intn(1000))
-	defer func (){
+	defer func() {
 		// remove the AppDownloadVolume if exist just to make sure
 		// previous test case have not created directory
 		err = os.RemoveAll(splcommon.AppDownloadVolume)
 		if err != nil {
 			t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
 		}
-		splcommon.AppDownloadVolume = currentDownloadVolume 
+		splcommon.AppDownloadVolume = currentDownloadVolume
 	}()
 
 	// Valid app framework config
