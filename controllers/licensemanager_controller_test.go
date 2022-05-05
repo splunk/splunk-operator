@@ -46,7 +46,7 @@ var _ = Describe("LicenseManager Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
 			_, err := GetLicenseManager("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("licensemasters.enterprise.splunk.com \"test\" not found"))
+			Expect(err.Error()).Should(Equal("licensemanagers.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 

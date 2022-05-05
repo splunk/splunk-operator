@@ -687,7 +687,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
-		Content splclient.ClusterMasterInfo `json:"content"`
+		Content splclient.ClusterManagerInfo `json:"content"`
 	}
 
 	apiResponse1 := struct {
@@ -695,7 +695,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}{
 		Entry: []Entry1{
 			{
-				Content: splclient.ClusterMasterInfo{
+				Content: splclient.ClusterManagerInfo{
 					Initialized:     true,
 					IndexingReady:   true,
 					ServiceReady:    true,
@@ -703,7 +703,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 				},
 			},
 			{
-				Content: splclient.ClusterMasterInfo{
+				Content: splclient.ClusterManagerInfo{
 					Initialized:     true,
 					IndexingReady:   true,
 					ServiceReady:    true,
@@ -714,8 +714,8 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	type Entry struct {
-		Name    string                          `json:"name"`
-		Content splclient.ClusterMasterPeerInfo `json:"content"`
+		Name    string                           `json:"name"`
+		Content splclient.ClusterManagerPeerInfo `json:"content"`
 	}
 
 	apiResponse2 := struct {
@@ -724,7 +724,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		Entry: []Entry{
 			{
 				Name: "testing",
-				Content: splclient.ClusterMasterPeerInfo{
+				Content: splclient.ClusterManagerPeerInfo{
 					ID:             "testing",
 					Status:         "Up",
 					ActiveBundleID: "testing",
@@ -738,8 +738,8 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	response1, err := json.Marshal(apiResponse1)
 	response2, err := json.Marshal(apiResponse2)
-	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
-	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
@@ -800,12 +800,12 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// create clustermanager custom resource
-	clustermanager := &enterpriseApi.ClusterMaster{
+	clustermanager := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
@@ -966,7 +966,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// create licensemanager custom resource
-	licensemanager := enterpriseApi.LicenseManager{
+	licensemanager := &enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
@@ -980,7 +980,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
-				ClusterMasterRef: clusterObjRef,
+				ClusterManagerRef: clusterObjRef,
 			},
 		},
 	}
@@ -1027,9 +1027,9 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermanager instance before reconcilation
-	c.Create(ctx, &licensemanager)
+	c.Create(ctx, licensemanager)
 
-	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
@@ -1053,20 +1053,20 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "license-manager",
 		"app.kubernetes.io/part-of":    "splunk-test-license-manager",
 	}
-	err = c.Status().Update(ctx, &licensemanager)
+	err = c.Status().Update(ctx, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, &licensemanager)
+	err = c.Get(ctx, namespacedName, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1135,7 +1135,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, &licensemanager)
+	err = c.Get(ctx, namespacedName, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
@@ -1157,7 +1157,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &licensemanager, namespacedName)
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, licensemanager, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
@@ -1181,7 +1181,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
 		debug.PrintStack()

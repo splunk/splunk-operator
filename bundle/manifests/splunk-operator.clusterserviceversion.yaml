@@ -6,12 +6,12 @@ metadata:
       [
         {
           "apiVersion": "enterprise.splunk.com/v3",
-          "kind": "ClusterMaster",
+          "kind": "ClusterManager",
           "metadata": {
             "finalizers": [
               "enterprise.splunk.com/delete-pvc"
             ],
-            "name": "clustermaster-sample"
+            "name": "clustermanager-sample"
           },
           "spec": {}
         },
@@ -93,6 +93,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: ClusterManager is the Schema for the cluster manager API
+      displayName: Cluster Manager
+      kind: ClusterManager
+      name: clustermanagers.enterprise.splunk.com
+      version: v3
     - description: ClusterMaster is the Schema for the cluster manager API
       displayName: Cluster Master
       kind: ClusterMaster
@@ -367,6 +372,32 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermanagers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermanagers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - clustermanagers/status
+          verbs:
+          - get
+          - patch
+          - update
         - apiGroups:
           - enterprise.splunk.com
           resources:

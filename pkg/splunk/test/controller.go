@@ -53,6 +53,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 	dstP := *dst
 	srcP := *src
 	switch srcP.(type) {
+	case *enterpriseApi.ClusterManager:
+		*dstP.(*enterpriseApi.ClusterManager) = *srcP.(*enterpriseApi.ClusterManager)
 	case *enterpriseApi.ClusterMaster:
 		*dstP.(*enterpriseApi.ClusterMaster) = *srcP.(*enterpriseApi.ClusterMaster)
 	case *enterpriseApi.IndexerCluster:
@@ -112,6 +114,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 		*dstP.(*enterpriseApi.LicenseManagerList) = *srcP.(*enterpriseApi.LicenseManagerList)
 	case *enterpriseApi.SearchHeadClusterList:
 		*dstP.(*enterpriseApi.SearchHeadClusterList) = *srcP.(*enterpriseApi.SearchHeadClusterList)
+	case *enterpriseApi.ClusterManagerList:
+		*dstP.(*enterpriseApi.ClusterManagerList) = *srcP.(*enterpriseApi.ClusterManagerList)
 	case *enterpriseApi.ClusterMasterList:
 		*dstP.(*enterpriseApi.ClusterMasterList) = *srcP.(*enterpriseApi.ClusterMasterList)
 	case *enterpriseApi.StandaloneList:

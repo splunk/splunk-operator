@@ -41,6 +41,9 @@ const (
 // List of URLs - Cluster Manager
 const (
 
+	//ClusterManagerURL = "SPLUNK_CLUSTER_MASTER_URL"
+	ClusterManagerURL = "SPLUNK_CLUSTER_MASTER_URL"
+
 	//LocalURLClusterManagerApplyBundle = "https://localhost:8089/services/cluster/master/control/default/apply"
 	LocalURLClusterManagerApplyBundle = "https://localhost:8089" + URIClusterManagerApplyBundle
 

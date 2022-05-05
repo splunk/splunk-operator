@@ -13,7 +13,7 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: ClusterMaster
+  kind: ClusterManager
   path: github.com/splunk/splunk-operator/api/v3
   version: v3
 - api:

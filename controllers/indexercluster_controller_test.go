@@ -64,7 +64,7 @@ var _ = Describe("IndexerCluster Controller", func() {
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			ssSpec.Status.ClusterMasterPhase = "Ready"
+			ssSpec.Status.ClusterManagerPhase, ssSpec.Status.ClusterMasterPhase = "Ready", "Ready" //CM* Phase can't be empty
 			UpdateIndexerCluster(ssSpec, splcommon.PhaseReady)
 			DeleteIndexerCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
@@ -169,7 +169,7 @@ func CreateIndexerCluster(name string, namespace string, annotations map[string]
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
 			ss.Status.Phase = status
-			ss.Status.ClusterMasterPhase = status
+			ss.Status.ClusterManagerPhase, ss.Status.ClusterMasterPhase = status, status //CM* Phase can't be empty
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
@@ -197,7 +197,7 @@ func UpdateIndexerCluster(instance *enterprisev3.IndexerCluster, status splcommo
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
 			ss.Status.Phase = status
-			ssSpec.Status.ClusterMasterPhase = "Ready"
+			ss.Status.ClusterManagerPhase, ss.Status.ClusterMasterPhase = status, status //CM* Phase can't be empty
 			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}

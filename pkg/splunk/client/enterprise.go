@@ -373,9 +373,9 @@ type ClusterBundleInfo struct {
 	Timestamp int64 `json:"timestamp"`
 }
 
-// ClusterMasterInfo represents the status of the indexer cluster manager.
+// ClusterManagerInfo represents the status of the indexer cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
-type ClusterMasterInfo struct {
+type ClusterManagerInfo struct {
 	// Indicates if the cluster is initialized.
 	Initialized bool `json:"initialized_flag"`
 
@@ -408,10 +408,10 @@ type ClusterMasterInfo struct {
 // GetClusterManagerInfo queries the cluster manager for info about the indexer cluster.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
-func (c *SplunkClient) GetClusterManagerInfo() (*ClusterMasterInfo, error) {
+func (c *SplunkClient) GetClusterManagerInfo() (*ClusterManagerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
-			Content ClusterMasterInfo `json:"content"`
+			Content ClusterManagerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
 	path := splcommon.URIClusterManagerGetInfo
@@ -472,9 +472,9 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 	return &apiResponse.Entry[0].Content, nil
 }
 
-// ClusterMasterPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
+// ClusterManagerPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
-type ClusterMasterPeerInfo struct {
+type ClusterManagerPeerInfo struct {
 	// Unique identifier or GUID for the peer
 	ID string `json:"guid"`
 
@@ -577,11 +577,11 @@ type ClusterMasterPeerInfo struct {
 // GetClusterManagerPeers queries the cluster manager for info about indexer cluster peers.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
-func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInfo, error) {
+func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterManagerPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
-			Name    string                `json:"name"`
-			Content ClusterMasterPeerInfo `json:"content"`
+			Name    string                 `json:"name"`
+			Content ClusterManagerPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
 	path := splcommon.URIClusterManagerGetPeers
@@ -590,7 +590,7 @@ func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInf
 		return nil, err
 	}
 
-	peers := make(map[string]ClusterMasterPeerInfo)
+	peers := make(map[string]ClusterManagerPeerInfo)
 	for _, e := range apiResponse.Entry {
 		e.Content.ID = e.Name
 		peers[e.Content.Label] = e.Content

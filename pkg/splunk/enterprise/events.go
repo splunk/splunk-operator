@@ -64,6 +64,9 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	case *enterpriseApi.IndexerCluster:
 		cr := k.instance.(*enterpriseApi.IndexerCluster)
 		event = cr.NewEvent(eventType, reason, message)
+	case *enterpriseApi.ClusterManager:
+		cr := k.instance.(*enterpriseApi.ClusterManager)
+		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.ClusterMaster:
 		cr := k.instance.(*enterpriseApi.ClusterMaster)
 		event = cr.NewEvent(eventType, reason, message)

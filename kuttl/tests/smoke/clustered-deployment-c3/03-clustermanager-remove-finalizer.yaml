@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
-  name: clustermaster
+  name: test
   finalizers: []
 spec: 
   volumes: []
