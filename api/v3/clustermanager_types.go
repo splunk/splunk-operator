@@ -31,13 +31,13 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// ClusterMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	ClusterMasterPausedAnnotation = "clustermaster.enterprise.splunk.com/paused"
+	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
 )
 
-// ClusterMasterSpec defines the desired state of ClusterMaster
-type ClusterMasterSpec struct {
+// ClusterManagerSpec defines the desired state of ClusterManager
+type ClusterManagerSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
@@ -47,8 +47,8 @@ type ClusterMasterSpec struct {
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// ClusterMasterStatus defines the observed state of ClusterMaster
-type ClusterMasterStatus struct {
+// ClusterManagerStatus defines the observed state of ClusterManager
+type ClusterManagerStatus struct {
 	// current phase of the cluster manager
 	Phase splcommon.Phase `json:"phase"`
 
@@ -69,47 +69,47 @@ type ClusterMasterStatus struct {
 }
 
 // BundlePushInfo Indicates if bundle push required
-//type BundlePushInfo struct {
-//	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
-//	LastCheckInterval    int64 `json:"lastCheckInterval"`
-//}
+type BundlePushInfo struct {
+	NeedToPushManagerApps bool  `json:"needToPushManagerApps"`
+	LastCheckInterval     int64 `json:"lastCheckInterval"`
+}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterMaster is the Schema for the cluster manager API
+// ClusterManager is the Schema for the cluster manager API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cmaster-idxc
+// +kubebuilder:resource:path=clustermanagers,scope=Namespaced,shortName=cm-idxc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Manager",type="string",JSONPath=".status.clusterManagerPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"
 // +kubebuilder:storageversion
-type ClusterMaster struct {
+type ClusterManager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ClusterMasterSpec   `json:"spec,omitempty"`
-	Status ClusterMasterStatus `json:"status,omitempty"`
+	Spec   ClusterManagerSpec   `json:"spec,omitempty"`
+	Status ClusterManagerStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// ClusterMasterList contains a list of ClusterMaster
-type ClusterMasterList struct {
+// ClusterManagerList contains a list of ClusterManager
+type ClusterManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterMaster `json:"items"`
+	Items           []ClusterManager `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ClusterMaster{}, &ClusterMasterList{})
+	SchemeBuilder.Register(&ClusterManager{}, &ClusterManagerList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to the kubernetes API.
-func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.Event {
+func (cmstr *ClusterManager) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -117,7 +117,7 @@ func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.E
 			Namespace:    cmstr.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Clustermaster",
+			Kind:       "Clustermanager",
 			Namespace:  cmstr.Namespace,
 			Name:       cmstr.Name,
 			UID:        cmstr.UID,
@@ -126,12 +126,12 @@ func (cmstr *ClusterMaster) NewEvent(eventType, reason, message string) corev1.E
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-clustermaster-controller",
+			Component: "splunk-clustermanager-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/clustermaster-controller",
+		ReportingController: "enterprise.splunk.com/clustermanager-controller",
 	}
 }

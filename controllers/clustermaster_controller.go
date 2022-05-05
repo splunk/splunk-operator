@@ -96,17 +96,17 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.ClusterManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.ClusterMasterPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyClusterManager(ctx, r.Client, instance)
+	return ApplyClusterMaster(ctx, r.Client, instance)
 }
 
-// ApplyClusterManager adding to handle unit test case
-var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {
-	return enterprise.ApplyClusterManager(ctx, client, instance)
+// ApplyClusterMaster adding to handle unit test case
+var ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {
+	return enterprise.ApplyClusterMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -150,10 +150,10 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // recordInstrumentionData Record api profiling information to prometheus
-func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
-	metricLabels := getPrometheusLabels(req, name)
-	metricLabels[labelModuleName] = module
-	metricLabels[labelMethodName] = name
-	value := float64(time.Since(start) / time.Millisecond)
-	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
-}
+//func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
+//	metricLabels := getPrometheusLabels(req, name)
+//	metricLabels[labelModuleName] = module
+//	metricLabels[labelMethodName] = name
+//	value := float64(time.Since(start) / time.Millisecond)
+//	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
+//}

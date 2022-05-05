@@ -229,15 +229,15 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 404, "", wantRequest, test)
 }
 
-func TestGetClusterMasterInfo(t *testing.T) {
+func TestGetclusterManagerInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetInfo, nil)
-	wantInfo := ClusterMasterInfo{
+	wantInfo := ClusterManagerInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           fmt.Sprintf(splcommon.TestClusterManagerID, "s1", "0"),
+		Label:           fmt.Sprintf("splunk-%s-cluster-manager-%s", "s1", "0"),
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -261,7 +261,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		return nil
 	}
 	body := splcommon.TestGetCMInfo
-	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
+	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
 	test = func(c SplunkClient) error {
@@ -272,7 +272,7 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		return nil
 	}
 	body = splcommon.TestGetCMInfoEmpty
-	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
+	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test error code
 	splunkClientTester(t, "TestGetClusterManagerInfo", 500, "", wantRequest, test)
@@ -502,7 +502,8 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		EaiAppName:  "splunk_monitoring_console",
 		EaiUserName: "nobody",
 	}
-	wantconfiguredPeers := "&member=" + splcommon.TestExampleClusterManagerMgmtPort + "&"
+	// TODO Check dual support
+	wantconfiguredPeers := "&member=splunk-example-cluster-manager-service:8089&"
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")

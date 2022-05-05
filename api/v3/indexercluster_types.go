@@ -70,8 +70,11 @@ type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
 	Phase splcommon.Phase `json:"phase"`
 
-	// current phase of the cluster manager
+	// current phase of the cluster master
 	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase"`
+
+	// current phase of the cluster manager
+	ClusterManagerPhase splcommon.Phase `json:"clusterManagerPhase"`
 
 	// desired number of indexer peers
 	Replicas int32 `json:"replicas"`
@@ -115,7 +118,8 @@ type IndexerClusterStatus struct {
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=indexerclusters,scope=Namespaced,shortName=idc;idxc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of indexer cluster"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
+// +kubebuilder:printcolumn:name="Manager",type="string",JSONPath=".status.clusterManagerPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"

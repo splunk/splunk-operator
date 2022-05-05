@@ -38,15 +38,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// IndexerClusterReconciler reconciles a IndexerCluster object
-type IndexerClusterReconciler struct {
+// ClusterManagerReconciler reconciles a ClusterManager object
+type ClusterManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermanagers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermanagers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermanagers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -63,23 +63,23 @@ type IndexerClusterReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the IndexerCluster object against the actual cluster state, and then
+// the ClusterManager object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "IndexerCluster")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
+	reconcileCounters.With(getPrometheusLabels(req, "ClusterManager")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterManager")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("clustermanager", req.NamespacedName)
 	reqLogger.Info("start")
 
-	// Fetch the IndexerCluster
-	instance := &enterprisev3.IndexerCluster{}
+	// Fetch the ClusterManager
+	instance := &enterprisev3.ClusterManager{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -90,32 +90,29 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load indexer cluster data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load cluster manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.IndexerClusterPausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.ClusterManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyIndexerCluster(ctx, r.Client, instance)
+	return ApplyClusterManager(ctx, r.Client, instance)
 }
 
-// ApplyIndexerCluster adding to handle unit test case
-var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
-	if len(instance.Spec.ClusterManagerRef.Name) > 0 {
-		return enterprise.ApplyIndexerClusterManager(ctx, client, instance)
-	}
-	return enterprise.ApplyIndexerCluster(ctx, client, instance)
+// ApplyClusterManager adding to handle unit test case
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterManager) (reconcile.Result, error) {
+	return enterprise.ApplyClusterManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.IndexerCluster{}).
+		For(&enterprisev3.ClusterManager{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -124,40 +121,39 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
-			common.ClusterManagerChangedPredicate(),
+			common.CrdChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
+				OwnerType:    &enterprisev3.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
+				OwnerType:    &enterprisev3.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
+				OwnerType:    &enterprisev3.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
-			}).
-		Watches(&source.Kind{Type: &enterprisev3.ClusterManager{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
-			}).
-		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterprisev3.IndexerCluster{},
+				OwnerType:    &enterprisev3.ClusterManager{},
 			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).
 		Complete(r)
+}
+
+// recordInstrumentionData Record api profiling information to prometheus
+func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
+	metricLabels := getPrometheusLabels(req, name)
+	metricLabels[labelModuleName] = module
+	metricLabels[labelMethodName] = name
+	value := float64(time.Since(start) / time.Millisecond)
+	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
 }

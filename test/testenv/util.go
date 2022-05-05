@@ -257,7 +257,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterMasterRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
 	new := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -274,8 +274,11 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				ClusterMasterRef: corev1.ObjectReference{
-					Name: clusterMasterRef,
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: clusterManagerRef,
+				},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: licenseManagerName,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -286,7 +289,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
 
 	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
 
@@ -306,8 +309,8 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string,
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
-				ClusterMasterRef: corev1.ObjectReference{
-					Name: clusterMasterRef,
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: clusterManagerRef,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,

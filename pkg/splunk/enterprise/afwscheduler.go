@@ -84,6 +84,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		return ""
 	case "ClusterMaster":
 		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
 	}
@@ -1099,7 +1101,7 @@ func isAppInstallationCompleteOnAllReplicas(auxPhaseInfo []enterpriseApi.PhaseIn
 
 // isClusterScoped checks whether current cr is a SHC or a CM
 func isClusterScoped(kind string) bool {
-	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "SearchHeadCluster"
 }
 
 // checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
@@ -1174,7 +1176,9 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
-		instanceID = SplunkClusterManager
+		instanceID = SplunkClusterMaster
+	case "ClusterManager":
+		instanceID = "cluster-manager"
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
 	default:
@@ -1228,6 +1232,8 @@ func getClusterScopePlaybookContext(ctx context.Context, client splcommon.Contro
 
 	switch kind {
 	case "ClusterMaster":
+		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
+	case "ClusterManager":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	case "SearchHeadCluster":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1326,6 +1332,8 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "ClusterMaster":
+		return idxcAppsLocationOnClusterManager
+	case "ClusterManager":
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer

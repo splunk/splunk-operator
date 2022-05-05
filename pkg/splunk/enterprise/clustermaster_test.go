@@ -44,7 +44,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
-func TestApplyClusterManager(t *testing.T) {
+func TestApplyClusterMaster(t *testing.T) {
 
 	// redefining cpmakeTar to return nil always
 	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
@@ -111,23 +111,23 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApi.ClusterMaster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMaster", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApi.ClusterMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
-func TestGetClusterManagerStatefulSet(t *testing.T) {
+func TestGetClusterMasterStatefulSet(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -144,12 +144,12 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
-				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
+			if err := validateClusterMasterSpec(ctx, &cr); err != nil {
+				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
 			}
-			return getClusterManagerStatefulSet(ctx, c, &cr)
+			return getClusterMasterStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getClusterManagerStatefulSet", f, want)
+		configTester(t, "getClusterMasterStatefulSet", f, want)
 	}
 
 	test(splcommon.TestGetCMStatefulSet)
@@ -186,7 +186,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 	test(splcommon.TestGetCMStatefulSetExtraEnv)
 }
 
-func TestApplyClusterManagerWithSmartstore(t *testing.T) {
+func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -280,10 +280,10 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	client := spltest.NewMockClient()
 
-	// Without S3 keys, ApplyClusterManager should fail
-	_, err := ApplyClusterManager(ctx, client, &current)
+	// Without S3 keys, ApplyClusterMaster should fail
+	_, err := ApplyClusterMaster(ctx, client, &current)
 	if err == nil {
-		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
+		t.Errorf("ApplyClusterMaster should fail without S3 secrets configured")
 	}
 
 	// Create namespace scoped secret
@@ -310,12 +310,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
 	}
 
 	client.AddObject(&smartstoreConfigMap)
-	ss, _ := getClusterManagerStatefulSet(ctx, client, &current)
+	ss, _ := getClusterMasterStatefulSet(ctx, client, &current)
 	ss.Status.ReadyReplicas = 1
 
 	pod := &corev1.Pod{
@@ -334,16 +334,16 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		},
 	}
 
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
-	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	if _, err = ApplyClusterManager(context.Background(), client, &current); err != nil {
-		t.Errorf("ApplyClusterManager() should not have returned error")
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	if _, err = ApplyClusterMaster(context.Background(), client, &current); err != nil {
+		t.Errorf("ApplyClusterMaster() should not have returned error")
 	}
 
 	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
-		t.Errorf("ApplyClusterManager() should have returned error")
+	if _, err := ApplyClusterMaster(context.Background(), client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
 	}
 
 	var replicas int32 = 3
@@ -352,8 +352,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if result, err := ApplyClusterManager(context.Background(), client, &current); err == nil && !result.Requeue {
-		t.Errorf("ApplyClusterManager() should have returned error or result.requeue should have been false")
+	if result, err := ApplyClusterMaster(context.Background(), client, &current); err == nil && !result.Requeue {
+		t.Errorf("ApplyClusterMaster() should have returned error or result.requeue should have been false")
 	}
 
 	ss.Status.ReadyReplicas = 1
@@ -362,12 +362,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client.AddObjects(objects)
 	current.Spec.CommonSplunkSpec.Mock = false
 
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
-		t.Errorf("ApplyClusterManager() should have returned error")
+	if _, err := ApplyClusterMaster(context.Background(), client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
 	}
 }
 
-func TestPerformCmBundlePush(t *testing.T) {
+func TestPerformCmasterBundlePush(t *testing.T) {
 
 	ctx := context.TODO()
 	current := enterpriseApi.ClusterMaster{
@@ -388,8 +388,8 @@ func TestPerformCmBundlePush(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// When the secret object is not present, should return an error
-	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	err := PerformCmBundlePush(ctx, client, &current)
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	err := PerformCmasterBundlePush(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Should return error, when the secret object is not present")
 	}
@@ -417,25 +417,25 @@ func TestPerformCmBundlePush(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	current.Status.BundlePushTracker.NeedToPushMasterApps = true
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
 
 	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle Push Should fail, if attempted to push within 5 seconds interval")
 	}
 
 	//Re-attempting to push the CM bundle after 5 seconds passed, should not return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
 		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
 	}
 
 	// When the CM Bundle push is not pending, should not return an error
-	current.Status.BundlePushTracker.NeedToPushMasterApps = false
-	err = PerformCmBundlePush(ctx, client, &current)
+	current.Status.BundlePushTracker.NeedToPushManagerApps = false
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
 	}
@@ -462,7 +462,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	//Without global secret object, should return an error
-	err := PushManagerAppsBundle(ctx, client, &current)
+	err := PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the secret object is not found")
 	}
@@ -477,14 +477,14 @@ func TestPushMasterAppsBundle(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	err = PushManagerAppsBundle(ctx, client, &current)
+	err = PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the password is not found")
 	}
 
 	//Without password, should return an error
 	delete(secret.Data, "password")
-	err = PushManagerAppsBundle(ctx, client, &current)
+	err = PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the password is not found")
 	}
@@ -557,9 +557,9 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyClusterManager(context.Background(), client, &cm)
+	_, err = ApplyClusterMaster(context.Background(), client, &cm)
 	if err != nil {
-		t.Errorf("ApplyClusterManager should not have returned error here.")
+		t.Errorf("ApplyClusterMaster should not have returned error here.")
 	}
 }
 
@@ -649,7 +649,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyClusterManager(ctx, c, &cm)
+	_, err = ApplyClusterMaster(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterMaster should not have returned error here.")
 	}
@@ -989,7 +989,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 }
 
-func TestGetClusterManagerList(t *testing.T) {
+func TestGetClusterMasterList(t *testing.T) {
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterMaster{}
 
@@ -1001,7 +1001,7 @@ func TestGetClusterManagerList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added clustermanager to the list yet
-	_, err := getClusterManagerList(ctx, client, &cm, listOpts)
+	_, err := getClusterMasterList(ctx, client, &cm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added cluster manager to the list yet")
 	}
@@ -1011,17 +1011,17 @@ func TestGetClusterManagerList(t *testing.T) {
 
 	client.ListObj = cmList
 
-	numOfObjects, err = getClusterManagerList(ctx, client, &cm, listOpts)
+	numOfObjects, err = getClusterMasterList(ctx, client, &cm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
 	if numOfObjects != 1 {
-		t.Errorf("Got wrong number of ClusterManager objects. Expected=%d, Got=%d", 1, numOfObjects)
+		t.Errorf("Got wrong number of ClusterMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
 
-func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
+func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1057,24 +1057,24 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err := CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error")
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should have returned error")
 	}
 
 	mockPodExecReturnContexts[0].Err = nil
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err = CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
 	}
 
 	c.AddObject(&smartstoreConfigMap)
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err = CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err != nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
 	}
 
-	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
+	mockPodExecClient.CheckPodExecCommands(t, "CheckIfMastersmartstoreConfigMapUpdatedToPod")
 }
 
 func TestClusterMasterWitReadyState(t *testing.T) {
@@ -1190,7 +1190,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	// simulate create clustermaster instance before reconcilation
 	c.Create(ctx, clustermaster)
 
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermaster with app framework  %v", err)
 		debug.PrintStack()
@@ -1226,7 +1226,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1300,7 +1300,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

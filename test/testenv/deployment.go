@@ -410,9 +410,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 }
 
 //DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterMasterRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
+func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
-	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterMasterRef, ansibleConfig)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -424,9 +424,9 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 }
 
 // DeploySearchHeadCluster deploys a search head cluster
-func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterMasterRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
-	sh := newSearchHeadCluster(name, d.testenv.namespace, clusterMasterRef, LicenseManagerName, ansibleConfig)
+	sh := newSearchHeadCluster(name, d.testenv.namespace, ClusterManagerRef, LicenseManagerName, ansibleConfig)
 	if mcRef != "" {
 		sh.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -857,7 +857,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterMasterRef: corev1.ObjectReference{
+			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -961,7 +961,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterMasterRef: corev1.ObjectReference{
+			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1034,7 +1034,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterMasterRef: corev1.ObjectReference{
+			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1132,7 +1132,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterMasterRef: corev1.ObjectReference{
+			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{

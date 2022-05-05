@@ -573,12 +573,13 @@ func TestGetLabels(t *testing.T) {
 		}
 	}
 
+	//TODO check dual support
 	test("indexer", ClusterManager, "t1", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
 		"app.kubernetes.io/name":       ClusterManager,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   fmt.Sprintf(TestClusterManager, "t1"),
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
 	})
 
 	// Multipart IndexerCluster - selector of indexer service for main part
@@ -608,6 +609,8 @@ func TestGetLabels(t *testing.T) {
 		}
 	}
 
+	//TODO check dual support
+
 	// Test all labels using selectFew option
 	selectAll := []string{"manager", "component", "name", "partof", "instance"}
 	testNew("indexer", ClusterManager, "t1", "t1", selectAll, map[string]string{
@@ -615,7 +618,7 @@ func TestGetLabels(t *testing.T) {
 		"app.kubernetes.io/component":  "indexer",
 		"app.kubernetes.io/name":       ClusterManager,
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   fmt.Sprintf(TestClusterManager, "t1"),
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
 	}, "")
 
 	// Test a few labels using selectFew option

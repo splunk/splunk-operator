@@ -901,7 +901,7 @@ var _ = Describe("c3appfw test", func() {
 							Value: "ignore"},
 					},
 					Volumes: []corev1.Volume{},
-					ClusterMasterRef: corev1.ObjectReference{
+					ClusterManagerRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
 				},

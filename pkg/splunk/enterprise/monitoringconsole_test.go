@@ -262,7 +262,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -750,7 +750,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, monitoringconsole)
 
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)

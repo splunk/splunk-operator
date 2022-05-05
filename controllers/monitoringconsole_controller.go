@@ -154,6 +154,8 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterprisev3.ClusterMaster{}},
 			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.ClusterManager{}},
+			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterprisev3.TotalWorker,
 		}).

@@ -613,7 +613,7 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 
 // VerifyClusterManagerPhase verify phase of cluster manager
 func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase splcommon.Phase) {
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApi.ClusterManager{}
 	gomega.Eventually(func() splcommon.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
 		if err != nil {
@@ -788,7 +788,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 
 			if versionCheck {
 				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
 					var expectedVersion string
 					if checkupdated {
 						expectedVersion = AppInfo[appName]["V2"]

@@ -108,7 +108,7 @@ const (
 	// appDownlodPVCName is the name of PVC for downloading apps on operator
 	appDownlodPVCName = "tmp-app-download"
 	// ClusterMasterServiceName Cluster Manager Service Template String
-	ClusterMasterServiceName = splcommon.TestClusterManager + "-service"
+	ClusterMasterServiceName = "splunk-%s-cluster-manager-service"
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"

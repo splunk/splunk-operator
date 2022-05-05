@@ -80,7 +80,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
-	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
+	searchHeadRevised.Spec.ClusterManagerRef.Name = "stack2"
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license manager

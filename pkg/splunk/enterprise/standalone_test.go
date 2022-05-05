@@ -262,7 +262,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"

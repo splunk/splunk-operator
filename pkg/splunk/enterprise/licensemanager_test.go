@@ -683,7 +683,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
-		Content splclient.ClusterMasterInfo `json:"content"`
+		Content splclient.ClusterManagerInfo `json:"content"`
 	}
 
 	apiResponse1 := struct {
@@ -691,7 +691,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}{
 		Entry: []Entry1{
 			{
-				Content: splclient.ClusterMasterInfo{
+				Content: splclient.ClusterManagerInfo{
 					Initialized:     true,
 					IndexingReady:   true,
 					ServiceReady:    true,
@@ -699,7 +699,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 				},
 			},
 			{
-				Content: splclient.ClusterMasterInfo{
+				Content: splclient.ClusterManagerInfo{
 					Initialized:     true,
 					IndexingReady:   true,
 					ServiceReady:    true,
@@ -710,8 +710,8 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	type Entry struct {
-		Name    string                          `json:"name"`
-		Content splclient.ClusterMasterPeerInfo `json:"content"`
+		Name    string                           `json:"name"`
+		Content splclient.ClusterManagerPeerInfo `json:"content"`
 	}
 
 	apiResponse2 := struct {
@@ -720,7 +720,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		Entry: []Entry{
 			{
 				Name: "testing",
-				Content: splclient.ClusterMasterPeerInfo{
+				Content: splclient.ClusterManagerPeerInfo{
 					ID:             "testing",
 					Status:         "Up",
 					ActiveBundleID: "testing",
@@ -734,8 +734,8 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	response1, err := json.Marshal(apiResponse1)
 	response2, err := json.Marshal(apiResponse2)
-	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
-	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
@@ -795,13 +795,13 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		AppSources:           appSourceSpec,
 	}
 
-	// create clustermaster custom resource
-	clustermaster := &enterpriseApi.ClusterMaster{
+	// create clustermanager custom resource
+	clustermanager := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
@@ -815,11 +815,11 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	creplicas := int32(1)
 	cstatefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master",
+			Name:      "splunk-test-cluster-manager",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-cluster-master-headless",
+			ServiceName: "splunk-test-cluster-manager-headless",
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -840,41 +840,41 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		},
 	}
 
-	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, clustermaster)
+	// simulate create clustermanager instance before reconcilation
+	c.Create(ctx, clustermanager)
 
 	// simulate Ready state
 	namespacedName := types.NamespacedName{
-		Name:      clustermaster.Name,
-		Namespace: clustermaster.Namespace,
+		Name:      clustermanager.Name,
+		Namespace: clustermanager.Namespace,
 	}
 
-	clustermaster.Status.Phase = splcommon.PhaseReady
-	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
+	clustermanager.Status.Phase = splcommon.PhaseReady
+	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
 	}
-	clustermaster.Spec.ServiceTemplate.Labels = map[string]string{
-		"app.kubernetes.io/instance":   "splunk-test-cluster-master",
+	clustermanager.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-cluster-manager",
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/component":  "cluster-master",
-		"app.kubernetes.io/name":       "cluster-master",
-		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
+		"app.kubernetes.io/component":  "cluster-manager",
+		"app.kubernetes.io/name":       "cluster-manager",
+		"app.kubernetes.io/part-of":    "splunk-test-cluster-manager",
 	}
-	err = c.Status().Update(ctx, clustermaster)
+	err = c.Status().Update(ctx, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected get cluster master %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -883,7 +883,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	// create pod
 	stpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master-0",
+			Name:      "splunk-test-cluster-manager-0",
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
@@ -924,7 +924,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	stNamespacedName := types.NamespacedName{
-		Name:      "splunk-test-cluster-master",
+		Name:      "splunk-test-cluster-manager",
 		Namespace: "default",
 	}
 	err = c.Get(ctx, stNamespacedName, cstatefulset)
@@ -941,39 +941,39 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
 	}
 
 	clusterObjRef := corev1.ObjectReference{
-		Kind:      clustermaster.Kind,
-		Name:      clustermaster.Name,
-		Namespace: clustermaster.Namespace,
-		UID:       clustermaster.UID,
+		Kind:      clustermanager.Kind,
+		Name:      clustermanager.Name,
+		Namespace: clustermanager.Namespace,
+		UID:       clustermanager.UID,
 	}
 
 	// create licensemanager custom resource
-	licensemanager := &enterpriseApi.LicenseMaster{
+	licensemanager := &enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
 				},
-				Volumes:          []corev1.Volume{},
-				ClusterMasterRef: clusterObjRef,
+				Volumes:           []corev1.Volume{},
+				ClusterManagerRef: clusterObjRef,
 			},
 		},
 	}
@@ -1019,7 +1019,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, licensemanager)
 
 	_, err = ApplyLicenseManager(ctx, c, licensemanager)

@@ -31,7 +31,7 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
 
-	cm := enterpriseApi.ClusterMaster{}
+	cm := enterpriseApi.ClusterManager{}
 	k8sevent, err := newK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
