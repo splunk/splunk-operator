@@ -22,6 +22,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"math/rand"
 
 	"github.com/stretchr/testify/require"
 
@@ -610,14 +611,18 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
-
-	// remove the AppDownloadVolume if exist just to make sure
-	// previous test case have not created directory
-	appDownloadVolume := splcommon.AppDownloadVolume
-	err = os.RemoveAll(splcommon.AppDownloadVolume)
-	if err != nil {
-		t.Errorf("unable to delete directory %s", appDownloadVolume)
-	}
+	
+	currentDownloadVolume := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = fmt.Sprintf("/tmp/appdownload-%d", rand.Intn(1000))
+	defer func (){
+		// remove the AppDownloadVolume if exist just to make sure
+		// previous test case have not created directory
+		err = os.RemoveAll(splcommon.AppDownloadVolume)
+		if err != nil {
+			t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
+		}
+		splcommon.AppDownloadVolume = currentDownloadVolume 
+	}()
 
 	// Valid app framework config
 	AppFramework := enterpriseApi.AppFrameworkSpec{
@@ -913,6 +918,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
+
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
