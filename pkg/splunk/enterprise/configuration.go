@@ -1173,11 +1173,13 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
 	}
 
-	_, err = os.Stat(splcommon.AppDownloadVolume)
+	appDownloadVolume := splcommon.AppDownloadVolume
+	_, err = os.Stat(appDownloadVolume)
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
-	if _, err := os.Stat(splcommon.AppDownloadVolume); os.IsNotExist(err) {
-		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", splcommon.AppDownloadVolume)
+	if _, err := os.Stat(appDownloadVolume); os.IsNotExist(err) {
+		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
+		return err
 	}
 
 	err = validateRemoteVolumeSpec(ctx, appFramework.VolList, true)

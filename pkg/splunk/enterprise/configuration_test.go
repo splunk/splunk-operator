@@ -613,9 +613,10 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 
 	// remove the AppDownloadVolume if exist just to make sure
 	// previous test case have not created directory
+	appDownloadVolume := splcommon.AppDownloadVolume
 	err = os.RemoveAll(splcommon.AppDownloadVolume)
 	if err != nil {
-		t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
+		t.Errorf("unable to delete directory %s", appDownloadVolume)
 	}
 
 	// Valid app framework config
