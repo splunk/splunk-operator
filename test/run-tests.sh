@@ -31,7 +31,9 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
     fi
   fi
 
+  echo "docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
   docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
+  echo "docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
   docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
   if [ $? -ne 0 ]; then
     echo "Unable to push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}. Exiting..."
