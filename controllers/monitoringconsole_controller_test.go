@@ -110,7 +110,7 @@ var _ = Describe("MonitoringConsole Controller", func() {
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterprisev3.ClusterManagerPausedAnnotation] = ""
+			annotations[enterprisev3.MonitoringConsolePausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)

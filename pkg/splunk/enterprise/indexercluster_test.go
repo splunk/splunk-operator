@@ -37,8 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/go-logr/logr"
-	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -1261,7 +1259,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		return nil
 	}
 
-	NewIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
 		return indexerClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -1372,19 +1370,6 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 			Replicas: &creplicas,
 		},
 	}
-
-	/*cservice := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-master-headless",
-			Namespace: "default",
-		},
-	} */
-
-	// simulate service
-	//c.Create(ctx, cservice)
-
-	// simulate create stateful set
-	//c.Create(ctx, cstatefulset)
 
 	// simulate create clustermaster instance before reconcilation
 	c.Create(ctx, clustermaster)
@@ -1678,16 +1663,6 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	httpmock.ActivateNonDefault(resty.New().GetClient())
-	httpmock.Reset()
-	fixture := `{"status":{"message": "Your message", "code": 200}}`
-	_ = httpmock.NewStringResponder(200, fixture)
-	fakeURL := "https://api.mybiz.com/articles.json"
-
-	// fetch the article into struct
-	client := resty.New()
-	_, err = client.R().Get(fakeURL)
-
 	indexercluster.Status.Initialized = true
 	indexercluster.Status.IndexingReady = true
 	indexercluster.Status.ServiceReady = true
@@ -1697,5 +1672,4 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
 		debug.PrintStack()
 	}
-	httpmock.DeactivateAndReset()
 }
