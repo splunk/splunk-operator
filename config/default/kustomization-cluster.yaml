@@ -122,9 +122,9 @@ patches:
       path: /spec/template/spec/containers/0/env
       value: 
       - name: WATCH_NAMESPACE
-        value: ""
+        value: WATCH_NAMESPACE_VALUE
       - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: splunk/splunk:8.2.6
+        value: SPLUNK_ENTERPRISE_IMAGE
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: POD_NAME

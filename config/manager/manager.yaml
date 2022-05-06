@@ -43,21 +43,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: WATCH_NAMESPACE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: WATCH_NAMESPACE
-        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        - name: OPERATOR_NAME
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: OPERATOR_NAME
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
