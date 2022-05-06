@@ -305,6 +305,7 @@ generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s 
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
 	sed -i "" "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
 	sed -i "" "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	sed -i "" "s/WATCH_NAMESPACE_VALUE/\"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
