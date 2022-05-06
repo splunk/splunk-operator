@@ -1324,7 +1324,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 	}
 
 	// create clustermaster custom resource
-	clustermaster := &enterpriseApi.ClusterMaster{
+	clustermaster := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
@@ -1372,7 +1372,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 	}
 
 	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, clustermaster)
+	c.Create(ctx, &clustermaster)
 
 	// simulate Ready state
 	namespacedName := types.NamespacedName{
@@ -1392,20 +1392,20 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-master",
 		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
 	}
-	err = c.Status().Update(ctx, clustermaster)
+	err = c.Status().Update(ctx, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster master %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1472,14 +1472,14 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, clustermaster)
+	err = c.Get(ctx, namespacedName, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	_, err = ApplyClusterManager(ctx, c, &clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

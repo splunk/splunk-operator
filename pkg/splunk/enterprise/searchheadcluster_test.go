@@ -40,6 +40,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -1452,7 +1453,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	ctx := context.TODO()
 
 	// create searchheadcluster custom resource
-	searchheadcluster := &enterpriseApi.SearchHeadCluster{
+	searchheadcluster := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
@@ -1518,9 +1519,9 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, searchheadcluster)
+	c.Create(ctx, &searchheadcluster)
 
-	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
+	_, err = ApplySearchHeadCluster(ctx, c, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for searchhead cluster %v", err)
 		debug.PrintStack()
@@ -1544,20 +1545,20 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "search-cluster",
 		"app.kubernetes.io/part-of":    "splunk-test-searchead-cluster",
 	}
-	err = c.Status().Update(ctx, searchheadcluster)
+	err = c.Status().Update(ctx, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for searchhead cluster with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, searchheadcluster)
+	err = c.Get(ctx, namespacedName, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected get search head cluster %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
+	_, err = ApplySearchHeadCluster(ctx, c, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for searchead cluster with app framework  %v", err)
 		debug.PrintStack()
@@ -1799,7 +1800,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, searchheadcluster)
+	err = c.Get(ctx, namespacedName, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected get searchhead cluster %v", err)
 		debug.PrintStack()
@@ -1810,8 +1811,46 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	searchheadcluster.Status.ReadyReplicas = 3
 	searchheadcluster.Status.Replicas = 3
 
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &searchheadcluster, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
 	// call reconciliation
-	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
+	_, err = ApplySearchHeadCluster(ctx, c, &searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework  %v", err)
 		debug.PrintStack()

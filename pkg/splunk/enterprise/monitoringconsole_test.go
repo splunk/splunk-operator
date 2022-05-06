@@ -956,3 +956,95 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
+
+func TestApplyMonitoringConsoleDeletion(t *testing.T) {
+	ctx := context.TODO()
+	mc := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "monitoring-console",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	c.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	mc.ObjectMeta.DeletionTimestamp = &currentTime
+	mc.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyMonitoringConsole(ctx, c, &mc)
+	if err != nil {
+		t.Errorf("ApplyMonitoringConsole should not have returned error here.")
+	}
+}

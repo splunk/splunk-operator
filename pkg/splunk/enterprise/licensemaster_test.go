@@ -37,6 +37,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -965,7 +966,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// create licensemanager custom resource
-	licensemanager := &enterpriseApi.LicenseMaster{
+	licensemanager := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
@@ -975,7 +976,10 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
 				},
-				Volumes:          []corev1.Volume{},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 				ClusterMasterRef: clusterObjRef,
 			},
 		},
@@ -1023,9 +1027,9 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, licensemanager)
+	c.Create(ctx, &licensemanager)
 
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
@@ -1049,20 +1053,20 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "license-master",
 		"app.kubernetes.io/part-of":    "splunk-test-license-master",
 	}
-	err = c.Status().Update(ctx, licensemanager)
+	err = c.Status().Update(ctx, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, licensemanager)
+	err = c.Get(ctx, namespacedName, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1131,14 +1135,53 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, licensemanager)
+	err = c.Get(ctx, namespacedName, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
 	}
 
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &licensemanager, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for license master with app framework  %v", err)
 		debug.PrintStack()
