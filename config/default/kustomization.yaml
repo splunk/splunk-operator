@@ -119,7 +119,7 @@ patches:
     name: controller-manager
   patch: |-
     - op: add
-      path: /spec/template/spec/containers/0/env
+      path: /spec/template/spec/containers/1/env
       value: 
       - name: WATCH_NAMESPACE
         value: ""
