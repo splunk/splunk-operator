@@ -291,8 +291,12 @@ generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8
 	cp config/default/kustomization-namespace.yaml config/default/kustomization.yaml
 	sed -i "" "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
 	sed -i "" "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	sed -i "" "s/ClusterRole/Role/g"  config/rbac/role.yaml
+	sed -i "" "s/ClusterRole/Role/g"  config/rbac/role_binding.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-namespace.yaml
+	sed -i "" "s/Role/ClusterRole/g"  config/rbac/role.yaml
+	sed -i "" "s/Role/ClusterRole/g"  config/rbac/role_binding.yaml
 
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
