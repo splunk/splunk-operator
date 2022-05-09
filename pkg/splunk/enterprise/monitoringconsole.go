@@ -58,29 +58,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
-	defer func() {
-		client.Status().Update(ctx, cr)
-		if err != nil {
-			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
-		}
-		return result, err
-	}
-
 	// updates status after function completes
 	cr.Status.Phase = splcommon.PhaseError
 
@@ -102,9 +79,20 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		}
 	}
 
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
+	defer func() {
+		client.Status().Update(ctx, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
+			scopedLog.Error(err, "Status update failed")
+		}
+	}()
+
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -126,8 +114,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		} else {
 			result.Requeue = false
 		}
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
