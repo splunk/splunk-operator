@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-cluster.yaml
 ```
 
 ## Default Installation
@@ -15,7 +15,7 @@ wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/r
 By default operator will be installed in `splunk-operator` namespace and will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
-wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
+wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-cluster.yaml
 kubectl apply -f splunk-operator-install.yaml
 ```
 
@@ -53,6 +53,14 @@ metadata:
     name: splunk-operator
   name: splunk-operator-config
   namespace: splunk-operator
+```
+## Install operator to watch single namespace with restrictive permission
+
+In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-install.yaml](https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-cluster.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace
+
+```
+wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
+kubectl apply -f splunk-operator-install.yaml
 ```
 
 ## Private Registries
