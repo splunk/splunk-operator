@@ -113,6 +113,7 @@ jobs:
       - name: Run Integration test
         run: |
           export SPLUNK_OPERATOR_IMAGE_NAME=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export SPLUNK_OPERATOR_IMAGE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
