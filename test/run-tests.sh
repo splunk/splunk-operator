@@ -23,9 +23,9 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull Splunk Operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
-    docker pull ${SPLUNK_OPERATOR_IMAGE}
+    docker pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
-     echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
+     echo "Unable to pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}. Exiting..."
      exit 1
     fi
   fi
