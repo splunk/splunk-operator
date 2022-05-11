@@ -118,7 +118,7 @@ jobs:
     - name: Setup clair scanner
       run: make setup_clair_scanner
     - name: Scan container image
-      run: make run_clair_scan
+      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Stop clair scanner
       run: make stop_clair_scanner
     - name: Save scan results as artifacts
