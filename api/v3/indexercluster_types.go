@@ -71,10 +71,12 @@ type IndexerClusterStatus struct {
 	Phase splcommon.Phase `json:"phase"`
 
 	// current phase of the cluster master
-	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase"`
+	// +optional
+	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase,omitempty"`
 
 	// current phase of the cluster manager
-	ClusterManagerPhase splcommon.Phase `json:"clusterManagerPhase"`
+	// +optional
+	ClusterManagerPhase splcommon.Phase `json:"clusterManagerPhase,omitempty"`
 
 	// desired number of indexer peers
 	Replicas int32 `json:"replicas"`

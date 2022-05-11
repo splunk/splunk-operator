@@ -755,22 +755,25 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string
+	var cm InstanceType
 	if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+		cm = SplunkClusterManager
 	} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+		cm = SplunkClusterMaster
 	} else {
 		mgr.log.Info("Empty cluster manager reference")
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(cm, managerIdxcName, false))
 
 	// Retrieve admin password for Pod
-	podName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+	podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod %v", err.Error())
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod %v", podName, err.Error())
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
