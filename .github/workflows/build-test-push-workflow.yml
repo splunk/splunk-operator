@@ -83,12 +83,11 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Make Splunk Operator Image
       run: |
-        docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-        docker build -t ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA .
+        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -236,7 +235,7 @@ jobs:
         id: smoketest
         run: |
           export SPLUNK_OPERATOR_IMAGE_NAME=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-          export SPLUNK_OPERATOR_IMAGE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
