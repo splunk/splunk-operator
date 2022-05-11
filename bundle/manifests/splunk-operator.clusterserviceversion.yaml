@@ -488,6 +488,7 @@ spec:
                   allowPrivilegeEscalation: false
               securityContext:
                 runAsUser: 1001
+                fsGroup: 1001
               serviceAccountName: splunk-operator-controller-manager
               terminationGracePeriodSeconds: 10
       permissions:

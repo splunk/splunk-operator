@@ -421,6 +421,7 @@ spec:
         name: splunk-operator
     spec:
       securityContext:
+        runAsUser: 1001
         fsGroup: 1001
       serviceAccountName: splunk-operator
       containers:
