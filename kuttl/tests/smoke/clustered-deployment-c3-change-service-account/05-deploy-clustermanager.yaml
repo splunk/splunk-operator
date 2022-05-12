@@ -1,12 +1,12 @@
+#create new cluster manager custom resource 
 apiVersion: enterprise.splunk.com/v3
-kind: SearchHeadCluster
+kind: ClusterManager
 metadata:
-  name: test-shc
+  name: test
   finalizers: 
     - "enterprise.splunk.com/delete-pvc"
 spec: 
   volumes: []
   imagePullPolicy: "IfNotPresent"
-  clusterManagerRef: 
-    name: test
   serviceAccount: test-svc-account-2
+  

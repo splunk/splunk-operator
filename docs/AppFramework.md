@@ -103,7 +103,7 @@ Example: ClusterMaster.yaml
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm
   finalizers:

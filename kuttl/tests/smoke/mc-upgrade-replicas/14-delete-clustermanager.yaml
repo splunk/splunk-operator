@@ -3,5 +3,5 @@ kind: TestStep
 delete:
 # Delete a ClusterMaster
 - apiVersion: enterprise.splunk.com/v3
-  kind: ClusterMaster
+  kind: ClusterManager
   name: example

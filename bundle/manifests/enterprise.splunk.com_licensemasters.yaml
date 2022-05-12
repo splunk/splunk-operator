@@ -977,7 +977,7 @@ spec:
                       type: object
                     type: array
                 type: object
-              clusterMasterRef:
+              clusterManagerRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
                 properties:

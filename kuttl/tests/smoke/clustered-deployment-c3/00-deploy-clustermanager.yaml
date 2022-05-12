@@ -1,6 +1,6 @@
 #create new cluster manager custom resource 
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: test
   finalizers: 

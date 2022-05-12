@@ -90,9 +90,9 @@ metadata:
 ---
 # assert for clustre master custom resource to be ready
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
-  name: clustermaster
+  name: clustermanager
 status:
   phase: Ready
   readyReplicas: 1

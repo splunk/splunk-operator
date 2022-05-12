@@ -4,7 +4,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: clustermasters.enterprise.splunk.com
+  name: clustermanagers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
@@ -988,7 +988,7 @@ spec:
                       type: object
                     type: array
                 type: object
-              clusterMasterRef:
+              clusterManagerRef:
                 description: ClusterMasterRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
                 properties:

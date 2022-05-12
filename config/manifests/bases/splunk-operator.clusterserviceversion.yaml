@@ -12,10 +12,15 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: ClusterMaster is the Schema for the clustermanagers API
+    - description: ClusterMaster is the Schema for the clustermasters API
       displayName: Cluster Master
       kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
+      name: clustermanagers.enterprise.splunk.com
+      version: v3
+    - description: ClusterManager is the Schema for the cluster manager API
+      displayName: Cluster Manager
+      kind: ClusterManager
+      name: clustermanagers.enterprise.splunk.com
       version: v3
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster

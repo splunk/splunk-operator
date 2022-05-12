@@ -78,7 +78,7 @@ NAME                                  READY   STATUS    RESTARTS   AGE
 splunk-default-monitoring-console-0   1/1     Running   0          17m
 splunk-example-license-manager-0       1/1     Running   0          18m
 splunk-operator-cb8d66765-tl6z2       1/1     Running   0          6h6m
-splunk-test-cluster-master-0          1/1     Running   0          19m
+splunk-test-cluster-manager-0          1/1     Running   0          19m
 splunk-test-deployer-0                1/1     Running   0          6h3m
 splunk-test-indexer-0                 1/1     Running   0          17m
 splunk-test-indexer-1                 1/1     Running   0          17m

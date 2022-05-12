@@ -56,7 +56,7 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMast
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm
   finalizers:
@@ -97,7 +97,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm
   monitoringConsoleRef:
     name: example_mc
@@ -111,7 +111,7 @@ After starting the cluster manager, indexer cluster peers, and monitoring consol
 ```
 $ kubectl get pods
 NAME                                       READY   STATUS    RESTARTS    AGE
-splunk-cm-cluster-master-0                  1/1     Running   0          29s
+splunk-cm-cluster-manager-0                  1/1     Running   0          29s
 splunk-example-indexer-0                    1/1     Running   0          29s
 splunk-example-indexer-1                    1/1     Running   0          29s
 splunk-example-indexer-2                    1/1     Running   0          29s
@@ -132,7 +132,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm
   replicas: 3
   monitoringConsoleRef:
@@ -143,7 +143,7 @@ EOF
 ```
 $ kubectl get pods
 NAME                                         READY    STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0                    1/1     Running   0          14m
+splunk-cm-cluster-manager-0                    1/1     Running   0          14m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
@@ -160,7 +160,7 @@ indexercluster.enterprise.splunk.com/example patched
 
 For efficiency, note that you can use the following short names with `kubectl`:
 
-* `clustermaster`: `cm-idxc`
+* `clustermanager`: `cm-idxc`
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
 * `LicenseManager`: `lm`
@@ -199,7 +199,7 @@ idc-example   IndexerCluster/example   16%/50%   5         10        5          
 ```
 
 #### Create a search head for your index cluster
-To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
+To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterManagerRef` parameter:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -210,19 +210,19 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm
   monitoringConsoleRef:
     name: example_mc
 EOF
 ```
 
-Note that the `clusterMasterRef` field points to the cluster manager for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
+Note that the `clusterManagerRef` field points to the cluster manager for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
 ```
 $ kubectl get pods
 NAME                                         READY    STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0                    1/1     Running   0          14m
+splunk-cm-cluster-manager-0                    1/1     Running   0          14m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
@@ -237,7 +237,7 @@ Having a separate CR for cluster manager allows you to define parameters differe
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm
   finalizers:
@@ -258,7 +258,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   # No cluster-manager created, uses the referenced one
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm
   replicas: 3
   storageClassName: local
@@ -291,7 +291,7 @@ There is no preferred order when running an MC pod; you can start the pod before
 A search head cluster is used to distribute users and search load across multiple instances, and provides high availabilty for search jobs. See [About search head clustering](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/AboutSHC) in the Splunk Enterprise documentation.
 
 You can create a search head cluster that is configured to communicate with your indexer cluster by using a `SearchHeadCluster` resource
-and adding the `clusterMasterRef` parameter. 
+and adding the `clusterManagerRef` parameter. 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -302,7 +302,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm
   monitoringConsoleRef:
     name: example_mc
@@ -325,7 +325,7 @@ EOF
 ```
 $ kubectl get pods
 NAME                                        READY   STATUS    RESTARTS   AGE
-splunk-cm-cluster-master-0                   1/1     Running   0          53m
+splunk-cm-cluster-manager-0                   1/1     Running   0          53m
 splunk-example-deployer-0                    0/1     Running   0          29s
 splunk-example-indexer-0                     1/1     Running   0          53m
 splunk-example-indexer-1                     1/1     Running   0          40m
@@ -351,7 +351,7 @@ The creation of `SearchHeadCluster`, `ClusterMaster`, `MonitoringConsole`, and `
 ```
 $ kubectl get svc
 NAME                                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
-splunk-cm-cluster-master-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
+splunk-cm-cluster-manager-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
 splunk-cm-indexer-service                                   ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
 splunk-example_mc-monitoring-console-service                ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
 splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
@@ -387,7 +387,7 @@ kubectl delete standalone single
 kubectl delete shc example
 kubectl delete idc example
 kubectl delete mc example_mc
-kubectl delete clustermaster cm
+kubectl delete clustermanager cm
 ```
 
 ## SmartStore Index Management
@@ -507,7 +507,7 @@ In this example, app3 and app4 are installed on any indexer instances that are m
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cmexample
   finalizers:
@@ -691,7 +691,7 @@ While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the 
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: example-cm
   finalizers:
@@ -707,12 +707,12 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: example-cm
 EOF
 ```
 
-In order to forward `LicenseManager` logs to the above `Indexer Cluster`, you need to add `clusterMasterRef` to the `LicenseManager` spec as follows:
+In order to forward `LicenseManager` logs to the above `Indexer Cluster`, you need to add `clusterManagerRef` to the `LicenseManager` spec as follows:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
@@ -727,7 +727,7 @@ spec:
       configMap:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
-  clusterMasterRef:
+  clusterManagerRef:
     name: example-cm
 ```
 
@@ -839,18 +839,18 @@ There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Clu
 
 ### Configuring cluster_master_url:
 
-Assuming the hostname for your cluster manager is `cluster-master.splunk.mydomain.com`,
+Assuming the hostname for your cluster manager is `cluster-manager.splunk.mydomain.com`,
 you should create a `default.yml` file with the following contents:
 
 ```yaml
 splunk:
-  cluster_master_url: cluster-master.splunk.mydomain.com
+  cluster_master_url: cluster-manager.splunk.mydomain.com
 ```
 
-Next, save this file as a secret. In the example here, it is called `splunk-cluster-master`:
+Next, save this file as a secret. In the example here, it is called `splunk-cluster-manager`:
 
 ```
-kubectl create secret generic splunk-cluster-master --from-file=default.yml
+kubectl create secret generic splunk-cluster-manager --from-file=default.yml
 ```
 
 You can then use the `defaultsUrl` parameter and a reference to the secret created above to configure any Splunk
@@ -865,10 +865,10 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   volumes:
-    - name: cluster-master
+    - name: cluster-manager
       secret:
-        secretName: splunk-cluster-master
-  defaultsUrl: /mnt/cluster-master/default.yml
+        secretName: splunk-cluster-manager
+  defaultsUrl: /mnt/cluster-manager/default.yml
 ```
 ## Managing global kubernetes secret object
 

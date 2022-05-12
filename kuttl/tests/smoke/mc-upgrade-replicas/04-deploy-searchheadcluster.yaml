@@ -6,7 +6,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 3
-  clusterMasterRef:
-    name: clustermaster
+  clusterManagerRef:
+    name: clustermanager
   monitoringConsoleRef:
     name: example

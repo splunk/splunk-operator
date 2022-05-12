@@ -74,15 +74,15 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
 4. Create/Update the Cluster Manager Customer Resource specification with volume and index configuration (see Example below)
-5. Apply the Customer Resource specification: kubectl -f apply Clustermaster.yaml
+5. Apply the Customer Resource specification: kubectl -f apply Clustermanager.yaml
 6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
 
 
-Example. Clustermaster.yaml:
+Example. Clustermanager.yaml:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: <name>
   finalizers:

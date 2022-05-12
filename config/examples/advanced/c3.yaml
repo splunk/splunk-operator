@@ -12,7 +12,7 @@ spec:
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm-example
   finalizers:
@@ -55,7 +55,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: <n>
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
   licenseManagerRef:
     name: lm-example
@@ -67,7 +67,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
   licenseManagerRef:
     name: lm-example
