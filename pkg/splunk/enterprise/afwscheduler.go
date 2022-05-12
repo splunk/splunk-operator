@@ -1178,7 +1178,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	case "ClusterMaster":
 		instanceID = SplunkClusterMaster
 	case "ClusterManager":
-		instanceID = "cluster-manager"
+		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
 	default:

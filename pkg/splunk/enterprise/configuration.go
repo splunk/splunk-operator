@@ -663,7 +663,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
 	} else if spec.ClusterManagerRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName("cluster-manager", spec.ClusterManagerRef.Name, false)
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
 		if spec.ClusterManagerRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}

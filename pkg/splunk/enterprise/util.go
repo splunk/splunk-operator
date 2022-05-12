@@ -241,7 +241,7 @@ func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Commo
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
 		},
 	}
 }
@@ -251,7 +251,7 @@ func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Comm
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName("cluster-manager", cr.GetName(), false),
+			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 }

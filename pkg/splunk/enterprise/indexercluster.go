@@ -213,9 +213,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Set indexer cluster CR as owner reference for clustermanager
 		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
-			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName("cluster-manager", cr.Spec.ClusterManagerRef.Name)}
+			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
 		} else {
-			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterMasterRef.Name)}
+			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
@@ -401,7 +401,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermanager
 		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
-		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterMasterRef.Name)}
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
@@ -755,10 +755,9 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string
-	var cm InstanceType
+	cm := SplunkClusterManager
 	if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
-		cm = SplunkClusterManager
 	} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
 		cm = SplunkClusterMaster
