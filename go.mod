@@ -10,7 +10,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1 //For CVE-2022-21698
 	github.com/stretchr/testify v1.7.0
 	go.uber.org/zap v1.19.1
 	k8s.io/api v0.23.0
@@ -89,4 +89,7 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+replace (
+	github.com/prometheus/client_golang => github.com/prometheus/client_golang v1.11.1 //For CVE-2022-21698
+	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+)
