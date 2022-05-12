@@ -8,20 +8,20 @@ package common
 // Test URLs for Cluster Manager based on Manager-service
 const (
 
-	//TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/config?count=0&output_mode=json"
-	TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerClusterConfig + "?count=0&output_mode=json"
+//TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/config?count=0&output_mode=json"
+//TestServiceURLClusterManagerClusterConfig = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerClusterConfig + "?count=0&output_mode=json"
 
-	//TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json"
-	TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
+//TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json"
+//TestServiceURLClusterManagerGetInfo = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
 
-	//TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json"
-	TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
+//TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json"
+//TestServiceURLClusterManagerGetPeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
 
-	//TestServiceURLClusterManagerRemovePeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/control/control/remove_peers"
-	TestServiceURLClusterManagerRemovePeers = "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089" + URIClusterManagerRemovePeers
+//TestServiceURLClusterManagerRemovePeers = "https://splunk-master1-cluster-master-service.test.svc.cluster.local:8089/services/cluster/master/control/control/remove_peers"
+//TestServiceURLClusterManagerRemovePeers = "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089" + URIClusterManagerRemovePeers
 
-	//TestServiceURLClusterManagerMgmtPort = "https://splunk--cluster-master-service.test.svc.cluster.local:8089"
-	TestServiceURLClusterManagerMgmtPort = "https://splunk--cluster-master-service.test.svc.cluster.local:8089"
+//TestServiceURLClusterManagerMgmtPort = "https://splunk--cluster-master-service.test.svc.cluster.local:8089"
+//TestServiceURLClusterManagerMgmtPort = "https://splunk--cluster-master-service.test.svc.cluster.local:8089"
 )
 
 // Test K8s components for Cluster Manager based on Stack1
@@ -53,25 +53,25 @@ const (
 	TestClusterManagerService = ClusterManager + "-service"
 
 	//TestClusterManagerPod = "Pod-test-splunk-master1-cluster-master-0"
-	TestClusterManagerPod = "Pod-test-splunk-master1-" + ClusterManager + "-%s"
+	//TestClusterManagerPod = "Pod-test-splunk-master1-" + ClusterManager + "-%s"
 
 	//TestExampleClusterManagerMgmtPort = "splunk-example-cluster-master-service:8089"
-	TestExampleClusterManagerMgmtPort = "splunk-example-" + TestClusterManagerService + ":8089"
+	//TestExampleClusterManagerMgmtPort = "splunk-example-" + TestClusterManagerService + ":8089"
 
 	//TestClusterManager = "splunk-%s-cluster-master"
-	TestClusterManager = "splunk-%s-cluster-master"
+	//TestClusterManager = "splunk-%s-cluster-master"
 
 	//TestClusterManagerID = "splunk-%s-cluster-master-%s"
-	TestClusterManagerID = "splunk-%s-cluster-master-%s"
+	//TestClusterManagerID = "splunk-%s-cluster-master-%s"
 
 	//TestClusterManagerDashed = "-cluster-master-"
 	TestClusterManagerDashed = "-" + ClusterManager + "-"
 
 	//TestClusterManager1 = "ClusterMaster-test-master1"
-	TestClusterManager1 = "ClusterMaster-test-master1"
+	//TestClusterManager1 = "ClusterMaster-test-master1"
 
 	//TestClusterManager1Secrets = "splunk-master1-indexer-secrets"
-	TestClusterManager1Secrets = "splunk-master1-indexer-secrets"
+	//TestClusterManager1Secrets = "splunk-master1-indexer-secrets"
 )
 
 // Test URLs for Cluster Peers based on Stack1

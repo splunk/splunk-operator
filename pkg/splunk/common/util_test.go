@@ -574,12 +574,12 @@ func TestGetLabels(t *testing.T) {
 	}
 
 	//TODO check dual support
-	test("indexer", ClusterManager, "t1", "t1", map[string]string{
+	test("indexer", "cluster-manager", "t1", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
-		"app.kubernetes.io/name":       ClusterManager,
+		"app.kubernetes.io/name":       "cluster-manager",
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-manager",
 	})
 
 	// Multipart IndexerCluster - selector of indexer service for main part
@@ -613,24 +613,24 @@ func TestGetLabels(t *testing.T) {
 
 	// Test all labels using selectFew option
 	selectAll := []string{"manager", "component", "name", "partof", "instance"}
-	testNew("indexer", ClusterManager, "t1", "t1", selectAll, map[string]string{
+	testNew("indexer", "cluster-manager", "t1", "t1", selectAll, map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
-		"app.kubernetes.io/name":       ClusterManager,
+		"app.kubernetes.io/name":       "cluster-manager",
 		"app.kubernetes.io/part-of":    "splunk-t1-indexer",
-		"app.kubernetes.io/instance":   "splunk-t1-cluster-master",
+		"app.kubernetes.io/instance":   "splunk-t1-cluster-manager",
 	}, "")
 
 	// Test a few labels using selectFew option
 	selectFewPartial := []string{"manager", "component"}
-	testNew("indexer", ClusterManager, "t1", "t1", selectFewPartial, map[string]string{
+	testNew("indexer", "cluster-manager", "t1", "t1", selectFewPartial, map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
 	}, "")
 
 	// Test incorrect label
 	selectFewIncorrect := []string{"randomvalue"}
-	testNew("indexer", ClusterManager, "t1", "t1", selectFewIncorrect, map[string]string{}, "Incorrect label type randomvalue")
+	testNew("indexer", "cluster-manager", "t1", "t1", selectFewIncorrect, map[string]string{}, "Incorrect label type randomvalue")
 }
 
 func TestAppendPodAffinity(t *testing.T) {

@@ -2158,7 +2158,7 @@ var _ = Describe("m4appfw test", func() {
 
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
 			// Get instance of current Cluster Master CR with latest config
-			cm = &enterpriseApi.ClusterMaster{}
+			cm = &enterpriseApi.ClusterManager{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to edit Cluster Master")
 

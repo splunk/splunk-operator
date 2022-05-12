@@ -194,7 +194,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, true, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "cluster-manager", 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
@@ -211,7 +211,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 			// Delete the Cluster Manager
-			cm := &enterpriseApi.ClusterMaster{}
+			cm := &enterpriseApi.ClusterManager{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
 			err = deployment.DeleteCR(ctx, cm)
@@ -233,7 +233,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, false, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "cluster-manager", 1, false, verificationTimeout)
 
 			// Verify Monitoring Console PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "monitoring-console", 1, false, verificationTimeout)

@@ -191,14 +191,14 @@ func swapLicenseManager(name string, licenseManagerName string) (string, string)
 	return licenseMasterName, licenseManagerName
 }
 
-// newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+// newClusterManager creates and initialize the CR for ClusterManager Kind
+func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
 
 	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
 
-	new := enterpriseApi.ClusterMaster{
+	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -206,7 +206,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{
@@ -226,11 +226,11 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 	return &new
 }
 
-// newClusterMaster creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
-	new := enterpriseApi.ClusterMaster{
+// newClusterManager creates and initialize the CR for ClusterManager Kind
+func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterManager {
+	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -238,7 +238,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
@@ -779,11 +779,11 @@ func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, config
 	return configMap, err
 }
 
-// newClusterMasterWithGivenSpec creates and initialize the CR for ClusterMaster Kind
-func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterMasterSpec) *enterpriseApi.ClusterMaster {
-	new := enterpriseApi.ClusterMaster{
+// newClusterManagerWithGivenSpec creates and initialize the CR for ClusterManager Kind
+func newClusterManagerWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterManagerSpec) *enterpriseApi.ClusterManager {
+	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,

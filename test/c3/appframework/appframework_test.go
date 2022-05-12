@@ -879,7 +879,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
 			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-			_, err = deployment.DeployClusterMaster(ctx, deployment.GetName(), "", "", "")
+			_, err = deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the Indexer Cluster
