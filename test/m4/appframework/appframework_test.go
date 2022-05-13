@@ -258,7 +258,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for the poll period for the apps to be downloaded
-			time.Sleep(2 * time.Minute)
+			time.Sleep(4 * time.Minute)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
