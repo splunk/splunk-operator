@@ -260,7 +260,7 @@ cluster-up:
 cluster-down:
 	@test/deploy-cluster.sh down
 
-.PHONY: ins-test
+.PHONY: int-test
 int-test:
 	@echo Run integration test
 	@test/run-tests.sh
