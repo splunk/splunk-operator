@@ -9,7 +9,7 @@ spec:
   spec: 
     imagePullPolicy: "IfNotPresent"
   defaults: "splunk:
-    multisite_master: localhost
+    multisite_manager: localhost
     all_sites: site1,site2,site3
     site: site1
     multisite_replication_factor_origin: 1

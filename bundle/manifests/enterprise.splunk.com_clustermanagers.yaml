@@ -6,16 +6,16 @@ metadata:
   creationTimestamp: null
   labels:
     name: splunk-operator
-  name: clustermasters.enterprise.splunk.com
+  name: clustermanagers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: ClusterMaster
-    listKind: ClusterMasterList
-    plural: clustermasters
+    kind: ClusterManager
+    listKind: ClusterManagerList
+    plural: clustermanagers
     shortNames:
-    - cmaster-idxc
-    singular: clustermaster
+    - cm-idxc
+    singular: clustermanager
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -24,8 +24,8 @@ spec:
       name: Phase
       type: string
     - description: Status of cluster manager
-      jsonPath: .status.clusterMasterPhase
-      name: Master
+      jsonPath: .status.clusterManagerPhase
+      name: Manager
       type: string
     - description: Desired number of indexer peers
       jsonPath: .status.replicas
@@ -42,7 +42,7 @@ spec:
     name: v3
     schema:
       openAPIV3Schema:
-        description: ClusterMaster is the Schema for the cluster manager API
+        description: ClusterManager is the Schema for the cluster manager API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -57,7 +57,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ClusterMasterSpec defines the desired state of ClusterMaster
+            description: ClusterManagerSpec defines the desired state of ClusterManager
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -3511,7 +3511,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ClusterMasterStatus defines the observed state of ClusterMaster
+            description: ClusterManagerStatus defines the observed state of ClusterManager
             properties:
               appContext:
                 description: App Framework status
@@ -3879,66 +3879,6 @@ spec:
     storage: true
     subresources:
       status: {}
-  - name: v1
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v1beta1
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v1beta2
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v1beta3
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
-  - name: v2
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            type: string
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: false
 status:
   acceptedNames:
     kind: ""

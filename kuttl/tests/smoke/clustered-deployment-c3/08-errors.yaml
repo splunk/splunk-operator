@@ -8,7 +8,7 @@ name: test
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-test-cluster-master
+  name: splunk-test-cluster-manager
 status:
   replicas: 1
 
@@ -17,4 +17,4 @@ status:
 apiVersion: v1
 kind: Secret
 metadata: 
-  name: splunk-test-cluster-master-secret-v1
+  name: splunk-test-cluster-manager-secret-v1

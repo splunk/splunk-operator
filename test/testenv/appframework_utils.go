@@ -234,7 +234,7 @@ func GetAppDeploymentInfoMonitoringConsole(ctx context.Context, deployment *Depl
 	return appDeploymentInfo, err
 }
 
-// GetAppDeploymentInfoClusterManager returns AppDeploymentInfo for given Cluster Master, appSourceName and appName
+// GetAppDeploymentInfoClusterManager returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
 func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	cm := &enterpriseApi.ClusterManager{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
@@ -245,14 +245,14 @@ func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deploym
 	}
 	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Cluster Master AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Cluster Manager AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "App Info List", appInfoList)
 	return appDeploymentInfo, err
 }
 

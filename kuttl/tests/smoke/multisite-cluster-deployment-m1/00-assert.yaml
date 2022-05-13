@@ -1,5 +1,5 @@
 ---
-# assert for clustre master custom resource to be ready
+# assert for clustre manager custom resource to be ready
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterManager
 metadata:
@@ -12,7 +12,7 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-test-cluster-master
+  name: splunk-test-cluster-manager
 status:
   replicas: 2
 
@@ -21,4 +21,4 @@ status:
 apiVersion: v1
 kind: Secret
 metadata: 
-  name: splunk-test-cluster-master-secret-v1
+  name: splunk-test-cluster-manager-secret-v1

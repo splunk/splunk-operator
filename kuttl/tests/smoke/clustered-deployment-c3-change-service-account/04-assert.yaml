@@ -1,4 +1,4 @@
-# assert for clustre master custom resource to be ready
+# assert for clustre manager custom resource to be ready
 apiVersion: v1
 kind: ServiceAccount
 metadata:
