@@ -145,14 +145,14 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	${SED} "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
-	${SED} "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
-	${SED} "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
+	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default | kubectl apply -f -
-	${SED} "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
-	${SED} "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/default/kustomization.yaml
-	${SED} "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/default/kustomization.yaml
+	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
+	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/default/kustomization.yaml
+	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/default/kustomization.yaml
  
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
@@ -188,8 +188,8 @@ endef
 bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
 	operator-sdk generate kustomize manifests -q
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
-	${SED} "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
-	${SED} "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 	operator-sdk bundle validate ./bundle
@@ -298,23 +298,23 @@ run_clair_scan:
 generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-namespace.yaml config/default/kustomization.yaml
-	${SED} "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
-	${SED} "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
-	${SED} "s/ClusterRole/Role/g"  config/rbac/role.yaml
-	${SED} "s/ClusterRole/Role/g"  config/rbac/role_binding.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	$(SED) "s/ClusterRole/Role/g"  config/rbac/role.yaml
+	$(SED) "s/ClusterRole/Role/g"  config/rbac/role_binding.yaml
 	cd conig/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-namespace.yaml
-	${SED} "s/Role/ClusterRole/g"  config/rbac/role.yaml
-	${SED} "s/Role/ClusterRole/g"  config/rbac/role_binding.yaml
+	$(SED) "s/Role/ClusterRole/g"  config/rbac/role.yaml
+	$(SED) "s/Role/ClusterRole/g"  config/rbac/role_binding.yaml
 
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
-	${SED} "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
-	${SED} "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
-	${SED} "s/WATCH_NAMESPACE_VALUE/\"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	$(SED) "s/WATCH_NAMESPACE_VALUE/\"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
