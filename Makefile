@@ -138,7 +138,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	sed -i "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
 	sed -i "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
-	sed -i "" "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	sed -i "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default | kubectl apply -f -
 	sed -i "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
