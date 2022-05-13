@@ -234,7 +234,6 @@ jobs:
       - name: Run smoke test
         id: smoketest
         run: |
-          export SPLUNK_OPERATOR_IMAGE_NAME=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
