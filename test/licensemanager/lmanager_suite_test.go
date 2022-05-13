@@ -36,7 +36,7 @@ const (
 
 var (
 	testenvInstance *testenv.TestEnv
-	testSuiteName   = "lm-" + testenv.RandomDNSName(3)
+	testSuiteName   = "lmanager-" + testenv.RandomDNSName(3)
 )
 
 // TestBasic is the main entry point

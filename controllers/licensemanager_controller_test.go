@@ -26,7 +26,7 @@ import (
 var _ = Describe("LicenseManager Controller", func() {
 
 	var (
-		namespace = "ns-splunk-lm"
+		namespace = "ns-splunk-lmanager"
 	)
 
 	BeforeEach(func() {
