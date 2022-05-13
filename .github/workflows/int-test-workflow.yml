@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - pipeline_fix_test
 jobs:
   int-tests:
     strategy:
