@@ -14,7 +14,7 @@ spec:
     listKind: LicenseManagerList
     plural: licensemanagers
     shortNames:
-    - lm
+    - lmanager
     singular: licensemanager
   scope: Namespaced
   versions:

@@ -58,7 +58,7 @@ type LicenseManagerStatus struct {
 // LicenseManager is the Schema for a Splunk Enterprise license manager.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=licensemanagers,scope=Namespaced,shortName=lm
+// +kubebuilder:resource:path=licensemanagers,scope=Namespaced,shortName=lmanager
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
 // +kubebuilder:storageversion
