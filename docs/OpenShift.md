@@ -9,11 +9,15 @@ container and compromising the host. For more information, please see the
 Splunk Enterprise container's
 [Documentation on Security](https://github.com/splunk/docker-splunk/blob/develop/docs/SECURITY.md).
 
+Similarly the Splunk Operator pod is attached to the Service Account
+`splunk-operator-controller-manager` and runs as user `1001`.
+
 Users of Red Hat OpenShift may find that the default Security Context
-Constraint is too restrictive. You can fix this by granting the default
-Service Account the `nonroot` Security Context Constraint by running the
-following command within your namespace:
+Constraint is too restrictive. You can fix this by granting the `default`
+and `splunk-operator-controller-manager` Service Accounts the `nonroot`
+Security Context Constraint by running the following commands within your namespace:
 
 ```
 oc adm policy add-scc-to-user nonroot -z default
+oc adm policy add-scc-to-user nonroot -z splunk-operator-controller-manager
 ```
