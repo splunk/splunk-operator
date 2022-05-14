@@ -70,7 +70,7 @@ jobs:
     - name: Create Release
       uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
       with:
-        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-install.yaml"
+        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-cluster.yaml"
         bodyFile: "docs/ReleaseNotes.md"
         tag: "${{ github.event.inputs.release_version }}"
         draft: true
