@@ -95,7 +95,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	indexerRevised := indexerCR.DeepCopy()
 	indexerRevised.Spec.Image = "splunk/test"
-	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
+	indexerRevised.Spec.LicenseManagerRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
 		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -111,20 +111,19 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
 
-	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerService,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service",
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -133,12 +132,12 @@ func TestGetLicenseManagerURL(t *testing.T) {
 		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
-	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Namespace = "test"
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerClusterLocal,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service.test.svc.cluster.local",
 		},
 	}
 

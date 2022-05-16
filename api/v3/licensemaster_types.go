@@ -31,9 +31,9 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// LicenseManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// LicenseMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LicenseManagerPausedAnnotation = "licensemanager.enterprise.splunk.com/paused"
+	LicenseMasterPausedAnnotation = "licensemaster.enterprise.splunk.com/paused"
 )
 
 // LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
@@ -55,7 +55,7 @@ type LicenseMasterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise license manager.
+// LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm

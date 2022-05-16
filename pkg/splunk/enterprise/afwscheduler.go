@@ -74,6 +74,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		podType = "standalone"
+	case "LicenseManager":
+		podType = "license-manager"
 	case "LicenseMaster":
 		podType = "license-master"
 	case "SearchHeadCluster":
@@ -1165,8 +1167,10 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		instanceID = SplunkStandalone
-	case "LicenseMaster":
+	case "LicenseManager":
 		instanceID = SplunkLicenseManager
+	case "LicenseMaster":
+		instanceID = SplunkLicenseMaster
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":

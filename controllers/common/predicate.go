@@ -176,6 +176,7 @@ func CrdChangedPredicate() predicate.Predicate {
 			if !stringInSlice(newObj.Name, []string{"clustermasters.enterprise.splunk.com",
 				"indexerclusters.enterprise.splunk.com",
 				"licensemasters.enterprise.splunk.com",
+				"licensemanagers.enterprise.splunk.com",
 				"monitoringconsoles.enterprise.splunk.com",
 				"searchheadclusters.enterprise.splunk.com",
 				"standalones.enterprise.splunk.com"}) {

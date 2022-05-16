@@ -105,7 +105,12 @@ type CommonSplunkSpec struct {
 	LicenseURL string `json:"licenseUrl"`
 
 	// LicenseMasterRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
-	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
+	// +optional
+	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef,omitempty"`
+
+	// LicenseManagerRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
+	// +optional
+	LicenseManagerRef corev1.ObjectReference `json:"licenseManagerRef,omitempty"`
 
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`

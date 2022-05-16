@@ -1,5 +1,5 @@
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
@@ -19,7 +19,7 @@ spec:
     storageClassName: ""
   image: ""
   imagePullPolicy: IfNotPresent
-  licenseMasterRef: {}
+  licenseManagerRef: {}
   licenseUrl: /mnt/licenses/enterprise.lic
   livenessInitialDelaySeconds: 0
   monitoringConsoleRef: {}

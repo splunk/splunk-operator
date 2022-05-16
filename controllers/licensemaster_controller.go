@@ -96,17 +96,17 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.LicenseManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterprisev3.LicenseMasterPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyLicenseManager(ctx, r.Client, instance)
+	return ApplyLicenseMaster(ctx, r.Client, instance)
 }
 
-// ApplyLicenseManager adding to handle unit test case
-var ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
-	return enterprise.ApplyLicenseManager(ctx, client, instance)
+// ApplyLicenseMaster adding to handle unit test case
+var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

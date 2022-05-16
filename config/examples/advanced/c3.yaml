@@ -1,5 +1,5 @@
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   name: lm-example
   finalizers:
@@ -18,7 +18,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
   appRepo:
     appsRepoPollIntervalSeconds: 600
@@ -57,7 +57,7 @@ spec:
   replicas: <n>
   clusterMasterRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
 ---
 apiVersion: enterprise.splunk.com/v3
@@ -69,7 +69,7 @@ metadata:
 spec:
   clusterMasterRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
   appRepo:
     appsRepoPollIntervalSeconds: 600

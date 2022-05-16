@@ -108,7 +108,7 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(k8sManager); err != nil {
 		Expect(err).NotTo(HaveOccurred())
 	}
-	if err := (&LicenseMasterReconciler{
+	if err := (&LicenseManagerReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {
@@ -199,11 +199,11 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		return nil, fmt.Errorf("unable to start manager")
 	}
-	if err = (&LicenseMasterReconciler{
+	if err = (&LicenseManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		return nil, fmt.Errorf("unable to start manager")
 	}
 	if err = (&MonitoringConsoleReconciler{

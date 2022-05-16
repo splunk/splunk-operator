@@ -40,7 +40,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 	Context("LicenseMaster Management", func() {
 
 		It("Create LicenseMaster custom resource should succeeded", func() {
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 
@@ -51,13 +51,13 @@ var _ = Describe("LicenseMaster Controller", func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 		It("Cover Unused methods", func() {
-			// Create New Manager for controllers
-			//k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+			// Create New Master for controllers
+			//k8sMaster, err := ctrl.NewMaster(cfg, ctrl.Options{
 			//	Scheme: scheme.Scheme,
 			//})
 			//Expect(err).ToNot(HaveOccurred())
 
-			//rr, err := New(k8sManager)
+			//rr, err := New(k8sMaster)
 			//callUnsedMethods(rr.(*LicenseMasterReconciler), namespace)
 		})
 

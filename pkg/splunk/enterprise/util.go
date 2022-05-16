@@ -257,23 +257,45 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 }
 
 // getLicenseManagerURL returns URL of license manager
-func getLicenseManagerURL(ctx context.Context, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
 		return []corev1.EnvVar{
 			{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Name:  splcommon.LicenseManagerURL,
 				Value: licenseManagerURL,
 			},
 		}
 	}
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  splcommon.LicenseManagerURL,
 			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
+		},
+	}
+}
+
+// getLicenseMasterURL returns URL of license manager
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  splcommon.LicenseManagerURL,
+				Value: licenseManagerURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.LicenseManagerURL,
+			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
 		},
 	}
 }

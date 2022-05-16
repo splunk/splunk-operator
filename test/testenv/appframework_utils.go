@@ -94,7 +94,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 // GetPodAppStatus Get the app install status and version number
 func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, splcommon.TestDeployerDashed)) {
+	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, "-deployer-")) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil
 	}
@@ -117,7 +117,7 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 			path = splcommon.PeerAppsLoc
 		} else if strings.Contains(podName, splcommon.ClusterManager) {
 			path = splcommon.ManagerAppsLoc
-		} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+		} else if strings.Contains(podName, "-deployer-") {
 			path = splcommon.SHClusterAppsLoc
 		}
 	}

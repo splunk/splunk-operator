@@ -138,6 +138,7 @@ kubectl get idxc >> indexerclusters.txt; kubectl get idxc -o yaml >> indexerclus
 kubectl get cm-idxc >> clustermasters.txt; kubectl get cm-idxc -o yaml >> clustermasters.txt;
 kubectl get shc >> searchheadclusters.txt; kubectl get shc -o yaml >> searchheadclusters.txt;
 kubectl get lm >> licensemaster.txt; kubectl get lm -o yaml >> licensemaster.txt;
+kubectl get lmanager >> licensemanager.txt; kubectl get lmanager -o yaml >> licensemanager.txt;
 echo "Done collecting kubectl get command outputs \n"
 
 # Implement kubectl describe only if -l option is not used. Avoid describe if -l option is set to true
@@ -167,6 +168,7 @@ then
    kubectl describe cm-idxc  > clustermasters.txt
    kubectl describe shc  > searchheadclusters.txt
    kubectl describe lm  > licensemaster.txt
+   kubectl describe lmanager  > licensemanager.txt
    echo "Done collecting kubectl describe command outputs \n"
 fi
 

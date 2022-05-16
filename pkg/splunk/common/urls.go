@@ -98,6 +98,12 @@ const (
 	//LicenseManager = "license-master"
 	LicenseManager = "license-master"
 
+	// LicenseManagerRole = "splunk_license_master"
+	LicenseManagerRole = "splunk_license_master"
+
+	// LicenseManagerURL = "SPLUNK_LICENSE_MASTER_URL"
+	LicenseManagerURL = "SPLUNK_LICENSE_MASTER_URL"
+
 	//LicenseManagerDMCGroup = "dmc_group_license_master"
 	LicenseManagerDMCGroup = "dmc_group_license_master"
 )

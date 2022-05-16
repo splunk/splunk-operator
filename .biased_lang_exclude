@@ -1,6 +1,41 @@
+.biased_lang_exclude
 pkg/splunk/common/urls.go
 pkg/splunk/common/urls_testingcode.go
 pkg/splunk/common/paths.go
+PROJECT
+ChangeLog.md
+.rgignore
+# Exceptions for CRDs
+config/crd/bases/
+bundle/manifests/
+config/rbac/role.yaml
+#Exceptions for dual support of license manager
+.github/workflows/merge-develop-to-master-workflow.yml
+bundle/manifests/enterprise.splunk.com_licensemasters.yaml
+config/crd/bases/enterprise.splunk.com_licensemasters.yaml
+config/crd/patches/cainjection_in_licensemasters.yaml
+config/crd/patches/webhook_in_licensemasters.yaml
+config/examples/licensemaster/default.yaml
+config/rbac/licensemaster_editor_role.yaml
+config/rbac/licensemaster_viewer_role.yaml
+config/samples/enterprise_v3_licensemaster.yaml
+tools/make_bundle.sh
+config/samples/kustomization.yaml
+config/manifests/bases/splunk-operator.clusterserviceversion.yaml
+config/crd/kustomization.yaml
+config/crd/patches/patch_preserve_unknown_fields.yaml
+config/rbac/role.yaml
+api/v3/licensemaster_types.go
+api/v3/zz_generated.deepcopy.go
+api/v3/common_types.go
+pkg/splunk/enterprise/licensemaster.go
+controllers/licensemaster_controller.go
+tools/k8s_collectors/k8s-systeminfo-collector.sh
+controllers/common/predicate.go
+pkg/splunk/enterprise/finalizers.go
+controllers/monitoringconsole_controller.go
+pkg/splunk/enterprise/events.go
+#TOBE REVIEWED
 deploy/olm-catalog/
 go.sum
 .github/

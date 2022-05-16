@@ -146,6 +146,8 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterprisev3.LicenseMaster{}},
 			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterprisev3.LicenseManager{}},
+			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterprisev3.IndexerCluster{}},
 			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterprisev3.SearchHeadCluster{}},

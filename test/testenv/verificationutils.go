@@ -291,27 +291,53 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestCaseEnv
 
 // LicenseManagerReady verify LM is in ready status and does not flip flop
 func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	licenseMaster := &enterpriseApi.LicenseMaster{}
+	LicenseManager := &enterpriseApi.LicenseManager{}
 
 	testenvInstance.Log.Info("Verifying License Manager becomes READY")
 	gomega.Eventually(func() splcommon.Phase {
-		err := deployment.GetInstance(ctx, deployment.GetName(), licenseMaster)
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
 		if err != nil {
 			return splcommon.PhaseError
 		}
 		testenvInstance.Log.Info("Waiting for License Manager instance status to be ready",
-			"instance", licenseMaster.ObjectMeta.Name, "Phase", licenseMaster.Status.Phase)
+			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
 
-		return licenseMaster.Status.Phase
+		return LicenseManager.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() splcommon.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), licenseMaster)
-		return licenseMaster.Status.Phase
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		return LicenseManager.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+}
+
+// LicenseMasterReady verify LM is in ready status and does not flip flop
+func LicenseMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	LicenseManager := &enterpriseApi.LicenseMaster{}
+
+	testenvInstance.Log.Info("Verifying License Master becomes READY")
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
+			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+
+		return LicenseManager.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() splcommon.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		return LicenseManager.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
@@ -481,7 +507,7 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 	case *enterpriseApi.Standalone:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.LicenseMaster:
+	case *enterpriseApi.LicenseManager:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
 	case *enterpriseApi.IndexerCluster:
@@ -519,7 +545,7 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
-		case *enterpriseApi.LicenseMaster:
+		case *enterpriseApi.LicenseManager:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
@@ -762,7 +788,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 
 			if versionCheck {
 				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, splcommon.TestDeployerDashed) || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
 					var expectedVersion string
 					if checkupdated {
 						expectedVersion = AppInfo[appName]["V2"]
@@ -786,7 +812,7 @@ func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstan
 		if scope == enterpriseApi.ScopeCluster {
 			if strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
-			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+			} else if strings.Contains(podName, "-deployer-") {
 				path = splcommon.SHClusterAppsLoc
 			} else if strings.Contains(podName, "-indexer-") {
 				path = splcommon.PeerAppsLoc
