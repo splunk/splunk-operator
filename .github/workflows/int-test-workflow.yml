@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - master
-      - app-framework-image-change
 jobs:
   int-tests:
     strategy:
@@ -46,7 +45,6 @@ jobs:
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-          echo "ECR_REPOSITORY: $ECR_REPOSITORY"
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
