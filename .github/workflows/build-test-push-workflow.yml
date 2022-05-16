@@ -151,7 +151,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
-      CLUSTER_WIDE: "true"
+      CLUSTER_WIDE: "false"
     steps:
       - name: Set Test Cluster Name
         run: | 
