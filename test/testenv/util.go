@@ -182,6 +182,15 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.Lice
 	return &new
 }
 
+// swapClusterManager Enables both CRDs to be tested with minimal duplication
+func swapClusterManager(name string, clusterManagerName string) (string, string) {
+	clusterMasterName := ""
+	if strings.Contains(name, "master") {
+		clusterMasterName, clusterManagerName = clusterManagerName, clusterMasterName
+	}
+	return clusterMasterName, clusterManagerName
+}
+
 // swapLicenseManager Enables both License CRDs to be tested with minimal duplication
 func swapLicenseManager(name string, licenseManagerName string) (string, string) {
 	licenseMasterName := ""
@@ -193,6 +202,41 @@ func swapLicenseManager(name string, licenseManagerName string) (string, string)
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
 func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
+
+	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+
+	new := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{},
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: licenseManagerName,
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterName,
+				},
+				Defaults: ansibleConfig,
+			},
+		},
+	}
+
+	return &new
+}
+
+// newClusterManager creates and initialize the CR for ClusterManager Kind
+func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
 
 	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
 
@@ -258,6 +302,9 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
 func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+
+	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
+
 	new := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IndexerCluster",
@@ -277,6 +324,9 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
 				},
+				ClusterMasterRef: corev1.ObjectReference{
+					Name: clusterMasterRef,
+				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
 				},
@@ -292,6 +342,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
 
 	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
 
 	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -311,6 +362,9 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
+				},
+				ClusterMasterRef: corev1.ObjectReference{
+					Name: clusterMasterRef,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
@@ -784,6 +838,22 @@ func newClusterManagerWithGivenSpec(name string, ns string, spec enterpriseApi.C
 	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: spec,
+	}
+	return &new
+}
+
+// newClusterManagerWithGivenSpec creates and initialize the CR for ClusterManager Kind
+func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterMasterSpec) *enterpriseApi.ClusterMaster {
+	new := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,

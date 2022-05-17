@@ -35,7 +35,7 @@ var _ = Describe("IndexerCluster Controller", func() {
 
 	})
 
-	Context("IndexerCluster Management", func() {
+	XContext("IndexerCluster Management", func() {
 
 		It("Get IndexerCluster custom resource should failed", func() {
 			namespace := "ns-splunk-ic-1"

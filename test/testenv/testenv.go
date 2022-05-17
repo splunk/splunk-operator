@@ -86,6 +86,9 @@ const (
 	// ClusterManagerPod ClusterManager Pod Template String
 	ClusterManagerPod = "splunk-%s-cluster-manager-0"
 
+	// ClusterMasterPod ClusterMaster Pod Template String
+	ClusterMasterPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
+
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
 

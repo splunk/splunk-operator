@@ -77,6 +77,9 @@ type ClusterManagerHealthContent struct {
 func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
+	if strings.Contains(deployment.GetName(), "master") {
+		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
+	}
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetHealth
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)

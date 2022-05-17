@@ -35,7 +35,7 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 
 	})
 
-	Context("SearchHeadCluster Management", func() {
+	XContext("SearchHeadCluster Management", func() {
 
 		It("Get SearchHeadCluster custom resource should failed", func() {
 			namespace := "ns-splunk-shc-1"

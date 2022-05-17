@@ -60,7 +60,7 @@ var _ = Describe("Ingest and Search Test", func() {
 		}
 	})
 
-	Context("Standalone deployment (S1)", func() {
+	XContext("Standalone deployment (S1)", func() {
 		It("ingest_search, integration, s1: can search internal logs for standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
@@ -136,7 +136,7 @@ var _ = Describe("Ingest and Search Test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1)", func() {
+	XContext("Standalone deployment (S1)", func() {
 		It("ingest_search, integration, s1: can ingest custom data to new index and search", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")

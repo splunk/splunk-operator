@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - CSPL-1309-Cluster-Manager-CRD
 jobs:
   int-tests:
     strategy:
@@ -20,6 +21,7 @@ jobs:
             scaling,
             crcrud,
             licensemanager,
+            cmaster,
           ]
     runs-on: ubuntu-latest
     env:

@@ -52,7 +52,7 @@ var _ = Describe("Licensemaster test", func() {
 		}
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+	XContext("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("licensemaster, integration, m4: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
 
 			// Download License File

@@ -35,7 +35,7 @@ var _ = Describe("LicenseManager Controller", func() {
 
 	})
 
-	Context("LicenseManager Management", func() {
+	XContext("LicenseManager Management", func() {
 
 		It("Get LicenseManager custom resource should failed", func() {
 			namespace := "ns-splunk-lm-1"

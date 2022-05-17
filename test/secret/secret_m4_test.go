@@ -56,7 +56,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 		}
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+	XContext("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("secret, integration, m4: secret update on multisite indexers and search head cluster", func() {
 
 			// Test Scenario

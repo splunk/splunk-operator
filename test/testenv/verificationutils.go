@@ -201,6 +201,31 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
 }
 
+// ClusterMasterReady verify Cluster Master Instance is in ready status
+func ClusterMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	// Ensure that the cluster-master goes to Ready phase
+	cm := &enterpriseApi.ClusterMaster{}
+	gomega.Eventually(func() splcommon.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
+		if err != nil {
+			return splcommon.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		// Test ClusterMaster Phase to see if its ready
+		return cm.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+
+	// In a steady state, cluster-master should stay in Ready and not flip-flop around
+	gomega.Consistently(func() splcommon.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+		testenvInstance.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		return cm.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(splcommon.PhaseReady))
+}
+
 // IndexersReady verify indexers of all sites go to ready state
 func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, siteCount int) {
 	siteIndexerMap := map[string][]string{}

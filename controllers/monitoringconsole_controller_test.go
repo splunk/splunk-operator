@@ -35,7 +35,7 @@ var _ = Describe("MonitoringConsole Controller", func() {
 
 	})
 
-	Context("MonitoringConsole Management", func() {
+	XContext("MonitoringConsole Management", func() {
 
 		It("Get MonitoringConsole custom resource should failed", func() {
 			namespace := "ns-splunk-mc-1"

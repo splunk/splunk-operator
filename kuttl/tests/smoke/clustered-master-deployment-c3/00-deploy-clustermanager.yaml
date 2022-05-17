@@ -1,0 +1,10 @@
+#create new cluster master custom resource 
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: test
+  finalizers: 
+    - "enterprise.splunk.com/delete-pvc"
+spec: 
+  volumes: []
+  imagePullPolicy: "IfNotPresent"

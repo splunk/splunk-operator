@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package smoke
+package cmaster
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("Smoke test", func() {
+var _ = Describe("cmaster Smoke test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -54,6 +54,26 @@ var _ = Describe("Smoke test", func() {
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
+	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("smoke, cmaster, c3: can deploy indexers and search head cluster", func() {
+
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
+			Expect(err).To(Succeed(), "Unable to deploy cluster")
+
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+		})
 	})
 
 	XContext("Standalone deployment (S1)", func() {

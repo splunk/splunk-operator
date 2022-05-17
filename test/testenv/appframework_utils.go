@@ -256,6 +256,28 @@ func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deploym
 	return appDeploymentInfo, err
 }
 
+// GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
+func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	cm := &enterpriseApi.ClusterMaster{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(ctx, name, cm)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking Cluster Master AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+		if strings.Contains(appName, appInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "AppDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Master Name", name, "App Info List", appInfoList)
+	return appDeploymentInfo, err
+}
+
 // GetAppDeploymentInfoSearchHeadCluster returns AppDeploymentInfo for given Search Head Cluster, appSourceName and appName
 func GetAppDeploymentInfoSearchHeadCluster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	cm := &enterpriseApi.SearchHeadCluster{}
@@ -291,6 +313,8 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterManager":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
+	case "ClusterMaster":
+		appDeploymentInfo, err = GetAppDeploymentInfoClusterMaster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	default:
 		message := fmt.Sprintf("Failed to fetch AppDeploymentInfo. Incorrect CR Kind %s", crKind)
 		err = errors.New(message)
@@ -394,6 +418,12 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 	for _, appSource := range appSource {
 		if appSource.CrKind == "ClusterManager" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
+			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
+			if clusterManagerBundleHash == "" {
+				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
+			}
+		} else if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Master bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
 			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
 			if clusterManagerBundleHash == "" {
 				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
