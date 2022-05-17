@@ -39,29 +39,26 @@ const (
 	// IdxcSecret represents indexer cluster pass4Symmkey secret token
 	IdxcSecret = "idxc_secret"
 
-	// PvcNamePrefix is a helper string representing prefix for persistent volume claim names
-	PvcNamePrefix = "pvc-%s"
+	// K8SVolumeTypePvc represents a persistent volume storage volume type
+	K8SVolumeTypePvc = "pvc"
 
-	// SplunkMountTypePvc represents a persistent volume storage volume type
-	SplunkMountTypePvc = "pvc"
+	// K8SVolumeTypeEph represents a ephemeral storage volume type
+	K8SVolumeTypeEph = "eph"
 
-	// SplunkMountTypeEph represents a ephemeral storage volume type
-	SplunkMountTypeEph = "eph"
+	// SplunkVolumeNamePrefix is a helper string for Splunk Volume names
+	SplunkVolumeNamePrefix = "mnt-splunk-%s-%s"
 
-	// SplunkMountNamePrefix is a helper string representing Splunk Volume mount names
-	SplunkMountNamePrefix = "mnt-splunk-%s-%s"
-
-	// SplunkMountDirecPrefix is a helper string representing Splunk Volume mount directory
-	SplunkMountDirecPrefix = "/opt/splunk/%s"
+	// SplunkVolumeMountPathPrefix is a helper string for Splunk Volume mount paths
+	SplunkVolumeMountPathPrefix = "/opt/splunk/%s"
 
 	// SplunkSmartStoreInitContMount represents mount for init container
 	SplunkSmartStoreInitContMount = "/opt/splk/etc"
 
-	// EtcVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
-	EtcVolumeStorage = "etc"
+	// SplunkEtcVolume indicates Splunk etc volume mounted on Pods
+	SplunkEtcVolume = "etc"
 
-	// VarVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
-	VarVolumeStorage = "var"
+	// SplunkVarVolume indicates Splunk var volume mounted on Pods
+	SplunkVarVolume = "var"
 
 	// DefaultEtcVolumeStorageCapacity represents default storage capacity for etc volume
 	DefaultEtcVolumeStorageCapacity = "10Gi"
