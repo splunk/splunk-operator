@@ -683,7 +683,7 @@ func TestLicenseManagerList(t *testing.T) {
 	}
 }
 
-func TestLicenseMasterWithReadyState(t *testing.T) {
+func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
@@ -819,11 +819,11 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	creplicas := int32(1)
 	cstatefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-manager",
+			Name:      "splunk-test-cluster-master",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-cluster-manager-headless",
+			ServiceName: "splunk-test-cluster-master-headless",
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -859,11 +859,11 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
 	}
 	clustermanager.Spec.ServiceTemplate.Labels = map[string]string{
-		"app.kubernetes.io/instance":   "splunk-test-cluster-manager",
+		"app.kubernetes.io/instance":   "splunk-test-cluster-master",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "cluster-manager",
 		"app.kubernetes.io/name":       "cluster-manager",
-		"app.kubernetes.io/part-of":    "splunk-test-cluster-manager",
+		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
 	}
 	err = c.Status().Update(ctx, clustermanager)
 	if err != nil {
@@ -887,7 +887,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	// create pod
 	stpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-manager-0",
+			Name:      "splunk-test-cluster-master-0",
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
@@ -928,7 +928,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	stNamespacedName := types.NamespacedName{
-		Name:      "splunk-test-cluster-manager",
+		Name:      "splunk-test-cluster-master",
 		Namespace: "default",
 	}
 	err = c.Get(ctx, stNamespacedName, cstatefulset)

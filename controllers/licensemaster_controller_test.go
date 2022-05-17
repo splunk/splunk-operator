@@ -38,7 +38,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 	Context("LicenseMaster Management", func() {
 
 		It("Get LicenseMaster custom resource should failed", func() {
-			namespace := "ns-splunk-lm-1"
+			namespace := "ns-splunk-lmaster-1"
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -51,7 +51,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 		})
 
 		It("Create LicenseMaster custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-lm-2"
+			namespace := "ns-splunk-lmaster-2"
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -70,7 +70,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 		})
 
 		It("Create LicenseMaster custom resource should succeeded", func() {
-			namespace := "ns-splunk-lm-3"
+			namespace := "ns-splunk-lmaster-3"
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -83,7 +83,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-lm-4"
+			namespace := "ns-splunk-lmaster-4"
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
