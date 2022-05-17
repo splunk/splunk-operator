@@ -17,16 +17,18 @@ package enterprise
 
 import (
 	"context"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -34,6 +36,8 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 func TestApplyStandalone(t *testing.T) {
@@ -870,6 +874,9 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 				},
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 				Mock: true,
 			},
 		},
@@ -1060,6 +1067,271 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 
 	// call reconciliation
 	_, err = ApplyStandalone(ctx, c, standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+}
+
+func TestStandaloneWitReadyState(t *testing.T) {
+	// create directory for app framework
+	newpath := filepath.Join("/tmp", "appframework")
+	err := os.MkdirAll(newpath, os.ModePerm)
+
+	// adding getapplist to fix test case
+	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+		s3Response := splclient.S3Response{}
+		return s3Response, nil
+	}
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{
+		{
+			Name:      "testing",
+			Endpoint:  "/someendpoint",
+			Path:      "s3-test",
+			SecretRef: "secretRef",
+			Provider:  "aws",
+			Type:      "s3",
+			Region:    "west",
+		},
+	}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: "testing",
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{
+		{
+			Name:                 "appSourceName",
+			Location:             "appSourceLocation",
+			AppSourceDefaultSpec: appSourceDefaultSpec,
+		},
+	}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(60),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	// create standalone custom resource
+	standalone := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
+			},
+			AppFrameworkConfig: appFrameworkSpec,
+			Replicas:           1,
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 1,
+		},
+	}
+
+	replicas := int32(1)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create standalone instance before reconcilation
+	c.Create(ctx, &standalone)
+
+	_, err = ApplyStandalone(ctx, c, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+	namespacedName := types.NamespacedName{
+		Name:      standalone.Name,
+		Namespace: standalone.Namespace,
+	}
+
+	// simulate Ready state
+	standalone.Status.Phase = splcommon.PhaseReady
+	standalone.Spec.ServiceTemplate.Annotations = map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+	}
+	standalone.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-standalone",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "standalone",
+		"app.kubernetes.io/name":       "standalone",
+		"app.kubernetes.io/part-of":    "splunk-test-standalone",
+	}
+	err = c.Status().Update(ctx, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	// create pod
+	stpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	stNamespacedName := types.NamespacedName{
+		Name:      "splunk-test-standalone",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+	// update statefulset
+	statefulset.Status.ReadyReplicas = 1
+	statefulset.Status.Replicas = 1
+	err = c.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &standalone, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()

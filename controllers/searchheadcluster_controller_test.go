@@ -10,6 +10,7 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	//ctrl "sigs.k8s.io/controller-runtime"
@@ -20,14 +21,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	//"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("SearchHeadCluster Controller", func() {
-
-	var (
-		namespace = "ns-splunk-shc"
-	)
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
@@ -39,45 +37,157 @@ var _ = Describe("SearchHeadCluster Controller", func() {
 
 	Context("SearchHeadCluster Management", func() {
 
-		It("Create SearchHeadCluster custom resource should succeeded", func() {
+		It("Get SearchHeadCluster custom resource should failed", func() {
+			namespace := "ns-splunk-shc-1"
 			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.SearchHeadCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
-
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
-			CreateSearchHeadCluster("test", nsSpecs.Name, splcommon.PhaseReady)
+			// check when resource not found
+			_, err := GetSearchHeadCluster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("searchheadclusters.enterprise.splunk.com \"test\" not found"))
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Create SearchHeadCluster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-shc-2"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.SearchHeadCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			annotations[enterprisev3.SearchHeadClusterPausedAnnotation] = ""
+			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			ssSpec, _ := GetSearchHeadCluster("test", nsSpecs.Name)
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			ssSpec.Status.DeployerPhase = "Ready"
+			ssSpec.Status.Phase = "Ready"
+			UpdateSearchHeadCluster(ssSpec, splcommon.PhaseReady)
 			DeleteSearchHeadCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-		It("Cover Unused methods", func() {
-			// Create New Manager for controllers
-			//k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-			//	Scheme: scheme.Scheme,
-			//})
-			//Expect(err).ToNot(HaveOccurred())
 
-			//rr, err := New(k8sManager)
-			//callUnsedMethods(rr.(*SearchHeadClusterReconciler), namespace)
+		It("Create SearchHeadCluster custom resource should succeeded", func() {
+			namespace := "ns-splunk-shc-3"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.SearchHeadCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			CreateSearchHeadCluster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			DeleteSearchHeadCluster("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Cover Unused methods", func() {
+			namespace := "ns-splunk-shc-4"
+			ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.SearchHeadCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder()
+			c := builder.Build()
+			instance := SearchHeadClusterReconciler{
+				Client: c,
+				Scheme: scheme.Scheme,
+			}
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test",
+					Namespace: namespace,
+				},
+			}
+			// econcile for the first time err is resource not found
+			_, err := instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// create resource first adn then reconcile for the first time
+			ssSpec := testutils.NewSearchHeadCluster("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+			// reconcile with updated annotations for pause
+			annotations := make(map[string]string)
+			annotations[enterprisev3.SearchHeadClusterPausedAnnotation] = ""
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// reconcile after removing annotations for pause
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			// reconcile after adding delete timestamp
+			Expect(err).ToNot(HaveOccurred())
+			ssSpec.DeletionTimestamp = &metav1.Time{}
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 	})
 })
 
-func CreateSearchHeadCluster(name string, namespace string, status splcommon.Phase) *enterprisev3.SearchHeadCluster {
+func GetSearchHeadCluster(name string, namespace string) (*enterprisev3.SearchHeadCluster, error) {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	By("Expecting SearchHeadCluster custom resource to be created successfully")
+	ss := &enterprisev3.SearchHeadCluster{}
+	err := k8sClient.Get(context.Background(), key, ss)
+	if err != nil {
+		return nil, err
+	}
+	return ss, err
+}
+
+func CreateSearchHeadCluster(name string, namespace string, annotations map[string]string, status splcommon.Phase) *enterprisev3.SearchHeadCluster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 	ssSpec := &enterprisev3.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: annotations,
 		},
 		Spec: enterprisev3.SearchHeadClusterSpec{},
 	}
 	ssSpec = testutils.NewSearchHeadCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
+	time.Sleep(2 * time.Second)
+
+	By("Expecting SearchHeadCluster custom resource to be created successfully")
+	ss := &enterprisev3.SearchHeadCluster{}
+	Eventually(func() bool {
+		_ = k8sClient.Get(context.Background(), key, ss)
+		if status != "" {
+			fmt.Printf("status is set to %v", status)
+			ss.Status.Phase = status
+			ss.Status.DeployerPhase = status
+			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+			time.Sleep(2 * time.Second)
+		}
+		return true
+	}, timeout, interval).Should(BeTrue())
+
+	return ss
+}
+
+func UpdateSearchHeadCluster(instance *enterprisev3.SearchHeadCluster, status splcommon.Phase) *enterprisev3.SearchHeadCluster {
+	key := types.NamespacedName{
+		Name:      instance.Name,
+		Namespace: instance.Namespace,
+	}
+
+	ssSpec := testutils.NewSearchHeadCluster(instance.Name, instance.Namespace, "image")
+	ssSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting SearchHeadCluster custom resource to be created successfully")

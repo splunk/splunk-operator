@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - master
-      - feature-appframework
 jobs:
   int-tests:
     strategy:

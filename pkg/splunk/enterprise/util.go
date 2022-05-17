@@ -1313,9 +1313,6 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		return err
 	}
 
-	// reset the LastAppInfoCheckTime to 0 so that we don't reconcile again and poll for apps status
-	appStatusContext.LastAppInfoCheckTime = 0
-
 	numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
 
 	// turn off the manual checking for this CR kind in the configMap
@@ -1412,10 +1409,11 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 			appStatusContext.AppFrameworkConfig = *appFrameworkConf
 		}
 
-		// set the last check time to current time only if the polling is enabled
-		if isAppRepoPollingEnabled(appStatusContext) {
-			SetLastAppInfoCheckTime(ctx, appStatusContext)
-		} else {
+		// Set the last check time, irrespective of the polling type. This way, it is easy to switch
+		// in between the manual and automatic polling
+		SetLastAppInfoCheckTime(ctx, appStatusContext)
+
+		if !isAppRepoPollingEnabled(appStatusContext) {
 			err = updateManualAppUpdateConfigMapLocked(ctx, client, cr, appStatusContext, kind, turnOffManualChecking)
 			if err != nil {
 				scopedLog.Error(err, "failed to update the manual app udpate configMap")
@@ -1834,7 +1832,8 @@ func handleAppFrameworkActivity(ctx context.Context, client splcommon.Controller
 		RequeueAfter: maxRecDuration,
 	}
 
-	if appDeployContext.LastAppInfoCheckTime != 0 {
+	// Consider the polling interval for next reconcile
+	if isAppRepoPollingEnabled(appDeployContext) {
 		requeueAfter := GetNextRequeueTime(ctx, appDeployContext.AppsRepoStatusPollInterval, appDeployContext.LastAppInfoCheckTime)
 		updateReconcileRequeueTime(ctx, finalResult, requeueAfter, true)
 	}

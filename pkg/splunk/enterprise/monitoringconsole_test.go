@@ -18,12 +18,18 @@ package enterprise
 import (
 	"context"
 	"os"
+	"runtime/debug"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -219,6 +225,92 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	newURLsAdded = true
 
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
+	env = []corev1.EnvVar{
+		{Name: "SPLUNK_MULTISITE_MASTER", Value: "test-a"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"SPLUNK_MULTISITE_MASTER": "test-a", "SPLUNK_SITE": "abc"},
+	}
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-a,test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b,test-c"},
+	}
+
+	newURLsAdded = false
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	env = []corev1.EnvVar{
+		{Name: "A", Value: "test-b"},
+	}
+
+	current = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a,test-b"},
+	}
+	newURLsAdded = true
+
+	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
@@ -677,5 +769,282 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 	if len(s3Resp.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestMonitoringConsoleWithReadyState(t *testing.T) {
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// create monitoringconsole custom resource
+	monitoringconsole := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: splcommon.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+
+	replicas := int32(1)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-test-monitoring-console-headless",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console-headless",
+			Namespace: "default",
+		},
+	}
+
+	// simulate service
+	c.Create(ctx, service)
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create clustermaster instance before reconcilation
+	c.Create(ctx, monitoringconsole)
+
+	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		debug.PrintStack()
+	}
+
+	namespacedName := types.NamespacedName{
+		Name:      monitoringconsole.Name,
+		Namespace: monitoringconsole.Namespace,
+	}
+
+	// simulate Ready state
+	monitoringconsole.Status.Phase = splcommon.PhaseReady
+	monitoringconsole.Spec.ServiceTemplate.Annotations = map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+	}
+	monitoringconsole.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-monitoring-console",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "monitoring-console",
+		"app.kubernetes.io/name":       "monitoring-console",
+		"app.kubernetes.io/part-of":    "splunk-test-monitoring-console",
+	}
+	err = c.Status().Update(ctx, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected get monitoring console %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for monitoring console with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	// create pod
+	stpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	stNamespacedName := types.NamespacedName{
+		Name:      "splunk-test-monitoring-console",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get monitoring console %v", err)
+		debug.PrintStack()
+	}
+	// update statefulset
+	statefulset.Status.ReadyReplicas = 1
+	statefulset.Status.Replicas = 1
+	err = c.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected get monitoring console %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for monitoring console with app framework  %v", err)
+		debug.PrintStack()
+	}
+}
+
+func TestApplyMonitoringConsoleDeletion(t *testing.T) {
+	ctx := context.TODO()
+	mc := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "monitoring-console",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	c.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	mc.ObjectMeta.DeletionTimestamp = &currentTime
+	mc.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyMonitoringConsole(ctx, c, &mc)
+	if err != nil {
+		t.Errorf("ApplyMonitoringConsole should not have returned error here.")
 	}
 }
