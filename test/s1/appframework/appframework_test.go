@@ -1712,4 +1712,72 @@ var _ = Describe("s1appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload 15 apps of 100MB size each to S3
+			   * Create app source for Standalone with parallelDownload=15
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############### VERIFICATION ################
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify App enabled and version by running splunk cmd
+			*/
+
+			//################## SETUP ####################
+			// Download 15 apps around 100MB each (Total 1.4GB) to have total volume above Operator PV default size (1GB)
+			appVersion := "V1"
+			appList := testenv.PVTestApps
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			Expect(err).To(Succeed(), "Unable to download app files")
+
+			// Upload apps to S3
+			testcaseEnvInst.Log.Info("Upload 15 apps around 100MB each (Total 1.4GB) to be above Operator PV default size (1GB)")
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirPVTestApps)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Maximum apps to be downloaded in parallel
+			maxConcurrentAppDownloads := 15
+
+			// Create App framework Spec
+			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############### VERIFICATION ################
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
 })
