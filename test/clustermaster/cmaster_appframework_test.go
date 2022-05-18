@@ -25,7 +25,56 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
-var _ = Describe("cmaster test", func() {
+var _ = Describe("cmaster C3 test", func() {
+
+	var testcaseEnvInst *testenv.TestCaseEnv
+	var deployment *testenv.Deployment
+	ctx := context.TODO()
+
+	BeforeEach(func() {
+		var err error
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
+		Expect(err).To(Succeed(), "Unable to create deployment")
+	})
+
+	AfterEach(func() {
+		// When a test spec failed, skip the teardown so we can troubleshoot.
+		if CurrentGinkgoTestDescription().Failed {
+			testcaseEnvInst.SkipTeardown = true
+		}
+		if deployment != nil {
+			deployment.Teardown()
+		}
+		if testcaseEnvInst != nil {
+			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+		}
+	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("integration, c3, cmaster, CM can deploy indexers and search head cluster", func() {
+
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
+			Expect(err).To(Succeed(), "Unable to deploy cluster")
+
+			// Ensure that the cluster-manager goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+		})
+	})
+})
+
+var _ = Describe("cmaster M4 test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
