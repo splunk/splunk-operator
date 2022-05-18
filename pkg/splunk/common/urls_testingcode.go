@@ -77,8 +77,8 @@ const (
 // Test URLs for Cluster Peers based on Stack1
 const (
 
-	//TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/slave/control/control/decommission"
-	TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089" + URIPeerDecommission
+//TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/slave/control/control/decommission"
+//TestURLPeerHeadlessDecommission = "https://splunk-stack1-indexer-0.splunk-stack1-indexer-headless.test.svc.cluster.local:8089/services/cluster/peer/control/control/decommission"
 )
 
 // Test K8s components for License Manager Single Exceptions

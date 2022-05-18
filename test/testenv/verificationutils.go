@@ -266,7 +266,7 @@ func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, 
 	}
 	gomega.Eventually(func() map[string][]string {
 		podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetSite
+		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 		if err != nil {

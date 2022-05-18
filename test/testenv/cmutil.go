@@ -80,7 +80,7 @@ func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 	if strings.Contains(deployment.GetName(), "master") {
 		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
 	}
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetHealth
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/health?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
@@ -130,7 +130,7 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	if endpoint == "sh" {
 		url = splcommon.LocalURLClusterManagerGetSearchHeads
 	} else {
-		url = splcommon.LocalURLClusterManagerGetPeersJSONOutput
+		url = "https://localhost:8089/services/cluster/manager/peers?output_mode=json"
 	}
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
@@ -224,7 +224,7 @@ type ClusterManagerInfoEndpointResponse struct {
 
 // ClusterManagerInfoResponse Get cluster Manager response
 func ClusterManagerInfoResponse(ctx context.Context, deployment *Deployment, podName string) ClusterManagerInfoEndpointResponse {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/info?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	restResponse := ClusterManagerInfoEndpointResponse{}
@@ -244,7 +244,7 @@ func ClusterManagerInfoResponse(ctx context.Context, deployment *Deployment, pod
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
 func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool {
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/info?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {

@@ -11,7 +11,7 @@ const (
 	ClusterManager = "cluster-master"
 
 	//URIClusterManagerClusterConfig = "/services/cluster/config"
-	URIClusterManagerClusterConfig = "/services/cluster/config"
+	//URIClusterManagerClusterConfig = "/services/cluster/config"
 
 	//URICLusterManagerServices = "/services/cluster/master"
 	URICLusterManagerServices = "/services/cluster/master"
