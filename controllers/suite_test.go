@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+
 	//"time"
 
 	. "github.com/onsi/ginkgo"
@@ -27,17 +28,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	//"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	//"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/pkg/config"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -71,22 +75,22 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
@@ -164,7 +168,7 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 	var probeAddr string
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	//utilruntime.Must(enterprisev3.AddToScheme(scheme))
+	//utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 
 	// Logging setup
 	ctrl.SetLogger(zap.New())

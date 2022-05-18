@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -33,9 +34,17 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
+
+// TestResource defines a simple custom resource, used to test the Spec
+type TestResource struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              enterpriseApi.Spec `json:"spec,omitempty"`
+}
 
 func configTester(t *testing.T, method string, f func() (interface{}, error), want string) {
 	result, err := f()
@@ -90,6 +99,160 @@ func TestGetSplunkService(t *testing.T) {
 	test(SplunkSearchHead, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head","one":"two"},"annotations":{"a":"b"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089}],"selector":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"clusterIP":"None","type":"ClusterIP","publishNotReadyAddresses":true},"status":{"loadBalancer":{}}}`)
 }
 
+func TestValidateImagePullSecrets(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	css := enterpriseApi.CommonSplunkSpec{}
+	cr := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idx1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: css,
+		},
+	}
+
+	// Validate empty imagePullSecrets configuration
+	err := ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err == nil {
+		var nilImagePullSecrets []corev1.LocalObjectReference
+		if !reflect.DeepEqual(css.ImagePullSecrets, nilImagePullSecrets) {
+			t.Errorf("Wanted an empty ImagePullSecrets got %x", css.ImagePullSecrets)
+		}
+	} else {
+		t.Errorf("Unexpected error validating imagePullSecrets %s ", err.Error())
+	}
+
+	// Create a secret
+	secret1 := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "secret1",
+			Namespace: "test",
+		},
+	}
+	err = splutil.CreateResource(ctx, c, &secret1)
+	if err != nil {
+		t.Errorf("Error creating secret %x", secret1)
+	}
+
+	// Create a valid imagePullSecrets config
+	ips := corev1.LocalObjectReference{
+		Name: secret1.GetName(),
+	}
+	css.ImagePullSecrets = append(css.ImagePullSecrets, ips)
+
+	// Validate a valid imagePullSecrets config
+	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err != nil {
+		t.Errorf("Unexpected error validating imagePullSecrets %s ", err.Error())
+	}
+
+	// Create an invalid imagePullSecrets config
+	ipsInvalid := corev1.LocalObjectReference{
+		Name: "nonExistentSecret",
+	}
+	css.ImagePullSecrets = append(css.ImagePullSecrets, ipsInvalid)
+
+	// Validate an invalid imagePullSecrets config
+	err = ValidateImagePullSecrets(ctx, c, &cr, &css)
+	if err != nil {
+		t.Errorf("Shouldn't thrown an error as we assume the image might be from a public repo")
+	}
+
+}
+
+func TestValidateSpec(t *testing.T) {
+	spec := enterpriseApi.Spec{}
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("0.1"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	test := func(pullPolicy, scheduler string) {
+		err := ValidateSpec(&spec, defaultResources)
+		if err != nil {
+			t.Errorf("ValidateSpec() returned %v; want nil", err)
+		}
+		if spec.ImagePullPolicy != pullPolicy {
+			t.Errorf("ValidateSpec() ImagePullPolicy = %s; want %s", spec.ImagePullPolicy, pullPolicy)
+		}
+		if spec.SchedulerName != scheduler {
+			t.Errorf("ValidateSpec() SchedulerName = %s; want %s", spec.SchedulerName, scheduler)
+		}
+		if !reflect.DeepEqual(spec.Resources, defaultResources) {
+			t.Errorf("ValidateSpec() Resources = %v; want %v", spec.Resources, defaultResources)
+		}
+	}
+
+	test("IfNotPresent", "default-scheduler")
+
+	spec.ImagePullPolicy = "Always"
+	spec.SchedulerName = "blah"
+	test("Always", "blah")
+
+	spec.ImagePullPolicy = "IfNotPresent"
+	test("IfNotPresent", "blah")
+
+	spec.ImagePullPolicy = "Invalid"
+	err := ValidateSpec(&spec, defaultResources)
+	if err == nil {
+		t.Error("ValidateSpec() returned nil; want ERROR")
+	}
+}
+
+func TestSetServiceTemplateDefaults(t *testing.T) {
+	cr := TestResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.Spec{
+			ServiceTemplate: corev1.Service{
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{
+							Name: "http",
+							Port: 80,
+						},
+						{
+							Name: "https",
+							Port: 443,
+							TargetPort: intstr.IntOrString{
+								Type:   intstr.Int,
+								IntVal: 8443,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	setServiceTemplateDefaults(&cr.Spec)
+	for _, p := range cr.Spec.ServiceTemplate.Spec.Ports {
+		switch p.Name {
+		case "http":
+			if p.TargetPort.IntValue() != int(p.Port) {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want %d, Got %d", p.Port, p.TargetPort.IntVal)
+			}
+			if p.Protocol != corev1.ProtocolTCP {
+				t.Errorf("setServiceTemplateDefaults() did not set protocol correctly. Want %s, Got %s", corev1.ProtocolTCP, p.Protocol)
+			}
+		case "https":
+			if p.TargetPort.IntValue() != 8443 {
+				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want 8443, Got %d", p.TargetPort.IntVal)
+			}
+		}
+	}
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -122,7 +285,7 @@ func TestGetService(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ServiceTemplate: corev1.Service{
 						Spec: corev1.ServiceSpec{
 							Ports: []corev1.ServicePort{{Name: "user-defined", Port: 32000, TargetPort: intstr.FromInt(6443)}},
@@ -273,6 +436,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	ctx := context.TODO()
+	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -299,7 +463,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterManagerSpec(ctx, &cr)
+	err := validateClusterManagerSpec(ctx, c, &cr)
 
 	if err != nil {
 		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
@@ -1191,7 +1355,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"mnt-splunk-pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1204,7 +1368,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"mnt-splunk-pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1216,7 +1380,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-eph-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-eph-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1228,7 +1392,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-eph-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-eph-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1241,7 +1405,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-eph-etc","emptyDir":{}},{"name":"mnt-splunk-eph-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-eph-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-eph-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{

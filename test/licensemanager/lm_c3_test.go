@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -189,7 +188,7 @@ var _ = Describe("Licensemanager test", func() {
 						},
 					},
 					LicenseURL: "/mnt/licenses/enterprise.lic",
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 				},

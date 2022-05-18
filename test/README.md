@@ -54,7 +54,7 @@ Note: Both make cluster-up and make int-test invokes the test/deploy-cluster.sh 
 Both these scripts take in the env.sh script that defines various environment variables used to build the cluster and run
 the test.
 
-- SPLUNK_OPERATOR_IMAGE (Default: splunk/splunk-operator:latest): The splunk operator image to use for testing  
+- SPLUNK_OPERATOR_IMAGE (Default: splunk/splunk-operator:latest): The Splunk Operator image to use for testing  
 - SPLUNK_ENTERPRISE_IMAGE (Default: splunk/splunk:latest)       : The splunk enterprise image to use for testing
 - CLUSTER_PROVIDER (Default: kind)                              : Supports creating eks or kind cluster
 - PRIVATE_REGISTRY (Default: localhost:5000)                    : Private registry to use push and pull the images used during testing

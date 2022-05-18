@@ -11,7 +11,6 @@ require (
 	github.com/onsi/gomega v1.17.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.1 //For CVE-2022-21698
-	github.com/stretchr/testify v1.7.0
 	go.uber.org/zap v1.19.1
 	k8s.io/api v0.23.0
 	k8s.io/apiextensions-apiserver v0.23.0
@@ -20,6 +19,8 @@ require (
 	k8s.io/kubectl v0.22.4
 	sigs.k8s.io/controller-runtime v0.11.0
 )
+
+require github.com/stretchr/testify v1.7.0
 
 require (
 	cloud.google.com/go v0.81.0 // indirect

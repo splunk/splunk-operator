@@ -50,7 +50,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(ctx, cr)
+	err := validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -74,8 +74,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = splcommon.PhaseError
-	cr.Status.DeployerPhase = splcommon.PhaseError
+	cr.Status.Phase = enterpriseApi.PhaseError
+	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())
 	if cr.Status.Members == nil {
@@ -128,8 +128,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
-			cr.Status.DeployerPhase = splcommon.PhaseTerminating
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
@@ -190,12 +190,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.Phase = phase
 
 	var finalResult *reconcile.Result
-	if cr.Status.DeployerPhase == splcommon.PhaseReady {
+	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
 		finalResult = handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 	}
 
 	// no need to requeue if everything is ready
-	if cr.Status.Phase == splcommon.PhaseReady {
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -258,11 +258,12 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	}
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion)
+	scopedLog := reqLogger.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "CrStatusNamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "NamespaceSecretResourceVersion", namespaceSecret.GetObjectMeta().GetResourceVersion())
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
+		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
 		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
@@ -394,7 +395,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	*/
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
-			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr, podSecretName)
+			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
@@ -411,7 +412,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 }
 
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
-func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
+func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
@@ -420,7 +421,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update statefulset, if necessary
 	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 	if err != nil {
-		return splcommon.PhaseError, err
+		return enterpriseApi.PhaseError, err
 	}
 
 	// for now pass the targetPodName as empty since we are going to fill it in ApplyShcSecret
@@ -429,14 +430,14 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// Check if a recycle of shc pods is necessary(due to shc_secret mismatch with namespace scoped secret)
 	err = ApplyShcSecret(ctx, mgr, desiredReplicas, podExecClient)
 	if err != nil {
-		return splcommon.PhaseError, err
+		return enterpriseApi.PhaseError, err
 	}
 
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		mgr.log.Error(err, "Search head cluster is not ready")
-		return splcommon.PhasePending, nil
+		mgr.log.Info("Search head cluster is not ready", "reason ", err)
+		return enterpriseApi.PhasePending, nil
 	}
 
 	// manage scaling and updates
@@ -619,7 +620,7 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
-func validateSearchHeadClusterSpec(ctx context.Context, cr *enterpriseApi.SearchHeadCluster) error {
+func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) error {
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
 	}
@@ -631,7 +632,7 @@ func validateSearchHeadClusterSpec(ctx context.Context, cr *enterpriseApi.Search
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // helper function to get the list of SearchHeadCluster types in the current namespace

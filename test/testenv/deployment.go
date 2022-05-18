@@ -680,7 +680,7 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context
 
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "IfNotPresent",
 			},
 			Volumes: []corev1.Volume{},
@@ -800,7 +800,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -826,7 +826,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -890,7 +890,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -930,7 +930,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -978,7 +978,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -1003,7 +1003,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -1062,7 +1062,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -1101,7 +1101,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},

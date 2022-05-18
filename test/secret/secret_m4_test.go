@@ -21,7 +21,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -129,7 +130,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)

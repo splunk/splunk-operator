@@ -83,11 +83,12 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Make Splunk Operator Image
       run: |
-        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
+        docker build -t ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA .
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -114,10 +115,13 @@ jobs:
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+    - name: Change Operator Image Tag to latest
+      run: |
+        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
     - name: Setup clair scanner
       run: make setup_clair_scanner
     - name: Scan container image
-      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      run: make run_clair_scan
     - name: Stop clair scanner
       run: make stop_clair_scanner
     - name: Save scan results as artifacts
@@ -234,7 +238,6 @@ jobs:
       - name: Run smoke test
         id: smoketest
         run: |
-          export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}

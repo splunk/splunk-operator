@@ -115,7 +115,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, &cr); err != nil {
+			if err := validateLicenseManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
 			return getLicenseManagerStatefulSet(ctx, c, &cr)
@@ -807,7 +807,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -853,7 +853,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		Namespace: clustermaster.Namespace,
 	}
 
-	clustermaster.Status.Phase = splcommon.PhaseReady
+	clustermaster.Status.Phase = enterpriseApi.PhaseReady
 	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
@@ -973,7 +973,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1041,7 +1041,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	licensemanager.Status.Phase = splcommon.PhaseReady
+	licensemanager.Status.Phase = enterpriseApi.PhaseReady
 	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

@@ -148,7 +148,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		secretAccessKey = ""
 	} else {
 		// Get credentials through the secretRef
-		s3ClientSecret, err := splutil.GetSecretByName(ctx, client, cr, appSecretRef)
+		s3ClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
 		if err != nil {
 			return s3Client, err
 		}
@@ -306,7 +306,7 @@ func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
-	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -444,11 +444,11 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 
 	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
-		scopedLog.Error(err, fmt.Sprintf("There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir))
+		scopedLog.Error(err, "There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir)
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
 		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 		if err != nil {
-			scopedLog.Error(err, fmt.Sprintf("Unable to create the directory %s", splcommon.AppDownloadVolume))
+			scopedLog.Error(err, "Unable to create the directory %s", splcommon.AppDownloadVolume)
 			return 0, err
 		}
 	}
@@ -640,7 +640,16 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 }
 
 //  setupInitContainer modifies the podTemplateSpec object
-func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string) {
+func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
+	var volMntName string
+
+	// Populate the volume mount name based on volume type(eph, pvc) and use /opt/splk/etc for init container
+	if isEtcVolEph {
+		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, splcommon.EtcVolumeStorage)
+	} else {
+		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypePvc, splcommon.EtcVolumeStorage)
+	}
+
 	containerSpec := corev1.Container{
 		Image:           Image,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
@@ -648,7 +657,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 		Command: []string{"bash", "-c", commandOnContainer},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
+			{Name: volMntName, MountPath: splcommon.SplunkSmartStoreInitContMount},
 		},
 
 		Resources: corev1.ResourceRequirements{
@@ -691,7 +700,7 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 // remote volume end points
 func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForS3Secrets").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForS3SecretObjects").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error = nil
 	if !isSmartstoreConfigured(smartstore) {
@@ -700,11 +709,13 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
-		if err == nil {
-			scopedLog.Info("Success", "Removed references for Secret Object %s", volume.SecretRef)
-		} else {
-			scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", volume.SecretRef))
+		if volume.SecretRef != "" {
+			_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
+			if err == nil {
+				scopedLog.Info("Removed references for Secret Object", "secret", volume.SecretRef)
+			} else {
+				scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", volume.SecretRef))
+			}
 		}
 	}
 
@@ -1727,7 +1738,7 @@ func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *
 func getAdminPasswordFromSecret(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
 	// get the admin password from the namespace scoped secret
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr, defaultSecretObjName)
+	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
 		return nil, fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
 	}
@@ -1789,7 +1800,7 @@ func updateReconcileRequeueTime(ctx context.Context, result *reconcile.Result, r
 		return
 	}
 	if rqTime <= 0 {
-		scopedLog.Error(nil, fmt.Sprintf("invalid requeue time: %d", rqTime))
+		scopedLog.Error(nil, "invalid requeue time: %d", rqTime)
 		return
 	}
 

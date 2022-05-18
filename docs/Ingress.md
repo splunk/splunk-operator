@@ -463,7 +463,7 @@ Istio is a popular choice for its Service Mesh capabilities. However, Service Me
 - Nginx Ingress Open Source (F5's open source version)
 - Nginx Ingress Plus (F5's paid version)
 
-[Nginx Comparison Chart](https://github.com/nginxinc/kubernetes-ingress/blob/master/docs/nginx-ingress-controllers.md).
+[Nginx Comparison Chart](https://github.com/nginxinc/kubernetes-ingress/blob/main/docs/content/intro/nginx-ingress-controllers.md).
 
 It is important to confirm which Nginx Ingress controller you intended to implement, as they have *very* different annotations and configurations. For these examples, we are using the Kubernetes Ingress Nginx (option 1) and the Nginx Ingress Open Source (option 2).
 

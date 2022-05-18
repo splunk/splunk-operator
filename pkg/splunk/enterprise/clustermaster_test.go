@@ -109,7 +109,7 @@ func TestApplyClusterManager(t *testing.T) {
 		},
 	}
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterMaster))
 		return err
@@ -144,7 +144,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
+			if err := validateClusterManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
 			return getClusterManagerStatefulSet(ctx, c, &cr)
@@ -308,7 +308,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
@@ -1140,7 +1140,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1207,7 +1207,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	clustermaster.Status.Phase = splcommon.PhaseReady
+	clustermaster.Status.Phase = enterpriseApi.PhaseReady
 	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

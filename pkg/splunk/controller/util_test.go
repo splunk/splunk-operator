@@ -90,6 +90,16 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.ObjectMeta.Labels, revised.ObjectMeta.Labels) }
 	podUpdateTester("Labels")
 
+	// check new init container added
+	revised.Spec.InitContainers = []corev1.Container{{Image: "splunk/splunk:a.b.c"}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.InitContainers, revised.Spec.InitContainers) }
+	podUpdateTester("InitContainer added")
+
+	// check init container image modified
+	revised.Spec.InitContainers = []corev1.Container{{Image: "splunk/splunk:a.b.d"}}
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.InitContainers, revised.Spec.InitContainers) }
+	podUpdateTester("InitContainer image changed")
+
 	// check new container added
 	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
