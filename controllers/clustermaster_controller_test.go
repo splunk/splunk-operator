@@ -35,7 +35,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 	})
 
-	XContext("ClusterMaster Management failed", func() {
+	Context("ClusterMaster Management failed", func() {
 
 		It("Get ClusterMaster custom resource should failed", func() {
 			namespace := "ns-splunk-cmaster-1"
@@ -51,7 +51,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 		})
 	})
 
-	XContext("ClusterMaster Management with annotations", func() {
+	Context("ClusterMaster Management with annotations", func() {
 
 		It("Create ClusterMaster custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-cmaster-2"
@@ -72,7 +72,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 	})
-	XContext("ClusterMaster Management", func() {
+	Context("ClusterMaster Management", func() {
 		It("Create ClusterMaster custom resource should succeeded", func() {
 			namespace := "ns-splunk-cmaster-3"
 			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterMaster) (reconcile.Result, error) {

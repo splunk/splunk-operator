@@ -79,7 +79,7 @@ type ClusterMasterStatus struct {
 // ClusterMaster is the Schema for the cluster manager API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cmaster-idxc
+// +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"

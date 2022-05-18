@@ -14,7 +14,7 @@ spec:
     listKind: ClusterMasterList
     plural: clustermasters
     shortNames:
-    - cmaster-idxc
+    - cm-idxc
     singular: clustermaster
   scope: Namespaced
   versions:

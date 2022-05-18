@@ -59,7 +59,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 		}
 	})
 
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("crcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone

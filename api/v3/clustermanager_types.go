@@ -79,7 +79,7 @@ type BundlePushInfo struct {
 // ClusterManager is the Schema for the cluster manager API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=clustermanagers,scope=Namespaced,shortName=cm-idxc
+// +kubebuilder:resource:path=clustermanagers,scope=Namespaced,shortName=cmanager-idxc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Manager",type="string",JSONPath=".status.clusterManagerPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"

@@ -236,13 +236,13 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
+func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
 
 	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
 
-	new := enterpriseApi.ClusterManager{
+	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind: "ClusterMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
@@ -250,7 +250,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.ClusterManagerSpec{
+		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: splcommon.Spec{

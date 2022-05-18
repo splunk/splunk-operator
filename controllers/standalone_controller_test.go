@@ -38,7 +38,7 @@ var _ = Describe("Standalone Controller", func() {
 
 	})
 
-	XContext("Standalone Management", func() {
+	Context("Standalone Management", func() {
 
 		It("Get Standalone custom resource should failed", func() {
 			namespace := "ns-splunk-st-1"

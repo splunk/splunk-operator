@@ -52,7 +52,7 @@ var _ = Describe("Licensemanager test", func() {
 		}
 	})
 
-	XContext("Standalone deployment (S1) with LM", func() {
+	Context("Standalone deployment (S1) with LM", func() {
 		It("licensemanager, integration, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
 
 			// Download License File

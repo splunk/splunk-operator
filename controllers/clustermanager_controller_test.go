@@ -37,7 +37,7 @@ var _ = Describe("ClusterManager Controller", func() {
 
 	})
 
-	XContext("ClusterManager Management", func() {
+	Context("ClusterManager Management", func() {
 
 		It("Create ClusterManager custom resource should succeeded", func() {
 			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterManager) (reconcile.Result, error) {
