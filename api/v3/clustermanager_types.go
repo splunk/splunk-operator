@@ -70,6 +70,7 @@ type ClusterManagerStatus struct {
 
 // BundlePushInfo Indicates if bundle push required
 type BundlePushInfo struct {
+	NeedToPushMasterApps  bool  `json:"needToPushMasterApps"` // NeedToPushMasterApps is an exception needed for dual support
 	NeedToPushManagerApps bool  `json:"needToPushManagerApps"`
 	LastCheckInterval     int64 `json:"lastCheckInterval"`
 }

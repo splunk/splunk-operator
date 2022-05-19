@@ -68,7 +68,7 @@ type ClusterMasterStatus struct {
 	AppContext AppDeploymentContext `json:"appContext"`
 }
 
-// BundlePushInfo Indicates if bundle push required
+//// BundlePushInfo Indicates if bundle push required
 //type BundlePushInfo struct {
 //	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
 //	LastCheckInterval    int64 `json:"lastCheckInterval"`

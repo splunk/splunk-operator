@@ -68,10 +68,10 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		if err != nil {
 			return result, err
 		} else if configMapDataChanged {
-			// Do not auto populate with configMapDataChanged flag to NeedToPushManagerApps. Set it only  if
+			// Do not auto populate with configMapDataChanged flag to NeedToPushMasterApps. Set it only  if
 			// configMapDataChanged it true. It mush be reset, only upon initiating the bundle push REST call,
 			// once the CM is in ready state otherwise, we keep retrying
-			cr.Status.BundlePushTracker.NeedToPushManagerApps = true
+			cr.Status.BundlePushTracker.NeedToPushMasterApps = true
 			cr.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix()
 		}
 
@@ -303,7 +303,7 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 
 // PerformCmasterBundlePush initiates the bundle push from cluster manager
 func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
-	if cr.Status.BundlePushTracker.NeedToPushManagerApps == false {
+	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
 	}
 
@@ -338,7 +338,7 @@ func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient,
 	err = PushMasterAppsBundle(ctx, c, cr)
 	if err == nil {
 		scopedLog.Info("Bundle push success")
-		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
+		cr.Status.BundlePushTracker.NeedToPushMasterApps = false
 	}
 
 	//eventPublisher.Warning(ctx, "BundlePush", fmt.Sprintf("Bundle push failed %s", err.Error()))

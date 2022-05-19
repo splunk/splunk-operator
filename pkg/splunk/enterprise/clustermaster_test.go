@@ -336,7 +336,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
 	if _, err = ApplyClusterMaster(context.Background(), client, &current); err != nil {
 		t.Errorf("ApplyClusterMaster() should not have returned error")
 	}
@@ -388,7 +388,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// When the secret object is not present, should return an error
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
 	err := PerformCmasterBundlePush(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Should return error, when the secret object is not present")
@@ -417,7 +417,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Status.BundlePushTracker.NeedToPushMasterApps = true
 
 	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
@@ -434,7 +434,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 	}
 
 	// When the CM Bundle push is not pending, should not return an error
-	current.Status.BundlePushTracker.NeedToPushManagerApps = false
+	current.Status.BundlePushTracker.NeedToPushMasterApps = false
 	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())

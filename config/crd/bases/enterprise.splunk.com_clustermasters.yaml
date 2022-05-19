@@ -3739,6 +3739,8 @@ spec:
                     type: integer
                   needToPushManagerApps:
                     type: boolean
+                  needToPushMasterApps:
+                    type: boolean
                 type: object
               phase:
                 description: current phase of the cluster manager
