@@ -4,7 +4,7 @@ on:
     branches:
       - develop
       - master
-      - app-framework-develop-merge
+      - cspl-1740
 jobs:
   int-tests:
     strategy:
