@@ -68,12 +68,6 @@ type ClusterMasterStatus struct {
 	AppContext AppDeploymentContext `json:"appContext"`
 }
 
-//// BundlePushInfo Indicates if bundle push required
-//type BundlePushInfo struct {
-//	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
-//	LastCheckInterval    int64 `json:"lastCheckInterval"`
-//}
-
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClusterMaster is the Schema for the cluster manager API
