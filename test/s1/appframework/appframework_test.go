@@ -68,7 +68,7 @@ var _ = Describe("s1appfw test", func() {
 		}
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
@@ -230,7 +230,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
@@ -393,7 +393,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("s1, smoke, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
@@ -570,7 +570,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
 
 			/* Test Steps
@@ -778,7 +778,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
 
 			/* Test Steps
@@ -847,7 +847,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("s1, smoke, appframeworks1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
 
 			/* Test Steps
@@ -1025,7 +1025,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
 
 			/* Test Steps
@@ -1126,7 +1126,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
 
 			/* Test Steps
@@ -1238,7 +1238,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
@@ -1306,7 +1306,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
@@ -1374,7 +1374,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
@@ -1478,7 +1478,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
 
 			/* Test Steps
@@ -1614,7 +1614,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
@@ -1712,7 +1712,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
@@ -1774,6 +1774,76 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from init-apps when app download is complete", func() {
+
+			/* Test Steps
+				################## SETUP ####################
+				* Upload big-size app to S3 for Standalone
+				* Create app source for Standalone
+				* Prepare and deploy Standalone
+				* When app download is complete, delete apps from init-apps
+				############## VERIFICATIONS ################
+				* Verify App installation is in progress on Standalone
+				* Upload more apps from S3 during bigger app install
+				* Wait for polling interval to pass
+			    * Verify all apps are installed on Standalone
+			*/
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Download all test apps from S3
+			appVersion := "V1"
+			appList := testenv.BigSingleApp
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download apps")
+
+			// Upload big-size app to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: splcommon.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Verify App Download is completed on Standalone
+			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+
+			//Delete apps from init-apps when app download is complete
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			podDownloadPath := testenv.AppStagingLocOnPod + appSourceName + "/" + testenv.AppInfo[appList[0]]["filename"]
+			err = testenv.DeleteFilesOnPod(ctx, deployment, testcaseEnvInst.GetName(), standalonePod[0], []string{podDownloadPath})
+			Expect(err).To(Succeed(), "Unable to delete file on pod")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// ############ VERIFICATION ###########
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
