@@ -705,7 +705,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframeworks1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
