@@ -255,7 +255,7 @@ cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
-  name: example_mc
+  name: example-mc
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
