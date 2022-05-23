@@ -53,7 +53,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 		}
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
 
 			// Test Scenario

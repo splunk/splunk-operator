@@ -58,7 +58,7 @@ var _ = Describe("Licensemanager test", func() {
 		}
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("licensemanager, integration, c3: Splunk Operator can configure License Manager with Indexers and Search Heads in C3 SVA", func() {
 
 			// Download License File
@@ -114,7 +114,7 @@ var _ = Describe("Licensemanager test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("licensemanager: Splunk Operator can configure a C3 SVA and have apps installed locally on LM", func() {
 
 			var (

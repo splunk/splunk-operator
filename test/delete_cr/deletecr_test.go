@@ -62,7 +62,7 @@ var _ = Describe("DeleteCR test", func() {
 		}
 	})
 
-	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
+	XContext("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
 		It("deletecr: can deploy indexers and search head cluster", func() {
 
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")

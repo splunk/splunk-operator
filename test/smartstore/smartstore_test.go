@@ -40,7 +40,7 @@ var _ = Describe("Smartstore test", func() {
 		}
 	})
 
-	Context("Standalone Deployment (S1)", func() {
+	XContext("Standalone Deployment (S1)", func() {
 		It("smartstore, integration: Can configure multiple indexes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
@@ -91,7 +91,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	Context("Standalone Deployment (S1)", func() {
+	XContext("Standalone Deployment (S1)", func() {
 		It("smartstore, integration: Can configure indexes which use default volumes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
@@ -157,7 +157,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
+	XContext("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
 		It("smartstore, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)

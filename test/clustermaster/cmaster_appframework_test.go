@@ -53,7 +53,7 @@ var _ = Describe("cmaster C3 test", func() {
 		}
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3, cmaster, CM can deploy indexers and search head cluster", func() {
 
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
@@ -122,7 +122,7 @@ var _ = Describe("cmaster M4 test", func() {
 		}
 	})
 
-	Context("Multi Site Indexer Cluster for Master CRD with Search Head Cluster (m4) with App Framework", func() {
+	XContext("Multi Site Indexer Cluster for Master CRD with Search Head Cluster (m4) with App Framework", func() {
 		It("integration, m4, cmaster, appframework: can deploy a M4 SVA and have apps installed locally on Cluster Master and Deployer", func() {
 
 			/* Test Steps
