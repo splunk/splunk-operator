@@ -416,18 +416,18 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 
 	// Verify bundle push status
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterManager" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+		if (appSource.CrKind == "ClusterManager" || appSource.CrKind == "ClusterMaster") && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
 			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
 			if clusterManagerBundleHash == "" {
 				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
 			}
-		} else if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
-			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Master bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
-			VerifyClusterMasterBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
-			if clusterManagerBundleHash == "" {
-				clusterManagerBundleHash = GetClusterMasterBundleHash(ctx, deployment)
-			}
+			//} else if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+			//	testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Master bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
+			//	VerifyClusterMasterBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
+			//	if clusterManagerBundleHash == "" {
+			//		clusterManagerBundleHash = GetClusterMasterBundleHash(ctx, deployment)
+			//	}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))

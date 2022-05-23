@@ -268,8 +268,8 @@ func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool
 	return rollingRestart
 }
 
-// ClusterManagerBundlePushstatus Check for bundle push status on ClusterManager
-func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string, cm string) map[string]string {
+// CMBundlePushstatus Check for bundle push status on ClusterManager
+func CMBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string, cm string) map[string]string {
 	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, cm)
 
 	bundleStatus := make(map[string]string)
@@ -298,12 +298,12 @@ func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) st
 	return bundleHash
 }
 
-// GetClusterMasterBundleHash Get the Active bundle hash on ClusterManager
-func GetClusterMasterBundleHash(ctx context.Context, deployment *Deployment) string {
-	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
-
-	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
-	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
-	return bundleHash
-}
+//// GetClusterMasterBundleHash Get the Active bundle hash on ClusterManager
+//func GetClusterMasterBundleHash(ctx context.Context, deployment *Deployment) string {
+//	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+//	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
+//
+//	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
+//	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
+//	return bundleHash
+//}
