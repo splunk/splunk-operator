@@ -1004,7 +1004,7 @@ func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, tes
 func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, replicas int, previousBundleHash string) {
 	gomega.Eventually(func() bool {
 		// Get Bundle status and check that each pod has successfully deployed the latest bundle
-		clusterManagerBundleStatus := ClusterManagerBundlePushstatus(ctx, deployment, previousBundleHash)
+		clusterManagerBundleStatus := ClusterManagerBundlePushstatus(ctx, deployment, previousBundleHash, "cmanager")
 		if len(clusterManagerBundleStatus) < replicas {
 			testenvInstance.Log.Info("Bundle push on Pod not complete on all pods", "Pod with bundle push", clusterManagerBundleStatus)
 			return false
@@ -1017,6 +1017,35 @@ func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment,
 				if _, present := clusterManagerBundleStatus[podName]; present {
 					if clusterManagerBundleStatus[podName] != "Up" {
 						testenvInstance.Log.Info("Bundle push on Pod not complete", "Pod Name", podName, "Status", clusterManagerBundleStatus[podName])
+						return false
+					}
+				} else {
+					testenvInstance.Log.Info("Bundle push not found on pod", "Podname", podName)
+					return false
+				}
+			}
+		}
+		return true
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyClusterMasterBundlePush verify that bundle push was pushed on all indexers
+func VerifyClusterMasterBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, replicas int, previousBundleHash string) {
+	gomega.Eventually(func() bool {
+		// Get Bundle status and check that each pod has successfully deployed the latest bundle
+		clusterMasterBundleStatus := ClusterManagerBundlePushstatus(ctx, deployment, previousBundleHash, "cmaster")
+		if len(clusterMasterBundleStatus) < replicas {
+			testenvInstance.Log.Info("Bundle push on Pod not complete on all pods", "Pod with bundle push", clusterMasterBundleStatus)
+			return false
+		}
+		clusterPodNames := DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		for _, podName := range clusterPodNames {
+			if strings.Contains(podName, "-indexer-") {
+				if _, present := clusterMasterBundleStatus[podName]; present {
+					if clusterMasterBundleStatus[podName] != "Up" {
+						testenvInstance.Log.Info("Bundle push on Pod not complete", "Pod Name", podName, "Status", clusterMasterBundleStatus[podName])
 						return false
 					}
 				} else {

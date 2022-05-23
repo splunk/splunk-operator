@@ -134,6 +134,9 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	}
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
+	if strings.Contains(endpoint, "master") {
+		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
+	}
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -266,8 +269,8 @@ func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool
 }
 
 // ClusterManagerBundlePushstatus Check for bundle push status on ClusterManager
-func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string) map[string]string {
-	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "")
+func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string, cm string) map[string]string {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, cm)
 
 	bundleStatus := make(map[string]string)
 	for _, entry := range restResponse.Entry {
@@ -287,6 +290,16 @@ func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment,
 
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
 func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) string {
+	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
+
+	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
+	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
+	return bundleHash
+}
+
+// GetClusterMasterBundleHash Get the Active bundle hash on ClusterManager
+func GetClusterMasterBundleHash(ctx context.Context, deployment *Deployment) string {
 	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
 
