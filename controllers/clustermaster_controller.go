@@ -148,12 +148,3 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		Complete(r)
 }
-
-// recordInstrumentionData Record api profiling information to prometheus
-//func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
-//	metricLabels := getPrometheusLabels(req, name)
-//	metricLabels[labelModuleName] = module
-//	metricLabels[labelMethodName] = name
-//	value := float64(time.Since(start) / time.Millisecond)
-//	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
-//}
