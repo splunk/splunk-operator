@@ -42,17 +42,17 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
-func TestApplyLicenseManager(t *testing.T) {
+func TestApplyLicenseMaster(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Service-test-splunk-stack1-license-manager-service"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+		{MetaName: "*v1.Service-test-splunk-stack1-license-master-service"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+		{MetaName: "*v1.Secret-test-splunk-stack1-license-master-secret-v1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 	}
 
 	labels := map[string]string{
@@ -66,13 +66,13 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	updateFuncCalls := append(funcCalls, spltest.MockFuncCall{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"})
+	updateFuncCalls := append(funcCalls, spltest.MockFuncCall{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"})
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls = append(updateFuncCalls[:2], updateFuncCalls[3:]...)
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
-	current := enterpriseApi.LicenseManager{
+	current := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
+			Kind: "LicenseMaster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -82,25 +82,25 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
+		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseMaster", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
+		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
-func TestGetLicenseManagerStatefulSet(t *testing.T) {
+func TestGetLicenseMasterStatefulSet(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseManager{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -115,22 +115,22 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, &cr); err != nil {
-				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
+			if err := validateLicenseMasterSpec(ctx, &cr); err != nil {
+				t.Errorf("validateLicenseMasterSpec() returned error: %v", err)
 			}
-			return getLicenseManagerStatefulSet(ctx, c, &cr)
+			return getLicenseMasterStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getLicenseManagerStatefulSet()", f, want)
+		configTester(t, "getLicenseMasterStatefulSet()", f, want)
 	}
 
-	test(splcommon.TestGetLMStatefulSetT1)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-license-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
-	test(splcommon.TestGetLMStatefulSetT2)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-license-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Allow installing apps via DefaultsURLApps for Licence Manager
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(splcommon.TestGetLMStatefulSetT3)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-license-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -141,7 +141,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(splcommon.TestGetLMStatefulSetT4)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-license-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -150,22 +150,22 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(splcommon.TestGetLMStatefulSetT5)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-license-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-license-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_license_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"},{"name":"TEST_ENV_VAR","value":"test_value"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-license-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"license-master","app.kubernetes.io/instance":"splunk-stack1-license-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"license-master","app.kubernetes.io/part-of":"splunk-stack1-license-master"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-license-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 }
 
-func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
+func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseManager{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
+			Kind: "LicenseMaster",
 		},
-		Spec: enterpriseApi.LicenseManagerSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
@@ -215,22 +215,22 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyLicenseManager(ctx, client, &cr)
+	_, err = ApplyLicenseMaster(ctx, client, &cr)
 
 	if err != nil {
-		t.Errorf("ApplyLicenseManager should be successful")
+		t.Errorf("ApplyLicenseMaster should be successful")
 	}
 }
 
-func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseManager{
+	cr := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseManagerSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
@@ -399,15 +399,15 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
-func TestLicenseManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseManager{
+	lm := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseManagerSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
@@ -556,17 +556,17 @@ func TestLicenseManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 }
 
-func TestApplyLicenseManagerDeletion(t *testing.T) {
+func TestApplyLicenseMasterDeletion(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseManager{
+	lm := enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
+			Kind: "LicenseMaster",
 		},
-		Spec: enterpriseApi.LicenseManagerSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -645,15 +645,15 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyLicenseManager(ctx, c, &lm)
+	_, err = ApplyLicenseMaster(ctx, c, &lm)
 	if err != nil {
-		t.Errorf("ApplyLicenseManager should not have returned error here.")
+		t.Errorf("ApplyLicenseMaster should not have returned error here.")
 	}
 }
 
-func TestLicenseManagerList(t *testing.T) {
+func TestLicenseMasterList(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseManager{}
+	lm := enterpriseApi.LicenseMaster{}
 
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -663,27 +663,27 @@ func TestLicenseManagerList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added license master to the list yet
-	_, err := getLicenseManagerList(ctx, client, &lm, listOpts)
+	_, err := getLicenseMasterList(ctx, client, &lm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
 
-	lmList := &enterpriseApi.LicenseManagerList{}
+	lmList := &enterpriseApi.LicenseMasterList{}
 	lmList.Items = append(lmList.Items, lm)
 
 	client.ListObj = lmList
 
-	numOfObjects, err = getLicenseManagerList(ctx, client, &lm, listOpts)
+	numOfObjects, err = getLicenseMasterList(ctx, client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
 	if numOfObjects != 1 {
-		t.Errorf("Got wrong number of LicenseManager objects. Expected=%d, Got=%d", 1, numOfObjects)
+		t.Errorf("Got wrong number of LicenseMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
 
-func TestLicenseManagerWithReadyState(t *testing.T) {
+func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
@@ -965,13 +965,13 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		UID:       clustermanager.UID,
 	}
 
-	// create licensemanager custom resource
-	licensemanager := &enterpriseApi.LicenseManager{
+	// create licensemaster custom resource
+	licensemaster := &enterpriseApi.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.LicenseManagerSpec{
+		Spec: enterpriseApi.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: splcommon.Spec{
 					ImagePullPolicy: "Always",
@@ -988,11 +988,11 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	replicas := int32(1)
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-license-manager",
+			Name:      "splunk-test-license-master",
 			Namespace: "default",
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-license-manager-headless",
+			ServiceName: "splunk-test-license-master-headless",
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -1015,7 +1015,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-license-manager-headless",
+			Name:      "splunk-test-license-master-headless",
 			Namespace: "default",
 		},
 	}
@@ -1027,46 +1027,46 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermanager instance before reconcilation
-	c.Create(ctx, licensemanager)
+	c.Create(ctx, licensemaster)
 
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
 	}
 
 	namespacedName = types.NamespacedName{
-		Name:      licensemanager.Name,
-		Namespace: licensemanager.Namespace,
+		Name:      licensemaster.Name,
+		Namespace: licensemaster.Namespace,
 	}
 
 	// simulate Ready state
-	licensemanager.Status.Phase = splcommon.PhaseReady
-	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
+	licensemaster.Status.Phase = splcommon.PhaseReady
+	licensemaster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
 	}
-	licensemanager.Spec.ServiceTemplate.Labels = map[string]string{
-		"app.kubernetes.io/instance":   "splunk-test-license-manager",
+	licensemaster.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-license-master",
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/component":  "license-manager",
-		"app.kubernetes.io/name":       "license-manager",
-		"app.kubernetes.io/part-of":    "splunk-test-license-manager",
+		"app.kubernetes.io/component":  "license-master",
+		"app.kubernetes.io/name":       "license-master",
+		"app.kubernetes.io/part-of":    "splunk-test-license-master",
 	}
-	err = c.Status().Update(ctx, licensemanager)
+	err = c.Status().Update(ctx, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, licensemanager)
+	err = c.Get(ctx, namespacedName, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1075,7 +1075,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	// create pod
 	stpod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-license-manager-0",
+			Name:      "splunk-test-license-master-0",
 			Namespace: "default",
 		},
 		Spec: corev1.PodSpec{
@@ -1117,7 +1117,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	// get latest stateful set
 	stNamespacedName = types.NamespacedName{
-		Name:      "splunk-test-license-manager",
+		Name:      "splunk-test-license-master",
 		Namespace: "default",
 	}
 	err = c.Get(ctx, stNamespacedName, statefulset)
@@ -1135,7 +1135,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, licensemanager)
+	err = c.Get(ctx, namespacedName, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
 		debug.PrintStack()
@@ -1157,7 +1157,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, licensemanager, namespacedName)
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, licensemaster, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
@@ -1181,7 +1181,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
 		debug.PrintStack()

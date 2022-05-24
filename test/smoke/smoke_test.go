@@ -56,7 +56,7 @@ var _ = Describe("Smoke test", func() {
 		}
 	})
 
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("smoke, basic, s1: can deploy a standalone instance", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
@@ -67,7 +67,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
 
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
@@ -87,7 +87,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
 		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
 
 			siteCount := 3
@@ -111,7 +111,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
+	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
 		It("smoke, basic: can deploy multisite indexers cluster", func() {
 
 			siteCount := 3
@@ -132,7 +132,7 @@ var _ = Describe("Smoke test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with Service Account", func() {
+	Context("Standalone deployment (S1) with Service Account", func() {
 		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
 			// Create Service Account
 			serviceAccountName := "smoke-service-account"

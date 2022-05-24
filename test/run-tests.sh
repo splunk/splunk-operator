@@ -149,5 +149,6 @@ fi
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v --trace -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
-
+#ginkgo -v --trace -progress -r -keepGoing -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+#ginkgo -v -progress -r -stream -keepGoing -nodes=${NUM_NODES} --reportPassed --skipPackage=s1,custom_resource_crud,delete_cr,example,ingest_search,m4,monitoring_console,scaling_test,secret,smartstore,smoke ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+ginkgo -v -progress -r -stream -keepGoing -nodes=${NUM_NODES} --reportPassed --skipPackage=s1,custom_resource_crud,delete_cr,example,ingest_search,m4,monitoring_console,scaling_test,secret,smartstore,smoke ${topdir}/test -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

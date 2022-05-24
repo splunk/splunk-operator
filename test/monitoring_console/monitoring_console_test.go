@@ -58,7 +58,7 @@ var _ = Describe("Monitoring Console test", func() {
 		}
 	})
 
-	XContext("Deploy Monitoring Console", func() {
+	Context("Deploy Monitoring Console", func() {
 		It("smoke, monitoringconsole: can deploy MC CR and can be configured standalone", func() {
 			/*
 				Test Steps
@@ -163,7 +163,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1)", func() {
+	Context("Standalone deployment (S1)", func() {
 		It("monitoringconsole, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 			/*
 				Test Steps
@@ -318,7 +318,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Standalone deployment with Scale up", func() {
+	Context("Standalone deployment with Scale up", func() {
 		It("monitoringconsole, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 			/*
 				Test Steps
@@ -413,7 +413,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("monitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps
@@ -579,7 +579,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("monitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
@@ -801,7 +801,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
+	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
 		It("monitoring_console, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps

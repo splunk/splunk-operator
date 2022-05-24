@@ -431,7 +431,7 @@ func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Conte
 
 //DeployIndexerCluster deploys the indexer cluster
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
-	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
+	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
 	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
