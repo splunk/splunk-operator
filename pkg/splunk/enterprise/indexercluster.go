@@ -97,7 +97,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
-		// cluser master status is not yet set so it will be blank
+		// cluser manager status is not yet set so it will be blank
 		if managerIdxCluster.Status.Phase == "" {
 			cr.Status.ClusterManagerPhase = splcommon.PhasePending
 		} else {
@@ -166,7 +166,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -189,8 +189,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			var managerIdxcName string
 			if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterManagerRef.Name
-			} else if len(cr.Spec.ClusterMasterRef.Name) > 0 {
-				managerIdxcName = cr.Spec.ClusterMasterRef.Name
+				//} else if len(cr.Spec.ClusterMasterRef.Name) > 0 {
+				//	managerIdxcName = cr.Spec.ClusterMasterRef.Name
 			} else {
 				return result, errors.New("empty cluster manager reference")
 			}
@@ -214,9 +214,10 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
-		} else {
-			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		}
+		//else {
+		//	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
+		//}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
@@ -373,7 +374,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 			}
 			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
-				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster manager spec")
+				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster master spec")
 			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
@@ -381,9 +382,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			if len(cr.Spec.ClusterMasterRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterMasterRef.Name
 			} else {
-				return result, errors.New("empty cluster manager reference")
+				return result, errors.New("empty cluster master reference")
 			}
-			cmPodName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+			cmPodName := fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
 			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
@@ -399,8 +400,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 
 		result.Requeue = false
-		// Set indexer cluster CR as owner reference for clustermanager
-		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
+		// Set indexer cluster CR as owner reference for clustermaster
+		scopedLog.Info("Setting indexer cluster as owner for cluster master")
 		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
