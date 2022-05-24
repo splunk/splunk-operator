@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	//"reflect"
 	"time"
@@ -10,7 +11,6 @@ import (
 	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	//ctrl "sigs.k8s.io/controller-runtime"
@@ -58,7 +58,7 @@ var _ = Describe("LicenseMaster Controller", func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterprisev3.LicenseManagerPausedAnnotation] = ""
+			annotations[enterprisev3.LicenseMasterPausedAnnotation] = ""
 			CreateLicenseMaster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
 			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
@@ -74,14 +74,14 @@ var _ = Describe("LicenseMaster Controller", func() {
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
+
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateLicenseMaster("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
-			DeleteLicenseMaster("test", nsSpecs.Name)
+			CreateLicenseManager("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			DeleteLicenseManager("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-lmaster-4"
 			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterprisev3.LicenseMaster) (reconcile.Result, error) {
