@@ -307,7 +307,7 @@ setup_clair_scanner: stop_clair_scanner
 
 .PHONY: run_clair_scanner
 run_clair_scan:
-	@./clair-scanner -c http://0.0.0.0:6060 --ip ${SCANNER_LOCALIP} -r clair-scanner-logs/results.json -l clair-scanner-logs/results.log splunk/splunk-operator
+	@./clair-scanner -c http://0.0.0.0:6060 --ip ${SCANNER_LOCALIP} -r clair-scanner-logs/results.json -l clair-scanner-logs/results.log ${IMG}
 
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this

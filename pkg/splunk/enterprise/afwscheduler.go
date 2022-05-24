@@ -420,7 +420,7 @@ downloadWork:
 
 				err := reserveStorage(downloadWorker.appDeployInfo.Size)
 				if err != nil {
-					scopedLog.Error(err, "insufficient storage for the app pkg download. appSrcName: %s, app name: %s, app size: %d Bytes", downloadWorker.appSrcName, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.Size)
+					scopedLog.Error(err, fmt.Sprintf("insufficient storage for the app pkg download. appSrcName: %s, app name: %s, app size: %d Bytes", downloadWorker.appSrcName, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.Size))
 					// setting isActive to false here so that downloadPhaseManager can take care of it.
 					downloadWorker.isActive = false
 					<-downloadWorkersRunPool
@@ -920,7 +920,7 @@ installHandler:
 					go ctxt.runPlaybook(ctx)
 				} else {
 					<-installTracker[podID]
-					scopedLog.Error(nil, "unable to get the local scoped context. app name %s", installWorker.appDeployInfo.AppName)
+					scopedLog.Error(nil, fmt.Sprintf("unable to get the local scoped context. app name %s", installWorker.appDeployInfo.AppName))
 				}
 			} else {
 				// This should never happen
@@ -944,7 +944,7 @@ installHandler:
 			if ctxt != nil {
 				ctxt.runPlaybook(ctx)
 			} else {
-				scopedLog.Error(nil, "unable to get the cluster scoped playbook context, kind: %s, name: %s", ppln.cr.GroupVersionKind().Kind, ppln.cr.GetName())
+				scopedLog.Error(nil, fmt.Sprintf("unable to get the cluster scoped playbook context, kind: %s, name: %s", ppln.cr.GroupVersionKind().Kind, ppln.cr.GetName()))
 			}
 		} else {
 			break
