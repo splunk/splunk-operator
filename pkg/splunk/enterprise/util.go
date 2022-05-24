@@ -476,11 +476,11 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 
 	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
-		scopedLog.Error(err, "There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir)
+		scopedLog.Error(err, fmt.Sprintf("There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir))
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
 		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the directory %s", splcommon.AppDownloadVolume)
+			scopedLog.Error(err, fmt.Sprintf("Unable to create the directory %s", splcommon.AppDownloadVolume))
 			return 0, err
 		}
 	}
@@ -736,7 +736,7 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 		if err == nil {
 			scopedLog.Info("Success", "Removed references for Secret Object %s", volume.SecretRef)
 		} else {
-			scopedLog.Error(err, "Owner reference removal failed for Secret Object %s", volume.SecretRef)
+			scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", volume.SecretRef))
 		}
 	}
 
@@ -1821,7 +1821,7 @@ func updateReconcileRequeueTime(ctx context.Context, result *reconcile.Result, r
 		return
 	}
 	if rqTime <= 0 {
-		scopedLog.Error(nil, "invalid requeue time: %d", rqTime)
+		scopedLog.Error(nil, fmt.Sprintf("invalid requeue time: %d", rqTime))
 		return
 	}
 

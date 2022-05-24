@@ -36,6 +36,21 @@ var AppInfo = map[string]map[string]string{
 	"test_app":                          {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app.tgz"},
 	"test_app2":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app2.tgz"},
 	"test_app3":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app3.tgz"},
+	"100mb-app-1":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-1.tgz"},
+	"100mb-app-2":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-2.tgz"},
+	"100mb-app-3":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-3.tgz"},
+	"100mb-app-4":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-4.tgz"},
+	"100mb-app-5":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-5.tgz"},
+	"100mb-app-6":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-6.tgz"},
+	"100mb-app-7":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-7.tgz"},
+	"100mb-app-8":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-8.tgz"},
+	"100mb-app-9":                       {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-9.tgz"},
+	"100mb-app-10":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-10.tgz"},
+	"100mb-app-11":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-11.tgz"},
+	"100mb-app-12":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-12.tgz"},
+	"100mb-app-13":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-13.tgz"},
+	"100mb-app-14":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-14.tgz"},
+	"100mb-app-15":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-15.tgz"},
 }
 
 //AppSourceInfo holds info related to app sources
@@ -70,6 +85,9 @@ var BigSingleApp = []string{"test_app"}
 //ExtraApps is 2 apps to be added to app source during app installa in progress
 var ExtraApps = []string{"test_app2", "test_app3"}
 
+// PVTestApps is a group of 100MB-size apps used to test Operator PV
+var PVTestApps = []string{"100mb-app-1", "100mb-app-2", "100mb-app-3", "100mb-app-4", "100mb-app-5", "100mb-app-6", "100mb-app-7", "100mb-app-8", "100mb-app-9", "100mb-app-10", "100mb-app-11", "100mb-app-12", "100mb-app-13", "100mb-app-14", "100mb-app-15"}
+
 // AppLocationV1 Location of apps on S3 for V1 Apps
 var AppLocationV1 = "appframework/v1apps/"
 
@@ -78,6 +96,9 @@ var AppLocationV2 = "appframework/v2apps/"
 
 // AppLocationDisabledApps Location of apps on S3 for Disabled Apps
 var AppLocationDisabledApps = "appframework/Disabledapps/"
+
+// PVTestAppsLocation stores location of 100mb-size apps used to test Operator PV
+var PVTestAppsLocation = "appframework/100mb_sample_apps/"
 
 // AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
 var AppStagingLocOnPod = "/operator-staging/appframework/"
