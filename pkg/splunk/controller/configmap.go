@@ -48,6 +48,17 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
+			dataUpdated = true
+			configMap = &current
+		}
+		if !reflect.DeepEqual(configMap.OwnerReferences, current.OwnerReferences) {
+			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			current.OwnerReferences = configMap.OwnerReferences
+			dataUpdated = true
+			configMap = &current
+		}
+
+		if dataUpdated {
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err == nil {
 				dataUpdated = true
@@ -56,6 +67,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
+
 	} else if errors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {

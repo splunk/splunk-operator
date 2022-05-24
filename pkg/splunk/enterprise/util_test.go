@@ -1694,7 +1694,7 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 	}
 
 	// When there is no explicit volume configured, should use the temp location, as set by the initStorageTracker()
-	expectedAppPkgLocalPath := "/tmp/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
+	expectedAppPkgLocalPath := "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	calculatedAppPkgLocalPath := getAppPackageLocalPath(ctx, worker)
 
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
