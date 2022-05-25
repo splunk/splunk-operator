@@ -475,7 +475,7 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 
 // UpdateCR method to update existing CR spec
 // this function retries CR update for CRUpdateRetryCount (10) times. if it fails it will throw error
-// it waits for a second everytime it fails. 
+// it waits for a second everytime it fails.
 func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 
 	var err error
@@ -546,7 +546,7 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 		cobject.SetLabels(cr.GetLabels())
 		err = d.testenv.GetKubeClient().Update(ctx, cobject)
 		if err != nil {
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Microsecond)
 		} else {
 			return nil
 		}
