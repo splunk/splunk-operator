@@ -114,7 +114,7 @@ const (
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
 
-	// if CR Update fails retry these many time
+	// CRUpdateRetryCount if CR Update fails retry these many time
 	CRUpdateRetryCount = 10
 )
 
