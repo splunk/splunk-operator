@@ -484,6 +484,24 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 		var cobject client.Object
 		kind := cr.GetObjectKind()
 		switch kind.GroupVersionKind().Kind {
+		case "ConfigMap":
+			current := &corev1.ConfigMap{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*corev1.ConfigMap)
+			current.Data = ucr.Data
+			cobject = current
+		case "Secret":
+			current := &corev1.Secret{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*corev1.Secret)
+			current.Data = ucr.Data
+			cobject = current
 		case "Standalone":
 			current := &enterpriseApi.Standalone{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
