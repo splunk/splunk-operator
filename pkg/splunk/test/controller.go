@@ -61,6 +61,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
 	case *enterpriseApi.LicenseManager:
 		*dstP.(*enterpriseApi.LicenseManager) = *srcP.(*enterpriseApi.LicenseManager)
+	case *enterpriseApi.LicenseMaster:
+		*dstP.(*enterpriseApi.LicenseMaster) = *srcP.(*enterpriseApi.LicenseMaster)
 	case *enterpriseApi.Standalone:
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
 	case *enterpriseApi.SearchHeadCluster:
