@@ -189,8 +189,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			var managerIdxcName string
 			if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterManagerRef.Name
-				//} else if len(cr.Spec.ClusterMasterRef.Name) > 0 {
-				//	managerIdxcName = cr.Spec.ClusterMasterRef.Name
 			} else {
 				return result, errors.New("empty cluster manager reference")
 			}
@@ -215,9 +213,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
 		}
-		//else {
-		//	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
-		//}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))

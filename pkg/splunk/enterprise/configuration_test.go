@@ -239,35 +239,6 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 	}
 }
 
-//func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
-//	cr := enterpriseApi.ClusterManager{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      "idxCluster",
-//			Namespace: "test",
-//		},
-//		Spec: enterpriseApi.ClusterManagerSpec{
-//			SmartStore: enterpriseApi.SmartStoreSpec{
-//				VolList: []enterpriseApi.VolumeSpec{
-//					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
-//				},
-//
-//				IndexList: []enterpriseApi.IndexSpec{
-//					{Name: "salesdata1"},
-//					{Name: "salesdata2", RemotePath: "salesdata2"},
-//					{Name: "salesdata3", RemotePath: ""},
-//				},
-//			},
-//		},
-//	}
-//
-//	var client splcommon.ControllerClient
-//
-//	_, err := ApplyClusterManager(context.Background(), client, &cr)
-//	if err == nil {
-//		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
-//	}
-//}
-
 func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{

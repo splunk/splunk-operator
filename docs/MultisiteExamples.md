@@ -33,7 +33,7 @@ multiple indexer pods scheduled on the same host.
 
 ## Multipart IndexerCluster
 
-Description: connect multiple IndexerCluster resources to ClusterMaster resource, each constrained to run within a dedicated zone and
+Description: connect multiple IndexerCluster resources to ClusterManager resource, each constrained to run within a dedicated zone and
 configured with a hardcoded site.
 
 Advantages:

@@ -4,7 +4,7 @@
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
- * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterMaster.
+ * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterManager.
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3 as described below."
  * Use of GCS with SmartStore is supported by using configuration via Splunk App.
  * Specification allows definition of SmartStore-enabled indexes only.
@@ -114,7 +114,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 
 
 ## SmartStore Resource Spec Parameters
-There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterMaster` Custom Resources, and adds the following `Spec` configuration parameters:
+There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterManager` Custom Resources, and adds the following `Spec` configuration parameters:
 
 
 ```yaml

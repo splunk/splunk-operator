@@ -502,7 +502,6 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		EaiAppName:  "splunk_monitoring_console",
 		EaiUserName: "nobody",
 	}
-	// TODO Check dual support
 	wantconfiguredPeers := "&member=splunk-example-cluster-manager-service:8089&"
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)

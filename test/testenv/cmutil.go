@@ -297,13 +297,3 @@ func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) st
 	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
 	return bundleHash
 }
-
-//// GetClusterMasterBundleHash Get the Active bundle hash on ClusterManager
-//func GetClusterMasterBundleHash(ctx context.Context, deployment *Deployment) string {
-//	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-//	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
-//
-//	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
-//	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)
-//	return bundleHash
-//}

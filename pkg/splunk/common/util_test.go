@@ -573,7 +573,6 @@ func TestGetLabels(t *testing.T) {
 		}
 	}
 
-	//TODO check dual support
 	test("indexer", "cluster-manager", "t1", "t1", map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		"app.kubernetes.io/component":  "indexer",
@@ -608,8 +607,6 @@ func TestGetLabels(t *testing.T) {
 			t.Errorf("GetLabels(\"%s\",\"%s\",\"%s\",\"%s\") = %v; want %v", component, name, instanceIdentifier, partOfIdentifier, got, want)
 		}
 	}
-
-	//TODO check dual support
 
 	// Test all labels using selectFew option
 	selectAll := []string{"manager", "component", "name", "partof", "instance"}

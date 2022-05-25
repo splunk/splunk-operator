@@ -106,6 +106,7 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // ApplyIndexerCluster adding to handle unit test case
 var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
+	// IdxCluster can be supported by two CRD types for CM
 	if len(instance.Spec.ClusterManagerRef.Name) > 0 {
 		return enterprise.ApplyIndexerClusterManager(ctx, client, instance)
 	}

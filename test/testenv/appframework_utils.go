@@ -443,12 +443,6 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 			if clusterManagerBundleHash == "" {
 				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
 			}
-			//} else if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
-			//	testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Master bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
-			//	VerifyClusterMasterBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
-			//	if clusterManagerBundleHash == "" {
-			//		clusterManagerBundleHash = GetClusterMasterBundleHash(ctx, deployment)
-			//	}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Deployer bundle push status (%s apps)", appSource.CrAppVersion))

@@ -50,7 +50,7 @@ The passwords for the instance are generated automatically. To review the passwo
 ### Indexer Clusters
 
 When customers outgrow the capabilites of single instance for indexing and search, they will scale the infrastructure up to an [indexer cluster](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Aboutindexesandindexers).
-The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMaster` resource for Cluster Manager, and using the `IndexerCluster` resource for the cluster peers:
+The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterManager` resource for Cluster Manager, and using the `IndexerCluster` resource for the cluster peers:
 
 #### Cluster Manager
 ```yaml
@@ -105,7 +105,7 @@ EOF
 ```
 This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
-NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterMaster,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
+NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterManager,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
 After starting the cluster manager, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
 ```
@@ -160,7 +160,7 @@ indexercluster.enterprise.splunk.com/example patched
 
 For efficiency, note that you can use the following short names with `kubectl`:
 
-* `clustermanager`: `cm-idxc`
+* `clustermanager`: `cmanager-idxc`
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
 * `LicenseManager`: `lm`
@@ -283,7 +283,7 @@ metadata:
 EOF
 ```
 
-There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster manager and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
+There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cmanager-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster manager and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
 
 
 ### Search Head Clusters
@@ -346,7 +346,7 @@ The passwords for the instance are generated automatically. To review the passwo
 
 ### Cluster Services
 
-The creation of `SearchHeadCluster`, `ClusterMaster`, `MonitoringConsole`, and `IndexerCluster` resources also creates corresponding Kubernetes services:
+The creation of `SearchHeadCluster`, `ClusterManager`, `MonitoringConsole`, and `IndexerCluster` resources also creates corresponding Kubernetes services:
 
 ```
 $ kubectl get svc
@@ -460,9 +460,9 @@ including the `apps_location` parameter in your default settings. The value
 may either be a comma-separated list of apps or a YAML list, with each app
 referenced using a filesystem path or URL.
 
-Note: In the case of `SearchHeadCluster` or `ClusterMaster` when the apps are configured through 
+Note: In the case of `SearchHeadCluster` or `ClusterManager` when the apps are configured through 
 the `apps_location`, all those apps will be deployed to the Search Heads or Indexers respectively.
-To install the apps locally to the Deployer or ClusterMaster, the apps should be specified through `apps_location_local`.
+To install the apps locally to the Deployer or ClusterManager, the apps should be specified through `apps_location_local`.
 
 When using filesystem paths, the apps should be mounted using the
 `volumes` parameter. This may be used to reference either Kubernetes
@@ -503,7 +503,7 @@ spec:
 
 
 ### Example: Cluster Manager
-In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterMaster instance.
+In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterManager instance.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
@@ -561,7 +561,7 @@ the `defaultsUrlApps` parameter applied.  This means:
  - For Standalone & License Manager, these applications will be installed as normal.
  - For SearchHeadClusters, these applications will only be installed on the SHC Deployer
 and pushed to the members via SH Bundle push.
- - For IndexerClusters, these applications will only be installed on the ClusterMaster
+ - For IndexerClusters, these applications will only be installed on the ClusterManager
 and pushed to the indexers in the cluster via CM Bundle push.
 
 For application installation the preferred method will be through the `defaultsUrlApps`
@@ -686,7 +686,7 @@ spec:
 
 ## Configuring Indexer Clusters to use License Manager
 
-While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseManager`, you need to add `licenseManagerRef` only to the `ClusterMaster` spec as follows:
+While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseManager`, you need to add `licenseManagerRef` only to the `ClusterManager` spec as follows:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
