@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -473,9 +474,83 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 }
 
 // UpdateCR method to update existing CR spec
+// this function retries CR update for CRUpdateRetryCount (10) times. if it fails it will throw error
+// it waits for a second everytime it fails. 
 func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 
-	err := d.testenv.GetKubeClient().Update(ctx, cr)
+	var err error
+	for i := 0; i < CRUpdateRetryCount; i++ {
+		namespacedName := types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}
+		var cobject client.Object
+		kind := cr.GetObjectKind()
+		switch kind.GroupVersionKind().Kind {
+		case "Standalone":
+			current := &enterpriseApi.Standalone{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.Standalone)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "LicenseMaster":
+			current := &enterpriseApi.LicenseMaster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.LicenseMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "IndexerCluster":
+			current := &enterpriseApi.IndexerCluster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.IndexerCluster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "ClusterMaster":
+			current := &enterpriseApi.ClusterMaster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.ClusterMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "MonitoringConsole":
+			current := &enterpriseApi.MonitoringConsole{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.MonitoringConsole)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "SearchHeadCluster":
+			current := &enterpriseApi.SearchHeadCluster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.SearchHeadCluster)
+			current.Spec = ucr.Spec
+			cobject = current
+		default:
+			return fmt.Errorf("unknown custom resource")
+		}
+		cobject.SetFinalizers(cr.GetFinalizers())
+		cobject.SetAnnotations(cr.GetAnnotations())
+		cobject.SetLabels(cr.GetLabels())
+		err = d.testenv.GetKubeClient().Update(ctx, cobject)
+		if err != nil {
+			time.Sleep(1 * time.Second)
+		} else {
+			return nil
+		}
+	}
 	return err
 }
 
