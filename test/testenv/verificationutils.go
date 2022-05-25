@@ -711,6 +711,7 @@ func VerifyPVC(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, 
 	gomega.Eventually(func() bool {
 		pvcExists := false
 		pvcsList := DumpGetPvcs(testenvInstance.GetName())
+		
 		for i := 0; i < len(pvcsList); i++ {
 			if strings.EqualFold(pvcsList[i], pvcName) {
 				pvcExists = true

@@ -76,7 +76,7 @@ const (
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
 	// PVCString Template String for PVC
-	PVCString = "pvc-%s-splunk-%s-%s-%d"
+	PVCString = "mnt-splunk-pvc-%s-splunk-%s-%s-%d"
 
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
