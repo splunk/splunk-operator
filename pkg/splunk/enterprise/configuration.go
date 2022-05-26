@@ -381,9 +381,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
-	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
-	if len(spec.ClusterMasterRef.Name) > 0 && len(spec.ClusterManagerRef.Name) == 0 {
-		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
+	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
+	if len(spec.ClusterManagerRef.Name) > 0 {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
 	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
@@ -486,7 +486,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster {
+	if instanceType == SplunkStandalone || isCMDeployed(instanceType) {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -659,7 +659,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	// append URL for cluster manager, if configured
 	var clusterManagerURL string
-	if instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster {
+	if isCMDeployed(instanceType) {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
 	} else if spec.ClusterManagerRef.Name != "" {
@@ -860,6 +860,10 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 	}
 
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
+}
+
+func isCMDeployed(instanceType InstanceType) bool {
+	return instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster
 }
 
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed

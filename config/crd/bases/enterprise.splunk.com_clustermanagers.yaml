@@ -19,7 +19,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of cluster manager
+    - description: Phase of the cluster manager
       jsonPath: .status.phase
       name: Phase
       type: string

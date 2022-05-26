@@ -751,9 +751,10 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string
-	cm := SplunkClusterManager
+	var cm InstanceType
 	if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+		cm = SplunkClusterManager
 	} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
 		cm = SplunkClusterMaster

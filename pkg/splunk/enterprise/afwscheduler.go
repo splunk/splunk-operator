@@ -1231,9 +1231,7 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 func getClusterScopePlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
 
 	switch kind {
-	case "ClusterMaster":
-		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
-	case "ClusterManager":
+	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	case "SearchHeadCluster":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1331,9 +1329,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
 func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "ClusterMaster":
-		return idxcAppsLocationOnClusterManager
-	case "ClusterManager":
+	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer

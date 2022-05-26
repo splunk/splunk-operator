@@ -81,7 +81,7 @@ type BundlePushInfo struct {
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=clustermanagers,scope=Namespaced,shortName=cmanager-idxc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Phase of the cluster manager"
 // +kubebuilder:printcolumn:name="Manager",type="string",JSONPath=".status.clusterManagerPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"

@@ -538,9 +538,6 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 	case *enterpriseApi.IndexerCluster:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
-	// case *enterpriseApi.ClusterMaster:
-	//	err = deployment.GetInstance(ctx, cr.Name, cr)
-	//	newResourceVersion = cr.ResourceVersion
 	case *enterpriseApi.ClusterManager:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion

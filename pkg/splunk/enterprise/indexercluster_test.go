@@ -173,7 +173,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 	c := spltest.NewMockClient()
 	mgr.c = c
 	cm := mgr.getClusterManagerClient(ctx)
-	if cm.ManagementURI != "https://splunk--cluster-manager-service.test.svc.cluster.local:8089" {
+	if cm.ManagementURI != "https://splunk---service.test.svc.cluster.local:8089" {
 		t.Errorf("getClusterManagerClient() should have returned incorrect mgmt URI")
 	}
 }
