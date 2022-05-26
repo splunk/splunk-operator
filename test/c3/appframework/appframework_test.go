@@ -2945,10 +2945,15 @@ var _ = Describe("c3appfw test", func() {
 			// Verify App Download is completed on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			//Delete apps from init-apps while app installation is in progress
-			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
-			podDownloadPath := testenv.AppStagingLocOnPod + appSourceVolumeNameIdxc + testenv.AppInfo[appList[0]]["filename"]
-			err = testenv.DeleteFilesOnPod(ctx, deployment, testcaseEnvInst.GetName(), cmPod[0], []string{podDownloadPath})
+			//Delete apps from init-apps when app download is complete
+			var opPod string
+			if testcaseEnvInst.IsOperatorInstalledClusterWide() != "true" {
+				opPod = testenv.GetOperatorPodName(testcaseEnvInst.GetName())
+			} else {
+				opPod = testenv.GetOperatorPodName("splunk-operator")
+			}
+			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
+			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -2970,6 +2975,7 @@ var _ = Describe("c3appfw test", func() {
 			var idxcPodNames, shcPodNames []string
 			idxcPodNames = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}

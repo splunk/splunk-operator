@@ -891,15 +891,13 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 	return nil
 }
 
-// DeleteFilesOnPod Delete files on Pod in the namespace
-func DeleteFilesOnPod(ctx context.Context, deployment *Deployment, ns string, podName string, filenames []string) error {
-	for _, file := range filenames {
-		output, _ := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "ls", file).Output()
-		logf.Log.Info("files present in location", "location", output)
-		output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "rm", "-f", file).Output()
+// DeleteFilesOnOperatorPod Delete files on Operator Pod
+func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, filenames []string) error {
+	for _, filepath := range filenames {
+		cmd := fmt.Sprintf("rm -f %s", filepath)
+		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 		if err != nil {
-			command := fmt.Sprintf("kubectl exec  -n %s %s -- rm -f %s", ns, podName, file)
-			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "Namespace", ns, "command", command, "output", output)
+			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
 			return err
 		}
 	}
