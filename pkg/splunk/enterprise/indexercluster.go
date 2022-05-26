@@ -916,34 +916,25 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 
 //RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-
-	if len(cr.Spec.ClusterManagerRef.Name) == 0 && len(cr.Spec.ClusterMasterRef.Name) > 0 {
-		return RetrieveCMasterSpec(ctx, client, cr)
-	}
-
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
-	var cmCR enterpriseApi.ClusterManager
 	var monitoringConsoleRef string = ""
 
-	err := client.Get(ctx, namespacedName, &cmCR)
-	if err == nil {
-		monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-		return monitoringConsoleRef, err
+	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
+		var cmCR enterpriseApi.ClusterMaster
+		err := client.Get(ctx, namespacedName, &cmCR)
+		if err == nil {
+			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
+			return monitoringConsoleRef, err
+		}
+	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
+		var cmCR enterpriseApi.ClusterManager
+		err := client.Get(ctx, namespacedName, &cmCR)
+		if err == nil {
+			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
+			return monitoringConsoleRef, err
+		}
 	}
-	return "", err
-}
 
-//RetrieveCMasterSpec finds monitoringConsole ref from cm spec
-func RetrieveCMasterSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
-	var cmCR enterpriseApi.ClusterMaster
-	var monitoringConsoleRef string = ""
-
-	err := client.Get(ctx, namespacedName, &cmCR)
-	if err == nil {
-		monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-		return monitoringConsoleRef, err
-	}
-	return "", err
+	return "", nil
 }
