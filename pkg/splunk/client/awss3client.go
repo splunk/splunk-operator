@@ -249,7 +249,7 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, remoteFile, local
 			IfMatch: aws.String(etag),
 		})
 	if err != nil {
-		scopedLog.Error(err, "Unable to download item %s, %v", remoteFile, err)
+		scopedLog.Error(err, "Unable to download item %s" , remoteFile)
 		os.Remove(localFile)
 		return false, err
 	}
