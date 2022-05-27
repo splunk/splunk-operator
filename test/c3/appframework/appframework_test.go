@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -2887,14 +2888,14 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and delete apps from init-apps when download is compelte", func() {
+		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
-			   * When app download is complete, delete apps from init-apps
+			   * When app download is complete, delete apps from app directory
 			   ######### VERIFICATIONS #############
 			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -2906,25 +2907,25 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download all apps from S3
+			// Download big size apps from S3
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload big size app to S3 for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info("Upload big size app to S3 for Indexer Cluster")
 			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			// Upload big size app to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big size app to S3 for Search Head Cluster")
 			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2945,13 +2946,8 @@ var _ = Describe("c3appfw test", func() {
 			// Verify App Download is completed on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			//Delete apps from init-apps when app download is complete
-			var opPod string
-			if testcaseEnvInst.IsOperatorInstalledClusterWide() != "true" {
-				opPod = testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			} else {
-				opPod = testenv.GetOperatorPodName("splunk-operator")
-			}
+			//Delete apps from app directory when app download is complete
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
 			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
 			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 			Expect(err).To(Succeed(), "Unable to delete file on pod")
