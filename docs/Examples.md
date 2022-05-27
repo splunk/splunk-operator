@@ -54,7 +54,7 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMast
 
 #### Cluster Manager
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
@@ -73,7 +73,7 @@ The Splunk Operator also controls the upgrade cycle, and implements the recommen
 This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
@@ -89,7 +89,7 @@ The passwords for the instance are generated automatically. To review the passwo
 
 #### Indexer cluster peers
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
@@ -123,7 +123,7 @@ splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 If you want to add more indexers as cluster peers, update your `IndexerCluster` CR and define the `replicas` parameter:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
@@ -176,7 +176,7 @@ indexercluster.enterprise.splunk.com/example scaled
 You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
 metadata:
@@ -202,7 +202,7 @@ idc-example   IndexerCluster/example   16%/50%   5         10        5          
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
@@ -235,7 +235,7 @@ splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 Having a separate CR for cluster manager allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
@@ -273,7 +273,7 @@ The Monitoring Console provides detailed topology and performance information ab
 
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
@@ -294,7 +294,7 @@ You can create a search head cluster that is configured to communicate with your
 and adding the `clusterMasterRef` parameter. 
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
@@ -312,7 +312,7 @@ EOF
 This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod.  To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
@@ -416,6 +416,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -487,6 +488,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -510,6 +512,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cmexample
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -644,6 +647,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -677,6 +681,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -689,11 +694,12 @@ spec:
 While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseMaster`, you need to add `licenseMasterRef` only to the `ClusterMaster` spec as follows:
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: example-cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -719,6 +725,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -792,6 +799,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -861,6 +869,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
