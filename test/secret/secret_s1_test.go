@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -109,7 +108,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
@@ -196,7 +195,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
@@ -247,7 +246,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			mcName := deployment.GetName()
 			standaloneSpec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -283,7 +282,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
 
 			// Ensure standalone is updating
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)

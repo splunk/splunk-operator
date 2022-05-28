@@ -38,8 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//var log = logf.Log.WithName("splunk.enterprise.configValidation")
-
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -82,7 +80,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	// Create a persistent volume claim
 	volumeClaim := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypePvc, volumeType),
 			Namespace: cr.GetNamespace(),
 			Labels:    labels,
 		},
@@ -115,7 +113,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
-		service = spec.Spec.ServiceTemplate.DeepCopy()
+		service = spec.ServiceTemplate.DeepCopy()
 	}
 	service.TypeMeta = metav1.TypeMeta{
 		Kind:       "Service",
@@ -194,10 +192,101 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 	}
 }
 
+// ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
+func ValidateImagePullPolicy(imagePullPolicy *string) error {
+	// ImagePullPolicy
+	if *imagePullPolicy == "" {
+		*imagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	}
+	switch *imagePullPolicy {
+	case "":
+		*imagePullPolicy = "IfNotPresent"
+		break
+	case "Always":
+		break
+	case "IfNotPresent":
+		break
+	default:
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+	}
+	return nil
+}
+
+// ValidateResources checks resource requests and limits and sets defaults if not provided
+func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+	// check for nil maps
+	if resources.Requests == nil {
+		resources.Requests = make(corev1.ResourceList)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(corev1.ResourceList)
+	}
+
+	// if not given, use default cpu requests
+	_, ok := resources.Requests[corev1.ResourceCPU]
+	if !ok {
+		resources.Requests[corev1.ResourceCPU] = defaults.Requests[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory requests
+	_, ok = resources.Requests[corev1.ResourceMemory]
+	if !ok {
+		resources.Requests[corev1.ResourceMemory] = defaults.Requests[corev1.ResourceMemory]
+	}
+
+	// if not given, use default cpu limits
+	_, ok = resources.Limits[corev1.ResourceCPU]
+	if !ok {
+		resources.Limits[corev1.ResourceCPU] = defaults.Limits[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory limits
+	_, ok = resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		resources.Limits[corev1.ResourceMemory] = defaults.Limits[corev1.ResourceMemory]
+	}
+}
+
+// ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
+func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
+	// make sure SchedulerName is not empty
+	if spec.SchedulerName == "" {
+		spec.SchedulerName = "default-scheduler"
+	}
+
+	// set default values for service template
+	setServiceTemplateDefaults(spec)
+
+	// if not provided, set default resource requests and limits
+	ValidateResources(&spec.Resources, defaultResources)
+
+	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
+}
+
+// setServiceTemplateDefaults sets default values for service templates
+func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range spec.ServiceTemplate.Spec.Ports {
+			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
+			if p.Protocol == "" {
+				p.Protocol = corev1.ProtocolTCP
+			}
+
+			if p.TargetPort.IntValue() == 0 {
+				p.TargetPort.IntVal = p.Port
+			}
+		}
+	}
+
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+}
+
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, cr splcommon.MetaObject) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
-	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
+	spec.Image = GetSplunkImage(spec.Image)
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -218,9 +307,38 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
+	// if not provided, set default values for imagePullSecrets
+	err := ValidateImagePullSecrets(ctx, c, cr, spec)
+	if err != nil {
+		return err
+	}
+
 	setVolumeDefaults(spec)
 
-	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
+	return ValidateSpec(&spec.Spec, defaultResources)
+}
+
+// ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
+func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ValidateImagePullSecrets").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// If no imagePullSecrets are configured
+	var nilImagePullSecrets []corev1.LocalObjectReference
+	if len(spec.ImagePullSecrets) == 0 {
+		spec.ImagePullSecrets = nilImagePullSecrets
+		return nil
+	}
+
+	// If configured, validated if the secret/s exist
+	for _, secret := range spec.ImagePullSecrets {
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		if err != nil {
+			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
+		}
+	}
+
+	return nil
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
@@ -321,21 +439,21 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 	return nil
 }
 
-// addEphermalVolumes adds ephermal volumes to statefulSet
-func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
+// addEphemeralVolumes adds ephemeral volumes to statefulSet
+func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
 	// add ephemeral volumes to the splunk pod
 	emptyVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
 	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
 		corev1.Volume{
-			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType), VolumeSource: emptyVolumeSource,
+			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, volumeType), VolumeSource: emptyVolumeSource,
 		})
 
 	// add volume mounts to splunk container for the ephemeral volumes
 	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
 		corev1.VolumeMount{
-			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
+			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, volumeType),
 			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
 		})
 
@@ -346,8 +464,8 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.EtcVolumeStorage)
+		// add Ephemeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.EtcVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.EtcVolumeStorage)
@@ -358,8 +476,8 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 
 	// configure storage for mount path /opt/splunk/var
 	if spec.VarVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.VarVolumeStorage)
+		// add Ephemeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.VarVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.VarVolumeStorage)
@@ -426,9 +544,10 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      affinity,
-				Tolerations:   spec.Tolerations,
-				SchedulerName: spec.SchedulerName,
+				Affinity:         affinity,
+				Tolerations:      spec.Tolerations,
+				SchedulerName:    spec.SchedulerName,
+				ImagePullSecrets: spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -813,7 +932,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)

@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -82,10 +81,10 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingUp)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseReady)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
 			// Scale Down Standalone
 			testcaseEnvInst.Log.Info("Scaling Down Standalone CR")
@@ -100,7 +99,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
 			// Ensure standalone is scaling down
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingDown)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -140,7 +139,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
 
 			// Ensure Search Head cluster scales up and go to ScalingUp phase
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp)
 
 			// Scale indexers
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
@@ -158,7 +157,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
 
 			// Ensure Indexer cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp, idxcName)
 
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -226,7 +225,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Indxer Cluster")
 
 			// Ensure Indxer cluster scales Down and go to ScalingDown phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingDown, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingDown, idxcName)
 
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -300,7 +299,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to Scale Up Indexer Cluster")
 
 			// Ensure Indxer cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp, idxcName)
 
 			// Ensure Indexer cluster go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
@@ -354,7 +353,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Indxer Cluster")
 
 			// Ensure Indxer cluster scales Down and go to ScalingDown phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingDown, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingDown, idxcName)
 
 			// Ensure Indexer cluster go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)

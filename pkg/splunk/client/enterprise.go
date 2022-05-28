@@ -656,10 +656,7 @@ type MCDistributedPeers struct {
 }
 
 //AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
-func (c *SplunkClient) AutomateMCApplyChanges(mock bool) error {
-	if mock {
-		return nil
-	}
+func (c *SplunkClient) AutomateMCApplyChanges() error {
 	var configuredPeers, indexerMemberList, licenseMasterMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
 	if err != nil {

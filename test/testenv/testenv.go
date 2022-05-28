@@ -25,6 +25,7 @@ import (
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -75,7 +76,7 @@ const (
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
 	// PVCString Template String for PVC
-	PVCString = "pvc-%s-splunk-%s-%s-%d"
+	PVCString = "mnt-splunk-pvc-%s-splunk-%s-%s-%d"
 
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
@@ -112,6 +113,9 @@ const (
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
+
+	// CRUpdateRetryCount if CR Update fails retry these many time
+	CRUpdateRetryCount = 10
 )
 
 var (
@@ -163,7 +167,11 @@ type TestEnv struct {
 }
 
 func init() {
-	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts))
 	l.WithName("testenv")
 	logf.SetLogger(l)
 

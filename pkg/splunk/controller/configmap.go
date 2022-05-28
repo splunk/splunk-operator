@@ -43,19 +43,44 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 	var current corev1.ConfigMap
 
 	err := client.Get(context.TODO(), namespacedName, &current)
-	var dataUpdated bool
+
+	// dataUpdated flag returns if the data on the configMap has been succesfully updated
+	dataUpdated := false
 	if err == nil {
+		// updateNeeded flag indicates if an update to the configMap is necessary
+		updateNeeded := false
+
+		// dataDifferent flag indicates the data on the configmap read from etcd is different
+		// from the data on the configMap passed as an argument to this function
+		dataDifferent := false
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
 			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
+			updateNeeded = true
+			dataDifferent = true
+			configMap = &current
+		}
+		if !reflect.DeepEqual(configMap.GetOwnerReferences(), current.GetOwnerReferences()) {
+			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			current.OwnerReferences = configMap.OwnerReferences
+			updateNeeded = true
+			configMap = &current
+		}
+
+		if updateNeeded {
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err == nil {
-				dataUpdated = true
 				configMap = &current
+				// Update the dataUpdated flag only when there is a data change
+				// and configMap is successfully updated by client
+				if dataDifferent {
+					dataUpdated = true
+				}
 			}
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
 		}
+
 	} else if errors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {

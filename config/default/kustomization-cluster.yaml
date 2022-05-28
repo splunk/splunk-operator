@@ -15,7 +15,7 @@ commonLabels:
 bases:
 - ../crd
 - ../rbac
-- ../persistent-volume
+#- ../persistent-volume
 - ../service
 - ../manager
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
@@ -124,7 +124,7 @@ patches:
       - name: WATCH_NAMESPACE
         value: WATCH_NAMESPACE_VALUE
       - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: splunk/splunk:8.2.6
+        value: SPLUNK_ENTERPRISE_IMAGE
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: POD_NAME

@@ -1,24 +1,23 @@
 package testutils
 
 import (
-	commonapi "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 
 	//"k8s.io/apimachinery/pkg/api/resource"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var pullPolicy = corev1.PullIfNotPresent
 
 // NewStandalone returns new Standalone instance with its config hash
-func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
+func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -27,7 +26,7 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 		},
 	}
 
-	ad := &enterprisev3.Standalone{
+	ad := &enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "Standalone",
@@ -39,20 +38,20 @@ func NewStandalone(name, ns, image string) *enterprisev3.Standalone {
 		},
 	}
 
-	ad.Spec = enterprisev3.StandaloneSpec{
+	ad.Spec = enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
 // NewSearchHeadCluster returns new serach head cluster instance with its config hash
-func NewSearchHeadCluster(name, ns, image string) *enterprisev3.SearchHeadCluster {
+func NewSearchHeadCluster(name, ns, image string) *enterpriseApi.SearchHeadCluster {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -61,7 +60,7 @@ func NewSearchHeadCluster(name, ns, image string) *enterprisev3.SearchHeadCluste
 		},
 	}
 
-	ad := &enterprisev3.SearchHeadCluster{
+	ad := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "SearchHeadCluster",
@@ -73,20 +72,20 @@ func NewSearchHeadCluster(name, ns, image string) *enterprisev3.SearchHeadCluste
 		},
 	}
 
-	ad.Spec = enterprisev3.SearchHeadClusterSpec{
+	ad.Spec = enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
 // NewMonitoringConsole returns new serach head cluster instance with its config hash
-func NewMonitoringConsole(name, ns, image string) *enterprisev3.MonitoringConsole {
+func NewMonitoringConsole(name, ns, image string) *enterpriseApi.MonitoringConsole {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -95,7 +94,7 @@ func NewMonitoringConsole(name, ns, image string) *enterprisev3.MonitoringConsol
 		},
 	}
 
-	ad := &enterprisev3.MonitoringConsole{
+	ad := &enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "MonitoringConsole",
@@ -107,20 +106,20 @@ func NewMonitoringConsole(name, ns, image string) *enterprisev3.MonitoringConsol
 		},
 	}
 
-	ad.Spec = enterprisev3.MonitoringConsoleSpec{
+	ad.Spec = enterpriseApi.MonitoringConsoleSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
 // NewClusterMaster returns new serach head cluster instance with its config hash
-func NewClusterMaster(name, ns, image string) *enterprisev3.ClusterMaster {
+func NewClusterMaster(name, ns, image string) *enterpriseApi.ClusterMaster {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -129,7 +128,7 @@ func NewClusterMaster(name, ns, image string) *enterprisev3.ClusterMaster {
 		},
 	}
 
-	ad := &enterprisev3.ClusterMaster{
+	ad := &enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "ClusterMaster",
@@ -141,20 +140,20 @@ func NewClusterMaster(name, ns, image string) *enterprisev3.ClusterMaster {
 		},
 	}
 
-	ad.Spec = enterprisev3.ClusterMasterSpec{
+	ad.Spec = enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
 // NewLicenseMaster returns new serach head cluster instance with its config hash
-func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
+func NewLicenseMaster(name, ns, image string) *enterpriseApi.LicenseMaster {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -163,7 +162,7 @@ func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
 		},
 	}
 
-	ad := &enterprisev3.LicenseMaster{
+	ad := &enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "LicenseMaster",
@@ -175,20 +174,20 @@ func NewLicenseMaster(name, ns, image string) *enterprisev3.LicenseMaster {
 		},
 	}
 
-	ad.Spec = enterprisev3.LicenseMasterSpec{
+	ad.Spec = enterpriseApi.LicenseMasterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
 // NewIndexerCluster returns new serach head cluster instance with its config hash
-func NewIndexerCluster(name, ns, image string) *enterprisev3.IndexerCluster {
+func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
-	c := &commonapi.Spec{
+	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
 	}
 
-	cs := &enterprisev3.CommonSplunkSpec{
+	cs := &enterpriseApi.CommonSplunkSpec{
 		Mock:    true,
 		Spec:    *c,
 		Volumes: []corev1.Volume{},
@@ -197,7 +196,7 @@ func NewIndexerCluster(name, ns, image string) *enterprisev3.IndexerCluster {
 		},
 	}
 
-	ad := &enterprisev3.IndexerCluster{
+	ad := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "IndexerCluster",
@@ -209,7 +208,7 @@ func NewIndexerCluster(name, ns, image string) *enterprisev3.IndexerCluster {
 		},
 	}
 
-	ad.Spec = enterprisev3.IndexerClusterSpec{
+	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
