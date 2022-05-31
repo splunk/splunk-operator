@@ -1948,3 +1948,92 @@ func migrateAfwFromPhase2ToPhase3(ctx context.Context, client splcommon.Controll
 func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeploymentContext) bool {
 	return afwStatusContext != nil && afwStatusContext.Version < currentAfwVersion && len(afwStatusContext.AppsSrcDeployStatus) > 0
 }
+
+// updateCRStatus fetches the latest CR, and on top of that, updates latest status
+func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, dirtyCR splcommon.MetaObject) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("name", dirtyCR.GetName(), "namespace", dirtyCR.GetNamespace())
+
+	var retryCnt int
+	for retryCnt = 0; retryCnt < maxRetryCountForCRStatusUpdate; retryCnt++ {
+		cr, err := fetchCurrentCRWithStatusUpdate(ctx, client, dirtyCR)
+		if err != nil {
+			scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
+			continue
+		}
+
+		err = client.Status().Update(ctx, cr)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(retryCnt) * 10 * time.Millisecond)
+	}
+
+	if retryCnt >= maxRetryCountForCRStatusUpdate {
+		scopedLog.Error(nil, "Status update failed", "cr version", dirtyCR.GetResourceVersion(), "reTry count", retryCnt)
+	}
+}
+
+// fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
+func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, dirtyCR splcommon.MetaObject) (splcommon.MetaObject, error) {
+	namespacedName := types.NamespacedName{Name: dirtyCR.GetName(), Namespace: dirtyCR.GetNamespace()}
+
+	var err error
+	switch dirtyCR.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		latestStdlnCR := &enterpriseApi.Standalone{}
+		err = client.Get(ctx, namespacedName, latestStdlnCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
+		return latestStdlnCR, nil
+
+	case "LicenseMaster":
+		latestLmCR := &enterpriseApi.LicenseMaster{}
+		err = client.Get(ctx, namespacedName, latestLmCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		return latestLmCR, nil
+
+	case "SearchHeadCluster":
+		latestShcCR := &enterpriseApi.SearchHeadCluster{}
+		err = client.Get(ctx, namespacedName, latestShcCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
+		return latestShcCR, nil
+
+	case "IndexerCluster":
+		latestIdxcCR := &enterpriseApi.IndexerCluster{}
+		err = client.Get(ctx, namespacedName, latestIdxcCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
+		return latestIdxcCR, nil
+
+	case "ClusterMaster":
+		latestCmCR := &enterpriseApi.ClusterMaster{}
+		err = client.Get(ctx, namespacedName, latestCmCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		return latestCmCR, nil
+
+	case "MonitoringConsole":
+		latestMcCR := &enterpriseApi.MonitoringConsole{}
+		err = client.Get(ctx, namespacedName, latestMcCR)
+		if err != nil {
+			return nil, err
+		}
+		dirtyCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
+		return latestMcCR, nil
+	}
+
+	return nil, fmt.Errorf("Invalid CR Kind")
+}

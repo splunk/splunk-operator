@@ -73,13 +73,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.IdxcPasswordChangedSecrets == nil {
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 	}
-	defer func() {
-		err = client.Status().Update(ctx, cr)
-		if err != nil {
-			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("custom resource update failed %s", err.Error()))
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -132,6 +128,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 		return result, err
 	}
+
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {

@@ -54,7 +54,7 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v3.Standalone-test-stack1"},
 	}
 	updatefuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -70,7 +70,12 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
-	updateFuncCalls := append(updatefuncCalls, spltest.MockFuncCall{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"})
+	deltaCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v3.Standalone-test-stack1"},
+	}
+	updateFuncCalls := append(updatefuncCalls, deltaCalls...)
+
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
@@ -131,6 +136,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v3.Standalone-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -150,6 +156,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+		{MetaName: "*v3.Standalone-test-stack1"},
 	}
 
 	labels := map[string]string{

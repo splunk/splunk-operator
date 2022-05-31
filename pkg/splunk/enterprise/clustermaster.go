@@ -83,12 +83,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	defer func() {
-		err = client.Status().Update(ctx, cr)
-		if err != nil {
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
