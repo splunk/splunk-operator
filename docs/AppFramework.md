@@ -79,7 +79,7 @@ For more information, see the [Description of App Framework Specification fields
 
 ### How to use the App Framework on Indexer Cluster
 
-This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterMaster CR with a remote storage volume, setting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
+This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterManager CR with a remote storage volume, setting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
 
 1. Confirm your S3-based remote storage volume path and URL.
 
@@ -95,15 +95,15 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
 4. Copy your Splunk app or add-on archive files to the App Source.
    * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework-us-west-2/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework-us-west-2/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework-us-west-2/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com`.
 
-5. Update the ClusterMaster CR specification and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CRs support both cluster and local scopes.
+5. Update the ClusterManager CR specification and append the volume, App Source configuration, and scope.
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes.
    * In this example, the cluster manager will install some apps locally, and deploy other apps to the cluster peers. The App Source folder `adminApps` contains Splunk apps that are installed and run on the cluster manager, and will use a local scope. The apps in the App Source folders `networkApps` and `clusterBase` will be deployed from the cluster manager to the peers, and will use a cluster scope.
 
-Example: ClusterMaster.yaml
+Example: ClusterManager.yaml
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm
   finalizers:
@@ -133,7 +133,7 @@ spec:
         secretRef: s3-secret
 ```
 
-6. Apply the Custom Resource specification: `kubectl apply -f ClusterMaster.yaml`
+6. Apply the Custom Resource specification: `kubectl apply -f ClusterManager.yaml`
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps` folder to the cluster manager instance for local use. 
 
@@ -167,8 +167,8 @@ This example describes the installation of apps on the Deployer and the Search H
 
 5. Update the SearchHeadCluster CR specification, and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
-      * For CRs where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads (for example, Splunk Enterprise Security,) set the `scope: clusterWithPreConfig`. The ClusterMaster and SearchHeadCluster CRs support the clusterWithPreConfig scope. 
-      * For CRs where the Splunk Enterprise instance will deploy the apps without pre-configuration to search heads, set the `scope:  cluster`. The ClusterMaster and SearchHeadCluster CRs support both cluster and local scopes. 
+      * For CRs where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads (for example, Splunk Enterprise Security,) set the `scope: clusterWithPreConfig`. The ClusterManager and SearchHeadCluster CRs support the clusterWithPreConfig scope. 
+      * For CRs where the Splunk Enterprise instance will deploy the apps without pre-configuration to search heads, set the `scope:  cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes. 
    * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder `ESappsLoc`, the Deployer will run a pre-configuration step before deploying those apps to the search heads.
 
 Example: SearchHeadCluster.yaml
@@ -223,7 +223,7 @@ By default, the App Framework polls the remote object storage location for new o
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
 ## Description of App Framework Specification fields
-The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterMaster, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
+The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterManager, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
 
 * Remote Source of Apps: Define the remote storage location, including unique folders, and the path to each folder.
 * Destination of Apps: Define which Custom Resources need to be configured.
@@ -337,11 +337,11 @@ Here is a typical App framework configuration in a Custom Resource definition:
   * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
   
     | CRD Type          | Scope support                          | App Framework support |
-    | :---------------- | :------------------------------------- | :-------------------- |
+-------------------| :---------------- | :------------------------------------- | :-------------------- |
     | ClusterManager    | cluster, clusterWithPreConfig,  local  | Yes                   |
     | SearchHeadCluster | cluster, clusterWithPreConfig, local   | Yes                   |
     | Standalone        | local                                  | Yes                   |
-    | LicenceMaster     | local                                  | Yes                   |
+    | LicenceManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 

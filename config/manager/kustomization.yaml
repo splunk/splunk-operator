@@ -17,4 +17,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: docker.io/splunk/splunk-operator
-  newTag: e267ad52e094
+  newTag: f2da98bb8ddb

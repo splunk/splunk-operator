@@ -31,9 +31,9 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ClusterMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
+	ClusterMasterPausedAnnotation = "clustermaster.enterprise.splunk.com/paused"
 )
 
 // ClusterMasterSpec defines the desired state of ClusterMaster
@@ -68,20 +68,14 @@ type ClusterMasterStatus struct {
 	AppContext AppDeploymentContext `json:"appContext"`
 }
 
-// BundlePushInfo Indicates if bundle push required
-type BundlePushInfo struct {
-	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
-	LastCheckInterval    int64 `json:"lastCheckInterval"`
-}
-
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ClusterMaster is the Schema for the cluster manager API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Phase of the cluster master"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"

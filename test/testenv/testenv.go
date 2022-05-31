@@ -83,8 +83,11 @@ const (
 	// MonitoringConsolePod Monitoring Console Pod Template String
 	MonitoringConsolePod = "splunk-%s-monitoring-console-0"
 
-	// ClusterManagerPod ClusterMaster Pod Template String
-	ClusterManagerPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
+	// ClusterManagerPod ClusterManager Pod Template String
+	ClusterManagerPod = "splunk-%s-cluster-manager-0"
+
+	// ClusterMasterPod ClusterMaster Pod Template String
+	ClusterMasterPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
 
 	// MultiSiteIndexerPod Indexer Pod Template String
 	MultiSiteIndexerPod = "splunk-%s-site%d-indexer-%d"
@@ -107,8 +110,8 @@ const (
 
 	// appDownlodPVCName is the name of PVC for downloading apps on operator
 	appDownlodPVCName = "tmp-app-download"
-	// ClusterMasterServiceName Cluster Manager Service Template String
-	ClusterMasterServiceName = splcommon.TestClusterManager + "-service"
+	// ClusterManagerServiceName Cluster Manager Service Template String
+	ClusterManagerServiceName = "splunk-%s-cluster-manager-service"
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"

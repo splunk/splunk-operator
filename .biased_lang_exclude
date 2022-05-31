@@ -35,24 +35,49 @@ controllers/common/predicate.go
 pkg/splunk/enterprise/finalizers.go
 controllers/monitoringconsole_controller.go
 pkg/splunk/enterprise/events.go
-#TOBE REVIEWED
-deploy/olm-catalog/
+#Exceptions for dual support of cluster manager
+api/v3/clustermaster_types.go
+api/v3/indexercluster_types.go
+api/v3/clustermanager_types.go
+config/crd/patches/cainjection_in_clustermasters.yaml
+config/crd/patches/webhook_in_clustermasters.yaml
+config/crd/patches/webhook_in_clustermasters.yaml
+config/rbac/clustermaster_editor_role.yaml
+config/rbac/clustermaster_editor_role.yaml
+config/rbac/clustermaster_viewer_role.yaml
+config/rbac/clustermanager_editor_role.yaml
+config/rbac/clustermanager_viewer_role.yaml
+controllers/clustermaster_controller.go
+controllers/clustermaster_controller_test.go
+controllers/licensemaster_controller_test.go
+kuttl/tests/smoke/clustered-master-deployment-c3/00-assert.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/00-deploy-clustermanager.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/01-deploy-indexercluster.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/02-deploy-searchheadcluster.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/03-assert.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/03-clustermanager-remove-finalizer.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/04-indexercluster-remove-finalizer.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/05-searchheadcluster-remove-finalizer.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/08-delete-clustermanager.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/08-errors.yaml
+kuttl/tests/smoke/clustered-master-deployment-c3/readme.txt
+pkg/splunk/enterprise/clustermaster.go
+pkg/splunk/enterprise/clustermaster_test.go
+pkg/splunk/enterprise/licensemaster_test.go
+test/clustermaster/cmaster_appframework_suite_test.go
+test/clustermaster/cmaster_appframework_test.go
+test/clustermaster/cmaster_appframework_test.go
+test/licensemaster/lmaster_m4_test.go
+tools/k8s_collectors/k8s-splunk-collector.sh
+#Below should be reviewed once CRDs have no bias lang
 go.sum
 .github/
 .circleci/
-#this is only for testing, this need to be reviewed
 main.go
 PROJECT
-controllers
-tools
-images
-apibundle
-config
-bundle
-api
-#Below should be reviewed once CRDs have no bias lang
 pkg/
 deploy/
+controllers/
 test/
 docs/
 README.md

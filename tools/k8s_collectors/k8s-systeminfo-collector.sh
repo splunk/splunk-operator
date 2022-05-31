@@ -574,6 +574,7 @@ get_crd_info() {
   if [[ -n "${KUBECONFIG:-}" ]]; then
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -581,6 +582,7 @@ get_crd_info() {
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd searchheadcluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -592,12 +594,14 @@ get_crd_info() {
     KUBECONFIG="/etc/kubernetes/kubeconfig.yaml"
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd monitoringconsole.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd searchheadcluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" monitoringconsole.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -607,6 +611,7 @@ get_crd_info() {
     KUBECONFIG=$(grep kubeconfig /etc/systemd/system/kubelet.service | awk '{print $2}')
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -614,6 +619,7 @@ get_crd_info() {
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd searchheadcluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -624,6 +630,7 @@ get_crd_info() {
     KUBECONFIG="/var/lib/kubelet/kubeconfig"
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
@@ -631,6 +638,7 @@ get_crd_info() {
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" crd searchheadcluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" standalones.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
+    command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" clustermanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" indexercluster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemaster.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log
     command -v kubectl > /dev/null && kubectl get --kubeconfig="${KUBECONFIG}" licensemanager.enterprise.splunk.com >> "${COLLECT_DIR}"/splunk/crd.log

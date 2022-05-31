@@ -9,7 +9,7 @@ spec:
   affinity: {}
   appRepo:
     defaults: {}
-  clusterMasterRef: {}
+  clusterManagerRef: {}
   defaults: ""
   defaultsUrl: ""
   defaultsUrlApps: ""

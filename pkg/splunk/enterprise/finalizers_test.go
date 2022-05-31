@@ -40,11 +40,13 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	case "LicenseManager":
 		component = "license-manager"
 	case "LicenseMaster":
-		component = "license-master"
+		component = splcommon.LicenseManager
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
 		component = "indexer"
+	case "ClusterManager":
+		component = "cluster-manager"
 	case "ClusterMaster":
 		component = splcommon.ClusterManager
 	case "MonitoringConsole":
@@ -147,7 +149,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v3.ClusterMaster-test-master1"},
+				{MetaName: "*v3.ClusterManager-test-manager1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 		}

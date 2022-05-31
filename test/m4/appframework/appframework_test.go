@@ -1010,7 +1010,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1060,7 +1060,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############ VERIFY APPS UPDATED TO V2 #############
 			appVersion = "V2"
@@ -1210,7 +1210,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1247,7 +1247,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATIONS ############
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -1444,7 +1444,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
@@ -1472,7 +1472,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion
@@ -2084,10 +2084,10 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify apps are installed locally on Cluster Manager and Deployer
-			   * Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster
+			   * Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster
 			   ######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
-			   * Set AppsRepoPollInterval to 180 seconds for Cluster Master and Search Head Cluster
-			   * Change status to 'ON' in config map for Cluster Master and Search Head Cluster
+			   * Set AppsRepoPollInterval to 180 seconds for Cluster Manager and Search Head Cluster
+			   * Change status to 'ON' in config map for Cluster Manager and Search Head Cluster
 			   ############### UPGRADE APPS ################
 			   * Upgrade apps in app sources
 			   * Wait for pods to be ready
@@ -2151,22 +2151,22 @@ var _ = Describe("m4appfw test", func() {
 			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
-			// Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster
-			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster")
+			// Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster
+			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Manager and Search Head Cluster")
 			config, _ := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
-			// Get instance of current Cluster Master CR with latest config
-			cm = &enterpriseApi.ClusterMaster{}
+			// Get instance of current Cluster Manager CR with latest config
+			cm = &enterpriseApi.ClusterManager{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
-			Expect(err).To(Succeed(), "Failed to edit Cluster Master")
+			Expect(err).To(Succeed(), "Failed to edit Cluster Manager")
 
-			// Set AppsRepoPollInterval for Cluster Master to 180 seconds
-			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Cluster Master to 180 seconds")
+			// Set AppsRepoPollInterval for Cluster Manager to 180 seconds
+			testcaseEnvInst.Log.Info("Set AppsRepoPollInterval for Cluster Manager to 180 seconds")
 			cm.Spec.AppFrameworkConfig.AppsRepoPollInterval = int64(180)
 			err = deployment.UpdateCR(ctx, cm)
-			Expect(err).To(Succeed(), "Failed to change AppsRepoPollInterval value for Cluster Master")
+			Expect(err).To(Succeed(), "Failed to change AppsRepoPollInterval value for Cluster Manager")
 
 			// Get instance of current Search Head Cluster CR with latest config
 			shc = &enterpriseApi.SearchHeadCluster{}
@@ -2179,14 +2179,14 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed to change AppsRepoPollInterval value for Search Head Cluster")
 
-			// Change status to 'ON' in config map for Cluster Master and Search Head Cluster
-			testcaseEnvInst.Log.Info("Change status to 'ON' in config map for Cluster Master")
+			// Change status to 'ON' in config map for Cluster Manager and Search Head Cluster
+			testcaseEnvInst.Log.Info("Change status to 'ON' in config map for Cluster Manager")
 			config, err = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map")
 
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
-			Expect(err).To(Succeed(), "Unable to update config map for Cluster Master")
+			Expect(err).To(Succeed(), "Unable to update config map for Cluster Manager")
 
 			testcaseEnvInst.Log.Info("Change status to 'ON' in config map for Search Head Cluster")
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
@@ -2197,10 +2197,10 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Wait 5 seconds to be sure reconcile caused by CR update and config map update are done")
 			time.Sleep(5 * time.Second)
 
-			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster
-			testcaseEnvInst.Log.Info("Verify status is 'ON' in config map for Cluster Master and Search Head Cluster")
+			// Verify status is 'ON' in config map for Cluster Manager and Search Head Cluster
+			testcaseEnvInst.Log.Info("Verify status is 'ON' in config map for Cluster Manager and Search Head Cluster")
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on S3

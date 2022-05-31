@@ -41,8 +41,11 @@ const (
 	// SplunkStandalone is a single instance of Splunk Enterprise
 	SplunkStandalone InstanceType = "standalone"
 
+	// SplunkClusterMaster is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
+	SplunkClusterMaster InstanceType = splcommon.ClusterManager
+
 	// SplunkClusterManager is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
-	SplunkClusterManager InstanceType = splcommon.ClusterManager
+	SplunkClusterManager InstanceType = "cluster-manager"
 
 	// SplunkSearchHead may be a standalone or clustered search head instance
 	SplunkSearchHead InstanceType = "search-head"
@@ -214,6 +217,8 @@ func (instanceType InstanceType) ToRole() string {
 		role = "splunk_standalone"
 	case SplunkClusterManager:
 		role = "splunk_cluster_master"
+	case SplunkClusterMaster:
+		role = "splunk_cluster_master"
 	case SplunkSearchHead:
 		role = "splunk_search_head"
 	case SplunkIndexer:
@@ -237,6 +242,8 @@ func (instanceType InstanceType) ToKind() string {
 	case SplunkStandalone:
 		kind = "standalone"
 	case SplunkClusterManager:
+		kind = "indexer"
+	case SplunkClusterMaster:
 		kind = "indexer"
 	case SplunkIndexer:
 		kind = "indexer"

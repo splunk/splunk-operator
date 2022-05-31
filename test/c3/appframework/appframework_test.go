@@ -879,7 +879,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
 			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-			_, err = deployment.DeployClusterMaster(ctx, deployment.GetName(), "", "", "")
+			_, err = deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Deploy the Indexer Cluster
@@ -901,7 +901,7 @@ var _ = Describe("c3appfw test", func() {
 							Value: "ignore"},
 					},
 					Volumes: []corev1.Volume{},
-					ClusterMasterRef: corev1.ObjectReference{
+					ClusterManagerRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
 				},
@@ -1636,7 +1636,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1679,7 +1679,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############## UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
@@ -1833,7 +1833,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
@@ -1866,7 +1866,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########### UPGRADE VERIFICATIONS ###########
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -2056,7 +2056,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
@@ -2084,7 +2084,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion

@@ -77,9 +77,9 @@ func TestGetSplunkService(t *testing.T) {
 	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"status":{"loadBalancer":{}}}`)
 	test(SplunkIndexer, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"clusterIP":"None","type":"ClusterIP"},"status":{"loadBalancer":{}}}`)
 	// Multipart IndexerCluster - test part-of and instance labels for child part
-	cr.Spec.ClusterMasterRef.Name = "cluster1"
+	cr.Spec.ClusterManagerRef.Name = "cluster1"
 	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"}},"status":{"loadBalancer":{}}}`)
-	cr.Spec.ClusterMasterRef.Name = ""
+	cr.Spec.ClusterManagerRef.Name = ""
 
 	cr.Spec.ServiceTemplate.Spec.Type = "LoadBalancer"
 	cr.Spec.ServiceTemplate.ObjectMeta.Labels = map[string]string{"1": "2"}
@@ -211,12 +211,12 @@ func TestSetVolumeDefault(t *testing.T) {
 }
 
 func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
@@ -273,12 +273,12 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
@@ -1056,12 +1056,12 @@ maxGlobalRawDataSizeMB = 61440
 func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -1146,7 +1146,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	var replicas int32 = 1
 
 	// Create CR
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
@@ -1291,7 +1291,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 
 func TestGetLivenessProbe(t *testing.T) {
 	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
@@ -1321,7 +1321,7 @@ func TestGetLivenessProbe(t *testing.T) {
 
 func TestGetReadinessProbe(t *testing.T) {
 	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",

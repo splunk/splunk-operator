@@ -106,6 +106,10 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // ApplyIndexerCluster adding to handle unit test case
 var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterprisev3.IndexerCluster) (reconcile.Result, error) {
+	// IdxCluster can be supported by two CRD types for CM
+	if len(instance.Spec.ClusterManagerRef.Name) > 0 {
+		return enterprise.ApplyIndexerClusterManager(ctx, client, instance)
+	}
 	return enterprise.ApplyIndexerCluster(ctx, client, instance)
 }
 
@@ -139,6 +143,11 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				OwnerType:    &enterprisev3.IndexerCluster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: false,
+				OwnerType:    &enterprisev3.IndexerCluster{},
+			}).
+		Watches(&source.Kind{Type: &enterprisev3.ClusterManager{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
 				OwnerType:    &enterprisev3.IndexerCluster{},

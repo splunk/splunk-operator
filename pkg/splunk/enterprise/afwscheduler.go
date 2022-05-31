@@ -84,6 +84,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		return ""
 	case "ClusterMaster":
 		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
 	}
@@ -1099,7 +1101,7 @@ func isAppInstallationCompleteOnAllReplicas(auxPhaseInfo []enterpriseApi.PhaseIn
 
 // isClusterScoped checks whether current cr is a SHC or a CM
 func isClusterScoped(kind string) bool {
-	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "SearchHeadCluster"
 }
 
 // checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
@@ -1174,6 +1176,8 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
+		instanceID = SplunkClusterMaster
+	case "ClusterManager":
 		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
@@ -1227,7 +1231,7 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 func getClusterScopePlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
 
 	switch kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	case "SearchHeadCluster":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1325,7 +1329,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
 func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer

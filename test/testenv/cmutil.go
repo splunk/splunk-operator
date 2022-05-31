@@ -27,42 +27,42 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-manager
+// ClusterManagerSitesResponse is a representation of the sites managed by a Splunk cluster-manager
 // Endpoint: /services/cluster/manager/sites
-type ClusterMasterSitesResponse struct {
-	Entries []ClusterMasterSitesEntry `json:"entry"`
+type ClusterManagerSitesResponse struct {
+	Entries []ClusterManagerSitesEntry `json:"entry"`
 }
 
-// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
-type ClusterMasterSitesEntry struct {
-	Name    string                    `json:"name"`
-	Content ClusterMasterSitesContent `json:"content"`
+// ClusterManagerSitesEntry represents a site of an indexer cluster with its metadata
+type ClusterManagerSitesEntry struct {
+	Name    string                     `json:"name"`
+	Content ClusterManagerSitesContent `json:"content"`
 }
 
-// ClusterMasterSitesContent represents detailed information about a site
-type ClusterMasterSitesContent struct {
-	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
+// ClusterManagerSitesContent represents detailed information about a site
+type ClusterManagerSitesContent struct {
+	Peers map[string]ClusterManagerSitesPeer `json:"peers"`
 }
 
-// ClusterMasterSitesPeer reprensents an indexer peer member of a site
-type ClusterMasterSitesPeer struct {
+// ClusterManagerSitesPeer reprensents an indexer peer member of a site
+type ClusterManagerSitesPeer struct {
 	ServerName string `json:"server_name"`
 }
 
-// ClusterMasterHealthResponse is a representation of the health response by a Splunk cluster-manager
+// ClusterManagerHealthResponse is a representation of the health response by a Splunk cluster-manager
 // Endpoint: /services/cluster/manager/health
-type ClusterMasterHealthResponse struct {
-	Entries []ClusterMasterHealthEntry `json:"entry"`
+type ClusterManagerHealthResponse struct {
+	Entries []ClusterManagerHealthEntry `json:"entry"`
 }
 
-// ClusterMasterHealthEntry represents a site of an indexer cluster with its metadata
-type ClusterMasterHealthEntry struct {
-	Name    string                     `json:"name"`
-	Content ClusterMasterHealthContent `json:"content"`
+// ClusterManagerHealthEntry represents a site of an indexer cluster with its metadata
+type ClusterManagerHealthEntry struct {
+	Name    string                      `json:"name"`
+	Content ClusterManagerHealthContent `json:"content"`
 }
 
-// ClusterMasterHealthContent represents detailed information about a site
-type ClusterMasterHealthContent struct {
+// ClusterManagerHealthContent represents detailed information about a site
+type ClusterManagerHealthContent struct {
 	AllDataIsSearchable      string `json:"all_data_is_searchable"`
 	AllPeersAreUp            string `json:"all_peers_are_up"`
 	Multisite                string `json:"multisite"`
@@ -76,8 +76,11 @@ type ClusterMasterHealthContent struct {
 // CheckRFSF check if cluster has met replication factor and search factor
 func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 	//code to execute
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetHealth
+	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
+	if strings.Contains(deployment.GetName(), "master") {
+		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
+	}
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/health?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
@@ -85,7 +88,7 @@ func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 		return false
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := ClusterMasterHealthResponse{}
+	restResponse := ClusterManagerHealthResponse{}
 	err = json.Unmarshal([]byte(stdout), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse health status")
@@ -102,8 +105,8 @@ func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
 	return rfMet && sfMet
 }
 
-// ClusterMasterPeersAndSearchHeadResponse /services/cluster/manager/peers  and /services/cluster/manager/searchhead response
-type ClusterMasterPeersAndSearchHeadResponse struct {
+// ClusterManagerPeersAndSearchHeadResponse /services/cluster/manager/peers  and /services/cluster/manager/searchhead response
+type ClusterManagerPeersAndSearchHeadResponse struct {
 	Entry []struct {
 		Content struct {
 			Label                                  string `json:"label"`
@@ -122,19 +125,22 @@ type ClusterMasterPeersAndSearchHeadResponse struct {
 }
 
 // GetIndexersOrSearchHeadsOnCM get indexers or search head on Cluster Manager
-func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, endpoint string) ClusterMasterPeersAndSearchHeadResponse {
+func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, endpoint string) ClusterManagerPeersAndSearchHeadResponse {
 	url := ""
 	if endpoint == "sh" {
 		url = splcommon.LocalURLClusterManagerGetSearchHeads
 	} else {
-		url = splcommon.LocalURLClusterManagerGetPeersJSONOutput
+		url = "https://localhost:8089/services/cluster/manager/peers?output_mode=json"
 	}
 	//code to execute
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
+	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
+	if strings.Contains(endpoint, "master") {
+		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
+	}
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	restResponse := ClusterMasterPeersAndSearchHeadResponse{}
+	restResponse := ClusterManagerPeersAndSearchHeadResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return restResponse
@@ -190,7 +196,7 @@ func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
 
 // RollHotBuckets roll hot buckets in cluster
 func RollHotBuckets(ctx context.Context, deployment *Deployment) bool {
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
+	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
 	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -205,8 +211,8 @@ func RollHotBuckets(ctx context.Context, deployment *Deployment) bool {
 	return false
 }
 
-// ClusterMasterInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint
-type ClusterMasterInfoEndpointResponse struct {
+// ClusterManagerInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint
+type ClusterManagerInfoEndpointResponse struct {
 	Entry []struct {
 		Content struct {
 			RollingRestartFlag bool `json:"rolling_restart_flag"`
@@ -219,12 +225,12 @@ type ClusterMasterInfoEndpointResponse struct {
 	} `json:"entry"`
 }
 
-// ClusterMasterInfoResponse Get cluster Manager response
-func ClusterMasterInfoResponse(ctx context.Context, deployment *Deployment, podName string) ClusterMasterInfoEndpointResponse {
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
+// ClusterManagerInfoResponse Get cluster Manager response
+func ClusterManagerInfoResponse(ctx context.Context, deployment *Deployment, podName string) ClusterManagerInfoEndpointResponse {
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/info?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	restResponse := ClusterMasterInfoEndpointResponse{}
+	restResponse := ClusterManagerInfoEndpointResponse{}
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return restResponse
@@ -240,8 +246,8 @@ func ClusterMasterInfoResponse(ctx context.Context, deployment *Deployment, podN
 
 // CheckRollingRestartStatus checks if rolling restart is happening in cluster
 func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool {
-	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), splcommon.ClusterManager)
-	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetInfoJSONOutput
+	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
+	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/info?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
@@ -249,7 +255,7 @@ func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool
 		return false
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-	restResponse := ClusterMasterInfoEndpointResponse{}
+	restResponse := ClusterManagerInfoEndpointResponse{}
 	err = json.Unmarshal([]byte(stdout), &restResponse)
 	if err != nil {
 		logf.Log.Error(err, "Failed to parse cluster searchheads")
@@ -262,9 +268,9 @@ func CheckRollingRestartStatus(ctx context.Context, deployment *Deployment) bool
 	return rollingRestart
 }
 
-// ClusterManagerBundlePushstatus Check for bundle push status on ClusterManager
-func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string) map[string]string {
-	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, "")
+// CMBundlePushstatus Check for bundle push status on ClusterManager
+func CMBundlePushstatus(ctx context.Context, deployment *Deployment, previousBundleHash string, cm string) map[string]string {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, cm)
 
 	bundleStatus := make(map[string]string)
 	for _, entry := range restResponse.Entry {
@@ -285,7 +291,7 @@ func ClusterManagerBundlePushstatus(ctx context.Context, deployment *Deployment,
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
 func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) string {
 	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-	restResponse := ClusterMasterInfoResponse(ctx, deployment, podName)
+	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum
 	logf.Log.Info("Bundle Hash on Cluster Manager Found", "Hash", bundleHash)

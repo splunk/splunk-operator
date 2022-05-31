@@ -41,7 +41,194 @@ import (
 // NewSplunkClientFunc funciton pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
-// ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster.
+// ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
+func ApplyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+
+	// unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	// validate and updates defaults for CR
+	err := validateIndexerClusterSpec(ctx, cr)
+	if err != nil {
+		return result, err
+	}
+
+	// updates status after function completes
+	cr.Status.Phase = splcommon.PhaseError
+	cr.Status.ClusterManagerPhase = splcommon.PhaseError
+	cr.Status.Replicas = cr.Spec.Replicas
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
+	if cr.Status.Peers == nil {
+		cr.Status.Peers = []enterpriseApi.IndexerClusterMemberStatus{}
+	}
+	if cr.Status.IndexerSecretChanged == nil {
+		cr.Status.IndexerSecretChanged = []bool{}
+	}
+	if cr.Status.IdxcPasswordChangedSecrets == nil {
+		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
+	}
+	defer func() {
+		err = client.Status().Update(ctx, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("custom resource update failed %s", err.Error()))
+			scopedLog.Error(err, "Status update failed")
+		}
+	}()
+
+	// create or update general config resources
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		return result, err
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterManagerRef.Name,
+	}
+	managerIdxCluster := &enterpriseApi.ClusterManager{}
+	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
+	if err == nil {
+		// when user creates both cluster manager and index cluster yaml file at the same time
+		// cluser manager status is not yet set so it will be blank
+		if managerIdxCluster.Status.Phase == "" {
+			cr.Status.ClusterManagerPhase = splcommon.PhasePending
+		} else {
+			cr.Status.ClusterManagerPhase = managerIdxCluster.Status.Phase
+		}
+	} else {
+		cr.Status.ClusterManagerPhase = splcommon.PhaseError
+	}
+
+	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	// Check if we have configured enough number(<= RF) of replicas
+	if mgr.cr.Status.ClusterManagerPhase == splcommon.PhaseReady {
+		err = VerifyRFPeers(ctx, mgr, client)
+		if err != nil {
+			eventPublisher.Warning(ctx, "verifyRFPeers", fmt.Sprintf("verify RF peer failed %s", err.Error()))
+			return result, err
+		}
+	}
+
+	// check if deletion has been requested
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = splcommon.PhaseTerminating
+			cr.Status.ClusterManagerPhase = splcommon.PhaseTerminating
+		} else {
+			result.Requeue = false
+		}
+		if err != nil {
+			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+		}
+		return result, err
+	}
+	// create or update a headless service for indexer cluster
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for indexer cluster failed %s", err.Error()))
+		return result, err
+	}
+
+	// create or update a regular service for indexer cluster (ingestion)
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for indexer cluster failed %s", err.Error()))
+		return result, err
+	}
+
+	// create or update statefulset for the indexers
+	statefulSet, err := getIndexerStatefulSet(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "getIndexerStatefulSet", fmt.Sprintf("get indexer stateful set failed %s", err.Error()))
+		return result, err
+	}
+
+	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+	if err != nil {
+		eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
+		return result, err
+	}
+	cr.Status.Phase = phase
+
+	// no need to requeue if everything is ready
+	if cr.Status.Phase == splcommon.PhaseReady {
+		//update MC
+		//Retrieve monitoring  console ref from CM Spec
+		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
+			return result, err
+		}
+		if cmMonitoringConsoleConfigRef != "" {
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
+			_, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
+			//if MC pod already exists
+			if err == nil {
+				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
+				err := c.AutomateMCApplyChanges(false)
+				if err != nil {
+					eventPublisher.Warning(ctx, "AutomateMCApplyChanges", fmt.Sprintf("get monitoring console client failed %s", err.Error()))
+					return result, err
+				}
+			}
+			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
+				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster manager spec")
+			}
+		}
+		if len(cr.Status.IndexerSecretChanged) > 0 {
+			var managerIdxcName string
+			if len(cr.Spec.ClusterManagerRef.Name) > 0 {
+				managerIdxcName = cr.Spec.ClusterManagerRef.Name
+			} else {
+				return result, errors.New("empty cluster manager reference")
+			}
+			cmPodName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
+			// Disable maintenance mode
+			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
+			if err != nil {
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				return result, err
+			}
+		}
+
+		// Reset idxc secret changed and namespace secret revision
+		cr.Status.IndexerSecretChanged = []bool{}
+		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
+		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
+
+		result.Requeue = false
+		// Set indexer cluster CR as owner reference for clustermanager
+		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
+		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
+			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
+		}
+		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
+		if err != nil {
+			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
+			result.Requeue = true
+			return result, err
+		}
+	}
+	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
+	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
+	if !result.Requeue {
+		result.RequeueAfter = 0
+	}
+	return result, nil
+}
+
+// ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster for Older CM CRDs.
 func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
@@ -164,7 +351,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.Phase == splcommon.PhaseReady {
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
-		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr, cr.Spec.ClusterMasterRef.Name)
+		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
 			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
 			return result, err
@@ -182,7 +369,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 			}
 			if len(cr.Spec.MonitoringConsoleRef.Name) > 0 && (cr.Spec.MonitoringConsoleRef.Name != cmMonitoringConsoleConfigRef) {
-				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster manager spec")
+				scopedLog.Info("Indexer Cluster CR should not specify monitoringConsoleRef and if specified, should be similar to cluster master spec")
 			}
 		}
 		if len(cr.Status.IndexerSecretChanged) > 0 {
@@ -190,9 +377,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			if len(cr.Spec.ClusterMasterRef.Name) > 0 {
 				managerIdxcName = cr.Spec.ClusterMasterRef.Name
 			} else {
-				return result, errors.New("empty cluster manager reference")
+				return result, errors.New("empty cluster master reference")
 			}
-			cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
+			cmPodName := fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
 			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
@@ -209,8 +396,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermaster
-		scopedLog.Info("Setting indexer cluster as owner for cluster manager")
-		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterMasterRef.Name)}
+		scopedLog.Info("Setting indexer cluster as owner for cluster master")
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
@@ -339,12 +526,16 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Enable maintenance mode
 			if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
 				var managerIdxcName string
-				if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+				var cmPodName string
+				if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+					managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+					cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+				} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
 					managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+					cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
 				} else {
 					return errors.New("empty cluster manager reference")
 				}
-				cmPodName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
 				podExecClient.SetTargetPodName(ctx, cmPodName)
 				err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
 				if err != nil {
@@ -439,7 +630,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		mgr.c = c
 	}
 	// update statefulset, if necessary
-	if mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
+	if mgr.cr.Status.ClusterManagerPhase == splcommon.PhaseReady || mgr.cr.Status.ClusterMasterPhase == splcommon.PhaseReady {
 		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 		if err != nil {
 			return splcommon.PhaseError, err
@@ -560,17 +751,22 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	// Retrieve admin password from Pod
 	var managerIdxcName string
-	if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+	var cm InstanceType
+	if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+		managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+		cm = SplunkClusterManager
+	} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
 		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+		cm = SplunkClusterMaster
 	} else {
 		mgr.log.Info("Empty cluster manager reference")
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(cm, managerIdxcName, false))
 
 	// Retrieve admin password for Pod
-	podName := fmt.Sprintf(splcommon.TestClusterManagerID, managerIdxcName, "0")
+	podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
 		scopedLog.Error(err, fmt.Sprintf("Couldn't retrieve the admin password from pod %v", podName))
@@ -617,7 +813,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 
-	if mgr.cr.Status.ClusterMasterPhase != splcommon.PhaseReady {
+	if mgr.cr.Status.ClusterManagerPhase != splcommon.PhaseReady && mgr.cr.Status.ClusterMasterPhase != splcommon.PhaseReady {
 		mgr.cr.Status.Initialized = false
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
@@ -687,13 +883,14 @@ func validateIndexerClusterSpec(ctx context.Context, cr *enterpriseApi.IndexerCl
 		cr.Spec.Replicas = 1
 	}
 
-	// Cannot leave clusterMasterRef field empty or else we cannot connect to CM
-	if len(cr.Spec.ClusterMasterRef.Name) == 0 {
-		return fmt.Errorf("IndexerCluster spec should refer to ClusterMaster via clusterMasterRef")
+	// Cannot leave clusterManagerRef field empty or else we cannot connect to CM
+	if len(cr.Spec.ClusterManagerRef.Name) == 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
+		return fmt.Errorf("IndexerCluster spec should refer to ClusterManager via clusterManagerRef")
 	}
 
 	// Multisite / multipart clusters: can't reference a cluster manager located in another namespace because of Service and Secret limitations
-	if len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
+	if len(cr.Spec.ClusterManagerRef.Namespace) > 0 && cr.Spec.ClusterManagerRef.Namespace != cr.GetNamespace() ||
+		len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
 	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
@@ -718,16 +915,26 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 }
 
 //RetrieveCMSpec finds monitoringConsole ref from cm spec
-func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, clusterMasterRef string) (string, error) {
-
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterMasterRef}
-	var cmCR enterpriseApi.ClusterMaster
+func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
 	var monitoringConsoleRef string = ""
 
-	err := client.Get(ctx, namespacedName, &cmCR)
-	if err == nil {
-		monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-		return monitoringConsoleRef, err
+	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
+		var cmCR enterpriseApi.ClusterMaster
+		err := client.Get(ctx, namespacedName, &cmCR)
+		if err == nil {
+			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
+			return monitoringConsoleRef, err
+		}
+	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
+		var cmCR enterpriseApi.ClusterManager
+		err := client.Get(ctx, namespacedName, &cmCR)
+		if err == nil {
+			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
+			return monitoringConsoleRef, err
+		}
 	}
-	return "", err
+
+	return "", nil
 }

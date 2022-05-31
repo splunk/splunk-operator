@@ -96,6 +96,12 @@ var _ = BeforeSuite(func() {
 		Scheme: clientgoscheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
+	if err := (&ClusterManagerReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
 	if err := (&ClusterMasterReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
@@ -185,11 +191,11 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 		return nil, fmt.Errorf("unable to start manager")
 	}
 
-	if err = (&ClusterMasterReconciler{
+	if err = (&ClusterManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		return nil, fmt.Errorf("unable to start manager")
 	}
 	if err = (&IndexerClusterReconciler{

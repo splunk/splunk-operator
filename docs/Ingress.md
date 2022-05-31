@@ -8,7 +8,7 @@ The Splunk Operator will automatically create and manage Kubernetes Services for
 
 ```
 $ kubectl get services -o name
-service/splunk-cluster-cluster-master-service
+service/splunk-cluster-cluster-manager-service
 service/splunk-cluster-deployer-service
 service/splunk-cluster-indexer-headless
 service/splunk-cluster-indexer-service
@@ -134,7 +134,7 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
     - "license-manager.splunk.example.com"
 ```
 
@@ -184,10 +184,10 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-cluster-master
+  name: splunk-cluster-manager
 spec:
   hosts:
-  - "cluster-master.splunk.example.com"
+  - "cluster-manager.splunk.example.com"
   gateways:
   - "splunk-web"
   http:
@@ -195,7 +195,7 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-cluster-master-service
+        host: splunk-example-cluster-manager-service
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
@@ -543,11 +543,11 @@ spec:
       - backend:
           serviceName: splunk-example-deployer-service
           servicePort: 8000
-  - host: cluster-master.splunk.example.com
+  - host: cluster-manager.splunk.example.com
     http:
       paths:
       - backend:
-          serviceName: splunk-example-cluster-master-service
+          serviceName: splunk-example-cluster-manager-service
           servicePort: 8000
 ```
 
@@ -897,11 +897,11 @@ spec:
       - backend:
           serviceName: splunk-example-deployer-service
           servicePort: 8000
-  - host: cluster-master.splunk.example.com
+  - host: cluster-manager.splunk.example.com
     http:
       paths:
       - backend:
-          serviceName: splunk-example-cluster-master-service
+          serviceName: splunk-example-cluster-manager-service
           servicePort: 8000
   - host: license-manager.splunk.example.com
     http:
@@ -913,7 +913,7 @@ spec:
   - hosts:
     - splunk.example.com
     - deployer.splunk.example.com
-    - cluster-master.splunk.example.com
+    - cluster-manager.splunk.example.com
     - license-manager.splunk.example.com
     secretName: splunk.example.com-tls
 ```
@@ -931,8 +931,8 @@ tls:
     - deployer.splunk.example.com
     secretName: deployer.splunk.example.com-tls
   - hosts:
-    - cluster-master.splunk.example.com
-    secretName: cluster-master.splunk.example.com-tls
+    - cluster-manager.splunk.example.com
+    secretName: cluster-manager.splunk.example.com-tls
 …
 ```
 
@@ -954,7 +954,7 @@ spec:
   dnsNames:
     - splunk.example.com
     - deployer.splunk.example.com
-    - cluster-master.splunk.example.com
+    - cluster-manager.splunk.example.com
     - license-manager.splunk.example.com
   issuerRef:
     name: letsencrypt-prod
@@ -979,7 +979,7 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
     - "license-manager.splunk.example.com"
     tls:
       httpsRedirect: true
@@ -993,7 +993,7 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
     - "license-manager.splunk.example.com"
 ```
 
@@ -1069,10 +1069,10 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-cluster-master
+  name: splunk-cluster-manager
 spec:
   hosts:
-  - "cluster-master.splunk.example.com"
+  - "cluster-manager.splunk.example.com"
   gateways:
   - "splunk-gw"
   http:
@@ -1080,7 +1080,7 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-cluster-master-service
+        host: splunk-example-cluster-manager-service
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService

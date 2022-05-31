@@ -179,9 +179,9 @@ func TestPodExecCommand(t *testing.T) {
 
 func TestRunPodExecCommand(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "clusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -190,7 +190,7 @@ func TestRunPodExecCommand(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	targetPodName := "splunk-cm-cluster-master-0"
+	targetPodName := "splunk-cm-cluster-manager-0"
 	podExecClient := GetPodExecClient(c, &cr, targetPodName)
 	dummyCmd := "dummyCmd"
 	streamOptions := &remotecommand.StreamOptions{

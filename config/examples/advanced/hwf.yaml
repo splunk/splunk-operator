@@ -5,7 +5,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
   licenseManagerRef:
     name: lm-example

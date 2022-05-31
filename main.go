@@ -105,6 +105,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
+	if err = (&controllers.ClusterManagerReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
+		os.Exit(1)
+	}
 	if err = (&controllers.IndexerClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
