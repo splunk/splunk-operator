@@ -208,7 +208,7 @@ spec:
         secretRef: s3-secret
 ```
 
-6. Apply the Custom Resource specification: ` -f SearchHeadCluster.yaml`
+6. Apply the Custom Resource specification: `kubectl apply -n splunk-operator -f SearchHeadCluster.yaml`
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the Deployer instance for local use. 
 

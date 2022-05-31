@@ -41,7 +41,7 @@ After applying the yaml, a new operator pod will be created and the existing ope
 ```
 kubectl get pods
 NAME                                                  READY   STATUS    RESTARTS   AGE
-splunk-operator--controller-manager-75f5d4d85b-8pshn   1/1     Running   0          5s
+splunk-operator-controller-manager-75f5d4d85b-8pshn   1/1     Running   0          5s
 ​
 ```
 ​
