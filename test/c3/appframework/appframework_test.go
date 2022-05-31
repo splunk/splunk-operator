@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -2883,6 +2884,103 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
+
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Create app sources for Cluster Manager and Deployer
+			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
+			   * When app download is complete, delete apps from app directory
+			   ######### VERIFICATIONS #############
+			   * Verify Apps are Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify bundle push is successful
+			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
+			*/
+
+			//################## SETUP ####################
+			// Download big size apps from S3
+			appList := testenv.BigSingleApp
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download big-size app")
+
+			// Upload big size app to S3 for Indexer Cluster
+			appVersion := "V1"
+			testcaseEnvInst.Log.Info("Upload big size app to S3 for Indexer Cluster")
+			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Indexer Cluster")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload big size app to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big size app to S3 for Search Head Cluster")
+			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec for C3
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+
+			// Deploy C3 CRD
+			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
+			indexerReplicas := 3
+			shReplicas := 3
+			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
+
+			// Verify App Download is completed on Cluster Manager
+			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+
+			//Delete apps from app directory when app download is complete
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), cm.Kind, deployment.GetName(), enterpriseApi.ScopeCluster, appSourceNameIdxc, testenv.AppInfo[appList[0]]["filename"])
+			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
+			Expect(err).To(Succeed(), "Unable to delete file on pod")
+
+			// Ensure Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//######### VERIFICATIONS #############
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appList, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+
 		})
 	})
 })

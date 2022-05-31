@@ -603,7 +603,13 @@ func DumpGetTopPods(ns string) []string {
 }
 
 // GetOperatorPodName returns name of operator pod in the namespace
-func GetOperatorPodName(ns string) string {
+func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
+	var ns string
+	if testcaseEnvInst.clusterWideOperator != "true" {
+		ns = testcaseEnvInst.GetName()
+	} else {
+		ns = "splunk-operator"
+	}
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods string
 	if err != nil {
@@ -881,12 +887,25 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 	} else {
 		ns = "splunk-operator"
 	}
-	podName = GetOperatorPodName(ns)
+	podName = GetOperatorPodName(testcaseEnvInst)
 
 	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {
 		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
 		return err
+	}
+	return nil
+}
+
+// DeleteFilesOnOperatorPod Delete files on Operator Pod
+func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, filenames []string) error {
+	for _, filepath := range filenames {
+		cmd := fmt.Sprintf("rm -f %s", filepath)
+		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+		if err != nil {
+			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
+			return err
+		}
 	}
 	return nil
 }
