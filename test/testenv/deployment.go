@@ -111,12 +111,10 @@ func (d *Deployment) Teardown() error {
 
 	var err error
 	var output []byte
-	var podName string
+	podName := GetOperatorPodName(d.testenv)
 	if d.testenv.clusterWideOperator != "true" {
-		podName = GetOperatorPodName(d.testenv.GetName())
 		output, err = exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 	} else {
-		podName = GetOperatorPodName("splunk-operator")
 		output, err = exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
 	}
 	if err != nil {
