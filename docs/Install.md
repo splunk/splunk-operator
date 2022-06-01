@@ -12,7 +12,9 @@ wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/r
 
 ## Default Installation
 
-Based on the file used Splunk Operator can be installed cluster-wide or namespace scoped. By default operator will be installed in `splunk-operator` namespace. By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
+Based on the file used Splunk Operator can be installed cluster-wide or namespace scoped. By default operator will be installed in `splunk-operator` namespace. User can change the default installation namespace by editing the manifest file `splunk-operator-namespace.yaml` or `splunk-operator-cluster.yaml`
+
+By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
 wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-cluster.yaml
