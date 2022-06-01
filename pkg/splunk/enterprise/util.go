@@ -1952,10 +1952,11 @@ func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeployment
 // updateCRStatus fetches the latest CR, and on top of that, updates latest status
 func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, dirtyCR splcommon.MetaObject) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("name", dirtyCR.GetName(), "namespace", dirtyCR.GetNamespace())
+	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("name", dirtyCR.GetName(), "namespace", dirtyCR.GetNamespace(), "old cr version", dirtyCR.GetResourceVersion())
 
 	var retryCnt int
 	for retryCnt = 0; retryCnt < maxRetryCountForCRStatusUpdate; retryCnt++ {
+		scopedLog.Info("Retrying: ", "count", retryCnt)
 		cr, err := fetchCurrentCRWithStatusUpdate(ctx, client, dirtyCR)
 		if err != nil {
 			scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
@@ -1964,6 +1965,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, dirt
 
 		err = client.Status().Update(ctx, cr)
 		if err == nil {
+			scopedLog.Info("Status update successful", "new cr version", cr.GetResourceVersion(), "reTry count", retryCnt)
 			break
 		}
 		time.Sleep(time.Duration(retryCnt) * 10 * time.Millisecond)
