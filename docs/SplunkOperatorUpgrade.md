@@ -49,9 +49,9 @@ If a Splunk Operator release changes the custom resource (CRD) API version, the 
 ​
 If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image.
 
-## Steps for upgrade from 1.0.5 to 2.0.0
+## Steps to upgrade from 1.0.5 to 2.0.0
 
-Upgrading the Splunk Operator from 1.0.5 or older version to Version 2.0.0 is a new installation rather than an upgrade from the current operator. The older Splunk Operator must be cleaned up before installing the new version. Script [upgrade-to-1.1.0.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/upgrade-to-1.1.0.sh) helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the 2.0.0 manifest file. The script performs the following steps
+Upgrading the Splunk Operator from 1.0.5 or older version to Version 2.0.0 is a new installation rather than an upgrade from the current operator. The older Splunk Operator must be cleaned up before installing the new version. Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the 2.0.0 manifest file. The script performs the following steps
 
 * Backup of all the operator resources within the namespace like
 ** service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
@@ -62,20 +62,20 @@ Upgrading the Splunk Operator from 1.0.5 or older version to Version 2.0.0 is a 
 1. Download the upgrade script.
 
 ```
-wget -O upgrade-to-1.1.0.sh https://github.com/splunk/splunk-operator/releases/download/1.1.0/upgrade-to-1.1.0.sh
+wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh
 ```
 
 2. Download the latest Splunk Operator installation yaml file.
 
 ```
-wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
+wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-install.yaml
 ```
 
 3. (Optional) Review the file and update it with your specific customizations used during your install. 
 
 4. Upgrade the Splunk Operator.
 
-Set KUBECONFIG and run [upgrade-to-1.1.0.sh](https://github.com/splunk/splunk-operator/releases/download/1.1.0/upgrade-to-1.1.0.sh) script with the following mandatory arguments
+Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) script with the following mandatory arguments
 
 * `current_namespace` current namespace where operator is installed
 * `manifest_file`: path to 1.1.0 Splunk Operator manifest file
@@ -83,7 +83,7 @@ Set KUBECONFIG and run [upgrade-to-1.1.0.sh](https://github.com/splunk/splunk-op
 ### Example
 
 ```bash
->upgrade-to-1.1.0.sh --current_namespace=splunk-operator --manifest_file=splunk-operator-install.yaml
+>operator-upgrade.sh --current_namespace=splunk-operator --manifest_file=splunk-operator-install.yaml
 ```
 
 Note: This script can be run from `Mac` or `Linux` system. To run this script on `Windows`, use `cygwin`.
