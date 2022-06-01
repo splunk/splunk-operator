@@ -12,7 +12,7 @@ wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/r
 
 ## Default Installation
 
-By default operator will be installed in `splunk-operator` namespace and based on the file used it can be installed cluster-wide or namespace scoped. By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
+Based on the file used Splunk Operator can be installed cluster-wide or namespace scoped. By default operator will be installed in `splunk-operator` namespace. By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
 wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-cluster.yaml
@@ -21,7 +21,7 @@ kubectl apply -f splunk-operator-cluster.yaml
 
 ## Install operator to watch multiple namespaces
 
-If Splunk Operator is installed clusterwide  and user wants to manage multiple namespaces, they must add the namespaces to the WATCH_NAMESPACE field with each namespace separated by a comma (,).  Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operator` namespace, set `WATCH_NAMESPACE` field to the namespace that needs to be monitored by Splunk Operator
+If Splunk Operator is installed clusterwide and user wants to manage multiple namespaces, they must add the namespaces to the WATCH_NAMESPACE field with each namespace separated by a comma (,).  Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operator` namespace, set `WATCH_NAMESPACE` field to the namespace that needs to be monitored by Splunk Operator
 
 ```yaml
 ...
