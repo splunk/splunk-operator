@@ -704,7 +704,7 @@ spec:
 While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseMaster`, you need to add `licenseMasterRef` only to the `ClusterMaster` spec as follows:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
