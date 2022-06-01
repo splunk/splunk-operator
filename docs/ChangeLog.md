@@ -6,7 +6,7 @@
 
 * Changes to App Framework
 
-* Operator SDK upgraded to version 1.18.0 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
+* Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
 
 * Functional QA automation enhancements
 
