@@ -1,5 +1,20 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.0.0 (Draft)
+
+* This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* Changes to App Framework
+
+* Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
+
+* Functional QA automation enhancements
+
+* Documentation Updates
+
+
+
+  
 ## 1.1.0 (2022-04-12)
 
 * This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
