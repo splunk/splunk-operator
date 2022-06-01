@@ -54,11 +54,12 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMast
 
 #### Cluster Manager
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -73,11 +74,12 @@ The Splunk Operator also controls the upgrade cycle, and implements the recommen
 This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. The monitoring console pod does not need to be running; the name can be predefined and the pod started later. To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -89,11 +91,12 @@ The passwords for the instance are generated automatically. To review the passwo
 
 #### Indexer cluster peers
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -123,11 +126,12 @@ splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 If you want to add more indexers as cluster peers, update your `IndexerCluster` CR and define the `replicas` parameter:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -176,11 +180,12 @@ indexercluster.enterprise.splunk.com/example scaled
 You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
 metadata:
   name: idc-example
+  namespace: splunk-operator
 spec:
   scaleTargetRef:
     apiVersion: enterprise.splunk.com/v3
@@ -202,11 +207,12 @@ idc-example   IndexerCluster/example   16%/50%   5         10        5          
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterMasterRef` parameter:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: single
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -235,11 +241,12 @@ splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 Having a separate CR for cluster manager allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -273,11 +280,12 @@ The Monitoring Console provides detailed topology and performance information ab
 
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -294,11 +302,12 @@ You can create a search head cluster that is configured to communicate with your
 and adding the `clusterMasterRef` parameter. 
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -312,11 +321,12 @@ EOF
 This will automatically create a deployer with 3 search heads clustered together. Search head clusters require a minimum of 3 members. This example includes the `monitoringConsoleRef` parameter and name used to define a monitoring console (MC) pod.  To start the monitoring console pod, see [Monitoring Console](#monitoring-console), or use the example below:
 
 ```yaml
-cat <<EOF | kubectl apply -n splunk-operator -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -383,11 +393,11 @@ As these examples demonstrate, the Splunk Operator makes it easy to create and m
 To remove the resources created from this example, run:
 
 ```
-kubectl delete standalone single
-kubectl delete shc example
-kubectl delete idc example
-kubectl delete mc example_mc
-kubectl delete clustermaster cm
+kubectl delete -n splunk-opertaor standalone single
+kubectl delete -n splunk-opertaor shc example
+kubectl delete -n splunk-opertaor idc example
+kubectl delete -n splunk-opertaor mc example_mc
+kubectl delete -n splunk-opertaor clustermaster cm
 ```
 
 ## SmartStore Index Management
@@ -473,7 +483,7 @@ For example, let's say you want to store two of your apps (`app1.tgz` and
 `app2.tgz`) in a ConfigMap named `splunk-apps`:
 
 ```
-kubectl create configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
+kubectl create -n splunk-operator configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
 ```
 
 You can have the Splunk Operator install these automatically using something
@@ -710,6 +720,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example-idc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -914,7 +925,7 @@ kind: Secret
 metadata:
   creationTimestamp: "2020-10-07T19:42:07Z"
   name: splunk-default-secret
-  namespace: default
+  namespace: splunk-operator
   ownerReferences:
   - apiVersion: enterprise.splunk.com/v3
     controller: false
