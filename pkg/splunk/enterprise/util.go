@@ -1966,7 +1966,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, dirt
 		err = client.Status().Update(ctx, cr)
 		if err == nil {
 			scopedLog.Info("Status update successful", "new cr version", cr.GetResourceVersion(), "reTry count", retryCnt)
-			time.Sleep(time.Duration(10 * time.Microsecond))
+			time.Sleep(time.Duration(10 * time.Millisecond))
 			break
 		}
 		time.Sleep(time.Duration(retryCnt) * 10 * time.Millisecond)
