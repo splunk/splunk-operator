@@ -55,8 +55,6 @@ var operatorResourceTracker *globalResourceTracker = nil
 
 // initialize operator level context
 func init() {
-	fmt.Printf("init is called here\n")
-	defer fmt.Printf("init ends here\n")
 	initGlobalResourceTracker()
 }
 

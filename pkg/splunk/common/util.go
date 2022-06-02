@@ -29,16 +29,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func init() {
 	// seed random number generator for splunk secret generation
 	rand.Seed(time.Now().UnixNano())
 }
-
-// kubernetes logger used by splunk.reconcile package
-//var log = logf.Log.WithName("splunk.reconcile")
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
 func AsOwner(cr MetaObject, isController bool) metav1.OwnerReference {
