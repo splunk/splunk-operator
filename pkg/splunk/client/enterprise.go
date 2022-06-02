@@ -27,11 +27,7 @@ import (
 	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-// kubernetes logger used by splunk.enterprise package
-//var log = logf.Log.WithName("splunk.client")
 
 // SplunkHTTPClient defines the interface used by SplunkClient.
 // It is used to mock alternative implementations used for testing.
