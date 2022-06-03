@@ -45,7 +45,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
+	scopedLog := reqLogger.WithName("ApplyMonitoringConsole").WithValues("cr version", cr.GetResourceVersion())
+	scopedLog.Info("Entering reconcile")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {

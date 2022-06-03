@@ -44,7 +44,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyClusterManager")
+	scopedLog := reqLogger.WithName("ApplyClusterManager").WithValues("cr version", cr.GetResourceVersion())
+	scopedLog.Info("Entering reconcile")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {
