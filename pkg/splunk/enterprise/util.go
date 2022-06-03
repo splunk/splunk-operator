@@ -639,13 +639,13 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 //  setupInitContainer modifies the podTemplateSpec object
 func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
-	var volMntName string
+	var volName string
 
 	// Populate the volume mount name based on volume type(eph, pvc) and use /opt/splk/etc for init container
 	if isEtcVolEph {
-		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, splcommon.EtcVolumeStorage)
+		volName = getSplunkVolumeName(splcommon.K8SVolumeTypeEph, splcommon.SplunkEtcVolume)
 	} else {
-		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypePvc, splcommon.EtcVolumeStorage)
+		volName = getSplunkVolumeName(splcommon.K8SVolumeTypePvc, splcommon.SplunkEtcVolume)
 	}
 
 	containerSpec := corev1.Container{
@@ -655,7 +655,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 		Command: []string{"bash", "-c", commandOnContainer},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: volMntName, MountPath: splcommon.SplunkSmartStoreInitContMount},
+			{Name: volName, MountPath: splcommon.SplunkSmartStoreInitContMount},
 		},
 
 		Resources: corev1.ResourceRequirements{
@@ -1706,6 +1706,17 @@ func validateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerCli
 	}
 	//if the sts doesn't exists no need for any change
 	return nil
+}
+
+// getSplunkVolumeName returns the name of Splunk volume based on
+// the type of k8s volume(pvc or ephemeral) & splunk volume type (etc or var)
+func getSplunkVolumeName(k8sVolumeType string, splunkVolumeType string) string {
+	return fmt.Sprintf(splcommon.SplunkVolumeNamePrefix, k8sVolumeType, splunkVolumeType)
+}
+
+// getSplunkVolumeMountPath returns the volume mount path based on splunk volume type(etc or var)
+func getSplunkVolumeMountPath(splunkVolumeType string) string {
+	return fmt.Sprintf(splcommon.SplunkVolumeMountPathPrefix, splunkVolumeType)
 }
 
 // setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
