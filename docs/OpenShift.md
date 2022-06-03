@@ -1,7 +1,8 @@
 # Red Hat OpenShift Configuration
 
 The Splunk Operator will always start Splunk Enterprise containers using
-a specific, unprivileged `splunk(41812)` user and group to allow write access to Kubernetes PersistentVolumes. This follows best security practices, 
+a specific, unprivileged `splunk(41812)` user and group to allow write access
+to Kubernetes PersistentVolumes. This follows best security practices,
 which helps prevent any malicious actor from escalating access outside of the
 container and compromising the host. For more information, please see the
 Splunk Enterprise container's
