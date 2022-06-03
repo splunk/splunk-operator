@@ -20,16 +20,16 @@ import (
 	"fmt"
 	"reflect"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
@@ -74,7 +74,7 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 		// a pod recycle unnecessarily. To avoid the same, sort the slices during the
 		// statefulSet creation.
 		// Note: During the update scenario below, MergePodUpdates takes care of sorting.
-		SortStatefulSetSlices(&revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
+		SortStatefulSetSlices(ctx, &revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
 
 		// no StatefulSet exists -> just create a new one
 		err = splutil.CreateResource(ctx, c, revised)
@@ -84,7 +84,7 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 	// found an existing StatefulSet
 
 	// check for changes in Pod template
-	hasUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
 	*revised = current // caller expects that object passed represents latest state
 
 	// only update if there are material differences, as determined by comparison function
@@ -108,7 +108,8 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
 func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, mgr splcommon.StatefulSetPodManager, desiredReplicas int32) (enterpriseApi.Phase, error) {
-	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
@@ -172,7 +173,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
 				return enterpriseApi.PhaseError, err
 			}
-			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			scopedLog.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
 			err = c.Delete(ctx, &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
@@ -330,16 +331,23 @@ func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerRefer
 	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID())
 }
 
-// IsStatefulSetScalingUp checks if we are currently scaling up
-func IsStatefulSetScalingUp(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (bool, error) {
-	scopedLog := log.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down
+func IsStatefulSetScalingUpOrDown(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
 	current, err := GetStatefulSetByName(ctx, client, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
-		return false, err
+		return enterpriseApi.StatefulSetNotScaling, err
 	}
 
-	return *current.Spec.Replicas < desiredReplicas, nil
+	if *current.Spec.Replicas < desiredReplicas {
+		return enterpriseApi.StatefulSetScalingUp, nil
+	} else if *current.Spec.Replicas > desiredReplicas {
+		return enterpriseApi.StatefulSetScalingDown, nil
+	}
+
+	return enterpriseApi.StatefulSetNotScaling, nil
 }

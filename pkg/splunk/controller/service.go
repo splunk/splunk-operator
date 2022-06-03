@@ -18,17 +18,18 @@ package controller
 import (
 	"context"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyService creates or updates a Kubernetes Service
 func ApplyService(ctx context.Context, client splcommon.ControllerClient, revised *corev1.Service) error {
-	scopedLog := log.WithName("ApplyService").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyService").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
 
@@ -43,7 +44,7 @@ func ApplyService(ctx context.Context, client splcommon.ControllerClient, revise
 	}
 
 	// check for changes in service template
-	hasUpdates := MergeServiceSpecUpdates(&current.Spec, &revised.Spec, current.GetObjectMeta().GetName())
+	hasUpdates := MergeServiceSpecUpdates(ctx, &current.Spec, &revised.Spec, current.GetObjectMeta().GetName())
 	*revised = current // caller expects that object passed represents latest state
 
 	// only update if there are material differences, as determined by comparison function

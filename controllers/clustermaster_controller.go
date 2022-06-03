@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -100,7 +101,12 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return enterprise.ApplyClusterManager(ctx, r.Client, instance)
+	return ApplyClusterManager(ctx, r.Client, instance)
+}
+
+// ApplyClusterManager adding to handle unit test case
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
+	return enterprise.ApplyClusterManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

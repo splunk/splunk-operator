@@ -19,17 +19,19 @@ import (
 	"context"
 	"fmt"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyDeployment creates or updates a Kubernetes Deployment
 func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.Deployment) (enterpriseApi.Phase, error) {
+	log := log.FromContext(ctx)
 	scopedLog := log.WithName("ApplyDeployment").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
 		"namespace", revised.GetObjectMeta().GetNamespace())
@@ -47,7 +49,7 @@ func ApplyDeployment(ctx context.Context, c splcommon.ControllerClient, revised 
 	// found an existing Deployment
 
 	// check for changes in Pod template
-	hasUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
 	desiredReplicas := *revised.Spec.Replicas
 	*revised = current // caller expects that object passed represents latest state
 
