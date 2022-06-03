@@ -22,24 +22,25 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // NewMockAWSS3Client returns an AWS S3 mock client for testing
 // Ideally this function should live in test package but due to
 // dependency of some variables in client package and to avoid
 // cyclic dependency this has to live here.
-func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
-	region := GetRegion(endpoint)
 
 	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
-		err = fmt.Errorf("Failed to create an AWS S3 client")
+		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
 	}
 
 	s3SplunkClient = cl.(SplunkAWSS3Client)
+	downloader := spltest.MockAWSDownloadClient{}
 
 	return &AWSS3Client{
 		Region:             region,
@@ -48,16 +49,41 @@ func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID stri
 		AWSSecretAccessKey: secretAccessKey,
 		Prefix:             prefix,
 		StartAfter:         startAfter,
-		Endpoint:           endpoint,
 		Client:             s3SplunkClient,
+		Downloader:         downloader,
+	}, nil
+}
+
+// NewMockMinioS3Client is mock client for testing minio client
+func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+	var s3SplunkClient SplunkMinioClient
+	var err error
+
+	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(SplunkMinioClient)
+
+	return &MinioClient{
+		BucketName:        bucketName,
+		S3AccessKeyID:     accessKeyID,
+		S3SecretAccessKey: secretAccessKey,
+		Prefix:            prefix,
+		StartAfter:        startAfter,
+		Endpoint:          endpoint,
+		Client:            s3SplunkClient,
 	}, nil
 }
 
 // ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(s3Response S3Response) (spltest.MockAWSS3Client, error) {
-	scopedLog := log.WithName("ConvertS3Response")
+func ConvertS3Response(ctx context.Context, s3Response S3Response) (spltest.MockS3Client, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ConvertS3Response")
 
-	var mockResponse spltest.MockAWSS3Client
+	var mockResponse spltest.MockS3Client
 
 	tmp, err := json.Marshal(s3Response)
 	if err != nil {
@@ -82,17 +108,18 @@ func CheckIfVolumeExists(volumeList []enterpriseApi.VolumeSpec, volName string) 
 		}
 	}
 
-	return -1, fmt.Errorf("Volume: %s, doesn't exist", volName)
+	return -1, fmt.Errorf("volume: %s, doesn't exist", volName)
 }
 
 // GetAppSrcVolume gets the volume defintion for an app source
-func GetAppSrcVolume(appSource enterpriseApi.AppSourceSpec, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (enterpriseApi.VolumeSpec, error) {
+func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (enterpriseApi.VolumeSpec, error) {
 	var volName string
 	var index int
 	var err error
 	var vol enterpriseApi.VolumeSpec
 
-	scopedLog := log.WithName("GetAppSrcVolume")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetAppSrcVolume")
 
 	// get the volume spec from the volume name
 	if appSource.VolName != "" {

@@ -58,6 +58,7 @@ type PodDetailsStruct struct {
 		PodIPs []struct {
 			IP string `json:"ip"`
 		} `json:"podIPs"`
+		StartTime string `json:"startTime"`
 	} `json:"status"`
 }
 
@@ -710,6 +711,7 @@ func VerifyPVC(deployment *Deployment, testenvInstance *TestCaseEnv, ns string, 
 	gomega.Eventually(func() bool {
 		pvcExists := false
 		pvcsList := DumpGetPvcs(testenvInstance.GetName())
+
 		for i := 0; i < len(pvcsList); i++ {
 			if strings.EqualFold(pvcsList[i], pvcName) {
 				pvcExists = true
@@ -777,11 +779,12 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
-func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, checkAppDirectory bool, clusterWideInstall bool) {
+func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, checkAppDirectory bool, scope string) {
+
 	for _, podName := range pods {
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
-		if clusterWideInstall {
+		if scope == enterpriseApi.ScopeCluster {
 			if strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
 			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
@@ -812,17 +815,110 @@ func VerifyAppsInFolder(ctx context.Context, deployment *Deployment, testenvInst
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
-// VerifyAppsDownloadedByInitContainer verify that apps are downloaded by init container
-func VerifyAppsDownloadedByInitContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+// VerifyAppsDownloadedOnContainer verify that apps are downloaded by init container
+func VerifyAppsDownloadedOnContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+
 	for _, podName := range pods {
 		appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, false)
 		gomega.Expect(err).To(gomega.Succeed(), "Unable to get apps on pod", "Pod", podName)
 		for _, app := range apps {
 			found := CheckStringInSlice(appList, app)
-			testenvInstance.Log.Info("App status", "Pod", podName, "App", app, "Status", found)
+			testenvInstance.Log.Info("Check App files present on the pod", "Pod Name", podName, "App Name", app, "directory", path, "Status", found)
 			gomega.Expect(found).Should(gomega.Equal(true))
 		}
 	}
+}
+
+// VerifyAppsPackageDeletedOnOperatorContainer verify that apps are deleted by container
+func VerifyAppsPackageDeletedOnOperatorContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+	for _, podName := range pods {
+		for _, app := range apps {
+			gomega.Eventually(func() bool {
+				appList, err := GetOperatorDirsOrFilesInPath(ctx, deployment, podName, path, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Unable to get apps on operator pod", "Pod", podName)
+					return true
+				}
+				found := CheckStringInSlice(appList, app+"_")
+				testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
+				return found
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+		}
+	}
+}
+
+// VerifyAppsPackageDeletedOnContainer verify that apps are deleted by container
+func VerifyAppsPackageDeletedOnContainer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, pods []string, apps []string, path string) {
+	for _, podName := range pods {
+		for _, app := range apps {
+			gomega.Eventually(func() bool {
+				appList, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, false)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Unable to get apps on pod", "Pod", podName)
+					return true
+				}
+				found := CheckStringInSlice(appList, app+"_")
+				testenvInstance.Log.Info(fmt.Sprintf("Check App package deleted on the pod %s. App Name %s. Directory %s, Status %t", podName, app, path, found))
+				return found
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(false))
+		}
+	}
+}
+
+// VerifyAppListPhase verify given app Phase has completed for the given list of apps for given CR Kind
+func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, phase enterpriseApi.AppPhaseType, appList []string) {
+	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
+		for _, appName := range appList {
+			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase not to be %s", crKind, name, appName, phase))
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return phase
+				}
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(phase))
+		}
+	} else {
+		for _, appName := range appList {
+			testenvInstance.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
+			gomega.Eventually(func() enterpriseApi.AppPhaseType {
+				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+				if err != nil {
+					testenvInstance.Log.Error(err, "Failed to get app deployment info")
+					return enterpriseApi.PhaseDownload
+				}
+				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
+				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
+					testenvInstance.Log.Info("Phase Install Not Complete.", "Phase Found", appDeploymentInfo.PhaseInfo.Phase, "Phase Status Found", appDeploymentInfo.PhaseInfo.Status)
+					return enterpriseApi.PhaseDownload
+				}
+				return appDeploymentInfo.PhaseInfo.Phase
+			}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+		}
+	}
+}
+
+// VerifyAppState verify given app state is in between states passed as parameters, i.e when Status is between 101 and 303 we would pass enterpriseApi.AppPkgInstallComplete and enterpriseApi.AppPkgPodCopyComplete
+func VerifyAppState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string, appStateFinal enterpriseApi.AppPhaseStatusType, appStateInitial enterpriseApi.AppPhaseStatusType) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeNumerically("~", appStateFinal, appStateInitial)) //Check status value is between appStateInitial and appStateFinal
+	}
+}
+
+// WaitForAppInstall waits until an app is correctly installed (having status equal to 303)
+func WaitForAppInstall(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {
+	for _, appName := range appList {
+		gomega.Eventually(func() enterpriseApi.AppPhaseStatusType {
+			appDeploymentInfo, _ := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+			return appDeploymentInfo.PhaseInfo.Status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.BeEquivalentTo(enterpriseApi.AppPkgInstallComplete))
+	}
+
 }
 
 // VerifyPodsInMCConfigMap checks if given pod names are present in given KEY of given MC's Config Map
@@ -902,4 +998,54 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 		}
 		return true
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyNoPodReset verify that no pod reset during App install using phase3 framework
+func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
+	// Get current Age on all splunk pods and compare with previous
+	currentSplunkPodAge := GetPodsStartTime(ns)
+	for podName, currentpodAge := range currentSplunkPodAge {
+		// Only compare if the pod was present in previous pod iteration
+		if _, ok := podStartTimeMap[podName]; ok {
+			// Check if pod needs to be skipped
+			if !CheckStringInSlice(podToSkip, podName) {
+				podReset := currentpodAge.Equal(podStartTimeMap[podName])
+				gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+			}
+		}
+	}
+}
+
+// WaitForSplunkPodCleanup Wait for cleanup to happend
+func WaitForSplunkPodCleanup(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	gomega.Eventually(func() int {
+		testenvInstance.Log.Info("Waiting for Splunk Pods to be deleted before running test")
+		return len(DumpGetPods(testenvInstance.GetName()))
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(0))
+}
+
+// WaitforAppInstallState Wait for App to reach state specified in conf file
+func WaitforAppInstallState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, podNames []string, ns string, appName string, newState string, clusterWideInstall bool) {
+	testenvInstance.Log.Info("Retrieve App state on pod")
+	for _, podName := range podNames {
+		gomega.Eventually(func() string {
+			status, _, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
+			logf.Log.Info("App details", "App", appName, "Status", status, "Error", err, "podName", podName)
+			return status
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(strings.ToUpper(newState)))
+	}
+}
+
+// VerifyAppRepoState verify given app repo state is equal to given value for app for given CR Kind
+func VerifyAppRepoState(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, repoValue int, appName string) {
+	testenvInstance.Log.Info("Check for app repo state in CR")
+	gomega.Eventually(func() int {
+		appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get app deployment info")
+			return 0
+		}
+		testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected repo value %d", crKind, name, appName, repoValue), "Actual Value", appDeploymentInfo.RepoState, "App State", appDeploymentInfo)
+		return int(appDeploymentInfo.RepoState)
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(repoValue))
 }

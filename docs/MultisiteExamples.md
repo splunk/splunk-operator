@@ -3,11 +3,12 @@
 This document provides examples to configure a multisite cluster using the splunk-operator.
 
 
-- [Multisite Indexer Clusters in Kubernetes](#multisite-indexer-clusters-in-kubernetes)
-- [Multipart IndexerCluster](#multipart-indexercluster)
-    - [Deploy the cluster-manager](#deploy-the-cluster-manager)
-    - [Deploy the indexer sites](#deploy-the-indexer-sites)
-- [Connecting a search-head cluster to a multisite indexer-cluster](#connecting-a-search-head-cluster-to-a-multisite-indexer-cluster)
+- [Configuring Splunk Enterprise Multisite Deployments](#configuring-splunk-enterprise-multisite-deployments)
+  - [Multisite Indexer Clusters in Kubernetes](#multisite-indexer-clusters-in-kubernetes)
+  - [Multipart IndexerCluster](#multipart-indexercluster)
+      - [Deploy the cluster-manager](#deploy-the-cluster-manager)
+      - [Deploy the indexer sites](#deploy-the-indexer-sites)
+  - [Connecting a search-head cluster to a multisite indexer-cluster](#connecting-a-search-head-cluster-to-a-multisite-indexer-cluster)
 
 Please refer to the [Configuring Splunk Enterprise Deployments Guide](Example.md)
 for more information and examples about deploying the different Splunk resources
@@ -47,7 +48,7 @@ Limitation: all the IndexerCluster resources must be located in the same namespa
 Note: the image version is defined in these resources as this allows to control the upgrade cycle 
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
@@ -86,7 +87,7 @@ EOF
 #### Deploy the indexer sites
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
@@ -134,7 +135,7 @@ Additional ansible default parameters must be set to activate multisite:
 (https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/DeploymultisiteSHC#Integrate_a_search_head_cluster_with_a_multisite_indexer_cluster))
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
 apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster

@@ -16,6 +16,7 @@
 package controller
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -24,24 +25,25 @@ import (
 )
 
 func TestMergePodUpdates(t *testing.T) {
+	ctx := context.TODO()
 	var current, revised corev1.PodTemplateSpec
 	name := "test-pod"
 	matcher := func() bool { return false }
 
 	podUpdateTester := func(param string) {
-		if !MergePodUpdates(&current, &revised, name) {
+		if !MergePodUpdates(ctx, &current, &revised, name) {
 			t.Errorf("MergePodUpdates() returned %t; want %t", false, true)
 		}
 		if !matcher() {
 			t.Errorf("MergePodUpdates() to detect change: %s", param)
 		}
-		if MergePodUpdates(&current, &revised, name) {
+		if MergePodUpdates(ctx, &current, &revised, name) {
 			t.Errorf("MergePodUpdates() re-run returned %t; want %t", true, false)
 		}
 	}
 
 	// should be no updates to merge if they are empty
-	if MergePodUpdates(&current, &revised, name) {
+	if MergePodUpdates(ctx, &current, &revised, name) {
 		t.Errorf("MergePodUpdates() returned %t; want %t", true, false)
 	}
 
@@ -163,24 +165,25 @@ func TestMergePodUpdates(t *testing.T) {
 }
 
 func TestMergeServiceSpecUpdates(t *testing.T) {
+	ctx := context.TODO()
 	var current, revised corev1.ServiceSpec
 	name := "test-svc"
 	matcher := func() bool { return false }
 
 	svcUpdateTester := func(param string) {
-		if !MergeServiceSpecUpdates(&current, &revised, name) {
+		if !MergeServiceSpecUpdates(ctx, &current, &revised, name) {
 			t.Errorf("MergeServiceSpecUpdates() returned %t; want %t", false, true)
 		}
 		if !matcher() {
 			t.Errorf("MergeServiceSpecUpdates() to detect change: %s", param)
 		}
-		if MergeServiceSpecUpdates(&current, &revised, name) {
+		if MergeServiceSpecUpdates(ctx, &current, &revised, name) {
 			t.Errorf("MergeServiceSpecUpdates() re-run returned %t; want %t", true, false)
 		}
 	}
 
 	// should be no updates to merge if they are empty
-	if MergeServiceSpecUpdates(&current, &revised, name) {
+	if MergeServiceSpecUpdates(ctx, &current, &revised, name) {
 		t.Errorf("MergeServiceSpecUpdates() returned %t; want %t", true, false)
 	}
 
@@ -224,11 +227,12 @@ func TestMergeServiceSpecUpdates(t *testing.T) {
 }
 
 func TestSortStatefulSetSlices(t *testing.T) {
+	ctx := context.TODO()
 	var unsorted, sorted corev1.PodSpec
 	matcher := func() bool { return false }
 
 	sortTester := func(sortSlice string) {
-		SortStatefulSetSlices(&unsorted, sortSlice)
+		SortStatefulSetSlices(ctx, &unsorted, sortSlice)
 		if !matcher() {
 			t.Errorf("SortStatefulSetSlices() didn't sort %s", sortSlice)
 		}

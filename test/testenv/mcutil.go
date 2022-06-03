@@ -30,7 +30,7 @@ import (
 
 // getMCPod Get MC Pod String
 func getMCPod(ns string) string {
-	mcPod := fmt.Sprintf(MonitoringConsolePod, ns, 0)
+	mcPod := fmt.Sprintf(MonitoringConsolePod, ns)
 	output, err := exec.Command("kubectl", "get", "pod", "-n", ns, mcPod).Output()
 	if err != nil {
 		cmd := fmt.Sprintf("kubectl get pods -n %s %s", ns, mcPod)
@@ -77,7 +77,7 @@ func CheckMCPodReady(ns string) bool {
 
 // GetConfiguredPeers get list of Peers Configured on Montioring Console
 func GetConfiguredPeers(ns string, mcName string) []string {
-	podName := fmt.Sprintf(MonitoringConsolePod, mcName, 0)
+	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"

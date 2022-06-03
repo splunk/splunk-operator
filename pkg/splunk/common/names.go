@@ -90,7 +90,14 @@ const (
 
 	// MaxAppsRepoPollInterval sets the polling interval to one day
 	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
+
+	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
+	DefaultMaxConcurrentAppDownloads uint64 = 5
 )
+
+// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
+// sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
+var AppDownloadVolume string = "/opt/splunk/appframework/"
 
 // GetVersionedSecretName returns a versioned secret name
 func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {

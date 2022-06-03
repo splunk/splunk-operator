@@ -18,12 +18,12 @@ package controller
 import (
 	"context"
 	"errors"
-	"reflect"
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -36,7 +36,8 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 		return nil, errors.New(splcommon.InvalidSecretObjectError)
 	}
 
-	scopedLog := log.WithName("ApplySecret").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplySecret").WithValues(
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
