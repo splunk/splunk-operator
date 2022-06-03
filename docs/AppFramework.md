@@ -6,7 +6,7 @@ The Splunk Operator provides support for Splunk app and add-on deployment using 
 
 Utilizing the App Framework requires:
 
-* An Amazon S3 or S3-API-compliant remote object storage location. The App framework requires read-only access to the path used to host the apps.
+* An Amazon S3 or S3-API-compliant remote object storage location. The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket
 * The remote object storage credentials provided as a kubernetes secret, or in an IAM role.
 * Splunk apps and add-ons in a .tgz or .spl archive format.  
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
