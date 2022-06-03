@@ -59,6 +59,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -78,6 +79,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -94,6 +96,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -128,6 +131,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -181,6 +185,7 @@ apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
 metadata:
   name: idc-example
+  namespace: splunk-operator
 spec:
   scaleTargetRef:
     apiVersion: enterprise.splunk.com/v3
@@ -207,6 +212,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: single
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -240,6 +246,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -278,6 +285,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -299,6 +307,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -317,6 +326,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
   name: example_mc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
@@ -383,11 +393,11 @@ As these examples demonstrate, the Splunk Operator makes it easy to create and m
 To remove the resources created from this example, run:
 
 ```
-kubectl delete standalone single
-kubectl delete shc example
-kubectl delete idc example
-kubectl delete mc example_mc
-kubectl delete clustermaster cm
+kubectl delete -n splunk-opertaor standalone single
+kubectl delete -n splunk-opertaor shc example
+kubectl delete -n splunk-opertaor idc example
+kubectl delete -n splunk-opertaor mc example_mc
+kubectl delete -n splunk-opertaor clustermaster cm
 ```
 
 ## SmartStore Index Management
@@ -416,6 +426,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -472,7 +483,7 @@ For example, let's say you want to store two of your apps (`app1.tgz` and
 `app2.tgz`) in a ConfigMap named `splunk-apps`:
 
 ```
-kubectl create configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
+kubectl create -n splunk-operator configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
 ```
 
 You can have the Splunk Operator install these automatically using something
@@ -487,6 +498,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -510,6 +522,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: cmexample
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -644,6 +657,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -677,6 +691,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -694,6 +709,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
   name: example-cm
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -704,6 +720,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
   name: example-idc
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -719,6 +736,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -792,6 +810,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -861,6 +880,7 @@ apiVersion: enterprise.splunk.com/v3
 kind: SearchHeadCluster
 metadata:
   name: example
+  namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -905,7 +925,7 @@ kind: Secret
 metadata:
   creationTimestamp: "2020-10-07T19:42:07Z"
   name: splunk-default-secret
-  namespace: default
+  namespace: splunk-operator
   ownerReferences:
   - apiVersion: enterprise.splunk.com/v3
     controller: false

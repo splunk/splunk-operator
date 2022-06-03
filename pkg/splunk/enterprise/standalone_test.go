@@ -17,12 +17,18 @@ package enterprise
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -30,6 +36,8 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 func TestApplyStandalone(t *testing.T) {
@@ -43,7 +51,6 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
@@ -58,7 +65,6 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
@@ -121,7 +127,6 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
@@ -142,7 +147,6 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-standalone-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
-		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-app-list"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
@@ -248,12 +252,11 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 		}
 		configTester(t, "getStandaloneStatefulSet()", f, want)
 	}
-
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-standalone-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"mnt-splunk-pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"mnt-splunk-pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-standalone-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"mnt-splunk-pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"mnt-splunk-pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"mnt-splunk-pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = true
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = true
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-eph-etc","emptyDir":{}},{"name":"mnt-splunk-eph-var","emptyDir":{}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-standalone-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"mnt-splunk-eph-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-eph-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-standalone","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"standalone","app.kubernetes.io/instance":"splunk-stack1-standalone","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"standalone","app.kubernetes.io/part-of":"splunk-stack1-standalone"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-eph-etc","emptyDir":{}},{"name":"mnt-splunk-eph-var","emptyDir":{}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-standalone-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"mnt-splunk-eph-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-eph-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-standalone"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"serviceName":"splunk-stack1-standalone-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
@@ -356,11 +359,16 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 }
 
 func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
+	initGlobalResourceTracker()
+
 	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
 			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
@@ -405,7 +413,16 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyStandalone(context.Background(), client, &cr)
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyStandalone(ctx, client, &cr)
+
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
@@ -418,6 +435,9 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 			Name:      "standalone",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
 		Spec: enterpriseApi.StandaloneSpec{
 			Replicas: 1,
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
@@ -461,14 +481,22 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyStandalone(context.Background(), client, &cr)
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+	_, err = ApplyStandalone(ctx, client, &cr)
+
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
 
 	// now scale up
 	cr.Spec.Replicas = 2
-	_, err = ApplyStandalone(context.Background(), client, &cr)
+	_, err = ApplyStandalone(ctx, client, &cr)
 	if err != nil {
 		t.Errorf("ApplyStandalone should be successful")
 	}
@@ -552,7 +580,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -563,7 +591,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -574,7 +602,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -594,7 +622,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -625,8 +653,8 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockAWSS3Client
-		mockResponse, err = splclient.ConvertS3Response(s3Response)
+		var mockResponse spltest.MockS3Client
+		mockResponse, err = splclient.ConvertS3Response(ctx, s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -636,7 +664,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
 		}
 
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = mockResponse
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
 	}
 
 	if allSuccess == false {
@@ -695,7 +723,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -714,7 +742,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
@@ -799,5 +827,512 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 	if len(s3Resp.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestApplyStandaloneDeletion(t *testing.T) {
+	ctx := context.TODO()
+	stand1 := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	c.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	stand1.ObjectMeta.DeletionTimestamp = &currentTime
+	stand1.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyStandalone(ctx, c, &stand1)
+	if err != nil {
+		t.Errorf("ApplyStandalone should not have returned error here.")
+	}
+}
+
+func TestGetStandaloneList(t *testing.T) {
+	ctx := context.TODO()
+	standalone := enterpriseApi.Standalone{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	var numOfObjects int
+	var err error
+
+	// Invalid scenario since we haven't added standalone to the list yet
+	_, err = getStandaloneList(ctx, client, &standalone, listOpts)
+	if err == nil {
+		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
+	}
+
+	standaloneList := &enterpriseApi.StandaloneList{}
+	standaloneList.Items = append(standaloneList.Items, standalone)
+
+	client.ListObj = standaloneList
+
+	numOfObjects, err = getStandaloneList(ctx, client, &standalone, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of standalone objects. Expected=%d, Got=%d", 1, numOfObjects)
+	}
+}
+
+func TestStandaloneWitAppFramework(t *testing.T) {
+	// create directory for app framework
+	newpath := filepath.Join("/tmp", "appframework")
+	err := os.MkdirAll(newpath, os.ModePerm)
+
+	// adding getapplist to fix test case
+	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+		s3Response := splclient.S3Response{}
+		return s3Response, nil
+	}
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+
+	ctx := context.TODO()
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{
+		{
+			Name:      "testing",
+			Endpoint:  "/someendpoint",
+			Path:      "s3-test",
+			SecretRef: "secretRef",
+			Provider:  "aws",
+			Type:      "s3",
+			Region:    "west",
+		},
+	}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: "testing",
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{
+		{
+			Name:                 "appSourceName",
+			Location:             "appSourceLocation",
+			AppSourceDefaultSpec: appSourceDefaultSpec,
+		},
+	}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(60),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	// create standalone custom resource
+	standalone := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+			AppFrameworkConfig: appFrameworkSpec,
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 2,
+		},
+	}
+
+	replicas := int32(3)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create standalone instance before reconcilation
+	c.Create(ctx, standalone)
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+}
+
+func TestStandaloneWitReadyState(t *testing.T) {
+	// create directory for app framework
+	newpath := filepath.Join("/tmp", "appframework")
+	err := os.MkdirAll(newpath, os.ModePerm)
+
+	// adding getapplist to fix test case
+	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+		s3Response := splclient.S3Response{}
+		return s3Response, nil
+	}
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{
+		{
+			Name:      "testing",
+			Endpoint:  "/someendpoint",
+			Path:      "s3-test",
+			SecretRef: "secretRef",
+			Provider:  "aws",
+			Type:      "s3",
+			Region:    "west",
+		},
+	}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: "testing",
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{
+		{
+			Name:                 "appSourceName",
+			Location:             "appSourceLocation",
+			AppSourceDefaultSpec: appSourceDefaultSpec,
+		},
+	}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(60),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	// create standalone custom resource
+	standalone := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
+			},
+			AppFrameworkConfig: appFrameworkSpec,
+			Replicas:           1,
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 1,
+		},
+	}
+
+	replicas := int32(1)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create standalone instance before reconcilation
+	c.Create(ctx, &standalone)
+
+	_, err = ApplyStandalone(ctx, c, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+	namespacedName := types.NamespacedName{
+		Name:      standalone.Name,
+		Namespace: standalone.Namespace,
+	}
+
+	// simulate Ready state
+	standalone.Status.Phase = enterpriseApi.PhaseReady
+	standalone.Spec.ServiceTemplate.Annotations = map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+	}
+	standalone.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-standalone",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "standalone",
+		"app.kubernetes.io/name":       "standalone",
+		"app.kubernetes.io/part-of":    "splunk-test-standalone",
+	}
+	err = c.Status().Update(ctx, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	// create pod
+	stpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-standalone-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	stNamespacedName := types.NamespacedName{
+		Name:      "splunk-test-standalone",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+	// update statefulset
+	statefulset.Status.ReadyReplicas = 1
+	statefulset.Status.Replicas = 1
+	err = c.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
+
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &standalone, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
+		debug.PrintStack()
 	}
 }

@@ -22,7 +22,7 @@ import (
 	"os"
 )
 
-func cpMakeTar(src localPath, dest remotePath, writer io.Writer) error {
+var cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
 	// TODO: use compression here?
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()

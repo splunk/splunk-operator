@@ -15,7 +15,24 @@
 
 package enterprise
 
-import splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+import (
+	"context"
+	"sync"
+	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
+)
+
+const (
+	maxRecDuration time.Duration = 1<<63 - 1
+)
+
+const (
+	currentAfwVersion = enterpriseApi.AfwPhase3
+)
 
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
 type InstanceType string
@@ -41,7 +58,145 @@ const (
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
+
+	// TmpAppDownloadDir is the Operator directory for app framework, when there is no explicit volume specified
+	TmpAppDownloadDir string = "/tmp/appframework/"
 )
+
+const (
+	// Max. of parallel installs for a given Pod
+	maxParallelInstallsPerPod = 1
+)
+
+type commonResourceTracker struct {
+	// mutex to serialize the access to commonResourceTracker
+	mutex sync.Mutex
+
+	// map of resource name:mutex, so that we can serialize get/create/update to common resources such as secrets/configMaps
+	mutexMap map[string]*sync.Mutex
+}
+
+type globalResourceTracker struct {
+	storage *storageTracker
+
+	commonResourceTracker *commonResourceTracker
+}
+
+type storageTracker struct {
+	// represents the available disk space on operator pod
+	availableDiskSpace uint64
+
+	// mutex to serialize the access
+	mutex sync.Mutex
+}
+
+// PipelineWorker represents execution context used to run an app pkg worker thread
+type PipelineWorker struct {
+	//  to the AppSource Spec entry
+	appSrcName string
+
+	// Reference to the App Framework Config
+	afwConfig *enterpriseApi.AppFrameworkSpec
+
+	// Reference to the App context from the CR status
+	appDeployInfo *enterpriseApi.AppDeploymentInfo
+
+	// Used for pod copy and install
+	targetPodName string
+
+	// runtime client
+	client splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
+
+	// isActive indicates if a worker is assigned
+	isActive bool
+
+	// waiter reference to inform the caller
+	waiter *sync.WaitGroup
+
+	// indicates a fan out worker
+	fanOut bool
+}
+
+// PipelinePhase represents one phase in the overall installation pipeline
+type PipelinePhase struct {
+	mutex        sync.Mutex
+	q            []*PipelineWorker
+	msgChannel   chan *PipelineWorker
+	workerWaiter sync.WaitGroup
+}
+
+// AppInstallPipeline defines the pipeline for the installation activity
+type AppInstallPipeline struct {
+	// Pipeline Phases: Download, Pod Copy and Install
+	pplnPhases map[enterpriseApi.AppPhaseType]*PipelinePhase
+
+	// Used by the scheduler to wait for all the Phases to complete
+	phaseWaiter sync.WaitGroup
+
+	// Used by yield logic
+	sigTerm chan struct{}
+
+	// Reference to app deploy context
+	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// Scheduler entry time
+	afwEntryTime int64
+
+	// additional context used for bundle push logic
+	// runtime client
+	client splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
+}
+
+// PlaybookImpl is an interface to implement individual playbooks
+type PlaybookImpl interface {
+	runPlaybook(ctx context.Context) error
+}
+
+var _ PlaybookImpl = &localScopePlaybookContext{}
+
+// blank assignment to implement PlaybookImpl
+var _ PlaybookImpl = &IdxcPlaybookContext{}
+
+var _ PlaybookImpl = &SHCPlaybookContext{}
+
+// IdxcPlaybookContext is used to implement playbook to push bundle to indexer cluster peers
+type IdxcPlaybookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
+	podExecClient splutil.PodExecClientImpl
+}
+
+// SHCPlaybookContext is used to implement playbook to push bundle to SHC members
+type SHCPlaybookContext struct {
+	client               splcommon.ControllerClient
+	cr                   splcommon.MetaObject
+	afwPipeline          *AppInstallPipeline
+	targetPodName        string
+	searchHeadCaptainURL string
+	podExecClient        splutil.PodExecClientImpl
+}
+
+type localScopePlaybookContext struct {
+	worker *PipelineWorker
+
+	// semaphore to track only one app install at any time for a given replicaset pod
+	sem           chan struct{}
+	podExecClient splutil.PodExecClientImpl
+}
 
 // ToString returns a string for a given InstanceType
 func (instanceType InstanceType) ToString() string {

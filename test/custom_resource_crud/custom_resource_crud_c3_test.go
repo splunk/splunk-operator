@@ -171,7 +171,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure Search Head Cluster go to Ready phase
+			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD

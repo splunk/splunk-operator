@@ -18,8 +18,8 @@ package controller
 import (
 	"context"
 	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
@@ -37,7 +37,8 @@ var SplunkFinalizerRegistry map[string]SplunkFinalizerMethod
 // CheckForDeletion checks to see if deletion was requested for the custom resource.
 // If so, it will process and remove any remaining finalizers.
 func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-	scopedLog := log.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind,
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CheckSplunkDeletion").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind,
 		"name", cr.GetName(), "namespace", cr.GetNamespace())
 	currentTime := metav1.Now()
 
@@ -86,7 +87,8 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 
 // removeSplunkFinalizer removes a finalizer from a custom resource.
 func removeSplunkFinalizer(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient, finalizer string) error {
-	scopedLog := log.WithName("RemoveFinalizer").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("RemoveFinalizer").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 	scopedLog.Info("Removing finalizer", "name", finalizer)
 
 	// create new list of finalizers that doesn't include the one being removed

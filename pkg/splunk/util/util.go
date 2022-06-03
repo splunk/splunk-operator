@@ -37,11 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // kubernetes logger used by splunk.reconcile package
-var log = logf.Log.WithName("splunk.reconcile")
+//var log = logf.Log.WithName("splunk.reconcile")
 
 // TestResource defines a simple custom resource, used to test the Spec
 type TestResource struct {
@@ -79,7 +79,8 @@ func (cr *TestResource) DeepCopyObject() runtime.Object {
 
 // CreateResource creates a new Kubernetes resource using the REST API.
 func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("CreateResource").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CreateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
@@ -97,7 +98,8 @@ func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 
 // UpdateResource updates an existing Kubernetes resource using the REST API.
 func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("UpdateResource").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("UpdateResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Update(ctx, obj)
@@ -113,7 +115,8 @@ func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
 func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
-	scopedLog := log.WithName("DeleteResource").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DeleteResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 	err := client.Delete(ctx, obj)
@@ -140,7 +143,7 @@ func generateHECToken() []byte {
 }
 
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, stdin string, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
@@ -176,7 +179,7 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 		Stderr:  true,
 		TTY:     tty,
 	}
-	if stdin == "" {
+	if streamOptions == nil {
 		option.Stdin = false
 	}
 	execReq.VersionedParams(
@@ -187,16 +190,82 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 	if err != nil {
 		return "", "", err
 	}
-	stdinReader := strings.NewReader(stdin)
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	err = exec.Stream(remotecommand.StreamOptions{
-		Stdin:  stdinReader,
-		Stdout: stdout,
-		Stderr: stderr,
-	})
+
+	streamOptions.Stdout = stdout
+	streamOptions.Stderr = stderr
+
+	err = exec.Stream(*streamOptions)
+
 	if err != nil {
 		return "", "", err
 	}
 	return stdout.String(), stderr.String(), nil
+}
+
+// PodExecClientImpl is an interface which is used to implement
+// PodExecClient to run pod exec commands
+// NOTE: This client will be helpful in UTs since we can create
+// our own mock client and pass it to the tests to work correctly.
+type PodExecClientImpl interface {
+	RunPodExecCommand(context.Context, *remotecommand.StreamOptions, []string) (string, string, error)
+	SetTargetPodName(context.Context, string)
+	GetTargetPodName() string
+	GetCR() splcommon.MetaObject
+}
+
+// blank assignment to implement PodExecClientImpl
+var _ PodExecClientImpl = &PodExecClient{}
+
+// PodExecClient implements PodExecClientImpl
+type PodExecClient struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	targetPodName string
+}
+
+// GetPodExecClient returns the client object used to execute pod exec commands
+func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) *PodExecClient {
+	return &PodExecClient{
+		client:        client,
+		cr:            cr,
+		targetPodName: targetPodName,
+	}
+}
+
+// RunPodExecCommand runs the specific pod exec command
+func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
+	return PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+}
+
+// SetTargetPodName sets the targetPodName field for podExecClient
+func (podExecClient *PodExecClient) SetTargetPodName(ctx context.Context, targetPodName string) {
+	podExecClient.targetPodName = targetPodName
+}
+
+// GetTargetPodName returns the target pod name
+func (podExecClient *PodExecClient) GetTargetPodName() string {
+	return podExecClient.targetPodName
+}
+
+// GetCR returns the CR from the PodExecClient
+func (podExecClient *PodExecClient) GetCR() splcommon.MetaObject {
+	return podExecClient.cr
+}
+
+// NewStreamOptionsObject return a new streamoptions object for the given command
+func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
+	return &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(command),
+	}
+}
+
+// ResetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
+func ResetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
+	// convert Stdin of type io.Reader to strings.Reader type
+	stdInReader := streamOptions.Stdin.(*strings.Reader)
+
+	// reset the offset of the Reader
+	stdInReader.Reset(command)
 }
