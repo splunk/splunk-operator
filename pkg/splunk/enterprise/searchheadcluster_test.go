@@ -63,6 +63,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -82,6 +84,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 
 	labels := map[string]string{

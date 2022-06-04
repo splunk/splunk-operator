@@ -72,9 +72,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
-	defer func() {
-		client.Status().Update(context.TODO(), cr)
-	}()
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)

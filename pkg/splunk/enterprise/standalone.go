@@ -95,13 +95,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
-	defer func() {
-		err = client.Status().Update(ctx, cr)
-		if err != nil {
-			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
@@ -289,7 +284,7 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 // helper function to get the list of Standalone types in the current namespace
 func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getStandaloneList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("getStandaloneList")
 
 	objectList := enterpriseApi.StandaloneList{}
 
