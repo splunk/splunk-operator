@@ -1974,10 +1974,10 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 			// While the current reconcile is in progress, there may be new event(s) from the
 			// list of watchers satisfying the predicates. That triggeres a new reconcile right after
-			// exiting from the current reconcile, in which case referring the cached version of the
-			// CR missing the updates we are doing here. From K8s specifc resource point of view, this
-			// may not an issue(expectation is always to be declarative), but the  application specific
-			// status may not be idempotent(tryint to install an app which was already installed).
+			// exiting from the current reconcile, in which case, refers the cached version of the
+			// CR missing the updates we are doing here. From K8s resource point of view, this
+			// may not be an issue(i.e., expectation is always to be declarative), but the  application
+			// specific status may not be idempotent(example. tryint to install an app which was already installed).
 			// So, always make sure that the cache is reflecting the latest CR, before the next event
 			// waiting in the Q triggers the next reconcile
 			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
