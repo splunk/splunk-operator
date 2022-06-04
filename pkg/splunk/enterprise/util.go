@@ -1809,7 +1809,7 @@ func updateReconcileRequeueTime(ctx context.Context, result *reconcile.Result, r
 		return
 	}
 	if rqTime <= 0 {
-		scopedLog.Error(nil, "invalid requeue time: %d", rqTime)
+		scopedLog.Error(nil, "invalid requeue time", "time value", rqTime)
 		return
 	}
 
@@ -1950,47 +1950,72 @@ func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeployment
 }
 
 // updateCRStatus fetches the latest CR, and on top of that, updates latest status
-func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, dirtyCR splcommon.MetaObject) {
+func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("name", dirtyCR.GetName(), "namespace", dirtyCR.GetNamespace(), "old cr version", dirtyCR.GetResourceVersion())
+	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("original cr version", origCR.GetResourceVersion())
 
-	var retryCnt int
-	for retryCnt = 0; retryCnt < maxRetryCountForCRStatusUpdate; retryCnt++ {
-		scopedLog.Info("Retrying: ", "count", retryCnt)
-		cr, err := fetchCurrentCRWithStatusUpdate(ctx, client, dirtyCR)
+	var tryCnt int
+	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
+		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR)
 		if err != nil {
-			scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
+			if origCR.GetDeletionTimestamp() == nil {
+				scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
+			}
+
 			continue
 		}
 
-		scopedLog.Info("Before the update", "cr version", cr.GetResourceVersion(), "reTry count", retryCnt)
-		err = client.Status().Update(ctx, cr)
+		scopedLog.Info("Trying to update", "count", tryCnt)
+		curCRVesion := latestCR.GetResourceVersion()
+		err = client.Status().Update(ctx, latestCR)
 		if err == nil {
-			scopedLog.Info("Status update successful", "new cr version", cr.GetResourceVersion(), "reTry count", retryCnt)
-			//time.Sleep(time.Duration(10 * time.Millisecond))
+			updatedCRVersion := latestCR.GetResourceVersion()
+			scopedLog.Info("Status update successful", "current CR version", curCRVesion, "updated CR version", updatedCRVersion)
+
+			// While the current reconcile is in progress, there may be new event(s) from the
+			// list of watchers satisfying the predicates. That triggeres a new reconcile right after
+			// exiting from the current reconcile, in which case referring the cached version of the
+			// CR missing the updates we are doing here. From K8s specifc resource point of view, this
+			// may not an issue(expectation is always to be declarative), but the  application specific
+			// status may not be idempotent(tryint to install an app which was already installed).
+			// So, always make sure that the cache is reflecting the latest CR, before the next event
+			// waiting in the Q triggers the next reconcile
+			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
+				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR)
+				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
+					scopedLog.Info("Cahe is reflecting the latest CR", "updated CR version", updatedCRVersion)
+					// Latest CR is reflecting in the cache
+					break
+				}
+
+				time.Sleep(time.Duration(chkCnt) * 10 * time.Millisecond)
+			}
+
+			// Status update successful
 			break
 		}
-		time.Sleep(time.Duration(retryCnt) * 10 * time.Millisecond)
+
+		time.Sleep(time.Duration(tryCnt) * 10 * time.Millisecond)
 	}
 
-	if retryCnt >= maxRetryCountForCRStatusUpdate {
-		scopedLog.Error(nil, "Status update failed", "cr version", dirtyCR.GetResourceVersion(), "reTry count", retryCnt)
+	if origCR.GetDeletionTimestamp() == nil && tryCnt >= maxRetryCountForCRStatusUpdate {
+		scopedLog.Error(nil, "Status update failed", "Attempt count", tryCnt)
 	}
 }
 
 // fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
-func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, dirtyCR splcommon.MetaObject) (splcommon.MetaObject, error) {
-	namespacedName := types.NamespacedName{Name: dirtyCR.GetName(), Namespace: dirtyCR.GetNamespace()}
+func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) (splcommon.MetaObject, error) {
+	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
 
 	var err error
-	switch dirtyCR.GetObjectKind().GroupVersionKind().Kind {
+	switch origCR.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		latestStdlnCR := &enterpriseApi.Standalone{}
 		err = client.Get(ctx, namespacedName, latestStdlnCR)
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
+		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
 		return latestStdlnCR, nil
 
 	case "LicenseMaster":
@@ -1999,7 +2024,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		origCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
 		return latestLmCR, nil
 
 	case "SearchHeadCluster":
@@ -2008,7 +2033,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
+		origCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
 		return latestShcCR, nil
 
 	case "IndexerCluster":
@@ -2017,7 +2042,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
+		origCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
 		return latestIdxcCR, nil
 
 	case "ClusterMaster":
@@ -2026,7 +2051,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		origCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
 		return latestCmCR, nil
 
 	case "MonitoringConsole":
@@ -2035,7 +2060,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
-		dirtyCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
+		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
 		return latestMcCR, nil
 	}
 

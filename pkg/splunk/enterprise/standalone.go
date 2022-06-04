@@ -42,8 +42,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyStandalone").WithValues("cr version", cr.GetResourceVersion())
-	scopedLog.Info("Entering reconcile")
+	scopedLog := reqLogger.WithName("ApplyStandalone")
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -285,7 +284,7 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 // helper function to get the list of Standalone types in the current namespace
 func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getStandaloneList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("getStandaloneList")
 
 	objectList := enterpriseApi.StandaloneList{}
 

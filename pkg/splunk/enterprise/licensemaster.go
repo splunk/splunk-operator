@@ -42,8 +42,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyLicenseManager").WithValues("cr version", cr.GetResourceVersion())
-	scopedLog.Info("Entering reconcile")
+	scopedLog := reqLogger.WithName("ApplyLicenseManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR

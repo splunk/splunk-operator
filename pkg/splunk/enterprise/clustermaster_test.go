@@ -66,6 +66,7 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -80,6 +81,7 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 
@@ -212,6 +214,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-master-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -232,6 +235,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 

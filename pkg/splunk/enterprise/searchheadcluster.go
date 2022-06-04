@@ -46,8 +46,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplySearchHeadCluster").WithValues("cr version", cr.GetResourceVersion())
-	scopedLog.Info("Entering reconcile")
+	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR

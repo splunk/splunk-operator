@@ -50,8 +50,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyIndexerCluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "cr version", cr.GetResourceVersion())
-	scopedLog.Info("Entering reconcile")
+	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	// validate and updates defaults for CR
