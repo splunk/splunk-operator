@@ -76,7 +76,6 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the IndexerCluster
 	instance := &enterpriseApi.IndexerCluster{}
@@ -101,7 +100,14 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	return ApplyIndexerCluster(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyIndexerCluster adding to handle unit test case

@@ -76,7 +76,6 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("licensemaster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the LicenseMaster
 	instance := &enterpriseApi.LicenseMaster{}
@@ -101,7 +100,14 @@ func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return ApplyLicenseManager(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyLicenseManager(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyLicenseManager adding to handle unit test case
