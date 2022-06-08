@@ -80,7 +80,6 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the Standalone
 	instance := &enterpriseApi.Standalone{}
@@ -104,7 +103,15 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
-	return ApplyStandalone(ctx, r.Client, instance)
+
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyStandalone(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyStandalone adding to handle unit test case
