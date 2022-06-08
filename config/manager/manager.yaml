@@ -32,7 +32,9 @@ spec:
       securityContext:
         runAsUser: 1001
         fsGroup: 1001
-        #runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       containers:
       - command:
         - /manager
