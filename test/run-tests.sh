@@ -20,7 +20,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "Using private registry at ${PRIVATE_REGISTRY}"
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
-  PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
+  PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/splunk/splunk:epat900
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull Splunk Operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
@@ -39,12 +39,14 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   fi
 
   # Always attempt to pull splunk enterprise image
-  docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+  #docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+  docker pull docker.io/jambrosiano/splunk:epat900
   if [ $? -ne 0 ]; then
     echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
     exit 1
   fi
-  docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+  docker tag docker.io/jambrosiano/splunk:epat900 ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+  # docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
   docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
   if [ $? -ne 0 ]; then
     echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."

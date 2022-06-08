@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - CSPL-1820
 jobs:
   int-tests:
     strategy:
@@ -131,6 +132,7 @@ jobs:
       - name: Run Integration test
         run: |
           export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export SPLUNK_ENTERPRISE_IMAGE=jambrosiano/splunk:epat900
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
