@@ -75,7 +75,6 @@ type StandaloneReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
