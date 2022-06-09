@@ -21,8 +21,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	//"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
@@ -30,14 +28,11 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	//"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	//"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -145,11 +140,6 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	/*
-		k8sManager, err = mainFunction(clientgoscheme.Scheme)
-		Expect(err).ToNot(HaveOccurred())
-		time.Sleep(time.Second * 1)
-	*/
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		fmt.Printf("error %v", err.Error())
@@ -167,7 +157,6 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	testEnv.Stop()
-	//Expect(err).NotTo(HaveOccurred())
 })
 
 func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
@@ -176,7 +165,6 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 	var probeAddr string
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	//utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 
 	// Logging setup
 	opts := zap.Options{
