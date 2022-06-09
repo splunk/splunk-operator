@@ -204,7 +204,6 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	if err != nil {
 		return nil, err
 	}
-	// VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
