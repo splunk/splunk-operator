@@ -47,9 +47,6 @@ import (
 func init() {
 	fmt.Printf("init is called here from test")
 	initGlobalResourceTracker()
-	/*cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
-		return nil
-	}*/
 }
 
 func TestApplySplunkConfig(t *testing.T) {
@@ -744,13 +741,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-10: Setting  all apps in AppSrc to complete should mark all the apps status as complete irrespective of their state
 	// 10.1 Check for state=Active and status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		// ToDo: Enable for Phase-3
-		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		// ToDo: Enable for Phase-3
-		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
 		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
