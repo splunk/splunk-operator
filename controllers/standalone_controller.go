@@ -75,13 +75,11 @@ type StandaloneReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the Standalone
 	instance := &enterpriseApi.Standalone{}
@@ -105,8 +103,15 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
-	return ApplyStandalone(ctx, r.Client, instance)
-	//return ctrl.Result{}, nil
+
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyStandalone(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyStandalone adding to handle unit test case

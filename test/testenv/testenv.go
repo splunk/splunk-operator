@@ -262,11 +262,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		}
 	}()
 
-	/*if err := testenv.setup(); err != nil {
-		// teardown() should still be invoked
-		return nil, err
-	} */
-
 	return testenv, nil
 }
 
